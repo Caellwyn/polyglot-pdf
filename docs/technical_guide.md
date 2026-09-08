@@ -1181,7 +1181,7 @@ inventing its own.
   block until this bead, despite being Admin-SDK-only by access pattern
   since it shipped (bd polyglot-pdf-ugm6) -- an oversight this bead closes
   opportunistically since the rules-set test was already being extended.
-  All eight are added to `ADMIN_SDK_ONLY_COLLECTIONS` in
+  All six are added to `ADMIN_SDK_ONLY_COLLECTIONS` in
   `backend/tests/unit/test_firestore_rules_text.py` (see contract 15 for
   the set-derived-test shape); the nested ledger entry required widening
   that test's both-directions regex to allow one extra

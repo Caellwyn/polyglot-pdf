@@ -82,7 +82,7 @@ already denied). Fold-in: `link_redemptions/{jti}` +
 `link_redemptions_staging/{jti}` had NO deny block until now, despite
 being Admin-SDK-only by access pattern since it shipped -- closed
 opportunistically while the rules-set test was already being extended.
-The set-derived test (`test_firestore_rules_text.py`) grows to 8 new
+The set-derived test (`test_firestore_rules_text.py`) grows to 6 new
 entries, and its file-wide both-directions scan regex was widened to
 recognize one extra `/{wildcard}/segment` hop so the nested ledger
 collection round-trips against the file in both directions -- without
@@ -142,6 +142,47 @@ verdict was `NO-GAPS`. Breakdown of the round's findings:
     process's own channel. Low confidence (no current caller passes `""`)
     and not a regression from `origin/dev` (the function didn't exist
     there), so filed rather than fixed inline.
+
+**Second cross-surface round (GAPS-FOUND 1, fixed).** A follow-up outer
+review traced every new/changed contract (`upsert_firm`'s new `kind`
+positional, the `FIRM_KIND_*` constants, `firm_kind()`, the Firestore
+schema additions, `bootstrap_firm.py --kind`, `_collection_name`/
+`_collection`'s channel argument, `links_store.py`'s public API,
+the six `firestore.rules` blocks, the widened `ADMIN_SDK_ONLY_COLLECTIONS`
+regex, and the IAM envelope) out into every consumer and found no
+production caller broken and no new permission needed. Breakdown:
+
+- Adopt (1) -- `docs/technical_guide.md:1184` claimed "All eight are added
+  to `ADMIN_SDK_ONLY_COLLECTIONS`"; the diff adds six new deny blocks and
+  the constant holds nine tuples total (three pre-existing + six new).
+  Neither number is eight. Fixed to "All six" (matching the diff's new-block
+  count, which is what the sentence is counting). Verified:
+  `git diff origin/dev...HEAD -- firestore.rules | grep -c "^+    match /"`
+  returns 6; `ADMIN_SDK_ONLY_COLLECTIONS` has 9 tuples.
+- Reject (none).
+- Defer (3, all filed as beads, none a blocker for this bead since nothing
+  reads the affected records/collections yet):
+  - `polyglot-pdf-s0g69` (nit, forward-facing) -- the mint record's 30-day
+    TTL retention margin (`links_store.py:108`) exactly equals the maximum
+    staff-requestable `complete_window_s` (`link_routes.py:69`), so a link
+    minted with the maximum window and opened near its deadline can have
+    its mint record reaped while still legitimately reopenable. Matters
+    once Epic 2 bead A3 wires an "open requires a mint record" gate, not
+    today.
+  - `polyglot-pdf-yz5cp` (pre-existing) -- the Admin-SDK-only collection
+    enumeration missed two collections that predate this bead:
+    `firms/{firm_id}/link_usage/{period}` (`link_metering.py`) and
+    `confirmation_events` (`confirmation_logger.py`). Same nested-subcollection
+    shape as the `firms/{firmId}/ledger` block this bead already added, and
+    the same scar-#8 lesson (enumerate the set mechanically, not by eye)
+    this bead was already applying to `link_redemptions`.
+  - `polyglot-pdf-5vi67` (nit, combined) -- two small hardening items: the
+    `link_minted` structured-log event name is now emitted from two places
+    (`link_routes.py:207`, `links_store.py:210`) with different field sets,
+    a schema hazard once A3 wires both into one path; and
+    `channel or link_channel()` in both `links_store.py` and
+    `link_redemptions.py` treats an empty-string channel the same as
+    "omitted," which the docstrings claim explicit-channel prevents.
 
 ## Lessons
 
