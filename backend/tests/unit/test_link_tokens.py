@@ -74,6 +74,32 @@ def test_the_token_carries_NO_client_identifier(monkeypatch):
     assert payload["employee_id"] == "emp-1"
 
 
+def test_the_token_carries_NO_client_identifier_WITH_a_cap(monkeypatch):
+    """WIDENED DELIBERATELY (bd polyglot-pdf-ah5d3 / A4). `cap_usd` was added
+    to the payload -- a per-link USD spend ceiling, resolved once at mint from
+    the kit's price commercial and signed in so the socket need not re-read
+    Firestore on every connect. It is a MONEY LIMIT, not a person, so this
+    widening does not touch the split-key invariant the test above pins:
+    re-identification still requires the firm to act, because nothing here
+    names, emails, or otherwise identifies the client.
+
+    A separate test rather than editing the one above, because that test's
+    OWN `_mint()` call carries no `cap_usd` (the common, uncapped mint path
+    stays exactly as before) -- this test is the tripwire for the CAPPED
+    shape specifically.
+
+    Mutation: add "client_email" alongside cap_usd -- red.
+    """
+    token, _jti = _mint(cap_usd=3.0)
+    payload = verify_link_token(token)
+
+    assert set(payload) == {
+        "v", "aud", "firm_id", "kit_id", "employee_id", "jti", "iat", "exp",
+        "cw", "cap_usd",
+    }, "the capped token's field set changed -- see the split-key invariant above"
+    assert payload["cap_usd"] == 3.0
+
+
 def test_the_jti_is_unguessable_and_unique():
     """The jti is the FIRM'S JOIN KEY -- what they record against a client's
     case and what our session records carry. A predictable one would let an
@@ -374,6 +400,109 @@ def test_a_PRE_CLAIM_token_is_refused_rather_than_silently_accepted(monkeypatch)
     ).decode().rstrip("=")
     # Re-sign it, so this tests the CLAIM check rather than the signature.
     forged = stripped + "." + _sign(stripped)
+
+    with pytest.raises(LinkTokenError):
+        verify_link_token(forged)
+
+
+# --- caller-supplied jti + cap_usd (bd polyglot-pdf-ah5d3 / A4) -------------
+#
+# A3 needs to reserve the credit (write the ledger debit + the links/{jti}
+# record) BEFORE signing, so the jti must exist before mint_link_token is
+# called rather than be generated inside it. And the per-link spend ceiling
+# is resolved once at mint (from the kit's price commercial) and signed in,
+# so the socket can read its own token instead of loading kit metadata on
+# every connect.
+
+
+def test_new_jti_is_unguessable_and_unique():
+    """Split out of mint_link_token: same shape (16 random bytes, base64url),
+    just callable before a token exists."""
+    from backend.services.link_tokens import new_jti
+
+    a, b = new_jti(), new_jti()
+    assert a != b
+    assert len(a) >= 20  # 16 raw bytes, base64url-encoded, no padding
+    for ch in a:
+        assert ch not in "+/=", "must be URL-safe, not standard base64"
+
+
+def test_mint_uses_a_CALLER_SUPPLIED_jti_when_given():
+    """A3's reserve-before-sign order: the route generates the jti, writes
+    the ledger debit and links/{jti} record under it, THEN signs a token
+    naming that same jti -- never a fresh one mint_link_token would
+    otherwise generate."""
+    from backend.services.link_tokens import new_jti
+
+    reserved = new_jti()
+    token, returned_jti = _mint(jti=reserved)
+
+    assert returned_jti == reserved
+    assert verify_link_token(token)["jti"] == reserved
+
+
+def test_mint_still_generates_its_OWN_jti_when_none_is_supplied():
+    """The common path (tests, and any future non-billed mint) is unchanged:
+    omitting jti= still works exactly as before this parameter existed."""
+    token, jti = _mint()
+    assert jti
+    assert verify_link_token(token)["jti"] == jti
+
+
+def test_a_capped_token_carries_its_cap_usd():
+    token, _jti = _mint(cap_usd=3.0)
+    assert verify_link_token(token)["cap_usd"] == 3.0
+
+
+def test_an_UNCAPPED_mint_carries_no_cap_usd_claim():
+    """The common, uncapped path (every caller before A3 lands, and any
+    caller that omits cap_usd) must sign a token identical in shape to
+    today's -- no `cap_usd` key at all, not a null or a zero."""
+    token, _jti = _mint()
+    assert "cap_usd" not in verify_link_token(token)
+
+
+@pytest.mark.parametrize(
+    "bad_cap",
+    [
+        0,
+        -5,
+        -0.01,
+        True,   # bool is an int subclass -- must not become a $1.00 cap
+        False,
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        "5.00",  # caller contract is a number, not a numeric string
+        None,
+    ],
+)
+def test_a_malformed_cap_usd_is_DROPPED_not_signed_in(bad_cap):
+    """A bad cap_usd at MINT must not become a bad claim inside a signed
+    token -- there is no way to fix a wrong number baked into a token short
+    of re-minting it, so the only safe failure is "no claim", which
+    link_budget.cost_ceiling_usd_for_claims already treats as "use the
+    global default".
+    """
+    token, _jti = _mint(cap_usd=bad_cap)
+    assert "cap_usd" not in verify_link_token(token)
+
+
+def test_a_tampered_cap_usd_is_refused_at_verify(monkeypatch):
+    """Belt-and-braces: even though mint_link_token never signs in a bad
+    cap_usd, verify_link_token independently refuses one it finds in an
+    otherwise-validly-signed payload, rather than trusting its own mint-time
+    guard never to have a hole."""
+    token, _jti = _mint(cap_usd=3.0)
+    payload_b64, _sig = token.split(".", 1)
+    payload = json.loads(base64.urlsafe_b64decode(
+        payload_b64 + "=" * (-len(payload_b64) % 4)))
+    payload["cap_usd"] = -1.0
+
+    blob = base64.urlsafe_b64encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).decode().rstrip("=")
+    forged = blob + "." + _sign(blob)
 
     with pytest.raises(LinkTokenError):
         verify_link_token(forged)
