@@ -36,8 +36,17 @@ _log = structlog.get_logger().bind(module="link_redemptions")
 COLLECTION = "link_redemptions"
 
 
-def _collection_name() -> str:
-    """The redemption collection for THIS channel.
+def _collection_name(channel: str) -> str:
+    """The redemption collection for the GIVEN channel.
+
+    `channel` is an EXPLICIT argument (Epic 2 bead A1), not read from the
+    environment here: the admin service acts on a channel it names itself (a
+    sweep request, a firm-console read) and sets no LINK_CHANNEL env var of
+    its own, so an env-reading version of this helper would silently resolve
+    to the wrong (or default) channel for every admin-service caller. The
+    PUBLIC backend's one caller, `_collection()` below, passes
+    `link_channel()` explicitly -- this function itself makes no assumption
+    about which process is calling it.
 
     The demo keeps the bare `link_redemptions` name so nothing already written
     there is orphaned; every other channel gets its own suffixed collection
@@ -50,9 +59,8 @@ def _collection_name() -> str:
     link OPENING on the demo; this stops the two channels writing over each
     other's ledger.
     """
-    from backend.services.link_tokens import DEFAULT_CHANNEL, link_channel
+    from backend.services.link_tokens import DEFAULT_CHANNEL
 
-    channel = link_channel()
     return COLLECTION if channel == DEFAULT_CHANNEL else f"{COLLECTION}_{channel}"
 
 # Same env-gate shape as the firms store (services/firms.py): off by default,
@@ -100,15 +108,22 @@ def _enabled() -> bool:
     return os.getenv(_ENABLED_ENV, "false").lower() == "true"
 
 
-def _collection():
+def _collection(channel: Optional[str] = None):
+    """The redemption collection for `channel`, defaulting to THIS process's
+    own channel (backend.services.link_tokens.link_channel()) -- the public
+    backend never names a channel explicitly; it acts on its own. A caller
+    that DOES know which channel it means (a future admin-service reconciler)
+    passes one.
+    """
     # Imported lazily: module import must not require firebase_admin to be
     # initialized (the test suite and local dev import this module freely).
     from backend.services.auth import get_db
+    from backend.services.link_tokens import link_channel
 
     db = get_db()
     if db is None:
         raise RedemptionUnavailable("no firestore client")
-    return db.collection(_collection_name())
+    return db.collection(_collection_name(channel or link_channel()))
 
 
 def open_link(jti: str, firm_id: str, kit_id: str,

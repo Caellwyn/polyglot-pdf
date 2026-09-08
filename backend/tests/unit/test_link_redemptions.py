@@ -344,40 +344,33 @@ def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(
 # recorded under the jti alone, so a shared collection means a staging
 # test-drive marks a DEMO link used and the client finds a dead link.
 #
-# These drive the real _collection_name(). The FakeCollection above ignores the
-# name it is given, so a test that went through it would pass no matter what
-# this function returned -- exactly the stand-in trap this file's own header
+# _collection_name(channel) now takes channel EXPLICITLY (Epic 2 bead A1):
+# the admin service acts on a channel it names itself and sets no LINK_CHANNEL
+# env var of its own, so an env-reading version would silently resolve to the
+# wrong channel for every admin-service caller. These drive the real function
+# with an explicit argument. The FakeCollection above ignores the name it is
+# given, so a test that went through it would pass no matter what this
+# function returned -- exactly the stand-in trap this file's own header
 # warns about, and it left this surface unpinned on the first attempt.
 
 
-def test_the_demo_keeps_the_BARE_collection_name(monkeypatch):
+def test_the_demo_keeps_the_BARE_collection_name():
     """Renaming the demo's collection would orphan every burn already recorded."""
-    monkeypatch.setenv("LINK_CHANNEL", "demo")
-    assert lrd._collection_name() == "link_redemptions"
+    assert lrd._collection_name("demo") == "link_redemptions"
 
 
-def test_an_UNSET_channel_also_keeps_the_bare_name(monkeypatch):
-    """The default must not silently move the demo's ledger."""
-    monkeypatch.delenv("LINK_CHANNEL", raising=False)
-    assert lrd._collection_name() == "link_redemptions"
-
-
-def test_staging_gets_its_OWN_collection(monkeypatch):
+def test_staging_gets_its_OWN_collection():
     """The isolation itself."""
-    monkeypatch.setenv("LINK_CHANNEL", "staging")
-    assert lrd._collection_name() == "link_redemptions_staging"
+    assert lrd._collection_name("staging") == "link_redemptions_staging"
 
 
-def test_two_channels_never_share_a_collection(monkeypatch):
+def test_two_channels_never_share_a_collection():
     """The PROPERTY, not the two names.
 
     Asserting only the literal pair would pass if a third channel collided
-    with either -- and channels are added by setting one env var.
+    with either -- and channels are added by naming one more.
     """
-    names = []
-    for channel in ("demo", "staging", "pilot", "local"):
-        monkeypatch.setenv("LINK_CHANNEL", channel)
-        names.append(lrd._collection_name())
+    names = [lrd._collection_name(c) for c in ("demo", "staging", "pilot", "local")]
 
     assert len(set(names)) == len(names), (
         f"two channels share a redemption collection: {names} -- a burn in one "
@@ -390,13 +383,14 @@ def test_the_real_collection_accessor_ASKS_FIRESTORE_for_the_channel_name(
     """The one line that wires _collection_name() into Firestore.
 
     Every other test in this file monkeypatches `_collection` wholesale, so
-    reverting `db.collection(_collection_name())` to `db.collection(COLLECTION)`
-    left the ENTIRE 4390-test suite green while silently restoring the shared
-    ledger. Pinning the pure function was not enough -- nothing proved the
-    production path ever called it.
+    reverting `db.collection(_collection_name(...))` to
+    `db.collection(COLLECTION)` left the ENTIRE 4390-test suite green while
+    silently restoring the shared ledger. Pinning the pure function was not
+    enough -- nothing proved the production path ever called it.
 
-    So this drives the real `_collection()` with a recording client and asserts
-    the NAME Firestore is actually asked for.
+    So this drives the real `_collection()` with a recording client and
+    asserts the NAME Firestore is actually asked for, using an EXPLICIT
+    channel argument -- the new A1 contract -- rather than the env var.
     """
     asked: list[str] = []
 
@@ -408,12 +402,61 @@ def test_the_real_collection_accessor_ASKS_FIRESTORE_for_the_channel_name(
     monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
     monkeypatch.setattr("backend.services.auth.get_db", lambda: _RecordingDb())
 
-    monkeypatch.setenv("LINK_CHANNEL", "staging")
-    lrd._collection()
-    monkeypatch.setenv("LINK_CHANNEL", "demo")
-    lrd._collection()
+    lrd._collection("staging")
+    lrd._collection("demo")
 
     assert asked == ["link_redemptions_staging", "link_redemptions"], (
         f"the collection accessor asked Firestore for {asked} -- the channel "
         "name is not reaching the query, so both channels share one ledger"
     )
+
+
+def test_collection_with_no_channel_arg_DEFAULTS_to_link_channel(monkeypatch):
+    """THE PUBLIC-BACKEND CONTRACT: the bead requires 'the public backend
+    passes link_channel()'. Every existing caller in this module
+    (open_link/complete_link, via enforce_link_redemption) calls
+    `_collection()` with NO channel argument -- so that default must resolve
+    through link_channel(), the same resolver the token's `aud` claim uses,
+    or the public backend silently starts reading a different channel's
+    ledger than the one it mints tokens for.
+
+    Mutation: hardcode DEFAULT_CHANNEL (or COLLECTION) as the fallback
+    instead of calling link_channel() -- a non-default LINK_CHANNEL then
+    goes unnoticed and this test goes red."""
+    asked: list[str] = []
+
+    class _RecordingDb:
+        def collection(self, name):
+            asked.append(name)
+            return object()
+
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: _RecordingDb())
+
+    lrd._collection()
+
+    assert asked == ["link_redemptions_staging"]
+
+
+def test_an_explicit_channel_argument_OVERRIDES_link_channel(monkeypatch):
+    """A caller that DOES name a channel (a future admin-service reconciler)
+    must not be silently redirected to this process's own LINK_CHANNEL.
+
+    Mutation: ignore the `channel` parameter and always resolve via
+    link_channel() -- the assertion below (expecting "demo" while the env
+    says "staging") goes red."""
+    asked: list[str] = []
+
+    class _RecordingDb:
+        def collection(self, name):
+            asked.append(name)
+            return object()
+
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: _RecordingDb())
+
+    lrd._collection("demo")
+
+    assert asked == ["link_redemptions"]
