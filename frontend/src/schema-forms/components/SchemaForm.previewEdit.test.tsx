@@ -3,7 +3,8 @@
  * PreviewPane -> PDFViewer -> FieldOverlay -> FieldEditPopover chain (bd
  * polyglot-pdf-7esr, epic rubric R3): clicking a field overlay opens a
  * FieldRenderer-backed popover; a change lands in SchemaFormState with
- * {confirmed: true, confirmationMethod: 'manual_edit'} and fans out copy_to;
+ * UNVERIFIED (bd polyglot-pdf-uum5g: typing is not an assertion) and fans out
+ * copy_to, also unverified;
  * Esc and click-outside dismiss.
  *
  * Only the pdfjs internals are mocked (usePDFDocument / PDFPage) plus
@@ -121,7 +122,7 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
     vi.clearAllMocks();
   });
 
-  it('click overlay -> popover opens; a typed change is stamped manual_edit + confirmed and copy_to fans out; overlay repaints live', async () => {
+  it('click overlay -> popover opens; a typed change lands UNVERIFIED and copy_to fans out; overlay repaints live', async () => {
     await mountInPreview();
     const user = userEvent.setup();
 
@@ -134,14 +135,18 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
     expect(input).toBeTruthy();
     await user.type(input, 'Ramanujan');
 
+    // The PDF-view popover routes through SchemaForm's handleFieldChange -- the
+    // SAME handler as the schema form -- which is exactly why this test is worth
+    // keeping: it proves the two surfaces cannot drift apart on verification.
     const values = storedFieldValues();
     expect(values.f1.value).toBe('Ramanujan');
-    expect(values.f1.confirmed).toBe(true);
-    expect(values.f1.confirmationMethod).toBe('manual_edit');
-    // copy_to fan-out, stamped the same way.
+    expect(values.f1.confirmed, 'typing in the PDF view is not an assertion either').not.toBe(true);
+    expect(values.f1.confirmationMethod).toBeUndefined();
+    // copy_to fan-out: a copy the user never looked at is even less of an
+    // assertion than the value they typed.
     expect(values.f2.value).toBe('Ramanujan');
-    expect(values.f2.confirmed).toBe(true);
-    expect(values.f2.confirmationMethod).toBe('manual_edit');
+    expect(values.f2.confirmed).not.toBe(true);
+    expect(values.f2.confirmationMethod).toBeUndefined();
 
     // Live repaint: the f2 overlay now paints the copied value.
     expect(screen.getByTestId('pdf-field-overlay-f2').textContent).toBe('Ramanujan');

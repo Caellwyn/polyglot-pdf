@@ -504,27 +504,33 @@ describe('manual edit does not confirm a blank value (bd polyglot-pdf-5ovod)', (
     expect(entry?.confirmed, 'whitespace must not auto-confirm').not.toBe(true);
   });
 
-  it('typing a real value DOES confirm, as before', () => {
-    // The other half: the guard must not break ordinary typing, which is the
-    // whole point of auto-confirming a manual edit.
+  it('typing a real value STORES it but does NOT verify it (bd polyglot-pdf-uum5g)', () => {
+    // This test asserted the OPPOSITE until uum5g: typing auto-confirmed, so
+    // every keystroke wrote an audit record. The value half of the old
+    // assertion still stands and is kept -- withholding the verification must
+    // not cost the user their typing.
     render(<SchemaForm schema={makeSchema()} kitId="test" />);
     const input = screen.getByLabelText(/Field One/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: 'Maria' } });
 
     const entry = storedEntry('f1');
-    expect(entry?.value).toBe('Maria');
-    expect(entry?.confirmed).toBe(true);
+    expect(entry?.value, 'the typed value must still be stored').toBe('Maria');
+    expect(entry?.confirmed, 'typing is not an assertion').not.toBe(true);
+    expect(
+      entry?.confirmationMethod,
+      'no audit record for a keystroke'
+    ).toBeUndefined();
   });
 
-  it('clearing a field back to empty leaves it unconfirmed', () => {
-    // Deleting your answer is not confirming a blank one.
+  it('clearing a field back to empty leaves it unverified', () => {
+    // Deleting your answer is not verifying a blank one. (Unchanged by uum5g --
+    // it was already unconfirmed here; kept so the blank path stays pinned now
+    // that the non-blank path no longer confirms either.)
     render(<SchemaForm schema={makeSchema()} kitId="test" />);
     const input = screen.getByLabelText(/Field One/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: 'Maria' } });
-    expect(storedEntry('f1')?.confirmed).toBe(true);
-
     fireEvent.change(input, { target: { value: '' } });
 
     expect(storedEntry('f1')?.confirmed).not.toBe(true);

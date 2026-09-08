@@ -437,11 +437,23 @@ export function createConnectionManager(
 			// every other field's value and badge disappear until Gemini's next
 			// message re-fills them.
 			const currentState = SchemaFormStateManager.load() || state
+			// Typing does NOT verify (bd polyglot-pdf-uum5g). This handler is
+			// registered on 'blur' AND 'change' (fieldManager.ts), so confirming
+			// here meant TABBING THROUGH THREE FIELDS WROTE THREE AUDIT RECORDS --
+			// a keystroke nobody intends as an assertion, standing behind a
+			// per-field verification claim the firm relies on
+			// (docs/standards/confirmation-and-audit.md).
+			//
+			// The VALUE is still stored; only the verification is withheld. The
+			// field then stays in the next-field search (bd polyglot-pdf-a08po
+			// already re-offers it) until an explicit act verifies it: the verbal
+			// confirm, the skip control, or the Enter->modal gesture
+			// (bd polyglot-pdf-96um6).
 			const edited = SchemaFormStateManager.updateField(
 				currentState,
 				fieldId,
 				value,
-				{ confirmed: true, confirmationMethod: 'manual_edit' }
+				{ confirmed: false }
 			)
 			// Resume the next-field search from the field the user just filled,
 			// not the top of the form (bd polyglot-pdf-a08po). Without this the
