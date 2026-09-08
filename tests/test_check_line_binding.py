@@ -658,8 +658,10 @@ def test_the_corrupt_specimen_is_still_the_pre_fix_binding():
     re-running that migration on f1040 would overwrite it and silently gut the
     detection tests above, which would then abstain or invert with nobody
     noticing. This asserts the specimen still exhibits the exact bd
-    polyglot-pdf-3ave shift it is supposed to represent. (Same guard shape as
-    `test_archived_i90_is_the_v1_original` in tests/test_i90_migrated_baseline.py.)
+    polyglot-pdf-3ave shift it is supposed to represent. (The i-90 once carried
+    the same guard shape; it was retired with that kit's schema_archived.json
+    when the applicant-only v2 schema took over the id, so this f1040 specimen
+    is now the only place the convention is pinned.)
     """
     schema = json.loads(_F1040_CORRUPT_SCHEMA.read_text(encoding="utf-8"))
     result = clb.check(schema, str(_F1040_PDF))

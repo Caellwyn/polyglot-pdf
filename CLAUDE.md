@@ -210,6 +210,41 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    actually applied (a no-op edit that "passes" proves nothing) and re-verify per
    parametrization, not once per file. Full rules + the recurring traps:
    [`docs/standards/testing.md`](docs/standards/testing.md#test-the-tests).
+10. **FORM KITS LIVE IN THE BUCKET, NOT IN GIT -- and NOTHING is tested against a
+   SPECIFIC form.** The GCS bucket is the CANONICAL collection: authors publish to
+   it from the hosted schema editor, and the deployed backend serves kit bytes
+   straight out of it (`GET /api/form-kits/{id}/schema|pdf`). The local
+   `form-kits/` tree is a SCRATCH SPACE for rapid work before publishing -- not a
+   second store. Committing a kit FORKS the canonical copy, and that divergence
+   is exactly what broke the deployed I-90 (bd `polyglot-pdf-6p77c`): the app
+   asked for a static path the frontend build did not contain, Hosting's SPA
+   catch-all answered `index.html` with a **200**, and the client died on
+   `Unexpected token '<', "<!DOCTYPE"`.
+   **The corollary is a TESTING rule**, and it is the expensive half. This is
+   heading for hundreds-to-thousands of kits, authored and republished
+   constantly, so **a new test must not assert a named field id, a per-form
+   count, or a hardcoded kit list** -- and the existing ones that still do are a
+   tracked debt (bd `polyglot-pdf-1mgkq`, NEEDS PLANNING), not a licence. Live
+   examples of the debt, so this rule is not read as describing a clean tree:
+   `_MIN_POSITIONS_CHECKED` (test_kit_line_binding.py), `_READONLY_FIELD_ID`
+   (test_pdf_fill_readonly_unlock.py) and `_RACE_FIELD_ID`
+   (test_pdf_fill_checkbox_group_comma.py) all still name an i-90 field or count,
+   and all currently SKIP because no i-90 is tracked. Do not "fix" one in
+   passing; 1mgkq decides their fate together. Measured on ONE kit swap: the **22** test files
+   that read a real kit ALL broke; the **16** that hardcode the same ids as
+   SYNTHETIC fixtures needed nothing -- the coupling costs, not the specificity
+   (bd `polyglot-pdf-1mgkq`). So: assert PROPERTIES over DISCOVERED kits --
+   discover them from **`git ls-files form-kits/`**, NOT by scanning the
+   directory and NOT by publish status. Tracked is what CI actually sees; an
+   untracked dir is someone's scratch work, and a helper that scans the tree
+   looks alive locally while being dead in CI (that mistake shipped twice on
+   this branch before it was caught). Use a synthetic field for anything about
+   generic behavior; and where a real-data regression pin is genuinely needed,
+   FREEZE the artifact as a fixture rather than pointing at a live kit
+   (`backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json`). Kit-coupled
+   tests are legitimate ONLY when the shipped artifact IS the subject ("every
+   shipped kit lints clean"), and those stay cheap because they name no field.
+   `w7`/`f1040` remain tracked as a documented exception -- do not add a third.
 
 ---
 

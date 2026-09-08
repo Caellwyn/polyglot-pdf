@@ -26,7 +26,7 @@ def test_nested_help_block_rendered_in_si():
     schema = {
         "form_metadata": {"title": "I-90"},
         "fields": [{
-            "id": "p1_line1_aliennumber", "name": "A-Number", "type": "text",
+            "id": "a_number", "name": "A-Number", "type": "text",
             "help": {"instructions": "Your A-Number is a 7-9 digit number on your green card.",
                      "format_hint": "7-9 digits"},
         }],
@@ -112,17 +112,25 @@ def test_real_i90_required_field_rejects_empty_and_uses_validation_required():
     # Canonical shape: required lives under validation, never at the top level.
     assert all("required" not in f for f in raw["fields"]), (
         "a field still carries a dead top-level `required` key")
-    a_number = next(f for f in raw["fields"] if f["id"] == "p1_line1_aliennumber")
+    a_number = next(f for f in raw["fields"] if f["id"] == "a_number")
     assert (a_number.get("validation") or {}).get("required") is True
 
     fs = FormSchema.model_validate(raw)
-    ok_empty, msg = fs.validate_field_value("p1_line1_aliennumber", "")
+    ok_empty, msg = fs.validate_field_value("a_number", "")
     assert ok_empty is False and "required" in (msg or ""), (
         "required A-Number must reject an empty value")
-    ok_none, _ = fs.validate_field_value("p1_line1_aliennumber", None)
+    ok_none, _ = fs.validate_field_value("a_number", None)
     assert ok_none is False
     # An optional field still accepts empty (the gate is genuinely required-scoped).
-    ok_opt, _ = fs.validate_field_value("p1_line3a_familyname", "")
+    # middle_name, not family_name: the v2 applicant-only kit marks family_name
+    # REQUIRED (it was optional pre-v2), so it no longer demonstrates the
+    # optional side. A middle name is genuinely optional on the I-90.
+    optional_id = "middle_name"
+    assert not (next(
+        f for f in raw["fields"] if f["id"] == optional_id
+    ).get("validation") or {}).get("required"), (
+        f"{optional_id} is no longer optional -- pick another optional field")
+    ok_opt, _ = fs.validate_field_value(optional_id, "")
     assert ok_opt is True
 
 
@@ -243,7 +251,7 @@ def test_legacy_si_renders_note_and_carries_convey_directive():
     schema = {
         "form_metadata": {"title": "I-90"},
         "fields": [{
-            "id": "p1_checkbox4", "name": "Has Your Name Legally Changed?",
+            "id": "name_changed", "name": "Has Your Name Legally Changed?",
             "type": "radio",
             "help": {"instructions": "Indicate if your name has legally changed "
                      "since your Permanent Resident Card was issued."},

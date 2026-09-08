@@ -681,6 +681,11 @@ def _answer_everything(kit: str) -> dict:
             answers[field["id"]] = (
                 options[0].get("value", "X") if options else "X"
             )
+        elif kind == "email":
+            # A real address, not the "X" the free-text branch uses: an email
+            # field carries a format constraint, so a placeholder would fail
+            # validation on the round trip rather than exercising it.
+            answers[field["id"]] = "applicant@example.com"
         elif kind == "number":
             answers[field["id"]] = "42"
         elif kind == "date":
@@ -744,10 +749,18 @@ def test_EVERY_answer_survives_a_whole_form_round_trip(kit):
 def test_a_SUFFIX_named_widget_still_resolves(kit):
     """XFA PDFs name widgets with a full path; schemas may map the bare leaf.
 
-    On the i-90 that is ALL 114 direct mappings -- 0 exact, 114 suffix-only.
-    An exact-key lookup lost every text answer on the only status:complete
-    kit while the fill path wrote them correctly, because find_widget already
-    falls back to endswith.
+    HISTORICAL: that was ALL 114 of the OLD i-90's direct mappings -- 0 exact,
+    114 suffix-only. An exact-key lookup lost every text answer on the only
+    status:complete kit while the fill path wrote them correctly, because
+    find_widget already falls back to endswith.
+
+    MEASURED 2026-09-02, no shipped kit still exercises the suffix path:
+    i-90 79/79 exact, w7 47/47, f1040 167/167 -- all 0 suffix-only. The
+    applicant-only i-90 v2 schema stores FULLY-QUALIFIED widget names, the
+    inverse of its predecessor. So this test currently proves only that exact
+    matches resolve; the endswith fallback it was written to guard is
+    unexercised by real data (bd polyglot-pdf-2r1ku tracks the CI-dead kit
+    tests, this one included). Do not read a green run here as proof the fallback works.
     """
     if not (_KITS / kit / "form.pdf").exists():
         pytest.skip(f"{kit} kit not present")

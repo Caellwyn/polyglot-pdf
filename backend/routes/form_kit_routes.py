@@ -26,6 +26,7 @@ from backend.services.auth import (
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
+    GCSFormKitStore,
     get_form_kit_store,
 )
 from backend.services.kit_gates import (
@@ -197,18 +198,42 @@ async def list_form_kits(user: dict = Depends(require_signin)) -> FormKitManifes
             if form["id"] in firm_allowed:
                 visible.append((form, True))
 
+        # Serve kit BYTES through the authenticated backend routes whenever the
+        # store -- not the static bundle -- is the source of truth.
+        #
+        # A kit's baked static path (/form-kits/<id>/schema.json) resolves ONLY
+        # if that kit was in the git tree when the frontend was built, because
+        # generate-form-manifest.ts indexes the local form-kits/ directory. In
+        # GCS mode the BUCKET is authoritative and the hosted editor publishes
+        # straight into it, so a kit can be perfectly published and still absent
+        # from the bundle -- at which point its static path falls through the
+        # SPA catch-all in firebase.json and returns index.html with HTTP 200,
+        # and the client's JSON.parse dies on "<!DOCTYPE" (bd polyglot-pdf-6p77c;
+        # the missing /form-kits/** 404 rule is bd polyglot-pdf-9vbvt). The
+        # module docstring records the same hazard from the other side: in GCS
+        # mode "the manifest returns storage PATHS, but no host route backs
+        # them" (bd polyglot-pdf-sbfk).
+        #
+        # This was previously gated on is_private, whose stated reason -- the
+        # bundle "excludes private kits" (bd polyglot-pdf-kkos) -- is true but
+        # NOT the whole condition: the bundle excludes everything not committed,
+        # public kits included. Privacy was never the discriminator; PRESENCE IN
+        # THE BUNDLE is, and in GCS mode that is not knowable from here. So GCS
+        # mode routes every kit through /api/, which is correct for all of them
+        # (get_form_kit_schema/pdf serve any published, visible kit and apply
+        # the same firm gate). LOCAL mode keeps the static paths: there the
+        # store root IS the git tree, so they resolve by construction, and
+        # kitPublishFilter's KNOWN INTERACTION note (bd polyglot-pdf-pk2ns)
+        # tracks the draft-only gap that remains there.
+        store_is_authoritative = isinstance(store, GCSFormKitStore)
+
         forms = []
         for form, is_private in visible:
-            if is_private:
-                # Rewrite private kits' paths to the authenticated backend
-                # routes: the static Hosting bundle excludes private kits
-                # (bd polyglot-pdf-kkos -- kitPublishFilter.isPubliclyServable
-                # ships only complete AND public), so their baked static
-                # paths would 404. This route is THE per-request rewrite
-                # site: it already holds the caller's decoded claims
-                # (sprint-19 plan; normalize_manifest is a firm-agnostic
-                # store-boundary validator and must not do this). The viewer
-                # attaches its Bearer token on /api/ paths.
+            if is_private or store_is_authoritative:
+                # This route is THE per-request rewrite site: it already holds
+                # the caller's decoded claims (sprint-19 plan; normalize_manifest
+                # is a firm-agnostic store-boundary validator and must not do
+                # this). The viewer attaches its Bearer token on /api/ paths.
                 schema_path = f"/api/form-kits/{form['id']}/schema"
                 pdf_path = f"/api/form-kits/{form['id']}/pdf"
             else:

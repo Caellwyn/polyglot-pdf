@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-04 (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -572,10 +572,19 @@ tokens, not the client tier):
   parses its bearer token OPTIONALLY (`form_kit_routes.py`'s
   `get_form_kit_pdf`); an invalid token degrades to anonymous rather
   than 401.
-- **The private-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
-  rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
-  backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
-  Hosting bundle excludes private kits (bd kkos:
+- **The API-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
+  rewrites a kit's `schema_path`/`pdf_path` to the authenticated backend
+  routes (`/api/form-kits/<id>/schema|pdf`) whenever the STORE, not the static
+  bundle, is the source of truth. That is **any kit in GCS mode**, plus a
+  private kit in either mode. The discriminator is presence in the static
+  bundle, NOT privacy: the bundle contains only kits that were in the git tree
+  at frontend BUILD time, and kits are bucket-canonical (CLAUDE.md scar #10),
+  so a `complete`, PUBLIC kit published from the hosted editor is absent from
+  it too -- its baked static path then falls through the SPA catch-all and
+  returns `index.html` with HTTP 200, which is the `Unexpected token '<'`
+  failure of bd `polyglot-pdf-6p77c`. LOCAL mode keeps static paths (there the
+  store root IS the git tree). The private half of the rule remains true and
+  is why the rewrite existed at all (bd kkos:
   `kitPublishFilter.isPubliclyServable` ships only complete AND
   demonstrably-public -- absence or the exact string `"public"`;
   deliberately stricter than the routes' anything-but-"private" coercion,

@@ -1,0 +1,109 @@
+{
+  "id": "p7_checkbox7",
+  "name": "Preparer's Statement - Select whether the preparer is an attorney or accredited representative, or not",
+  "type": "radio",
+  "section_id": "sec_preparer_s_statement_p6",
+  "consolidated_widgets": [
+    "P7_checkbox7[0]",
+    "P7_checkbox7[1]"
+  ],
+  "options": [
+    {
+      "value": "i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent",
+      "label": "I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent",
+      "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[0]",
+      "pdf_position": {
+        "page": 6,
+        "x": 60.98,
+        "y": 151.0,
+        "width": 10.0,
+        "height": 10.0
+      },
+      "label_translations": {
+        "tagalog": "Hindi po ako isang abogado o accredited representative ngunit inihanda ko ang aplikasyong ito para sa aplikante at may pahintulot ng aplikante",
+        "spanish": "No soy un abogado ni un representante acreditado, pero he preparado esta solicitud en nombre del solicitante y con su consentimiento",
+        "chinese": "我不是律师或认证代表，但是经申请人同意，我代表申请人代写了此申请",
+        "arabic": "أنا لست محاميًا أو ممثلاً معتمدًا ولكنني أعددت هذا الطلب نيابة عن مقدم الطلب وبموافقته",
+        "portuguese": "Não sou advogado nem representante credenciado, mas preparei esta solicitação em nome do solicitante e com o seu consentimento",
+        "korean": "저는 변호사나 공인 대리인은 아니지만, 신청인을 대신하여 신청인의 동의를 얻어 이 신청서를 작성했습니다.",
+        "french": "Je ne suis pas un avocat ou un représentant accrédité mais j'ai préparé cette demande au nom du demandeur et avec son consentement",
+        "german": "Ich bin kein Anwalt oder akkreditierter Vertreter, habe diesen Antrag aber im Namen des Antragstellers und mit dessen Zustimmung vorbereitet",
+        "italian": "Non sono un avvocato o un rappresentante accreditato ma ho preparato questa domanda per conto del richiedente e con il suo consenso",
+        "hindi": "मैं एक वकील या मान्यता प्राप्त प्रतिनिधि नहीं हूँ, लेकिन मैंने यह आवेदन आवेदक की ओर से और आवेदक की सहमति से तैयार किया है",
+        "urdu": "میں وکیل یا تسلیم شدہ نمائندہ نہیں ہوں لیکن میں نے یہ درخواست درخواست دہندہ کی جانب سے اور اس کی رضامندی سے تیار کی ہے",
+        "persian": "من وکیل یا نماینده معتبر نیستم اما این درخواست را از طرف متقاضی و با رضایت او تهیه کرده‌ام",
+        "dutch": "Ik ben geen advocaat of geaccrediteerd vertegenwoordiger, maar heb deze aanvraag voorbereid namens de aanvrager en met diens toestemming",
+        "ukrainian": "Я не є адвокатом або акредитованим представником, але підготував(ла) цю заяву від імені заявника та за його згодою",
+        "swedish": "Jag är inte en advokat eller ackrediterad representant men har förberett denna ansökan på uppdrag av den sökande och med den sökandes samtycke",
+        "afrikaans": "Ek is nie 'n prokureur of geakkrediteerde verteenwoordiger nie, maar het hierdie aansoek namens die aansoeker en met die aansoeker se toestemming voorberei",
+        "russian": "Я не являюсь адвокатом или аккредитованным представителем, но подготовил(а) это заявление от имени заявителя и с его согласия"
+      }
+    },
+    {
+      "value": "i_am_an_attorney_or_accredited_representative_and_my_representation_of_the_applicant_in_this_case_extends_does_not_extend_beyond_the_preparation_of_this_application",
+      "label": "I am an attorney or accredited representative and my representation of the applicant in this case extends / does not extend beyond the preparation of this application",
+      "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[1]",
+      "pdf_position": {
+        "page": 6,
+        "x": 60.98,
+        "y": 196.29,
+        "width": 10.0,
+        "height": 10.0
+      },
+      "label_translations": {
+        "tagalog": "Ako po ay isang abogado o accredited representative at ang aking representasyon sa aplikante sa kasong ito ay umaabot / hindi umaabot lampas sa paghahanda ng aplikasyong ito",
+        "spanish": "Soy un abogado o representante acreditado y mi representación del solicitante en este caso se extiende / no se extiende más allá de la preparación de esta solicitud",
+        "chinese": "我是律师或认证代表，我在此案中对申请人的代理范围延伸/不延伸到代写此申请之外",
+        "arabic": "أنا محامٍ أو ممثل معتمد وتمثيلي لمقدم الطلب في هذه الحالة يمتد / لا يمتد إلى ما بعد إعداد هذا الطلب",
+        "portuguese": "Sou advogado ou representante credenciado e minha representação do solicitante neste caso se estende / não se estende além da preparação desta solicitação",
+        "korean": "저는 변호사 또는 공인 대리인이며, 이 사건에서 신청인에 대한 저의 대리 업무는 이 신청서의 작성을 넘어섭니다 / 넘어 서지 않습니다",
+        "french": "Je suis un avocat ou un représentant accrédité et ma représentation du demandeur dans cette affaire s'étend / ne s'étend pas au-delà de la préparation de cette demande",
+        "german": "Ich bin ein Anwalt oder akkreditierter Vertreter und meine Vertretung des Antragstellers in diesem Fall erstreckt sich / erstreckt sich nicht über die Vorbereitung dieses Antrags hinaus",
+        "italian": "Sono un avvocato o un rappresentante accreditato e la mia rappresentanza del richiedente in questo caso si estende / non si estende oltre la preparazione di questa domanda",
+        "hindi": "मैं एक वकील या मान्यता प्राप्त प्रतिनिधि हूँ और इस मामले में आवेदक का मेरा प्रतिनिधित्व इस आवेदन की तैयारी से आगे तक विस्तृत है / विस्तृत नहीं है",
+        "urdu": "میں ایک وکیل یا تسلیم شدہ نمائندہ ہوں اور اس معاملے میں درخواست دہندہ کی میری نمائندگی اس درخواست کی تیاری سے آگے تک ہے / نہیں ہے",
+        "persian": "من وکیل یا نماینده معتبر هستم و نمایندگی من از متقاضی در این پرونده فراتر از تهیه این درخواست است / فراتر از تهیه این درخواست نیست",
+        "dutch": "Ik ben een advocaat of geaccrediteerd vertegenwoordiger en mijn vertegenwoordiging van de aanvrager in deze zaak strekt zich wel / niet uit tot buiten de voorbereiding van deze aanvraag",
+        "ukrainian": "Я є адвокатом або акредитованим представником, і моє представництво заявника в цій справі поширюється / не поширюється за межі підготовки цієї заяви",
+        "swedish": "Jag är en advokat eller ackrediterad representant och min representation av den sökande i detta ärende sträcker sig / sträcker sig inte längre än förberedelsen av denna ansökan",
+        "afrikaans": "Ek is 'n prokureur of geakkrediteerde verteenwoordiger en my verteenwoordiging van die aansoeker in hierdie saak strek / strek nie verder as die voorbereiding van hierdie aansoek nie",
+        "russian": "Я являюсь адвокатом или аккредитованным представителем, и мое представительство заявителя по этому делу распространяется / не распространяется за пределы подготовки этого заявления"
+      }
+    }
+  ],
+  "read_only": false,
+  "multiline": false,
+  "is_comb": false,
+  "hidden": false,
+  "spoken_name": "Is the preparer an attorney or not",
+  "help": {
+    "instructions": "Select whether the preparer is an attorney or accredited representative, or not."
+  },
+  "pdf_position": {
+    "page": 6,
+    "x": 60.97999954223633,
+    "y": 150.99700927734375,
+    "width": 10.000003814697266,
+    "height": 10
+  },
+  "question_number": "7.7.A",
+  "spoken_name_translations": {
+    "spanish": "¿El preparador es un abogado o no?",
+    "arabic": "هل مُعِد الطلب محامٍ أم لا",
+    "chinese": "代写人是否是律师",
+    "tagalog": "Ang preparer po ba ay isang abogado o hindi",
+    "french": "Le préparateur est-il un avocat ou non",
+    "korean": "작성 대리인이 변호사입니까 아닙니까",
+    "german": "Ist der Vorbereiter ein Anwalt oder nicht",
+    "portuguese": "O preparador é um advogado ou não",
+    "hindi": "क्या तैयार करने वाला एक वकील है या नहीं",
+    "italian": "Il preparatore è un avvocato o no",
+    "urdu": "کیا تیار کنندہ وکیل ہے یا نہیں",
+    "persian": "آیا تهیه‌کننده وکیل است یا خیر",
+    "dutch": "Is de voorbereider een advocaat of niet",
+    "swedish": "Är handläggaren en advokat eller inte",
+    "ukrainian": "Чи є особа, що підготувала документ, адвокатом чи ні",
+    "russian": "Является ли подготовившее лицо адвокатом или нет",
+    "afrikaans": "Is die voorbereier 'n prokureur of nie"
+  }
+}
