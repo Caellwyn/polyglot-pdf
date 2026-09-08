@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-b6943: a FOURTH vitest suite, `admin-console/`, wired into `.github/workflows/ci.yml` the same way as `frontend`/`schema-editor` -- `npm ci` + `tsc --noEmit` + `vitest run`.) (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -276,23 +276,27 @@ measurement and center with margin for the spread (see the
 
 ## Coverage & CI
 
-**Coverage tooling is wired on all three stacks but opt-in (a secondary signal,
+**Coverage tooling is wired on all four stacks but opt-in (a secondary signal,
 not enforced).** Run it explicitly:
 
 - **Backend:** `pytest -m "not external" --cov --cov-report=term-missing`
   (`pytest-cov`; source/omit scoping in the root `.coveragerc`).
 - **Frontend:** `npm run test:coverage` from `frontend/` (`@vitest/coverage-v8`).
 - **Schema-editor:** `npm run test:coverage` from `schema-editor/`.
+- **Admin-console:** `npm run test:coverage` from `admin-console/` (bd
+  polyglot-pdf-b6943; same `@vitest/coverage-v8` wiring as the other two
+  Vite apps -- no baseline recorded yet for this newest stack).
 
-Baseline statement coverage (recorded 2026-06-09): **backend 54%** (source-scoped
-via `.coveragerc`, so untested modules count), **frontend 12%**, **schema-editor
-33%**. These are instruments, not gates — no threshold is enforced and a low
-number is not a closeout blocker. Coverage artifacts (`.coverage`, `coverage/`)
-are gitignored.
+Baseline statement coverage (recorded 2026-06-09, backend/frontend/schema-editor
+only): **backend 54%** (source-scoped via `.coveragerc`, so untested modules
+count), **frontend 12%**, **schema-editor 33%**. These are instruments, not
+gates — no threshold is enforced and a low number is not a closeout blocker.
+Coverage artifacts (`.coverage`, `coverage/`) are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
-backend pytest suite (`-m "not external"`) plus both vitest suites (each preceded
-by its own `tsc --noEmit` typecheck step) on every PR.
+backend pytest suite (`-m "not external"`) plus all three vitest suites --
+`frontend`, `schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each
+preceded by its own `tsc --noEmit` typecheck step, on every PR.
 It is **not** a required status check: the merge gate is the closeout merge
 decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
 merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
@@ -380,8 +384,9 @@ three runtime bugs blocked the actual PDF render, all invisible to jsdom.
 (esbuild) without full type-checking, so type errors -- including ones that mask
 real bugs, like a duplicate local type that let `field.required`/`field.options`
 resolve wrong -- pass the suite. The standalone `npm run typecheck`
-(`tsc --noEmit`) gate in CI's frontend and schema-editor jobs is the thing that
-catches this class; keep both green (`polyglot-pdf-uov.17`, `polyglot-pdf-1rgr`).
+(`tsc --noEmit`) gate in CI's frontend, schema-editor, and admin-console jobs is
+the thing that catches this class; keep all three green
+(`polyglot-pdf-uov.17`, `polyglot-pdf-1rgr`).
 
 **Beware the self-fulfilling mock test.** A test that constructs the expected
 payload, calls a mock with it, and then asserts the mock was called with it
