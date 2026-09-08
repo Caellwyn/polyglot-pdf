@@ -1187,3 +1187,68 @@ inventing its own.
   that test's both-directions regex to allow one extra
   `/{wildcard}/segment` hop, since the file-wide scan otherwise only
   recognizes single-level `collection/{wildcard}` blocks.
+
+### 17. Admin console -> admin service: sign-in gate + page reads/writes (bd polyglot-pdf-b6943)
+
+The admin console (`admin-console/`, a separate Vite app, Hosting sites
+`polyglot-admin-demo` + `polyglot-admin-candidate`) is the FIRST client of the
+admin service's routes (contracts 15 above and `GET /admin/whoami`). It
+mirrors `schema-editor/`'s producer/consumer shape closely enough that a
+change to one side's contract usually needs a matching change on the other.
+
+- **Producer:** `admin_backend/routes/whoami.py` (`GET /admin/whoami` ->
+  `{uid, email}`), `admin_backend/routes/audit_routes.py` (`GET /admin/audit`
+  -> `{rows, next_cursor}`), `admin_backend/routes/config_routes.py`
+  (`GET /admin/config/{channel}` -> `{channel, values, known_keys,
+  unknown_keys}`; `PUT /admin/config/{channel}` body `{key, value}` ->
+  `{channel, key, before, after, request_id}`). All four gated by
+  `require_app_admin` (`admin_backend/services/admin_auth.py`): 401 on a
+  missing/invalid token, 403 with the `NO_ADMIN_ACCESS:` prefix on a valid
+  account with no `app_admin` claim.
+- **Consumer:** `admin-console/src/utils/adminApi.ts` -- `probeWhoAmI`,
+  `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`. Every call
+  carries `Authorization: Bearer <Firebase ID token>`, fetched PER REQUEST
+  from `admin-console/src/utils/adminAuth.ts`'s `adminIdToken()` (never
+  cached client-side -- an ID token expires in about an hour and the SDK
+  refreshes it transparently, so caching one here would reintroduce a stale-
+  credential 401 mid-session). A 401 raises `AuthError`; a 403 raises
+  `ForbiddenError`, classified by the `NO_ADMIN_ACCESS:` prefix into
+  `noAdminAccess` -- the SAME wire marker `schema-editor`'s
+  `NO_EDITOR_ACCESS_PREFIX` classification uses, kept as a machine-readable
+  prefix rather than a client string-match on prose for the same reason (a
+  reworded message must not silently stop evicting).
+- **`admin-console/src/components/SignInGate.tsx`** mirrors
+  `schema-editor/src/components/SignInGate.tsx`'s two-gate shape (Firebase
+  authentication, then a server-side authorization probe) almost verbatim,
+  duplicated rather than imported for the same maintainer constraint that
+  keeps `schema-editor/` from importing `frontend/` (2026-08-20: no new
+  cross-surface dependencies to unravel later). `onReady` is called with the
+  `WhoAmI` the server returns, not a role string -- `app_admin` is boolean
+  (`admin_backend/services/admin_auth.py`'s `AdminActor` has no role field to
+  report), unlike the editor's `editor`/`author` `EditorRole`.
+- **`VITE_ADMIN_API_BASE_URL`** (`admin-console/src/utils/adminApi.ts`'s
+  `apiBaseUrl()`) is the admin service's own Cloud Run URL, resolved at
+  DEPLOY time by `deploy-admin-console.sh` the same way `deploy-editor.sh`
+  resolves `VITE_API_BASE_URL` for the public backend -- see Surface
+  contract-adjacent detail in `docs/components/config-deployment.md`'s
+  "Admin console" section. Distinct from `VITE_API_BASE_URL`: the console
+  never calls the public backend, so the two base URLs cannot be confused by
+  sharing a name.
+- **Auth project:** the SAME Firebase project as the voice app and the
+  schema editor (`admin-console/.env.hosted`'s `VITE_FIREBASE_*`, identical
+  values to `schema-editor/.env.hosted`'s) -- a second project is a
+  separation epic's job, not this one's. Access is granted per person with
+  `scripts/bootstrap_admin_user.py`, never self-served; the console offers no
+  account-creation UI.
+- **Build-time git SHA:** `admin-console/vite.config.ts` bakes
+  `__ADMIN_CONSOLE_GIT_SHA__` into the bundle via a Vite `define` (`git
+  rev-parse HEAD` at build time, `'unknown'` on failure). This is the
+  CONSOLE's own build commit, rendered on the "who am I" page --
+  intentionally separate from `GET /version`'s `git_sha`, which reports the
+  ADMIN SERVICE's commit (a different deploy, reached over HTTP, not the
+  build this bundle came from).
+- **CORS:** `admin_backend/main.py`'s `CORSMiddleware` allowlist carries both
+  console sites' localhost dev ports (3002) plus, at deploy time,
+  `deploy-admin.sh`'s `ADMIN_CORS_ORIGINS` (both sites' `.web.app` and
+  `.firebaseapp.com` domains, alongside the main app's origins for Epic 2's
+  firm-manager pages).

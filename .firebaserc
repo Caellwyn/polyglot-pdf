@@ -13,6 +13,12 @@
         ],
         "app-staging": [
           "polyglot-app-staging"
+        ],
+        "admin": [
+          "polyglot-admin-demo"
+        ],
+        "admin-candidate": [
+          "polyglot-admin-candidate"
         ]
       }
     },

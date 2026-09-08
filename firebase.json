@@ -62,6 +62,36 @@
                     "destination": "/index.html"
                 }
             ]
+        },
+        {
+            "target": "admin",
+            "public": "admin-console/dist",
+            "ignore": [
+                "firebase.json",
+                "**/.*",
+                "**/node_modules/**"
+            ],
+            "rewrites": [
+                {
+                    "source": "**",
+                    "destination": "/index.html"
+                }
+            ]
+        },
+        {
+            "target": "admin-candidate",
+            "public": "admin-console/dist",
+            "ignore": [
+                "firebase.json",
+                "**/.*",
+                "**/node_modules/**"
+            ],
+            "rewrites": [
+                {
+                    "source": "**",
+                    "destination": "/index.html"
+                }
+            ]
         }
     ]
 }
