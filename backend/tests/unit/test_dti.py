@@ -1051,3 +1051,78 @@ def test_confirm_field_tool_description_is_pinned_EXACTLY():
     )
     # The enum is a wire contract and must not drift with the prose.
     assert prop["enum"] == ["verbal", "manual"]
+
+
+# ---------------------------------------------------------------------------
+# manual_field_update carries VERIFICATION STATE (bd polyglot-pdf-96um6).
+#
+# The model gets a field's STATE, never how the value arrived (maintainer
+# directive, bd polyglot-pdf-gaxnf). A verify does NOT reach the model on its
+# own -- measured: the notify producer is a DOM change listener, and verifying
+# changes only a flag, so nothing fires. Hence the flag on this message.
+# ---------------------------------------------------------------------------
+
+class _CapturingLiveAI:
+    """Captures the text the model would receive."""
+
+    def __init__(self):
+        self.messages = []
+
+    async def send_text_message(self, message):
+        self.messages.append(message)
+
+
+def _handler_with_capture():
+    from backend.services.audio_handler import AudioHandler
+    live = _CapturingLiveAI()
+    h = AudioHandler(live_ai=live, session_id="t")
+    return h, live
+
+
+def test_manual_field_update_says_UNVERIFIED_and_what_to_do():
+    import asyncio
+    h, live = _handler_with_capture()
+    asyncio.run(h.send_manual_field_update("f1", "Family Name", "Vasquez"))
+
+    msg = live.messages[0]
+    assert "Vasquez" in msg, "the model must learn the value"
+    assert "NOT verified" in msg, "and that it is unverified"
+    # The one thing it cannot read off the state: what to DO about it.
+    assert "confirm" in msg.lower(), "an unverified value needs the user's assent"
+
+
+def test_manual_field_update_says_VERIFIED_when_the_user_verified_it():
+    import asyncio
+    h, live = _handler_with_capture()
+    asyncio.run(h.send_manual_field_update("f1", "Family Name", "Vasquez", verified=True))
+
+    msg = live.messages[0]
+    assert "Vasquez" in msg
+    assert "is verified" in msg
+    assert "NOT verified" not in msg, "the verified case must not read as unverified"
+
+
+def test_neither_message_mentions_HOW_the_value_ARRIVED():
+    """State, not provenance -- the standing directive.
+
+    'typed', 'manually', 'edited' all describe how the value got there, which the
+    model has no business reasoning about: it is filled or not, verified or not.
+    """
+    import asyncio
+    h, live = _handler_with_capture()
+    asyncio.run(h.send_manual_field_update("f1", "Family Name", "Vasquez"))
+    asyncio.run(h.send_manual_field_update("f1", "Family Name", "Vasquez", verified=True))
+
+    for msg in live.messages:
+        lowered = msg.lower()
+        for provenance in ("typed", "manually", "you filled", "edited"):
+            assert provenance not in lowered, f"{provenance!r} leaked into: {msg}"
+
+
+def test_verified_defaults_to_FALSE_for_a_legacy_client():
+    """An older client omits the key. Absent must mean UNVERIFIED, which is the
+    safe direction: the field is re-offered rather than treated as settled."""
+    import asyncio
+    h, live = _handler_with_capture()
+    asyncio.run(h.send_manual_field_update("f1", "Family Name", "Vasquez"))
+    assert "NOT verified" in live.messages[0]
