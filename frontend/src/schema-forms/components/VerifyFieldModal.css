@@ -1,0 +1,138 @@
+/**
+ * VerifyFieldModal styles (bd polyglot-pdf-96um6).
+ *
+ * Mirrors ConnectionTimeoutModal.css / DisclaimerModal.css (large touch targets,
+ * responsive, accessibility media queries).
+ *
+ * SIZED FOR TRANSLATIONS, NOT ENGLISH. Several of the 18 translated checkbox
+ * labels run ~1.6x the English (German, Ukrainian), and the bead requires this to
+ * work in the CROWDED PDF view -- so nothing here assumes English width: the
+ * label wraps, the modal is max-width with a viewport cap, and the action row
+ * wraps rather than overflowing.
+ */
+
+.verify-field-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.verify-field-modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 460px;
+  width: 100%;
+  /* The PDF view is crowded; never exceed the viewport even with long copy. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.verify-field-modal-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.verify-field-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.verify-field-modal-field-label {
+  font-size: 13px;
+  color: #5a6472;
+}
+
+.verify-field-modal-value {
+  font-size: 17px;
+  font-weight: 600;
+  /* A long typed answer must wrap, not stretch the modal. */
+  overflow-wrap: anywhere;
+}
+
+.verify-field-modal-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 24px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.verify-field-modal-checkbox-row input {
+  /* Large touch target, and it must not shrink when the label wraps to 3 lines. */
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.verify-field-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  /* Long translated button labels wrap to their own row rather than overflow. */
+  flex-wrap: wrap;
+}
+
+.verify-field-modal-actions button {
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.verify-field-modal-cancel {
+  background: white;
+  border: 1px solid #c3cbd6;
+  color: #333;
+}
+
+.verify-field-modal-confirm {
+  background: #1a73e8;
+  border: 1px solid #1a73e8;
+  color: white;
+  font-weight: 600;
+}
+
+.verify-field-modal-confirm:disabled {
+  background: #a8c4ea;
+  border-color: #a8c4ea;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .verify-field-modal-content {
+    padding: 20px;
+  }
+  .verify-field-modal-actions {
+    flex-direction: column-reverse;
+  }
+  .verify-field-modal-actions button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verify-field-modal-overlay,
+  .verify-field-modal-content {
+    transition: none;
+  }
+}
