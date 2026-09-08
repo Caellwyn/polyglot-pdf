@@ -474,3 +474,59 @@ describe('SchemaForm continuous-mode section paging (bd polyglot-pdf-gz20)', () 
     expect(screen.queryByText('Section Two')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Manual edits must not auto-confirm a BLANK value (bd polyglot-pdf-5ovod).
+//
+// handleFieldChange fires on every keystroke and stamped confirmed:true
+// unconditionally, so typing spaces into the React form -- the app's actual
+// entry point -- produced a CONFIRMED whitespace entry. That is the exact
+// confirmed-but-blank state the rest of the bead had to build a navigation
+// recovery arm to rescue, manufactured by the primary UI.
+//
+// Drives the REAL input the user types into, not the handler directly, so the
+// test cannot pass by calling something production does not call.
+// ---------------------------------------------------------------------------
+describe('manual edit does not confirm a blank value (bd polyglot-pdf-5ovod)', () => {
+  function storedEntry(fieldId: string): any {
+    const raw = sessionStorage.getItem('schema_form_state');
+    if (!raw) return undefined;
+    return JSON.parse(raw).fieldValues?.[fieldId];
+  }
+
+  it('typing only spaces leaves the field UNCONFIRMED', () => {
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    const input = screen.getByLabelText(/Field One/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: '   ' } });
+
+    const entry = storedEntry('f1');
+    expect(entry?.confirmed, 'whitespace must not auto-confirm').not.toBe(true);
+  });
+
+  it('typing a real value DOES confirm, as before', () => {
+    // The other half: the guard must not break ordinary typing, which is the
+    // whole point of auto-confirming a manual edit.
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    const input = screen.getByLabelText(/Field One/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'Maria' } });
+
+    const entry = storedEntry('f1');
+    expect(entry?.value).toBe('Maria');
+    expect(entry?.confirmed).toBe(true);
+  });
+
+  it('clearing a field back to empty leaves it unconfirmed', () => {
+    // Deleting your answer is not confirming a blank one.
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    const input = screen.getByLabelText(/Field One/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'Maria' } });
+    expect(storedEntry('f1')?.confirmed).toBe(true);
+
+    fireEvent.change(input, { target: { value: '' } });
+
+    expect(storedEntry('f1')?.confirmed).not.toBe(true);
+  });
+});

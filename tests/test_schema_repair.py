@@ -1809,3 +1809,49 @@ def test_strip_leaves_untouched_field_translations_intact():
     f = repaired["fields"][0]
     assert f["spoken_name"] == "born before 1961"
     assert f["spoken_name_translations"] == {"spanish": "nacido antes de 1961"}
+
+
+def test_a_condition_naming_a_selects_EXPORT_CODE_resolves_to_its_slug():
+    """bd polyglot-pdf-g2fpr PR 2. The extraction prompt shows the model only
+    a dropdown's /Opt codes, so a condition it writes names the code ('WY').
+    Under the v2 shape (value 'wyoming', pdf_on_value 'WY') that code resolved
+    to no option and repair DROPPED the condition -- a regression the
+    cross-surface review reproduced. pdf_on_value is now an alias for the slug.
+    """
+    schema = {
+        "schema_version": "2",
+        "fields": [
+            {"id": "state", "type": "select", "pdf_field_name": "state[0]",
+             "options": [
+                 {"value": "wyoming", "label": "Wyoming (WY)", "pdf_on_value": "WY"},
+                 {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"},
+             ]},
+            {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
+             "show_if": {"field": "state", "operator": "equals", "value": "WY"}},
+        ],
+    }
+    repaired, repairs = repair(schema)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep.get("show_if") == {"field": "state", "operator": "equals", "value": "wyoming"}, repairs
+    assert not any(r["action"] == "drop-condition" for r in repairs)
+
+
+def test_a_code_two_options_claim_is_NOT_an_alias():
+    """The collision guard: an ambiguous code must not pick a winner (the same
+    policy /resume-form applies, bd polyglot-pdf-7dvpp)."""
+    schema = {
+        "schema_version": "2",
+        "fields": [
+            {"id": "state", "type": "select", "pdf_field_name": "state[0]",
+             "options": [
+                 {"value": "alabama", "label": "Alabama", "pdf_on_value": "AL"},
+                 {"value": "alabama_north", "label": "Alabama North", "pdf_on_value": "AL"},
+             ]},
+            {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
+             "show_if": {"field": "state", "operator": "equals", "value": "AL"}},
+        ],
+    }
+    repaired, repairs = repair(schema)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep.get("show_if") is None            # dropped, not guessed
+    assert any(r["action"] == "drop-condition" for r in repairs)

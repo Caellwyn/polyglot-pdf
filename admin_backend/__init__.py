@@ -21,10 +21,15 @@ pinned by test.
 
 ONE IMAGE, TWO SERVICES. The root Dockerfile copies both packages and reads
 the ASGI target from the runtime env var APP_MODULE (default
-backend.main:app). NOTHING SETS THAT VARIABLE YET: no deploy script on this
-branch passes APP_MODULE, so every service built from this image serves
-backend.main:app today. The admin service will be deployed with
-APP_MODULE=admin_backend.main:app by its own deploy script (sprint-22 plan
-bead 1.3); the consumer side ships first so that deploy is a config change
-rather than a code change.
+backend.main:app). deploy-all.sh's backend stage sets APP_MODULE (plus
+GIT_SHA) as runtime env on every backend deploy, defaulting to
+backend.main:app when a caller sets nothing -- every public channel
+(deploy-staging.sh, deploy-demo.sh) does exactly that, so this is a config
+addition with no behavior change for them. deploy-admin.sh (bd
+polyglot-pdf-3l2vp, sprint-22 plan bead 1.3) is the one caller that overrides
+it, exporting APP_MODULE=admin_backend.main:app ahead of the same
+deploy-all.sh --backend invocation, and additionally deploys the admin
+service as a no-traffic tagged revision verified at its own health endpoint
+before traffic shifts -- the control plane's own staging tier, since one
+admin service backs both channels' data.
 """

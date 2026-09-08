@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -1998,8 +1998,15 @@ export class WebFormConnection {
     // never lands. Therefore, treat '' as usable when the field is not required.
     const fieldSchema = this.state.schema.fields.find(f => f.id === field_id);
     const fieldIsRequired = fieldSchema?.validation?.required === true;
+    // Whitespace-only is BLANK and never usable, on required OR optional fields
+    // (bd polyglot-pdf-5ovod): typing spaces is not the "does not apply" answer.
+    // The '' carve-out above stays as-is -- a genuine empty string on an OPTIONAL
+    // field is a deliberate verbal answer, and isBlankFieldValue treats '' and
+    // '   ' alike, so the carve-out is applied only to the exact-'' case.
+    const isWhitespaceOnly =
+      typeof fieldValue === 'string' && fieldValue !== '' && fieldValue.trim() === '';
     const hasUsableValue =
-      fieldValue !== null && fieldValue !== undefined &&
+      fieldValue !== null && fieldValue !== undefined && !isWhitespaceOnly &&
       (fieldValue !== '' || !fieldIsRequired);
 
     if (!hasUsableValue) {
@@ -2317,9 +2324,17 @@ export class WebFormConnection {
         field_id.endsWith('[]') ? field_id.slice(0, -2) : field_id + '[]'
       ]
     )?.value;
-    const alreadyFilled =
-      existing !== null && existing !== undefined && existing !== '' &&
-      !(Array.isArray(existing) && existing.length === 0);
+    // Whitespace is NOT a value, so it must not block a skip (bd
+    // polyglot-pdf-5ovod). This guard exists to stop a skip ERASING a real
+    // answer; there is no answer to protect here.
+    //
+    // Leaving it untrimmed created a DEADLOCK once the other exits tightened:
+    // confirm_field refuses (hasUsableValue rejects whitespace), skip_field
+    // refused here, and update_form_fields '' is rejected by the required
+    // check -- while the backend marks the skip refusal NON-RETRYABLE and
+    // computeNextField keeps re-offering the field. The model would be handed a
+    // field it could not answer, skip, or clear, and told not to try again.
+    const alreadyFilled = !isBlankFieldValue(existing);
     if (alreadyFilled) {
       console.warn('[WebFormConnection] skip_field refused -- field already has a value:', field_id);
       this.sendSkipFieldResponse(request_id, false, 'already_filled');
@@ -2480,17 +2495,30 @@ export class WebFormConnection {
     const currentValue = entry?.value;
     // An EMPTY checkbox-group ([]) is not a value -- treat it as unanswered so the
     // ack does not tell the model "it already holds an unconfirmed value" and ride
-    // value:[] (the model would read back nothing). Mirrors the skip path's guard
+    // value:[] (the model would read back nothing). Shares the skip path's guard
     // (handleSkipFieldRequest, bd polyglot-pdf-7yra) so the two agree (bd
-    // polyglot-pdf-luju nit 1).
-    const hasValue =
-      currentValue !== null && currentValue !== undefined && currentValue !== '' &&
-      !(Array.isArray(currentValue) && currentValue.length === 0);
+    // polyglot-pdf-luju nit 1) -- via the same predicate now, not a restatement
+    // of it: they had already drifted once on whitespace, and the comment went on
+    // claiming parity that no longer held (bd polyglot-pdf-5ovod).
+    //
+    // WHITESPACE IS NOT A VALUE HERE EITHER. Saying it is makes the ack tell the
+    // model "it already holds an unconfirmed value -- read it back and verify it"
+    // about a field containing only spaces: there is nothing to read back, and
+    // confirm_field now refuses that very field, so the guidance would steer the
+    // model at a closed exit.
+    const hasValue = !isBlankFieldValue(currentValue);
     this.sendSwitchFieldResponse(request_id, true, {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,
       next_field_hint: hint,
-      already_confirmed: !!entry?.confirmed,
+      // A confirmation of BLANKNESS is not a confirmed answer (bd
+      // polyglot-pdf-5ovod). The backend checks already_confirmed BEFORE
+      // has_value, so leaving this raw would announce a legacy
+      // confirmed-whitespace field as "it already has a confirmed answer -- read
+      // the current value back", with nothing to read back and confirm_field
+      // refusing that very field. Fixing has_value alone would have left this
+      // branch lying, one line above the one I had just corrected.
+      already_confirmed: !!entry?.confirmed && !isConfirmedButBlank(currentValue),
       has_value: hasValue,
       // The current value rides the ack so the model can read it back to the
       // user (same Gemini trust boundary as ask_secretary; never logged).

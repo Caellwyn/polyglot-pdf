@@ -100,65 +100,147 @@ def test_a_field_with_no_choices_renders_no_choices_clause(render):
     assert "choices=[" not in text
 
 
-# --- the slug rule must be scoped EVERYWHERE, not just where it is stated --- #
+# --- the select contract must be stated CONSISTENTLY everywhere ------------ #
 
-def test_no_rendered_slug_rule_still_claims_to_cover_select():
-    """Pins the SET, not the one instance (CLAUDE.md scar #8).
 
-    The prompt states the option-value rule in several places: the JSON type
-    skeleton, CHOICE-FIELD RULES, and the condition-reference rule. bd
-    polyglot-pdf-hmkas scopes the slug rule to radio/checkbox_group -- a
-    select's value is the PDF's own export code -- and fixing only ONE
-    statement leaves the model reading a contradiction (the skeleton is what it
-    imitates first).
+# A passage that puts a select's export code IN ITS VALUE, in so many words.
+# Co-occurrence with "pdf_on_value" elsewhere in the sentence is not enough:
+# fresh-eyes (g2fpr.2) wrote "For a SELECT the option value IS the PDF export
+# code, unlike radio ... which uses pdf_on_value" and the co-occurrence scan
+# passed it. So the wrong claim is matched DIRECTLY, whatever else the sentence
+# says.
+# Two guards fresh-eyes (g2fpr.2 round 2) showed were missing:
+#   - a WORD boundary before "value": `pdf_on_value` ends in "_value", so
+#     "pdf_on_value is the export code" -- a CORRECT sentence -- matched at its
+#     tail. `(?<![a-z_])` refuses a match that starts inside an identifier;
+#   - NEGATION: "select is NOT like radio, where value must be the export
+#     code" states the right thing by contrast. A match preceded within a
+#     short window by not / never / unlike / neither is a contrast, not a claim.
+_VALUE_IS_CODE = re.compile(
+    r"(?<![a-z_])(?:option\.?\s*)?value\s+(?:is|=|must be|should be)\s+(?:the\s+)?"
+    r"(?:pdf'?s?\s+own\s+)?(?:pdf\s+)?export\s+code"
+)
+_NEGATED = re.compile(r"\b(?:not|never|unlike|neither|no longer)\b")
+# A contrast only counts inside the SAME clause. Fresh-eyes (round 3) showed
+# a fixed 40-char window swallowing the real claim in "do not omit options;
+# a select value must be the export code" -- the "not" belongs to the previous
+# clause. The lookback therefore starts at the last clause boundary before
+# the match: ";", ".", or a " -- " dash. A COMMA is not a boundary, because
+# the legitimate contrast reads "NOT like radio, where value must be ...".
+_CLAUSE_BREAK = re.compile(r"[;.]|\s--\s")
 
-    Scans by SENTENCE, not by line. The skeleton splits one rule across two
-    lines ("radio/select/checkbox_group choices" then "option.value is a
-    SEMANTIC SLUG"), so a line-by-line scan sees neither half naming BOTH and
-    passes while the contradiction stands -- a false negative this test had
-    until mutation caught it.
-    """
-    text = schema_contract.SCHEMA_CONTRACT
-    # Blank-line / full-stop windows, so a rule wrapped across lines stays in
-    # one chunk.
+
+def _states_value_is_code(low: str) -> bool:
+    """True when the sentence CLAIMS a select's value is its export code --
+    not when it names that claim to contrast against it, within the clause."""
+    for m in _VALUE_IS_CODE.finditer(low):
+        before = low[:m.start()]
+        breaks = list(_CLAUSE_BREAK.finditer(before))
+        clause_start = breaks[-1].end() if breaks else 0
+        if not _NEGATED.search(before[clause_start:]):
+            return True
+    return False
+
+
+def select_contract_offenders(text: str) -> list:
+    """Rendered passages that state the OLD select contract. Factored out so the
+    scan itself can be tested against an adversarial passage."""
     chunks = re.split(r"\n\s*\n|(?<=\.)\s", text)
     offenders = []
     for chunk in chunks:
         low = " ".join(chunk.lower().split())
-        if "slug" not in low:
-            continue
-        # The FIELD TYPE, not the English words "selected" / "selection".
         if not re.search(r"\bselect\b|\bdropdown\b", low):
             continue
-        if any(k in low for k in ("is different", "does not apply", "not apply",
-                                  "no slug", "export code", "omit",
-                                  "leave options", "slugify these")):
+        if _states_value_is_code(low):
+            offenders.append(low[:160])          # the claim itself, verbatim
             continue
-        offenders.append(low[:160])
+        if "export code" not in low:
+            continue
+        if "pdf_on_value" in low or "never the export code" in low:
+            continue
+        offenders.append(low[:160])              # names the code, not its home
+    return offenders
+
+
+def test_no_rendered_passage_puts_a_selects_export_code_in_its_value():
+    """Pins the SET, not the one instance (CLAUDE.md scar #8).
+
+    Until bd polyglot-pdf-g2fpr a select's option.value WAS the PDF export
+    code, and this test pinned a carve-out saying so in three places. Now a
+    select's value is a SLUG and its export code lives in pdf_on_value (the
+    filler writes that -- PR 1), so the invariant inverts: no rendered passage
+    may put a select's export code in its value, and any passage naming the
+    code must say where it lives. The skeleton is what the model imitates
+    first, so one stale statement is a contradiction it reads before the rule.
+
+    Scans by SENTENCE, not by line: the skeleton splits one rule across lines.
+    """
+    offenders = select_contract_offenders(schema_contract.SCHEMA_CONTRACT)
     assert not offenders, (
-        "these rendered passages apply the slug rule to select:\n  "
+        "these rendered passages state the old select contract:\n  "
         + "\n  ".join(offenders))
+
+
+@pytest.mark.parametrize("passage", [
+    # The adversarial sentence fresh-eyes built: co-occurrence let it through.
+    "For a SELECT the option value IS the PDF export code (e.g. WY), unlike "
+    "radio/checkbox_group which uses pdf_on_value for shared-name kids.",
+    "A dropdown's option.value must be the PDF's own export code; pdf_on_value "
+    "is for radios.",
+    "select: value = export code. pdf_on_value carries the widget state.",
+    # Fresh-eyes round 3: an UNRELATED "not" in the previous clause, plus an
+    # innocuous pdf_on_value mention, defeated both layers at once.
+    "do not omit options for radio; a select value must be the export code, "
+    "unlike checkbox_group which uses pdf_on_value for shared-name kids.",
+])
+def test_the_scan_catches_a_wrong_passage_that_also_mentions_pdf_on_value(passage):
+    """The scan's own non-vacuity floor: a passage that states the OLD contract
+    while name-dropping pdf_on_value elsewhere in the sentence must be an
+    offender. Without this, the scan is a co-occurrence check that the wrong
+    claim can satisfy."""
+    assert select_contract_offenders(passage), passage
+
+
+@pytest.mark.parametrize("ok", [
+    "For a SELECT each option's value is a SLUG minted from its display name "
+    "and its PDF export code is stored in option.pdf_on_value.",
+    # Fresh-eyes' two FALSE-POSITIVE sentences: both state the right thing.
+    "pdf_on_value is the export code for a select option.",
+    "a select is NOT like radio, where value must be the export code -- here "
+    "value is a slug and pdf_on_value carries the code.",
+])
+def test_the_scan_accepts_the_right_claim(ok):
+    """The other side of the floor: a correct sentence must not be flagged --
+    including one where "value" is the tail of pdf_on_value, and one that
+    names the wrong claim only to contrast against it."""
+    assert select_contract_offenders(ok) == []
 
 
 @pytest.mark.parametrize("what,needle", [
     # The JSON type skeleton -- what the model imitates first.
-    ("skeleton", "its values are the PDF's own export codes"),
+    ("skeleton", "its PDF export code in"),
+    ("skeleton", "SLUG value minted from its"),
     # CHOICE-FIELD RULES -- the rule itself.
-    ("choice-field rule", "For a SELECT (dropdown) this rule does NOT apply"),
+    ("choice-field rule", "each option's value is a"),
+    ("choice-field rule", "is stored in option.pdf_on_value"),
     ("choice-field rule", "leave options[] out"),
-    # The condition-reference rule -- a show_if on a select names the code.
-    ("condition rule", "A condition on a SELECT trigger uses that dropdown's"),
+    # The condition-reference rule -- a show_if on a select names the SLUG.
+    # The model names the CODE it can see; repair resolves it to the slug
+    # through pdf_on_value (cross-surface, g2fpr.2 -- the earlier wording
+    # asked for a slug the model cannot derive from a bare "WY").
+    ("condition rule", "names the choice EXACTLY as it appears in"),
+    # Sits on ONE rendered line; the scan normalizes whitespace, this cannot.
+    ("condition rule", "resolved to the"),
 ])
-def test_each_select_carve_out_statement_is_present(what, needle):
+def test_each_select_statement_is_present(what, needle):
     """Non-vacuity floor for the scan above, ONE STATEMENT PER CASE.
 
-    The scan passes when no passage sweeps select into the slug rule -- which is
-    also true if a carve-out is simply deleted. Asserting a shared phrase like
-    "export code" appears SOMEWHERE is too weak: three separate statements
-    contain it, so deleting any one of them left the assertion green (caught by
-    mutation, twice). Each statement therefore gets its own case, keyed on text
-    unique to it.
+    The scan passes when no passage names a select's export code without its
+    home -- which is also true if a statement is simply deleted. Each of the
+    three places the contract is stated gets its own needle, keyed on text
+    unique to it, so deleting any one of them fails here (the shape that was
+    caught by mutation twice on the previous version of this test).
     """
     assert needle in schema_contract.SCHEMA_CONTRACT, (
-        "the %s carve-out is missing; the slug-scope scan cannot see its "
-        "absence, so this is the only thing pinning it" % what)
+        "the %s statement is missing; the scan above cannot see its absence, "
+        "so this is the only thing pinning it" % what)

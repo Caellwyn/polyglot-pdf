@@ -22,11 +22,16 @@ unauthenticated liveness probe, and it reports no data an unauthenticated
 caller could not already infer.
 
 NOTE on the deploy gate: deploy-all.sh's post-deploy
-verify_service_publicly_reachable() does NOT call this route. It reads the
+verify_service_publicly_reachable() does NOT call this route -- it reads the
 Cloud Run IAM policy for an allUsers roles/run.invoker binding and issues no
-HTTP request at all, so /health currently has NO deploy-time behavioral
-coverage -- an operator curls it by hand (deploy-all.sh's closing advisory
-echo). Do not assume a deploy would catch this route being broken.
+HTTP request. But this service's own deploy bridge, deploy-admin.sh (bd
+polyglot-pdf-3l2vp), sets BACKEND_NO_TRAFFIC_TAG, which makes deploy-all.sh
+additionally curl THIS route at the tagged candidate revision's own stable
+URL and gate `update-traffic --to-latest` on a 200 -- so for the admin
+service specifically, a broken /health on a new revision now DOES abort the
+deploy before that revision ever receives traffic. (A public-backend deploy
+that sets no tag still gets none of this -- the IAM check is the only gate
+there.)
 """
 import os
 
@@ -114,7 +119,17 @@ async def health():
 
 @app.get("/version")
 async def version():
-    return {"version": app.version}
+    """App version plus the deployed commit SHA.
+
+    Same GIT_SHA runtime env var and "unknown" fallback (including the
+    empty-string case; see backend/main.py's version route) as the public
+    backend's /version (bd polyglot-pdf-9hzod) -- the admin console's "what
+    is live per channel" view (bead 1.7) reads this route on both services.
+    Set by the deploy bridge (bead 1.3) via `--set-env-vars
+    GIT_SHA=$(git rev-parse HEAD)` until Cloud Build's $COMMIT_SHA takes
+    over (Epic 4).
+    """
+    return {"version": app.version, "git_sha": os.getenv("GIT_SHA") or "unknown"}
 
 
 app.include_router(whoami_routes.router)

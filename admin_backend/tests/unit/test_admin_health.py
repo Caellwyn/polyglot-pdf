@@ -4,11 +4,18 @@ Exit criterion 1: `uvicorn admin_backend.main:app` serves GET /health. The
 app is otherwise routeless at this stage, so /health is the whole reachable
 surface.
 
-These tests are the ONLY coverage /health has. deploy-all.sh's post-deploy
-verify_service_publicly_reachable() reads the Cloud Run IAM policy for an
-allUsers invoker binding and issues no HTTP request, so a broken /health would
-NOT abort a deploy -- do not delete a case here on the theory that the deploy
-would catch it.
+These tests are the ONLY *unit* coverage /health has. deploy-all.sh's
+post-deploy verify_service_publicly_reachable() still reads the Cloud Run IAM
+policy for an allUsers invoker binding and issues no HTTP request of its own.
+But deploy-admin.sh (bd polyglot-pdf-3l2vp) sets BACKEND_NO_TRAFFIC_TAG, which
+makes deploy-all.sh additionally curl THIS route at the tagged candidate
+revision's stable URL and abort before `update-traffic --to-latest` on
+anything but a 200 -- so for the admin service specifically, a deploy now DOES
+catch a broken /health, just not via verify_service_publicly_reachable, and
+not before the candidate revision exists. That real-Cloud-Run probe cannot
+substitute for these cases (it needs a live deploy and only ever sees the
+default env state), so still do not delete a case here on the theory that
+some deploy gate covers it.
 """
 from fastapi.testclient import TestClient
 
@@ -65,10 +72,15 @@ def test_health_resolves_an_empty_app_module_the_way_the_container_does(
 
 
 def test_version_answers():
+    """Superseded by the git_sha cases in test_version_route.py (bd
+    polyglot-pdf-9hzod) -- narrowed here to the version field alone so this
+    file's existing coverage of /version's status code and app.version value
+    survives that bead untouched.
+    """
     with TestClient(app) as client:
         response = client.get("/version")
     assert response.status_code == 200
-    assert response.json() == {"version": app.version}
+    assert response.json()["version"] == app.version
 
 
 def test_the_admin_app_is_a_distinct_asgi_app_from_the_public_backend():

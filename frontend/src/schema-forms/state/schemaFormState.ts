@@ -15,6 +15,7 @@
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue, ValidatorFinding } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
+import { isBlankFieldValue, isConfirmedButBlank } from "../utils/fieldValue";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
 import { loadOnboardingState } from "../onboardingStorage";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
@@ -856,13 +857,13 @@ export class SchemaFormStateManager {
     const doneFields = visibleFields.filter((f) => {
       const fieldValue = state.fieldValues[f.id];
       if (fieldValue?.skipped) return true;
-      const actualValue = fieldValue?.value;
-      return (
-        actualValue !== null &&
-        actualValue !== undefined &&
-        actualValue !== "" &&
-        !(Array.isArray(actualValue) && actualValue.length === 0)
-      );
+      // Shares the blankness definition with isSectionValid, isFormComplete and
+      // computeNextField (bd polyglot-pdf-5ovod). It used to hand-write the same
+      // check untrimmed, so a whitespace field counted as DONE: the progress bar
+      // and the overlay's field counter read 100% while the completion gate --
+      // correctly -- said the form was not finished. A progress bar that
+      // disagrees with the gate it is reporting on is worse than no bar.
+      return !isBlankFieldValue(fieldValue?.value);
     }).length;
 
     return { filled: doneFields, total: visibleFields.length };
@@ -904,12 +905,11 @@ export class SchemaFormStateManager {
         const fieldValue = state.fieldValues[field.id];
         if (!fieldValue?.skipped) {
           const actualValue = fieldValue?.value;
-          const isEmpty =
-            actualValue === null ||
-            actualValue === undefined ||
-            actualValue === "" ||
-            (Array.isArray(actualValue) && actualValue.length === 0);
-          if (isEmpty) {
+          // Whitespace-only is BLANK (bd polyglot-pdf-5ovod): typing spaces into
+          // a required field used to satisfy this gate while printing blank on
+          // the PDF -- and the backend never even heard about it, since the
+          // notify path trims.
+          if (isBlankFieldValue(actualValue)) {
             return false;
           }
         }
@@ -1821,7 +1821,20 @@ export class SchemaFormStateManager {
       const field = fields[index];
       if (!shouldShowField(field, state.fieldValues, fields)) return true; // N/A
       const fv = readFieldEntryWithAlias(state.fieldValues, field.id);
-      return fv?.confirmed === true || fv?.skipped === true;
+      if (fv?.skipped === true) return true;
+      // A confirmation of BLANKNESS does not settle a field (bd
+      // polyglot-pdf-5ovod), and the cost here is higher than at the other
+      // gates: a window marked ready is added to validatedWindowIndices, which
+      // PERSISTS to sessionStorage -- so retiring it on a whitespace field means
+      // that field is never validated again, even after a real answer arrives.
+      // That is a silent, permanent loss rather than a cosmetic disagreement,
+      // and it defeats this function's own "no field is ever permanently
+      // starved of validation" promise.
+      //
+      // A skipped field (handled above, value:null) and an optional field's
+      // confirmed '' (the deliberate "does not apply" answer, bd
+      // polyglot-pdf-6oe6) both remain settled.
+      return fv?.confirmed === true && !isConfirmedButBlank(fv?.value);
     };
 
     const sent = state.validatedWindowIndices;

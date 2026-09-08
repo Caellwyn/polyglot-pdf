@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue'
+import { SchemaFormStateManager } from './schema-forms/state/schemaFormState'
 
 class MockWebSocket {
   static instances: MockWebSocket[] = []
@@ -207,5 +208,203 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     // State untouched: the field is not marked skipped.
     const fv = (conn as any).state.fieldValues['p1_uscis_number']
     expect(fv?.skipped).toBeFalsy()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Whitespace must not block a skip (bd polyglot-pdf-5ovod).
+//
+// The `alreadyFilled` guard exists to stop a skip ERASING a real answer. It was
+// untrimmed, and once 5ovod tightened the other exits that became a DEADLOCK for
+// a required field holding only spaces:
+//   - confirm_field refuses  (hasUsableValue rejects whitespace)
+//   - skip_field refused     (this guard: "already_filled")
+//   - update_form_fields ''  is rejected by the required check
+// ...while the backend marks the skip refusal NON-RETRYABLE ("Do NOT retry
+// skip_field", callback_handler.py) and computeNextField keeps re-offering the
+// field. The model would be handed a field it could not answer, skip or clear,
+// and told not to try again.
+//
+// Found by the cross-surface review, which traced this diff's contracts OUT into
+// the untouched handler. 5ovod's own escapability test called markFieldSkipped
+// DIRECTLY, so it structurally could not see this -- these drive the real
+// skip_field message instead.
+// ---------------------------------------------------------------------------
+describe('skip_field is not blocked by whitespace (bd polyglot-pdf-5ovod)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function connectedWith(value: any): Promise<MockWebSocket> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value }
+    const ws = lastWs()
+    ws.send.mockClear()
+    return ws
+  }
+
+  it('a whitespace-only field CAN be skipped -- the voice path has an exit', async () => {
+    const ws = await connectedWith('   ')
+
+    fireSkip(ws, 'p1_uscis_number')
+
+    const ack = skipAcks(ws)[0]
+    expect(ack?.recorded, 'skip must be recorded, not refused as already_filled').toBe(true)
+  })
+
+  it('a REAL answer still blocks the skip -- the guard keeps its job', async () => {
+    // The guard exists so a skip cannot erase an answer. That must survive.
+    const ws = await connectedWith('A123456789')
+
+    fireSkip(ws, 'p1_uscis_number')
+
+    const ack = skipAcks(ws)[0]
+    expect(ack?.recorded).toBe(false)
+    expect(ack?.reason).toBe('already_filled')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// switch_field must not claim a whitespace field "already holds a value".
+//
+// Sibling of the skip guard above (bd polyglot-pdf-5ovod). The ack's has_value
+// drives the backend's guidance to the model: on true it says "it already holds
+// an unconfirmed value -- read it back and verify it" (callback_handler.py). For
+// a field containing only spaces there is nothing to read back, and confirm_field
+// now refuses that very field -- so a true here steers the model at a closed
+// exit. Found by the cross-surface review, which noticed the two predicates had
+// drifted while a comment still claimed they matched.
+// ---------------------------------------------------------------------------
+describe('switch_field has_value ignores whitespace (bd polyglot-pdf-5ovod)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function switchAckFor(value: any): Promise<any> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    // The handler RELOADS from the persisted snapshot before reading the value
+    // (the staleness rule it shares with sendManualFieldUpdate), so seeding the
+    // in-memory state alone is discarded -- persist it the way the app does.
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    // NOTE the key is `field`, not `field_id` -- switch_field takes a free-text
+    // identifier the handler resolves (resolveFieldForNavigation).
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'switch_field',
+        field: 'p1_uscis_number',
+        request_id: 'req-sf',
+      }),
+    })
+    return sentMessages(ws).find(m => m.type === 'switch_field_response')
+  }
+
+  it('a whitespace field is reported as having NO value', async () => {
+    const ack = await switchAckFor('   ')
+    expect(ack?.has_value, 'whitespace must not read as an existing answer').toBe(false)
+  })
+
+  it('a real value is still reported as having one', async () => {
+    const ack = await switchAckFor('A123456789')
+    expect(ack?.has_value).toBe(true)
+  })
+
+  it('a CONFIRMED whitespace field is not announced as having a confirmed answer', async () => {
+    // already_confirmed is checked BEFORE has_value in the backend's guidance
+    // (callback_handler.py), so a legacy confirmed-whitespace entry would be
+    // announced as "it already has a confirmed answer -- read the current value
+    // back" -- with nothing to read back, and confirm_field refusing that field.
+    // Fixing has_value alone would have left that branch lying.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: '   ', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-ac' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'a confirmation of blankness is not a confirmed answer').toBe(false)
+  })
+
+  it('a SKIPPED field is still announced as confirmed', async () => {
+    // The guard here MUST use the narrow helper. A skipped field carries
+    // value:null, which the BROAD helper (isBlankFieldValue) calls blank -- so
+    // substituting it would re-announce every skipped field as unanswered and
+    // the model would re-ask a question the user explicitly declined.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] =
+      { value: null, skipped: true, confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-sk' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'a skip is a settled decision, not an open question').toBe(true)
+  })
+
+  it('an OPTIONAL confirmed empty string is still announced as confirmed', async () => {
+    // Same reason, the other shape: '' on an optional field is the deliberate
+    // "does not apply" answer (bd polyglot-pdf-6oe6). The broad helper calls it
+    // blank; the narrow one does not, and that difference is the whole point of
+    // there being two helpers.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.schema.fields[0].validation = { required: false }
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: '', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-oe' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'the does-not-apply answer is settled').toBe(true)
+  })
+
+  it('a genuinely confirmed answer IS still announced as confirmed', async () => {
+    // The other half: the guard must not erase a real confirmation, or the model
+    // would re-ask questions the user has already answered.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: 'A123456789', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-ok' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed).toBe(true)
   })
 })
