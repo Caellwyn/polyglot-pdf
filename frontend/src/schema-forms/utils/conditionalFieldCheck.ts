@@ -14,7 +14,7 @@ import type {
 } from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
 import { normalizeToComposite } from "./normalizeToComposite";
-import { evaluateAtomicCondition, shouldShowField } from "./validation";
+import { evaluateAtomicCondition, isFieldReadOnly, shouldShowField } from "./validation";
 
 /**
  * Flatten a legacy-or-composite condition to its atomic conditions, tagging
@@ -170,8 +170,9 @@ export function checkFieldAccess(
     }
   }
 
-  // Check if field is read-only
-  if (field.read_only) {
+  // Check if field is read-only. A field declaring flip_readonly_bit is
+  // writable once SHOWN -- isFieldReadOnly owns that rule (bd polyglot-pdf-38p0y).
+  if (isFieldReadOnly(field, fieldValues, schema.fields)) {
     return {
       accessible: false,
       reason: "field_read_only",
@@ -252,7 +253,7 @@ export function evaluateFieldAvailability(
   // "Cannot update '<name>': <reason>") already names the field, so restating it
   // here produced "Cannot update 'X': The field 'X' is read-only..." -- the field
   // name twice (bd polyglot-pdf-34wc, mirroring the z6xs hidden-field fix).
-  if (field.read_only) {
+  if (isFieldReadOnly(field, fieldValues, schema.fields)) {
     return {
       availability: 'locked',
       lockedReason: 'it is read-only and cannot be modified.'
