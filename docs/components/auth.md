@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -250,6 +250,13 @@ because a signed bearer string is inherently replayable -- and it is enforced
 at every door that can cause SPEND: `/api/links/open`, the WebSocket, and the
 two `/api/tts/*` routes via `require_paid_client_work`. It is deliberately
 NOT enforced on `require_auth`, which gates retrieval -- see the split above.
+`link_redemptions.py`'s collection-name resolver takes `channel` as an
+EXPLICIT argument (Epic 2 bead A1) rather than reading `LINK_CHANNEL` itself
+-- the public backend's own callers (`open_link`/`complete_link`, via
+`enforce_link_redemption`) still get the same behavior by omitting the
+argument, which defaults to `link_channel()`, but a caller that names a
+channel (a future admin-service sweep or reconciler) is no longer silently
+redirected to whatever channel the CALLING process happens to be.
 One shared `enforce_link_redemption` serves every door that does redeem,
 EXTRACTED rather than copied: two hand-written versions of a security check
 drift, and the drift is
@@ -290,6 +297,27 @@ Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
 `ProtectedRoute`. The page is only the door: `firm_id` and `employee_id` come
 from the VERIFIED token, never from anything the page sends, so a reachable
 page cannot grant itself a firm.
+
+**The mint record (`links[_<channel>]/{jti}`, Epic 2 bead A1,
+`backend/services/links_store.py`) -- a SEPARATE collection from
+`link_redemptions`, answering a different question.** `link_redemptions.py`
+answers "has this link been opened/completed" -- written on the CLIENT's
+first open. `links_store.py` answers "was this link ever legitimately
+minted, by whom, for how much, and is it still good to open" -- written at
+MINT time, by staff, before any client sees the link. Folding the two
+together would mean a doc exists before the client's first open, which is
+precisely the state `link_redemptions.py`'s callers currently treat as proof
+of a real open -- so they stay separate collections under the SAME
+channel-suffix convention (`links` for demo, `links_staging` for staging).
+This bead ships the collection, its doc shape (firm/kit/employee,
+`credit_cost`/`cap_usd` snapshots, `minted_at`/`open_deadline`, a `status`
+cache, and an `expire_at` for the Firestore TTL policy declared by
+`scripts/setup-firestore-ttl.sh`), and a plain non-transactional
+`record_mint()` write -- NOT yet wired into the mint route. The ATOMIC
+"reserve a credit + ledger entry + this record" transaction, the
+open-requires-a-mint-record gate, and the revoke/sweep/refund paths that
+transition `status` all land in later Epic 2 beads (A2/A3/A5); until then
+nothing calls `record_mint()` from a route.
 
 ### The firm WRITE path: authorization is not authentication
 
@@ -349,18 +377,32 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
 
 - **Datastore** — Firestore collection **`firms/{firm_id}`** (doc ID =
   operator-chosen slug): `name`, `contact_email`, `allowed_kits: [kit_id]`,
-  `status: "active" | "suspended"`, `created_at`/`updated_at`. Accessed ONLY via
+  `status: "active" | "suspended"`, `kind: "mock" | "live"` (Epic 2 bead A1;
+  required on create), `balance_credits: int` and `balance_updated_at`
+  (also A1; 0-initialized on create, thereafter written ONLY by the
+  transactional credit-ledger helper landing in Epic 2 bead A2 — NOT
+  channel-partitioned, one balance per firm regardless of which channel's
+  mint debits it, safe only because a `live` firm can mint only on the
+  explicit demo channel), `created_at`/`updated_at`. Accessed ONLY via
   the Admin SDK through `backend/services/firms.py`; `firestore.rules` carries
   an explicit `firms/**` client deny block as defense in depth (the Admin SDK
   bypasses rules, so the block grants nothing — it forecloses any future
-  client-SDK path).
-- **Read contract — FAIL CLOSED.** `firms.get_allowed_kits(firm_id)` returns
+  client-SDK path), plus its own block for the nested `firms/{firmId}/ledger`
+  subcollection (Epic 2 bead A2's ledger rows; a parent's deny does not
+  cascade to a subcollection in Firestore's rules language).
+- **Read contract — FAIL CLOSED, in BOTH directions now.**
+  `firms.get_allowed_kits(firm_id)` returns
   `[]` on every failure branch (store disabled via `FIRMS_FIRESTORE_ENABLED`,
   missing firm, non-active status, malformed doc, read error) — the deliberate
   inverse of the confirmation sink's fail-open writes, because a broken firms
   store must never widen private-kit visibility (consumer: bd
-  `polyglot-pdf-vccy`). `firms_store_status()` is the read-shaped health probe
-  for diagnosing exactly that fail-closed silence.
+  `polyglot-pdf-vccy`). `firms.firm_kind(firm_id)` (Epic 2 bead A1) fails
+  closed the OPPOSITE way — every failure branch, AND a doc with no `kind`
+  key at all (the window between this bead's deploy and the backfill
+  migration, bd `polyglot-pdf-d4wdi`), resolves to `"live"`, because widening
+  who mints without the live-firm demo-channel gate is the risk there, not
+  narrowing kit visibility. `firms_store_status()` is the read-shaped health
+  probe for diagnosing fail-closed silence on either reader.
 - **Staff identity** — `firm_id` + `firm_role` (`manager` | `employee`) custom
   claims on the staff member's normal Firebase account, stamped by the admin
   bootstrap script below. The claims ride the existing ID-token verification
@@ -381,22 +423,31 @@ docstring):
 backend/.venv/Scripts/python.exe scripts/bootstrap_firm.py acme-legal \
     --name "Acme Legal Aid" --contact intake@acme-legal.example \
     --allowed-kits w7,i-90 \
+    --kind live \
     --manager-email ada@acme-legal.example \
     --employee-email bo@acme-legal.example \
     --project polyglot-demo-aa709
 ```
 
-Rules for the Admin-SDK-only collections — `firms/{firmId}`,
-`admin_audit_log/{rowId}` and `app_config/{channel}` (the last two added by bd
-`polyglot-pdf-li9x0`) — reach the live project only via a frontend/full deploy
-or an explicit
+`--kind` is REQUIRED (Epic 2 bead A1; no default, on purpose — see
+`firm_kind()`'s fail-closed direction above for why an implicit default in
+either direction is wrong). Local minting needs the dev account's own firm
+created with `--kind mock`.
+
+Rules for the Admin-SDK-only collections — `firms/{firmId}` and the nested
+`firms/{firmId}/ledger/{entryId}`, `admin_audit_log/{rowId}`,
+`app_config/{channel}`, `kits/{kitId}`, `links/{jti}` + `links_staging/{jti}`,
+and `link_redemptions/{jti}` + `link_redemptions_staging/{jti}` (the ledger,
+kits, links and link_redemptions blocks all added by Epic 2 bead A1;
+`admin_audit_log`/`app_config` by bd `polyglot-pdf-li9x0`) — reach the live
+project only via a frontend/full deploy or an explicit
 `firebase deploy --only firestore:rules --project polyglot-demo-aa709` — a
 backend-only deploy does NOT ship rules. Note that `firestore.rules` is
 **project-wide**, so it is a demo action whichever channel you ran it from
 (staging and the demo share the project). Manual verify of a deny: from a
 signed-in browser console, a client-SDK
 `getDoc(doc(db, "admin_audit_log", "x"))` must return `permission-denied`, and
-likewise for `firms` and `app_config`.
+likewise for `firms`, `app_config`, and the newer collections above.
 
 ## Testing
 
@@ -411,19 +462,33 @@ private-kit firm-visibility matrix (bd vccy), and the
 pins the deployed fail-closed guard on that bypass (both layers separately: the
 `Settings` startup refusal and `verify_token`'s inert-on-`K_SERVICE` branch).
 The firm-identity layer is covered by
-`backend/tests/unit/test_firms_service.py` (fail-closed reads, upsert
-idempotency), `backend/tests/unit/test_bootstrap_firm_cli.py` (claims merge,
-role stamping, wrong-project abort, dead-project refusal), and
+`backend/tests/unit/test_firms_service.py` (fail-closed reads in BOTH
+directions -- `get_allowed_kits` to `[]`, `firm_kind` to `"live"` -- upsert
+idempotency, and the `balance_credits=0`/`kind` seeding on first create),
+`backend/tests/unit/test_bootstrap_firm_cli.py` (claims merge,
+role stamping, wrong-project abort, dead-project refusal, `--kind`
+required with no default and flowing through to `upsert_firm` unchanged),
+`backend/tests/unit/test_link_redemptions.py` (one-time-use plus the
+channel-explicit-argument contract: a caller naming no channel gets
+`link_channel()`'s default, a caller naming one is never silently overridden),
+`backend/tests/unit/test_links_store.py` (the mint-record schema, its own
+channel-naming contract mirroring `link_redemptions.py`'s, the `record_mint`
+input guards, and the `expire_at` TTL derivation), and
 `backend/tests/unit/test_firestore_rules_text.py`, which since bd
 `polyglot-pdf-li9x0` is ONE set-derived test over EVERY Admin-SDK-only
 collection rather than a single assertion about `firms/**`: the list lives in
-one constant (`ADMIN_SDK_ONLY_COLLECTIONS` — currently `firms`,
-`admin_audit_log`, `app_config`), a later bead extends the LIST rather than
+one constant (`ADMIN_SDK_ONLY_COLLECTIONS` — now `firms`,
+`firms/{firmId}/ledger`, `admin_audit_log`, `app_config`, `kits`, `links`,
+`links_staging`, `link_redemptions`, `link_redemptions_staging`), a later bead
+extends the LIST rather than
 adding another copy of the assertion, and the test fails in both directions —
 a listed collection with no deny block, and a deny block for a collection
 nobody listed. It also rejects a WEAKENED block (one that keeps
 `allow read, write: if false;` but adds a second `allow`), not only a deleted
-one.
+one. The nested `firms/{firmId}/ledger` entry is matched by a widened
+both-directions regex that allows one extra `/{wildcard}/segment` hop, since
+a parent's deny does not cascade to a subcollection and the nested block
+needs its own list entry and its own round-trip against the file.
 `frontend/src/contexts/AuthContext.test.tsx` covers
 `AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
 the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate

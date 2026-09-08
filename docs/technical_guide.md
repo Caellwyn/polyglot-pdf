@@ -693,7 +693,14 @@ system that is NOT a Firebase account. Five coupled pieces:
   signed bearer string is replayable by construction. FAILS CLOSED BY
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
-  either.
+  either. `link_redemptions._collection_name(channel)` takes `channel` as an
+  EXPLICIT argument (Epic 2 bead A1), not read from the environment: the
+  public backend's own callers (`_collection()`, defaulted from `open_link`/
+  `complete_link`/`enforce_link_redemption`) pass no argument and so still
+  resolve through `link_channel()`, but a caller that DOES name a channel (a
+  future admin-service sweep/reconciler) is never silently redirected to
+  whichever channel the calling PROCESS happens to be on. See contract 16 for
+  the sibling mint-record store that mirrors this exact convention.
 - **The doors that REDEEM do it through ONE helper.**
   `link_redemptions.enforce_link_redemption` runs the redemption check AND the
   COMPLETION-window check, neither of which `verify_link_token` can do -- the
@@ -1094,3 +1101,89 @@ write forms BIND the row to the mutation rather than firing it alongside.
 - **IAM:** the writes need `roles/datastore.user`, which `admin-backend-sa`
   already holds and which `test_admin_sa_iam_envelope.py` pins by name AND
   justification. This contract added no new permission (CLAUDE.md scar #7).
+
+### 16. Credits data model: firm kind/balance + the mint record (Epic 2 bead A1)
+
+Schema and plumbing only -- no route reads or writes any of this yet
+(the mint transaction and the routes that use it are Epic 2 beads A2/A3/A5).
+Laid now so those beads compose an already-agreed shape rather than each
+inventing its own.
+
+- **`firms/{firm_id}` gains `kind: "mock" | "live"` (required on create) and
+  `balance_credits`/`balance_updated_at`.** Producer:
+  `backend/services/firms.py:upsert_firm` (0-initializes the balance fields
+  on first create ONLY; never touches them on a re-run -- a re-bootstrap of
+  an existing firm must not zero a real balance). Consumer, THIS bead:
+  `firms.firm_kind(firm_id)`, which is the FAIL-CLOSED-TO-`"live"` reader --
+  the opposite polarity from `get_allowed_kits`'s fail-closed-to-`[]`, and
+  the two are pinned in the same test file so the contrast stays visible.
+  Consumer, LATER bead (A3): the mint route's live-firm-demo-channel-only
+  gate reads `firm_kind()` directly. The balance is NOT
+  channel-partitioned -- one firm, one `balance_credits`, whichever
+  channel's mint debits it -- which is safe only because a `live` firm can
+  mint solely on the explicit demo channel (A3) and a `mock` firm carries no
+  real money. **`scripts/bootstrap_firm.py` gains a REQUIRED `--kind`** (no
+  default, either direction): the CLI's positional call into `upsert_firm`
+  shifted (`kind` is now the 5th positional argument, `status` moved to a
+  keyword) -- any other future caller of `upsert_firm` must update its call
+  site.
+- **NEW `links[_<channel>]/{jti}` mint record**
+  (`backend/services/links_store.py`), a collection SEPARATE from
+  `link_redemptions` on purpose: `link_redemptions` answers "has this link
+  been opened/completed" (written on the client's first open);
+  `links_store` answers "was this link ever legitimately minted, for how
+  much, and is it still good to open" (written at MINT time, by staff,
+  before the client ever sees it). Folding the two together would mean a
+  doc exists before the client's first open -- exactly the state
+  `link_redemptions`'s callers currently treat as proof of a real open.
+  - **Doc shape:** `firm_id`, `kit_id`, `employee_id`, `credit_cost` and
+    `cap_usd` snapshots (the latter closes bd `polyglot-pdf-4tjt7`),
+    `minted_at`, `open_deadline` (mirrors the token's `exp`, stored
+    separately so a later sweep can query Firestore without decoding a
+    token), `status` (one of `links_store.ALL_STATUSES`: `minted` |
+    `opened` | `completed` | `refunded` | `revoked` | `budget_exhausted`),
+    `revoked_by`/`revoked_at`, `expire_at` (a TTL field -- see below).
+    **`status` is a DERIVED CACHE for listing, never the money decision**:
+    any transaction that moves real credits (the mint debit, the expiry
+    refund -- both A2/A3/A5) reads the AUTHORITATIVE record fields
+    directly and never trusts `status` alone. THIS bead's `record_mint()`
+    writes ONLY the mint-time record (`status=minted`, non-transactionally
+    -- the atomic reserve-credit + ledger-entry + this-record transaction
+    is A2/A3's `backend/services/credit_ledger.py`); every other status
+    transition belongs to a later bead and is not wired to anything yet.
+  - **`channel` is an EXPLICIT argument, mirroring `link_redemptions`'s
+    convention (contract 9) exactly** -- `links_store._collection_name(channel)`
+    and `_collection(channel=None)` (defaulting to `link_channel()`) have
+    the identical shape as their `link_redemptions` counterparts, on
+    purpose: an operator who understands one collection's channel isolation
+    already understands the other's. The demo channel keeps the bare
+    `links` name; every other channel gets `links_<channel>`.
+  - **TTL:** `links_store.expire_at_for(open_deadline)` returns
+    `open_deadline` plus a 30-day retention margin, as a timezone-aware UTC
+    datetime. `scripts/setup-firestore-ttl.sh` (NEW, this bead) declares a
+    Firestore TTL policy on the `expire_at` field for `links`,
+    `links_staging`, and (ahead of Epic 3) `alerts` -- explicitly NOT for
+    `admin_audit_log` or `deployments` (retained) or `link_redemptions`/
+    `link_redemptions_staging` (a separate, deliberate retention decision
+    this bead does not touch). The script is idempotent (re-running it
+    against an already-declared policy is a no-op success) and is NOT run
+    by any deploy script -- an operator runs it by hand, once per project,
+    same as `scripts/setup-gcp-project.sh` and `scripts/setup-admin-service.sh`.
+- **`firestore.rules` gains deny blocks for every new collection, plus one
+  fold-in.** New: `kits/{kitId}` (kit commercial docs, `credit_cost` /
+  `burn_cap_usd` -- written by a Track B admin-service route in a later
+  bead), `links/{jti}` + `links_staging/{jti}`, and the nested
+  `firms/{firmId}/ledger/{entryId}` (Epic 2 bead A2's per-firm credit
+  ledger rows -- a parent's deny does NOT cascade to a subcollection in
+  Firestore's rules language, so this needed its own block even though
+  `firms/{firmId}` was already denied). Fold-in:
+  `link_redemptions/{jti}` + `link_redemptions_staging/{jti}` had NO deny
+  block until this bead, despite being Admin-SDK-only by access pattern
+  since it shipped (bd polyglot-pdf-ugm6) -- an oversight this bead closes
+  opportunistically since the rules-set test was already being extended.
+  All eight are added to `ADMIN_SDK_ONLY_COLLECTIONS` in
+  `backend/tests/unit/test_firestore_rules_text.py` (see contract 15 for
+  the set-derived-test shape); the nested ledger entry required widening
+  that test's both-directions regex to allow one extra
+  `/{wildcard}/segment` hop, since the file-wide scan otherwise only
+  recognizes single-level `collection/{wildcard}` blocks.
