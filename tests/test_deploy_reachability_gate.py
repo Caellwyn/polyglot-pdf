@@ -785,7 +785,12 @@ def _severity_of(rel: str, call: str) -> str:
 #
 # Two sets, two lists. Deriving both mechanically is what stops a third script
 # slipping between them.
-URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh"]
+#
+# deploy-admin-console.sh (bd polyglot-pdf-b6943) is the FOURTH member: it
+# resolves the admin service's live URL the same way deploy-editor.sh
+# resolves the public backend's, and bakes it into the console build as
+# VITE_ADMIN_API_BASE_URL.
+URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh", "deploy-admin-console.sh"]
 
 # How many of a script's gate calls must pass "warn", and how many take the fatal
 # default. deploy-all.sh has TWO call sites and they DIFFER -- the backend stage
@@ -798,6 +803,10 @@ URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh"]
 URL_BAKING_SEVERITY = {
     "deploy-all.sh": (1, 1),
     "deploy-editor.sh": (1, 0),
+    # The admin service is PRE-EXISTING from this script's point of view
+    # (deploy-admin.sh's job, not this one's) -- same reasoning as the
+    # editor's single warn-mode call.
+    "deploy-admin-console.sh": (1, 0),
 }
 
 
@@ -850,6 +859,10 @@ def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
         driver.write_text(
             "BACKEND_SERVICE_NAME=SVC; REGION=REG; PROJECT=PRJ\n"
             "POLYGLOT_PROJECT_NAME=PRJ; SERVICE_NAME=SVC\n"
+            # ADMIN_SERVICE_NAME: deploy-admin-console.sh's own service-name
+            # variable (bd polyglot-pdf-b6943), bound the same way as the
+            # other scripts' equivalents above.
+            "ADMIN_SERVICE_NAME=SVC\n"
             "verify_service_publicly_reachable() {\n"
             '  echo "ARGC=$# SVC=$1 REGION=$2 PROJECT=$3 SEVERITY=$4"\n'
             "}\n" + call + "\n",
@@ -948,6 +961,20 @@ def test_gate_copies_are_identical_across_all_three_scripts():
     editor = _gate_function(REPO_ROOT / "deploy-editor.sh")
     assert editor == _gate_function(DEPLOY_ALL) == _gate_function(DEPLOY_NEW), (
         "the reachability gate has drifted between its three copies"
+    )
+
+
+def test_gate_copies_are_identical_across_all_four_scripts():
+    """deploy-admin-console.sh (bd polyglot-pdf-b6943) is the FOURTH copy.
+
+    Extends test_gate_copies_are_identical_across_all_three_scripts so the
+    console deploy script's gate cannot drift into a subtly weaker check than
+    the other three run.
+    """
+    admin_console = _gate_function(REPO_ROOT / "deploy-admin-console.sh")
+    assert admin_console == _gate_function(REPO_ROOT / "deploy-editor.sh") \
+        == _gate_function(DEPLOY_ALL) == _gate_function(DEPLOY_NEW), (
+        "the reachability gate has drifted between its four copies"
     )
 
 
