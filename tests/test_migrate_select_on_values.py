@@ -187,16 +187,46 @@ def test_an_option_already_in_v2_shape_is_untouched_and_reserves_its_slug():
     assert entry["already_v2"] == 1 and entry["migrated"] == 1
 
 
-def test_an_EMPTY_pdf_on_value_counts_as_legacy():
-    """A cleared code is v2 in the EDITOR (a no-code option), but a kit on disk
-    with pdf_on_value '' and a code in value is the half-migrated shape lint
-    rejects; the tool treats it as legacy so the code is not lost."""
+def test_an_EMPTY_pdf_on_value_is_a_CLEARED_v2_code_left_alone_and_reported():
+    """Round 3 reversed round 1's contract. Legacy means the key is ABSENT (the
+    editor's convert-on-touch rule, PR 2); an empty code is a v2 option whose
+    author cleared it. Treating it as legacy fabricated a code from a
+    slug-shaped value -- 'alabama' as pdf_on_value, which is in no /Opt."""
     kit = {"schema_version": "2", "fields": [{
         "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
-        "options": [{"value": "AL", "label": "Alabama", "pdf_on_value": ""}]}], "sections": []}
-    out, _ = migrate_selects(kit)
-    assert out["fields"][0]["options"][0] == {
-        "value": "alabama", "label": "Alabama", "pdf_on_value": "AL"}
+        "options": [
+            {"value": "alabama", "label": "Alabama", "pdf_on_value": ""},   # cleared, slug value
+            {"value": "AL", "label": "Alabama (AL)", "pdf_on_value": ""},   # cleared, code-shaped value
+            {"value": "AK", "label": "Alaska (AK)"},                        # legacy: key absent
+        ]}], "sections": []}
+    out, report = migrate_selects(kit)
+    o = out["fields"][0]["options"]
+    assert o[0] == {"value": "alabama", "label": "Alabama", "pdf_on_value": ""}
+    assert o[1] == {"value": "AL", "label": "Alabama (AL)", "pdf_on_value": ""}
+    assert o[2] == {"value": "alaska", "label": "Alaska (AK)", "pdf_on_value": "AK"}
+    entry = report["fields"][0]
+    assert entry["no_code"] == ["alabama", "AL"]      # named for the human
+    assert entry["migrated"] == 1 and entry["already_v2"] == 2
+
+
+def test_a_legacy_code_equal_to_a_v2_siblings_CODE_is_reported_as_ambiguous():
+    """Two options writing one widget state (round 3). Reported; the options
+    still migrate (the code moves verbatim), but no condition is retargeted."""
+    kit = {"schema_version": "2", "fields": [
+        {"id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+         "options": [
+             {"value": "alabama", "label": "Alabama", "pdf_on_value": "AL"},
+             {"value": "AL", "label": "Assembly Line"},
+         ]},
+        {"id": "dep", "type": "text", "pdf_field_name": "d[0]", "section_id": "s",
+         "show_if": {"field": "f", "operator": "equals", "value": "AL"}},
+    ], "sections": []}
+    out, report = migrate_selects(kit)
+    assert report["fields"][0]["duplicate_codes"] == ["AL"]
+    assert report["fields_with_duplicate_codes"] == ["f"]
+    assert report["conditions_retargeted"] == 0
+    assert out["fields"][1]["show_if"]["value"] == "AL"
+    assert [o["pdf_on_value"] for o in out["fields"][0]["options"]] == ["AL", "AL"]
 
 
 def test_a_duplicate_code_is_reported_and_its_conditions_are_NOT_retargeted():

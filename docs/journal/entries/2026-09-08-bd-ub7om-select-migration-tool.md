@@ -41,11 +41,24 @@ a kit extracted by another. The tool calls `mint_select_slugs` and adds a
 the uniqueness rule. (`migrate_schema_v2.py` still restates it -- bd
 `polyglot-pdf-345mj`, filed by the PR 2 cross-surface pass.)
 
-**A cleared code and a missing code are different in the editor but the same
-on disk.** In the editor, `pdf_on_value: ''` is a v2 option with no code. On a
-kit file, `{value: 'AL', pdf_on_value: ''}` is the half-migrated shape lint
-rejects; treating it as legacy (so the code moves) is what preserves the code.
-Pinned; the mutant that treats empty as v2 reddens it.
+**A cleared code is a cleared code, on disk too -- round 3 reversed round 1.**
+I had argued `{value: 'AL', pdf_on_value: ''}` on a kit file should count as
+legacy so the code moves. Fresh-eyes showed the other half of that rule:
+`{value: 'alabama', pdf_on_value: ''}` -- an option whose author cleared its
+code -- would have had 'alabama' fabricated INTO `pdf_on_value`, a code in no
+/Opt, and the report could not tell it from a legitimately kept '5'. The
+consistent rule is PR 2's: legacy means the key is ABSENT; an empty code is a
+v2 option with no code, left alone and NAMED in the report (`no_code`) for the
+human who has to supply it. The round-1 test was flipped to the new contract,
+and the mutant that restores empty-is-legacy reddens it. A rule that saves
+the code in one case and invents one in the other is not a rule.
+
+**Ambiguity has three faces.** Two legacy options sharing a code (round 1); a
+legacy code equal to a v2 sibling's VALUE (round 2, a condition may mean the
+v2 option); a legacy code equal to a v2 sibling's CODE (round 3, two options
+would write one widget state). All three are reported and never retargeted.
+Enumerating "what can a code collide with" up front would have been one round
+instead of three -- scar #8 in a different costume.
 
 **Never guess between two claimants.** A code two options share cannot be
 retargeted unambiguously; the tool reports it and leaves the condition for a

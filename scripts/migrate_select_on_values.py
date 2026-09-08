@@ -60,12 +60,14 @@ from scripts.migrate_schema_v2 import _walk_condition_atoms  # noqa: E402
 
 
 def _is_v2_option(o: Any) -> bool:
-    """An option already in the v2 shape: a dict carrying a non-empty string
-    pdf_on_value. Legacy = the key is ABSENT (or not a usable string) -- the
-    editor's convert-on-touch uses the same test (PR 2)."""
-    return (isinstance(o, dict)
-            and isinstance(o.get("pdf_on_value"), str)
-            and o.get("pdf_on_value") != "")
+    """An option already in the v2 shape: a dict carrying a string pdf_on_value
+    -- INCLUDING the empty string. Legacy means the key is ABSENT (or not a
+    string), exactly the editor's convert-on-touch test (PR 2). An empty code
+    is a v2 option whose author cleared it (lint: select-on-value-missing);
+    treating it as legacy fabricated a code from a slug-shaped value
+    ({value: 'alabama', pdf_on_value: ''} -> pdf_on_value 'alabama', not in
+    /Opt) -- fresh-eyes round 3. Such options are left alone and REPORTED."""
+    return isinstance(o, dict) and isinstance(o.get("pdf_on_value"), str)
 
 
 def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any]]:
@@ -85,12 +87,14 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
         "non_dict_options": 0,
         "slug_map": {},
         "duplicate_codes": [],
+        "no_code": [],
     }
     if not isinstance(options, list):
         return {}, entry
 
     legacy_idx: List[int] = []
     reserved: List[str] = []
+    v2_codes: List[str] = []
     for i, o in enumerate(options):
         if not isinstance(o, dict):
             entry["non_dict_options"] += 1
@@ -99,6 +103,12 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
             entry["already_v2"] += 1
             if isinstance(o.get("value"), str):
                 reserved.append(o["value"])
+            if o.get("pdf_on_value") == "":
+                # A cleared code: left alone, named for the human who must
+                # supply it (the tool cannot know the /Opt entry).
+                entry["no_code"].append(str(o.get("value")))
+            else:
+                v2_codes.append(o["pdf_on_value"])
             continue
         legacy_idx.append(i)
 
@@ -111,12 +121,14 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
     # A code claimed by more than one option cannot be retargeted
     # unambiguously: two legacy options sharing it, OR a legacy code that is
     # also an already-v2 sibling's VALUE (a condition naming '5' may mean the
-    # v2 option, not the legacy one -- fresh-eyes round 2). Both are reported
-    # and left for a human; neither is guessed.
+    # v2 option, not the legacy one -- fresh-eyes round 2), OR a legacy code
+    # an already-v2 sibling carries as ITS pdf_on_value (two options would
+    # write one widget state -- round 3). All are reported and left for a
+    # human; none is guessed.
     seen: Dict[str, int] = {}
     for c in codes:
         seen[c] = seen.get(c, 0) + 1
-    reserved_set = set(reserved)
+    reserved_set = set(reserved) | set(v2_codes)
     entry["duplicate_codes"] = sorted(
         c for c, n in seen.items() if n > 1 or c in reserved_set)
 
@@ -173,7 +185,7 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
         if not isinstance(f, dict) or f.get("type") != "select":
             continue
         old_to_new, entry = _migrate_field(f)
-        if entry["migrated"] or entry["duplicate_codes"]:
+        if entry["migrated"] or entry["duplicate_codes"] or entry["no_code"]:
             report["fields"].append(entry)
         report["options_migrated"] += entry["migrated"]
         if entry["duplicate_codes"]:
