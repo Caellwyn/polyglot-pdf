@@ -403,6 +403,16 @@ def _mint_slugs(
             label = o.get("label")
             if isinstance(label, str) and label:
                 _register(label, cur)
+            # A select's EXPORT CODE resolves to its slug (bd polyglot-pdf-g2fpr,
+            # PR 2). The extraction prompt shows the model only the /Opt codes,
+            # so a condition it writes on a dropdown names the code ('WY');
+            # without this alias the code resolved to no option and the
+            # condition was DROPPED -- a regression the cross-surface review
+            # reproduced through repair() on both shapes. _register's collision
+            # guard drops any code two options claim, as it does for labels.
+            on_value = o.get("pdf_on_value")
+            if isinstance(on_value, str) and on_value:
+                _register(on_value, cur)
         for key in collided:
             res.pop(key, None)
         if res:
