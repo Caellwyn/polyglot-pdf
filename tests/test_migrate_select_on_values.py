@@ -287,3 +287,51 @@ def test_cli_refuses_both_modes_at_once(tmp_path):
     r = subprocess.run([PY, str(SCRIPT), "--kit", str(tmp_path), "--in", "x", "--out", "y"],
                        capture_output=True, text=True, cwd=str(REPO))
     assert r.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# Fresh-eyes round 1 (g2fpr.3)
+# ---------------------------------------------------------------------------
+
+def test_a_legacy_code_that_equals_an_already_v2_value_does_not_collide():
+    """The THIRD state: a field the editor half-migrated. A legacy option whose
+    code is itself a valid slug ('5') must not be handed the same value as the
+    already-v2 sibling that carries '5' -- it is minted from its label."""
+    kit = {"schema_version": "2", "fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+        "options": [
+            {"value": "5", "label": "5", "pdf_on_value": "5"},     # v2 already
+            {"value": "5", "label": "Five", },                     # legacy, same code
+        ]}], "sections": []}
+    out, report = migrate_selects(kit)
+    values = [o["value"] for o in out["fields"][0]["options"]]
+    assert values == ["5", "five"]
+    assert len(set(values)) == 2
+    assert out["fields"][0]["options"][1]["pdf_on_value"] == "5"
+
+
+def test_the_report_NAMES_every_kept_code_not_just_counts_them():
+    """Criterion: the report names every change. A numeric option that keeps
+    its value still gains pdf_on_value; the report lists it by code."""
+    _, report = migrate_selects(_kit_like_i90())
+    hf = next(e for e in report["fields"] if e["field"] == "height_feet")
+    assert hf["kept_codes"] == ["3", "4", "5", "6", "7"]
+    assert hf["kept_as_slug"] == len(hf["kept_codes"])
+    # Every migrated option is named exactly once: in slug_map OR kept_codes.
+    for e in report["fields"]:
+        assert e["migrated"] == len(e["slug_map"]) + len(e["kept_codes"]), e["field"]
+
+
+def test_an_id_less_select_migrates_its_options_but_is_never_a_retarget_key():
+    kit = {"schema_version": "2", "fields": [
+        {"type": "select", "pdf_field_name": "a[0]", "section_id": "s",
+         "options": [{"value": "AL", "label": "Alabama"}]},
+        {"type": "select", "pdf_field_name": "b[0]", "section_id": "s",
+         "options": [{"value": "AL", "label": "Alabama"}]},
+        {"id": "dep", "type": "text", "pdf_field_name": "d[0]", "section_id": "s",
+         "show_if": {"field": "None", "operator": "equals", "value": "AL"}},
+    ], "sections": []}
+    out, report = migrate_selects(kit)
+    assert [f["options"][0]["pdf_on_value"] for f in out["fields"][:2]] == ["AL", "AL"]
+    assert out["fields"][2]["show_if"]["value"] == "AL"      # not retargeted via "None"
+    assert report["conditions_retargeted"] == 0

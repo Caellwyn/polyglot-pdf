@@ -81,6 +81,7 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
         "migrated": 0,
         "already_v2": 0,
         "kept_as_slug": 0,
+        "kept_codes": [],
         "non_dict_options": 0,
         "slug_map": {},
         "duplicate_codes": [],
@@ -123,6 +124,7 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
         entry["migrated"] += 1
         if slug == code:
             entry["kept_as_slug"] += 1
+            entry["kept_codes"].append(code)     # named, so the report audits every option
         else:
             entry["slug_map"][code] = slug
             # Only an UNAMBIGUOUS code is retargeted.
@@ -170,8 +172,11 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
         report["options_migrated"] += entry["migrated"]
         if entry["duplicate_codes"]:
             report["fields_with_duplicate_codes"].append(entry["field"])
-        if old_to_new:
-            maps[str(f.get("id"))] = old_to_new
+        fid = f.get("id")
+        if old_to_new and isinstance(fid, str) and fid:
+            # An id-less field cannot be a condition trigger; keying it as the
+            # string "None" would merge two such fields' maps (fresh-eyes).
+            maps[fid] = old_to_new
     if maps:
         holders: List[Dict[str, Any]] = [f for f in fields if isinstance(f, dict)]
         holders += [s for s in (migrated.get("sections") or []) if isinstance(s, dict)]

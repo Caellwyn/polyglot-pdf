@@ -189,8 +189,13 @@ def mint_select_slugs(
     with an existing slug either; bd polyglot-pdf-g2fpr PR 3a).
     """
     assert len(labels) == len(codes)
-    keep = [c if (isinstance(c, str) and is_valid_option_slug(c)) else None
-            for c in codes]
+    # A code is kept as the value only when it is slug-shaped AND not already
+    # taken by a reserved sibling: fresh-eyes (g2fpr.3) showed the keep
+    # fast-path handing a legacy '5' the same value as an already-v2 '5' in
+    # the same field. Such a code is minted from its label instead.
+    taken = set(reserved)
+    keep = [c if (isinstance(c, str) and is_valid_option_slug(c) and c not in taken)
+            else None for c in codes]
     held = list(reserved) + [c for c in keep if c is not None]
     to_mint = [strip_trailing_code(l) for l, k in zip(labels, keep) if k is None]
     minted = iter(mint_unique_slugs(held + to_mint)[len(held):])

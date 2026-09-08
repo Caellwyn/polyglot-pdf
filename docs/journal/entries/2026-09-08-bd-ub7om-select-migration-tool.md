@@ -52,6 +52,26 @@ retargeted unambiguously; the tool reports it and leaves the condition for a
 human, matching `/resume-form`'s policy. The mutant that retargets anyway
 reddens the pin.
 
+**A new parameter needs its own unit test, or its first consumer's tests are
+the only ones -- and they test the consumer.** `reserved` shipped with zero
+direct tests; fresh-eyes reproduced the hole in one line:
+`mint_select_slugs(["Five"], ["5"], reserved=["5"]) == ["5"]`. The keep
+fast-path never consulted the reserved set, so a half-migrated field (the
+editor's convert-on-touch leaves exactly that) could end with two options
+sharing a value. A kept code that a reserved sibling already holds is now
+minted from its label instead; three direct tests, and the mutant reddens two.
+
+**"The report names every change" means NAMES, not counts.** Kept numeric
+options were counted (`kept_as_slug: 5`) but not listed; an auditor working
+from the report alone could not say which. `kept_codes` now lists them, and a
+test asserts every migrated option appears exactly once, in `slug_map` or
+`kept_codes`.
+
+**`str(None)` is a key.** An id-less field was keyed as the string `"None"` in
+the retarget map, so two such fields would merge maps and a condition on a
+field literally named "None" would be rewritten. Guarded; the test that
+reproduced it failed for exactly that reason before the guard landed.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)
