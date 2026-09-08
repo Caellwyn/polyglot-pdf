@@ -161,6 +161,68 @@ def test_get_allowed_kits_returns_stored_list_for_active_firm(fake_db):
     assert firms.get_allowed_kits("acme") == ["w7", "i-90"]
 
 
+# ------------------------------------------------------------- firm_kind
+
+
+def test_firm_kind_is_live_when_disabled(monkeypatch):
+    """Mutation: invert the _firms_enabled() gate -- the explode-mock fires
+    instead of the fail-closed-to-live default."""
+    monkeypatch.delenv("FIRMS_FIRESTORE_ENABLED", raising=False)
+    monkeypatch.setattr("backend.services.auth.get_db", _exploding_get_db)
+    assert firms.firm_kind("acme") == firms.FIRM_KIND_LIVE
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["missing_firm", "no_kind_key", "malformed_kind", "read_raises"],
+)
+def test_firm_kind_fails_closed_to_live(fake_db, monkeypatch, case):
+    """Every failure branch resolves to "live" -- the OPPOSITE polarity from
+    get_allowed_kits' fail-closed-to-[]: widening kit visibility is the risk
+    there, minting for free without the live-firm gate is the risk here, and
+    "live" is what SUBJECTS a firm to that gate. A doc with no `kind` key at
+    all (the pre-backfill window, bd polyglot-pdf-d4wdi) gets the same
+    treatment on purpose -- that is exit criterion 3's "missing kind is
+    live" requirement. Mutation per branch: delete that branch's guard in
+    firm_kind (the not-exists early return, the kind-membership check, the
+    try/except) -- the corresponding parametrization goes red."""
+    col = fake_db.collection(firms._FIRMS_COLLECTION)
+    if case == "no_kind_key":
+        doc = _firm_doc()
+        doc.pop("kind", None)
+        col.store["acme"] = doc
+    elif case == "malformed_kind":
+        col.store["acme"] = _firm_doc(kind="trial")
+    elif case == "read_raises":
+        def _boom():
+            raise RuntimeError("iam drift")
+
+        monkeypatch.setattr("backend.services.auth.get_db", _boom)
+    # missing_firm: store stays empty on purpose.
+
+    assert firms.firm_kind("acme") == firms.FIRM_KIND_LIVE
+
+
+def test_firm_kind_returns_stored_mock(fake_db):
+    """The positive case for the OTHER value: a doc explicitly marked mock
+    must not be swept into the live fail-closed default. Mutation: return
+    FIRM_KIND_LIVE unconditionally -- red."""
+    fake_db.collection(firms._FIRMS_COLLECTION).store["acme"] = _firm_doc(
+        kind="mock"
+    )
+    assert firms.firm_kind("acme") == firms.FIRM_KIND_MOCK
+
+
+def test_firm_kind_returns_stored_live(fake_db):
+    """The positive case for an explicitly-live doc, so the mock test above
+    is not the only positive path exercised. Mutation: return
+    FIRM_KIND_MOCK unconditionally -- red."""
+    fake_db.collection(firms._FIRMS_COLLECTION).store["acme"] = _firm_doc(
+        kind="live"
+    )
+    assert firms.firm_kind("acme") == firms.FIRM_KIND_LIVE
+
+
 # --------------------------------------------------------------- upserts
 
 
@@ -169,7 +231,7 @@ def test_upsert_first_write_sets_created_at_server_timestamp(fake_db):
     SERVER_TIMESTAMP sentinel (key-existence alone would pass with any
     garbage value). Mutation: drop created_at from the first-write payload
     -- red."""
-    firms.upsert_firm("acme", "Acme", "a@x.example", ["w7"])
+    firms.upsert_firm("acme", "Acme", "a@x.example", ["w7"], "live")
 
     ref = fake_db.collection(firms._FIRMS_COLLECTION).document("acme")
     payload, merge = ref.set_calls[0]
@@ -178,6 +240,7 @@ def test_upsert_first_write_sets_created_at_server_timestamp(fake_db):
     assert payload["updated_at"] is fb_firestore.SERVER_TIMESTAMP
     assert payload["allowed_kits"] == ["w7"]
     assert payload["status"] == "active"
+    assert payload["kind"] == "live"
 
 
 def test_upsert_rerun_omits_created_at_and_merges(fake_db):
@@ -188,8 +251,8 @@ def test_upsert_rerun_omits_created_at_and_merges(fake_db):
     plan): make upsert_firm unconditionally include created_at -> the
     no-created_at assertion goes red; drop merge=True -> the merge
     assertion goes red."""
-    firms.upsert_firm("acme", "Acme", "a@x.example", ["w7"])
-    firms.upsert_firm("acme", "Acme Legal", "a@x.example", ["w7", "i-90"])
+    firms.upsert_firm("acme", "Acme", "a@x.example", ["w7"], "live")
+    firms.upsert_firm("acme", "Acme Legal", "a@x.example", ["w7", "i-90"], "live")
 
     ref = fake_db.collection(firms._FIRMS_COLLECTION).document("acme")
     assert len(ref.set_calls) == 2
@@ -198,6 +261,25 @@ def test_upsert_rerun_omits_created_at_and_merges(fake_db):
     assert "created_at" not in payload2
     assert payload2["updated_at"] is fb_firestore.SERVER_TIMESTAMP
     assert payload2["allowed_kits"] == ["w7", "i-90"]
+    # balance_credits and balance_updated_at belong to the ledger helper
+    # (Epic 2 bead A2) alone from the SECOND write onward -- re-including
+    # them here would zero out a real balance on every re-bootstrap.
+    assert "balance_credits" not in payload2
+    assert "balance_updated_at" not in payload2
+
+
+def test_upsert_first_write_sets_balance_credits_zero(fake_db):
+    """POSITIVE pin: a brand-new firm starts at balance_credits=0 with
+    balance_updated_at stamped, so the ledger invariant
+    (balance_credits == sum(amount)) holds from doc creation, before any
+    ledger entry exists. Mutation: drop the balance_credits=0 seed from the
+    first-write payload -- red."""
+    firms.upsert_firm("acme", "Acme", "a@x.example", ["w7"], "live")
+
+    ref = fake_db.collection(firms._FIRMS_COLLECTION).document("acme")
+    payload, _ = ref.set_calls[0]
+    assert payload["balance_credits"] == 0
+    assert payload["balance_updated_at"] is fb_firestore.SERVER_TIMESTAMP
 
 
 def test_upsert_rejects_unknown_status(fake_db):
@@ -206,8 +288,34 @@ def test_upsert_rejects_unknown_status(fake_db):
     junk would store a status that silently fail-closes the firm).
     Mutation: remove the status guard in upsert_firm -- red."""
     with pytest.raises(ValueError):
-        firms.upsert_firm("acme", "Acme", "a@x.example", [], status="bogus")
+        firms.upsert_firm(
+            "acme", "Acme", "a@x.example", [], "live", status="bogus"
+        )
     assert fake_db.collection(firms._FIRMS_COLLECTION).store == {}
+
+
+def test_upsert_rejects_unknown_kind(fake_db):
+    """The write layer validates kind against the closed set, mirroring the
+    status guard: a future non-CLI caller passing junk (or a typo) must not
+    silently write an unrecognized kind that firm_kind() would then treat as
+    its fail-closed default. Mutation: remove the kind guard in upsert_firm
+    -- red."""
+    with pytest.raises(ValueError):
+        firms.upsert_firm("acme", "Acme", "a@x.example", [], "trial")
+    assert fake_db.collection(firms._FIRMS_COLLECTION).store == {}
+
+
+def test_upsert_writes_the_given_kind(fake_db):
+    """POSITIVE pin: kind lands verbatim in the doc, and is re-written on
+    every merge (unlike balance_credits) -- a re-bootstrap with a different
+    --kind is how an operator corrects a mis-classified firm before the
+    admin console's PATCH .../kind route exists. Mutation: hardcode
+    FIRM_KIND_LIVE in the payload instead of the kind param -- red."""
+    firms.upsert_firm("acme", "Acme", "a@x.example", [], "mock")
+
+    ref = fake_db.collection(firms._FIRMS_COLLECTION).document("acme")
+    payload, _ = ref.set_calls[0]
+    assert payload["kind"] == "mock"
 
 
 def test_upsert_is_ungated_by_the_env_var(monkeypatch):
@@ -218,7 +326,7 @@ def test_upsert_is_ungated_by_the_env_var(monkeypatch):
     db = _FakeDB()
     monkeypatch.setattr("backend.services.auth.get_db", lambda: db)
 
-    firms.upsert_firm("acme", "Acme", "a@x.example", [])
+    firms.upsert_firm("acme", "Acme", "a@x.example", [], "live")
 
     assert "acme" in db.collection(firms._FIRMS_COLLECTION).store
 
@@ -233,7 +341,7 @@ def test_upsert_raises_on_store_failure(monkeypatch):
 
     monkeypatch.setattr("backend.services.auth.get_db", _boom)
     with pytest.raises(RuntimeError):
-        firms.upsert_firm("acme", "Acme", "a@x.example", [])
+        firms.upsert_firm("acme", "Acme", "a@x.example", [], "live")
 
 
 # ----------------------------------------------------------------- probe

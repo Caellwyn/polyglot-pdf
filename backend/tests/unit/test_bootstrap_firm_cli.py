@@ -95,12 +95,13 @@ def wired(monkeypatch):
     return SimpleNamespace(auth=auth_stub, upserts=upserts)
 
 
-def _argv(*extra, firm_id="acme-legal", project=PROJECT):
+def _argv(*extra, firm_id="acme-legal", project=PROJECT, kind="live"):
     return [
         firm_id,
         "--name", "Acme Legal Aid",
         "--contact", "intake@acme.example",
         "--project", project,
+        "--kind", kind,
         *extra,
     ]
 
@@ -128,6 +129,7 @@ def test_stamps_roles_per_flag_and_exits_0(wired, capsys):
     args, _ = wired.upserts[0]
     assert args[0] == "acme-legal"
     assert args[3] == ["w7", "i-90"]  # comma-split + stripped
+    assert args[4] == "live"  # --kind, default in _argv()
 
 
 def test_existing_custom_claims_survive_the_stamp(wired):
@@ -288,7 +290,8 @@ def test_omitted_status_upserts_service_active_constant(wired):
 
     assert rc == 0
     assert len(wired.upserts) == 1
-    assert wired.upserts[0][0][4] == firms.FIRM_STATUS_ACTIVE
+    _, kw = wired.upserts[0]
+    assert kw["status"] == firms.FIRM_STATUS_ACTIVE
 
 
 def test_case_mismatched_dual_role_email_is_refused(wired, capsys):
@@ -324,6 +327,53 @@ def test_status_choices_match_service_constants():
         firms.FIRM_STATUS_ACTIVE,
         firms.FIRM_STATUS_SUSPENDED,
     ]
+
+
+def test_kind_choices_match_service_constants():
+    """Same drift guard as test_status_choices_match_service_constants, for
+    the new --kind flag (Epic 2 bead A1). Mutation: change a KIND_CHOICES
+    literal -- red."""
+    import backend.services.firms as firms
+
+    assert bootstrap_firm.KIND_CHOICES == [
+        firms.FIRM_KIND_MOCK,
+        firms.FIRM_KIND_LIVE,
+    ]
+
+
+def test_kind_is_required_and_missing_kind_aborts_before_any_write(capsys):
+    """--kind has NO default (module docstring: an operator who has not
+    decided mock-vs-live must not silently get either). argparse's own
+    required=True enforcement means main() never runs at all -- argparse
+    calls sys.exit(2) directly. Mutation: drop required=True from the --kind
+    argument -- this raises SystemExit(0) or hangs on a missing required
+    value instead of the expected usage-error exit, and the assertion below
+    goes red."""
+    argv = [
+        "acme-legal",
+        "--name", "Acme Legal Aid",
+        "--contact", "intake@acme.example",
+        "--project", PROJECT,
+        # --kind deliberately omitted
+    ]
+    with pytest.raises(SystemExit) as exc_info:
+        bootstrap_firm.main(argv)
+    assert exc_info.value.code == 2
+    assert "--kind" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("kind", ["mock", "live"])
+def test_kind_flows_through_to_upsert_firm(wired, kind):
+    """--kind mock and --kind live both reach upsert_firm as the 5th
+    positional argument, unchanged. Mutation: hardcode "live" (or any other
+    literal) in the upsert_firm call instead of args.kind -- the mock case
+    goes red."""
+    rc = bootstrap_firm.main(_argv(kind=kind))
+
+    assert rc == 0
+    assert len(wired.upserts) == 1
+    args, _ = wired.upserts[0]
+    assert args[4] == kind
 
 
 def test_firm_write_failure_exits_2_and_stamps_nobody(wired, monkeypatch, capsys):
