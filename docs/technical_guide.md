@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -1252,3 +1252,104 @@ change to one side's contract usually needs a matching change on the other.
   `deploy-admin.sh`'s `ADMIN_CORS_ORIGINS` (both sites' `.web.app` and
   `.firebaseapp.com` domains, alongside the main app's origins for Epic 2's
   firm-manager pages).
+
+### 18. Credit ledger: the ONE transactional balance writer (Epic 2 bead A2)
+
+`backend/services/credit_ledger.py` is the only code in the repo that writes
+`firms/{firm_id}.balance_credits` after the firm is created, and the only
+producer of `firms/{firm_id}/ledger/{auto}`. Every credit movement --
+subscription grants, prepaid purchases, promotional grants, mint debits,
+expiry refunds, operator adjustments -- goes through the single
+`append_entry()` transaction, so the invariant `balance_credits ==
+sum(amount)` holds by construction rather than by six call sites each
+remembering to update the balance. Nothing recomputes the balance from the
+ledger on a read, so a second writer breaks the invariant silently.
+
+- **The one deliberate other site** is `firms.upsert_firm()` (contract 16),
+  which 0-initializes `balance_credits`/`balance_updated_at` on FIRST CREATE
+  and never touches them again -- a firm with no ledger and a zero balance.
+  `test_credit_ledger_is_the_only_module_that_writes_balance_credits` derives
+  the allowed set from the source tree and fails on any third writer under
+  `backend/`.
+- **`append_entry(db, firm_id, *, entry_type, amount, actor, usd_amount=None,
+  channel=None, reason=None, link_jti=None, kit_id=None,
+  require_sufficient_balance=False, extra_writes=None, ts=None) -> dict`.**
+  Returns the committed entry plus `doc_id`, `firm_id` and
+  `balance_credits`. **SYNC on the Admin SDK** -- every async caller (the
+  mint route, the socket, the refund sweep) must wrap it in
+  `asyncio.to_thread`, as `backend/routes/link_routes.py` already does for
+  its Firestore reads.
+- **Entry shape** (`credit_ledger.ENTRY_FIELDS`, pinned as a frozenset):
+  `type`, signed `amount`, nullable `usd_amount`, `firm_kind` snapshot,
+  nullable `channel`, `balance_after`, `actor`, `reason`, `link_jti`,
+  `kit_id`, `ts`. Consumers: Epic 3's BigQuery `income_month` view (which
+  hard-codes `WHERE firm_kind = 'live'`) and the Track C console ledger
+  table; a dropped field becomes a NULL column nobody notices until a
+  revenue number is wrong, which is why the set is a test and not prose.
+- **The type rules run BOTH ways.** `purchase` and `subscription_grant`
+  (`USD_REQUIRED_TYPES`) REQUIRE `usd_amount`; the other four REFUSE it -- a
+  dollar figure on a promo grant or a debit would be double-counted as
+  income by a view that sums `usd_amount`. `POSITIVE_ONLY_TYPES` (the four
+  credit-adding types) refuse a negative amount and `NEGATIVE_ONLY_TYPES`
+  (`mint_debit`) refuses a positive one; `adjustment` is the signed escape
+  hatch and is the one type that REQUIRES a non-blank `reason`. `actor` is
+  required and never blank (a uid, or `system:<origin>`).
+- **Reads before writes, and nothing hoisted out of the body.** Firestore
+  requires every transactional read to precede every write, and RE-RUNS the
+  whole body on contention. The balance, the `firm_kind` snapshot, the
+  sufficiency verdict and `balance_after` are therefore all computed INSIDE
+  the body from the same snapshot, every run -- a value read before the
+  transaction would be stale on the retry, which is exactly the double-mint
+  race. `firm_kind` falls back to `"live"` on a missing/malformed key, the
+  same fail-closed polarity as `firms.firm_kind()` (contract 16); a
+  missing/malformed `balance_credits` reads as 0, which is what lets a grant
+  lift a pre-backfill firm (bead A6) out of the window.
+- **`require_sufficient_balance` is the enforcement switch, not a default.**
+  False (the default) WRITES the debit and lets the balance go negative --
+  the metered soft-launch mode. True raises `InsufficientCredits` (a
+  `LedgerError` subclass) with NOTHING committed. Consumer: Epic 2 bead A3's
+  mint route passes it from the `CREDITS_ENFORCED` runtime-config flag
+  (contract 14), and maps the refusal to `402`.
+- **`extra_writes(tx, firm_snapshot)` joins a caller's documents to the SAME
+  transaction.** Consumer: bead A3 passes the `links[_<channel>]/{jti}` mint
+  record (contract 16) so the debit, the ledger entry and the record commit
+  together or not at all. It runs inside the body AFTER the reads, must not
+  read, must write the same thing from the same inputs on a retry, and its
+  exceptions deliberately abort the whole transaction.
+- **Every committed write emits ONE `ledger_export` structured log line**
+  (`credit_ledger.LEDGER_EXPORT_FIELDS`: `event_type`, `type`, `amount`,
+  `usd_amount`, `firm_id`, `firm_kind`, `channel`, `link_jti`). structlog's
+  `JSONRenderer` puts each bound key at the top level of the JSON line, so
+  Epic 3's Cloud Logging sink filter `jsonPayload.event_type =
+  "ledger_export"` matches it directly -- this is the income and spend feed
+  BigQuery reads, with no Firestore export extension and no nightly job. It
+  is emitted AFTER the commit (a line for an entry that never committed
+  would inflate the income view) and carries NO field values, PII or PHI:
+  `reason` is operator free text and deliberately stays OUT of the log line
+  while being stored on the entry.
+- **Readers:** `read_balance(db, firm_id)` returns the materialized field
+  (None for a missing firm -- distinct from 0, which a CLI dry run relies
+  on) and does NOT sum the ledger; `read_entries(db, firm_id, limit=None)`
+  returns entries oldest-first by `ts` (the replay shape, not the console's
+  newest-n).
+- **`scripts/grant_credits.py`** (NEW) is the operator CLI on the same
+  helper, so credits can be granted and rolled back before the console
+  exists. Two subcommands: `grant` (positive only; `--type` in
+  `promo_grant` | `purchase` | `subscription_grant`, the latter two
+  requiring `--usd`, which `promo_grant` refuses) and `adjust` (either sign,
+  `--reason` required by argparse). Both take a REQUIRED `--project`, whose
+  resolved firebase_admin project is asserted before any write (the trap
+  `scripts/bootstrap_firm.py` documents), refuse the dead project
+  `polyglot-forms-919f2`, refuse a zero delta, and support `--dry-run`
+  (reads the balance, prints the entry, writes nothing). Grants carry
+  `channel=None` -- an operator grant is not a channel action. `actor` is
+  stamped `system:grant_credits_cli:<operator>`, deliberately
+  distinguishable from a console grant's Firebase uid. The CLI keeps its
+  type lists as LITERALS (a `backend.*` import at module scope would run
+  before `initialize_app`) and pins them against the service's constants by
+  test.
+- **Rules + IAM:** `firestore.rules`'s `firms/{firmId}/ledger/{entryId}`
+  deny block already exists (contract 16) and is pinned by the set-derived
+  rules test. The writes need `roles/datastore.user`, which both
+  `polyglot-backend-sa` and `admin-backend-sa` already hold; this contract
+  adds no new permission (CLAUDE.md scar #7).
