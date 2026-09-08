@@ -759,8 +759,8 @@ def test_a_SUFFIX_named_widget_still_resolves(kit):
     applicant-only i-90 v2 schema stores FULLY-QUALIFIED widget names, the
     inverse of its predecessor. So this test currently proves only that exact
     matches resolve; the endswith fallback it was written to guard is
-    unexercised by real data (bd polyglot-pdf-a4z1w tracks restoring that
-    coverage). Do not read a green run here as proof the fallback works.
+    unexercised by real data (bd polyglot-pdf-2r1ku tracks the CI-dead kit
+    tests, this one included). Do not read a green run here as proof the fallback works.
     """
     if not (_KITS / kit / "form.pdf").exists():
         pytest.skip(f"{kit} kit not present")

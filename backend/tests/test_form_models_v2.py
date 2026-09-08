@@ -71,16 +71,25 @@ def discovered_kits() -> list:
     """
     import subprocess
 
+    # EVERY exit asserts. The guard below is worthless if a failure can return []
+    # around it -- and the two paths that could are exactly the ones its comment
+    # names (no form-kits/ dir, git unavailable), so an early `return []` here
+    # would reproduce the silent-skip it exists to stop (fresh-eyes round 2).
     root = REPO_ROOT / "form-kits"
-    if not root.is_dir():
-        return []
+    assert root.is_dir(), (
+        f"{root} is not a directory -- the kit-discovery guards below would "
+        "silently collect zero cases instead of failing"
+    )
     try:
         tracked = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "ls-files", "form-kits/"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=True,
         ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return []
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise AssertionError(
+            f"`git ls-files form-kits/` failed ({exc!r}) -- a broken harness, not "
+            "'no kits to check'; the guards below would silently collect zero cases"
+        ) from exc
     names = {
         line.split("/")[1] for line in tracked.splitlines()
         if line.count("/") >= 2 and not line.split("/")[1].startswith("_")

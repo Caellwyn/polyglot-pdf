@@ -116,8 +116,8 @@ STANDARD_EVENTS: list = [
      "event": "plant",
      "planted_say": "On the extra pages my A number is A zero eight seven six five four three two.",
      "conflict_group": ["a_number", "p8_a_number"],
-     "correct_say": "Sorry, it is the same as before, one two three four five six seven eight.",
-     "expected_after": "12345678"},
+     "correct_say": "Sorry, it is the same as before, one two three four five six seven eight nine.",
+     "expected_after": "123456789"},
 ]
 
 # E3 adds two more plants on top of STANDARD_EVENTS' two (4 total, 1 far).
