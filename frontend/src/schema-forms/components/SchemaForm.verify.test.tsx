@@ -74,7 +74,15 @@ vi.mock('../../demo/VoiceOverlayMobile', () => ({
 // The lazy Preview surfaces -- stub so the Preview branch renders synchronously
 // (no pdfjs, no Suspense fallback churn).
 vi.mock('../../pdf-view/PreviewPane', () => ({
-  default: () => <div data-testid="preview-pane">preview</div>,
+  // Renders a REAL field input (id={field.id}, the same contract the popover's
+  // FieldRenderer uses), so a keystroke here exercises the actual handler rather
+  // than a stand-in. The Preview view had NO verify path at all until fresh-eyes
+  // caught it; a stub with no input could not have shown that.
+  default: () => (
+    <div data-testid="preview-pane">
+      <input id="f1" name="f1" defaultValue="Vasquez" />
+    </div>
+  ),
 }));
 vi.mock('../../pdf-view/FilledPreviewModal', () => ({
   default: () => <div data-testid="filled-preview-modal">modal</div>,
@@ -251,5 +259,65 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
 
     expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
     expect(evt.defaultPrevented, 'the native submit must be suppressed').toBe(true);
+  });
+
+  it('a CHECKBOX field does not open the modal -- it would show "false"', () => {
+    // An unchecked checkbox stores boolean false, which isBlankFieldValue counts
+    // as non-blank (correctly -- false is a real answer). Opening the modal on it
+    // showed the literal string "false" as the value to verify, which is nonsense
+    // to a user. A checkbox is toggled, not typed. Fresh-eyes finding.
+    const schema = {
+      ...VERIFY_SCHEMA,
+      fields: [
+        { id: 'agree', name: 'I agree', spoken_name: 'agree', section_id: 's1', type: 'checkbox' },
+      ],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['agree'] }],
+    } as unknown as FormSchema;
+    render(<SchemaForm schema={schema} kitId="test" />);
+
+    const box = document.getElementById('agree') as HTMLInputElement;
+    fireEvent.click(box);   // check
+    fireEvent.click(box);   // uncheck -> stores false
+    fireEvent.keyDown(box, { key: 'Enter' });
+
+    expect(screen.queryByTestId('verify-field-modal')).toBeNull();
+  });
+
+  it('verifying writes ONCE -- no double state-change event', () => {
+    // confirmField saves internally; an explicit second save double-fired the
+    // schemaFormStateChange event. Harmless today, a real bug the moment a
+    // non-idempotent listener is added. Fresh-eyes finding.
+    render(<SchemaForm schema={VERIFY_SCHEMA} kitId="test" />);
+    typeInto('f1', 'Vasquez');
+    fireEvent.keyDown(document.getElementById('f1')!, { key: 'Enter' });
+
+    const fired: string[] = [];
+    const listener = () => fired.push('x');
+    window.addEventListener('schemaFormStateChange', listener);
+    fireEvent.keyDown(screen.getByTestId('verify-field-checkbox'), { key: 'Enter' });
+    window.removeEventListener('schemaFormStateChange', listener);
+
+    expect(fired.length, 'one verify = one state-change event').toBe(1);
+  });
+
+  it('the gesture works in the PREVIEW (PDF) view too, not just Simplified', async () => {
+    // EXIT CRITERION 1 failed here: the handler was bound to the <form>, which is
+    // the Simplified branch ONLY, so a keyboard-only user working in Preview had
+    // no verify path at all -- reproducing the exact hole this bead closes.
+    // Fresh-eyes caught it. The handler now wraps BOTH branches.
+    render(<SchemaForm schema={VERIFY_SCHEMA} kitId="test" />);
+    typeInto('f1', 'Vasquez');   // into STATE -- the gate reads state, not the DOM
+
+    const toggle = screen.getAllByRole('tab').find(b => /preview/i.test(b.textContent || ''));
+    fireEvent.click(toggle!);
+    await screen.findByTestId('preview-pane');
+
+    // The same Enter, now from inside the Preview subtree.
+    fireEvent.keyDown(document.querySelector('[data-testid="preview-pane"] input')!, { key: 'Enter' });
+
+    expect(
+      screen.getByTestId('verify-field-modal'),
+      'Preview must have the same keyboard verify path as Simplified'
+    ).toBeTruthy();
   });
 });

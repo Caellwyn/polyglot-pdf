@@ -655,7 +655,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
    * may rely on. Where the modal DOES open we preventDefault, so that submit
    * never fires and the section cannot move out from under the dialog.
    */
-  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
     if (e.key !== 'Enter') return;
     const target = e.target as HTMLElement | null;
     const fieldId = target?.id;
@@ -667,6 +667,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
     const value = unwrapFieldValue(state.fieldValues[fieldId]);
     if (isBlankFieldValue(value)) return;
+    // An UNCHECKED checkbox stores boolean false, which isBlankFieldValue counts
+    // as non-blank (correctly -- false is a real answer, bd polyglot-pdf-vtdx).
+    // But opening the modal on it showed the literal string "false" as the value
+    // to verify, which is nonsense to a user. A checkbox is toggled, not typed,
+    // so Enter there keeps its existing meaning (fresh-eyes finding).
+    if (typeof value === 'boolean') return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -685,8 +691,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     const fieldId = verifyingFieldId;
     if (!fieldId) return;
     setState(prevState => {
+      // confirmField SAVES internally, so no explicit save here -- a second one
+      // double-fires the schemaFormStateChange event (fresh-eyes finding).
       const next = SchemaFormStateManager.confirmField(prevState, fieldId, 'manual_edit');
-      SchemaFormStateManager.save(next);
       const field = next.schema.fields.find(f => f.id === fieldId);
       const conn = connectionManagerRef.current;
       if (conn?.sendManualFieldUpdate) {
@@ -892,6 +899,26 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         </button>
       </div>
 
+      {verifyingFieldId && (() => {
+        const vField = state.schema.fields.find(f => f.id === verifyingFieldId);
+        const vValue = unwrapFieldValue(state.fieldValues[verifyingFieldId]);
+        return (
+          <VerifyFieldModal
+            isOpen
+            fieldName={vField?.name || verifyingFieldId}
+            value={vValue == null ? '' : String(vValue)}
+            selectedLanguage={initialLanguage || 'English'}
+            onVerify={handleVerifyConfirmed}
+            onCancel={() => setVerifyingFieldId(null)}
+          />
+        );
+      })()}
+
+      {/* Enter->verify is bound HERE, around BOTH views (bd polyglot-pdf-96um6).
+          It was originally on the <form>, which is the Simplified view ONLY -- so
+          the PDF view had no keyboard verify path at all, reproducing the exact
+          hole this bead exists to close. Fresh-eyes caught it. */}
+      <div onKeyDown={handleFormKeyDown} className="schema-form__view-container">
       {viewMode === 'preview' ? (
         <PdfViewErrorBoundary
           fallback={
@@ -933,20 +960,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         </PdfViewErrorBoundary>
       ) : (
       <form className="schema-form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown}>
-      {verifyingFieldId && (() => {
-        const vField = state.schema.fields.find(f => f.id === verifyingFieldId);
-        const vValue = unwrapFieldValue(state.fieldValues[verifyingFieldId]);
-        return (
-          <VerifyFieldModal
-            isOpen
-            fieldName={vField?.name || verifyingFieldId}
-            value={vValue == null ? '' : String(vValue)}
-            selectedLanguage={initialLanguage || 'English'}
-            onVerify={handleVerifyConfirmed}
-            onCancel={() => setVerifyingFieldId(null)}
-          />
-        );
-      })()}
 
         {/* Form Header */}
         <div className="schema-form__header">
@@ -1115,6 +1128,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           />
         )
       )}
+      </div>
     </>
   );
 }

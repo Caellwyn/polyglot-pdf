@@ -96,6 +96,11 @@ export function VerifyFieldModal({
   // lands here with the checkbox focused.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      // A BUTTON handles its own Enter (it activates natively and fires onClick),
+      // so intercepting here would swallow it -- Enter on "Not yet" did nothing
+      // at all, a silent dead end for anyone who tabs to it (fresh-eyes finding).
+      if ((e.target as HTMLElement)?.tagName === 'BUTTON') return;
+
       e.preventDefault();
       e.stopPropagation(); // never reach the form's submit handler
       if (checked || e.target === checkboxRef.current) {

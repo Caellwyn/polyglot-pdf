@@ -149,4 +149,18 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
       'a fresh field starts unticked'
     ).toBe(false);
   });
+
+  it('ENTER on the Cancel button dismisses -- it is not a silent dead end', () => {
+    // The dialog's Enter handler used to intercept EVERY Enter, including one
+    // aimed at a button -- so tabbing to "Not yet" and pressing Enter did nothing
+    // at all. A button activates natively; the handler must let it. Fresh-eyes
+    // finding, medium-confidence there, confirmed here.
+    const props = renderModal();
+
+    fireEvent.keyDown(screen.getByTestId('verify-field-cancel'), { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('verify-field-cancel')); // what Enter triggers natively
+
+    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onVerify, 'cancelling must never verify').not.toHaveBeenCalled();
+  });
 });
