@@ -5,7 +5,7 @@
  */
 
 import type { FormField, ValidationRules } from "../types/schema";
-import { unwrapFieldValue } from "./fieldValue";
+import { isBlankFieldValue, unwrapFieldValue } from "./fieldValue";
 import {
   normalizeToComposite,
   type AtomicCondition,
@@ -68,11 +68,10 @@ export function validateField(field: FormField, value: any): string | null {
   // group submitted as `[]` would slip past the required check (which gates on
   // normalizedEmpty) AND the enum loop (which is vacuous for `[]`), landing a blank
   // value that confirm_field would then treat as filled.
-  const normalizedEmpty =
-    actualValue === null ||
-    actualValue === undefined ||
-    actualValue === "" ||
-    (Array.isArray(actualValue) && actualValue.length === 0);
+  // Shared blankness definition (bd polyglot-pdf-5ovod) -- whitespace-only is
+  // BLANK, so a required field holding "   " fails the required check instead of
+  // passing it.
+  const normalizedEmpty = isBlankFieldValue(actualValue);
 
   // Enum / option-membership runs INDEPENDENTLY of field.validation: for a
   // STRING-enum field (select, radio, or a checkbox GROUP), the option set IS the

@@ -77,6 +77,22 @@ STAGING_SERVICE_NAME="polyglot-backend-staging"
 STAGING_SITE="polyglot-app-staging"
 STAGING_HOSTING_TARGET="app-staging"
 
+# Secret Manager bindings, passed to gcloud as --set-secrets (bd
+# polyglot-pdf-hvui4). MUST stay identical to deploy-demo.sh's copy -- pinned by
+# tests/test_deploy_channel_parity.py, which derives both lists from the two
+# scripts rather than restating them.
+#
+# --set-secrets REPLACES the whole secret block, so this must name EVERY
+# binding the service should keep, not just the one being added. Today that is
+# the link signing key alone: the two SCHEMA_*_TOKEN bindings live on the demo
+# service are hand-applied drift for a gate that is RETIRED (deploy-editor.sh,
+# bd rhc2v), so they are deliberately NOT carried forward here.
+#
+# LINK_TOKEN_SECRET gates client-link minting: without it the mint route 503s.
+# The secret itself is provisioned out of band (maintainer, 2026-09-01); this
+# only binds the existing secret's latest version to the env var.
+BACKEND_SECRETS_COMMON="LINK_TOKEN_SECRET=LINK_TOKEN_SECRET:latest"
+
 # Determine which components to deploy.
 #
 # NOTE the deliberate asymmetry with deploy-demo.sh: a bare run here deploys
@@ -102,6 +118,19 @@ if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
                 ;;
             --frontend)
                 DEPLOY_FIREBASE=true
+                ;;
+            *)
+                # UNKNOWN ARG IS FATAL (bd polyglot-pdf-7aez9). Without this arm
+                # a typo like --front-end silently matched nothing, every
+                # DEPLOY_* stayed false, the script deployed NOTHING, and still
+                # printed its success banner and exited 0. The operator then
+                # believes they verified a change they never deployed -- and on
+                # the staging channel that is exactly the false confidence the
+                # tier exists to remove. Mirrors deploy-all.sh, which has always
+                # errored on an unknown argument.
+                echo -e "${RED}[ERROR]${NC} Unknown argument: $arg" >&2
+                echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]" >&2
+                exit 1
                 ;;
         esac
     done
@@ -146,7 +175,29 @@ if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
     # straight to Cloud Run (bypassing the rewrite), it WILL need an entry here.
     # The editor origins are listed precisely because the hosted editor does
     # exactly that -- it calls Cloud Run directly to dodge the rewrite's 60s cap.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    #
+    # CLIENT LINKS mirror the demo (bd polyglot-pdf-hvui4). They were missing
+    # here: this script was written from a pre-#693 copy of the demo config, so
+    # staging could not mint or open a client link at all -- and a channel that
+    # cannot exercise the pilot's core feature does not predict demo behavior,
+    # which is the one job stated at the top of this block.
+    #
+    # TWO link values must NOT match the demo. Copying either one verbatim
+    # from deploy-demo.sh silently breaks a guarantee:
+    #
+    #   LINK_BASE_URL -- the STAGING frontend. A minted link is
+    #   `<base>/f#t=<token>` and /f is a client-app route (AppRoutes.tsx
+    #   CLIENT_LINK_PATH), so pointing staging at the demo origin would mint
+    #   links that open the DEMO -- silently testing the wrong deployment,
+    #   which is worse than not minting at all.
+    #
+    #   LINK_CHANNEL -- the channel name minted into every token as `aud` and
+    #   checked on open (bd polyglot-pdf-3q9qn). Matching the demo's value
+    #   would make staging links verify on the demo AND put both channels on
+    #   one redemption ledger, so a staging test could burn a real client's
+    #   link. tests/test_deploy_channel_parity.py asserts both differ.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_CHANNEL=staging,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://$STAGING_SITE.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+        BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \
         ./deploy-all.sh "${GCP_ARGS[@]}"

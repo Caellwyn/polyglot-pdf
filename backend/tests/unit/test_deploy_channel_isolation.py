@@ -289,27 +289,89 @@ DOCS_MENTIONING_DEAD_PROD = [
     "docs/technical_guide.md",
 ]
 
-# Phrasings that present the script as a live deploy path. Each must be absent.
-RUNNABLE_CLAIMS = [
-    "`deploy-demo.sh` / `deploy-production.sh` wrappers",
-    "`deploy-demo.sh` and\n> `deploy-production.sh` ship",
-    "stays maintainer-directed",
-]
+# Words that mark the script dead. Checked in the LINE-LOCAL neighbourhood of
+# each mention, never file-wide -- see the docstring below.
+DEATH_MARKERS = (
+    "dead",
+    "DEAD",
+    "refuses to run",
+    "unreachable",
+    "inactive",
+    "no live prod",
+)
 
 
 @pytest.mark.parametrize("doc", DOCS_MENTIONING_DEAD_PROD)
 def test_doc_does_not_present_dead_prod_as_runnable(doc):
-    """Every mention must mark it dead, never offer it as a deploy path."""
+    """EVERY mention must be marked dead in its OWN neighbourhood.
+
+    THE DEFEATABLE-BLACKLIST TRAP this replaces (bd polyglot-pdf-yz244, found by
+    the pre-PR review of bd polyglot-pdf-9qn64). The first version banned three
+    LITERAL phrasings, then searched the WHOLE FILE for a death word as a
+    catch-all. Both halves were weak:
+
+      - a blacklist is one synonym from defeat: any new wording presenting the
+        script as runnable simply was not on the list;
+      - the file-wide fallback was satisfied PERMANENTLY by unrelated prose. In
+        README.md an existing "Production site (inactive)" line hundreds of lines
+        away met it, so the reviewer rewrote the death paragraph into "To deploy
+        production, run ./deploy-production.sh" and every test stayed green.
+
+    So this asserts a PROPERTY per mention rather than banning phrasings, and
+    scopes the evidence to the mention's own line plus two either side. Repo scar
+    tissue, near-verbatim: a checker that infers a claim from text must scope the
+    evidence region to exactly the claim -- widen it and nearby prose becomes
+    evidence.
+    """
     body = _read(doc)
-    for claim in RUNNABLE_CLAIMS:
-        assert claim not in body, (
-            f"{doc} still presents deploy-production.sh as runnable via "
-            f"{claim!r}; it targets an unreachable project and exits 1."
-        )
-    # Wherever it IS named, the death must be stated nearby.
-    if "deploy-production" in body:
-        assert re.search(r"dead|DEAD|refuses to run|unreachable|inactive", body), (
-            f"{doc} names deploy-production.sh without saying it is dead"
+    if "deploy-production" not in body:
+        return
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if "deploy-production" not in line:
+            continue
+        # A doc's `**Tracks:**` header is a FILE LIST, not prose offering a
+        # deploy path -- naming the script there is how the freshness checker
+        # knows to watch it. Demanding a death marker inside a filename list
+        # would be a false positive, so skip it. (Caught on this test's first
+        # run: config-deployment.md's Tracks line failed the stricter check.)
+        #
+        # The exemption REQUIRES THE LINE TO ACTUALLY BE A FILE LIST, not merely
+        # to start with the marker. A bare startswith() was smugglable -- the
+        # review showed "**Tracks:** Run ./deploy-production.sh to go live."
+        # would be waved through, reintroducing exactly the evasion this test
+        # replaced a blacklist to prevent. So every token after the marker must
+        # look like a path, which prose never does.
+        stripped = line.lstrip()
+        if stripped.startswith("**Tracks:**"):
+            # Every token must LOOK LIKE A PATH: contain a "/" or carry a file
+            # extension, or be a known extensionless repo file. Ordinary prose
+            # words ("Run", "to", "go") satisfy none of those, which is what
+            # makes the exemption unsmugglable -- an earlier, looser version
+            # accepted any word made of path CHARACTERS and so waved through
+            # "**Tracks:** Run ./deploy-production.sh to go live."
+            #
+            # Dockerfile is the one extensionless name this repo's Tracks lines
+            # actually use; dotfiles like .gcloudignore and .firebaserc match the
+            # extension branch (leading dot, then a name).
+            tokens = stripped[len("**Tracks:**") :].split()
+
+            def _is_path(tok: str) -> bool:
+                if tok == "Dockerfile":
+                    return True
+                return bool(re.fullmatch(r"[\w.\-/]*[/.][\w\-]+", tok)) and (
+                    "/" in tok or "." in tok
+                )
+
+            if tokens and all(_is_path(t) for t in tokens):
+                continue
+        window = "\n".join(lines[max(0, i - 2) : i + 3])
+        assert any(m in window for m in DEATH_MARKERS), (
+            f"{doc}:{i + 1} mentions deploy-production.sh with no death marker "
+            f"within two lines either side, so it reads as a live deploy path. "
+            f"It targets an unreachable project and exits 1.\n"
+            f"  line: {line.strip()!r}\n"
+            f"  expected one of: {DEATH_MARKERS}"
         )
 
 
@@ -336,3 +398,29 @@ def test_dead_prod_doc_set_is_complete():
         f"  unlisted (add them): {sorted(found - set(DOCS_MENTIONING_DEAD_PROD))}\n"
         f"  listed but clean (remove): {sorted(set(DOCS_MENTIONING_DEAD_PROD) - found)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. The reachability gate lives in tests/test_deploy_reachability_gate.py.
+# ---------------------------------------------------------------------------
+#
+# It used to be pinned HERE by asserting on deploy-all.sh's text, because the
+# gate was inline. bd polyglot-pdf-6oi9s extracted it into a
+# verify_service_publicly_reachable() function so backend/deploy-new.sh could
+# carry a byte-identical copy -- and a function can be EXECUTED, which a text
+# assertion never could.
+#
+# tests/test_deploy_reachability_gate.py now runs the real shell against
+# synthetic IAM policies and asserts the actual exit code, covering strictly
+# more than the assertions removed from here: allUsers-on-invoker passes,
+# allUsers-on-a-non-invoker-role aborts (the false PASS), a multi-binding policy
+# still passes (the false FAIL), a lookalike role aborts, and an inconclusive
+# IAM read warns instead of aborting. It also pins the COMPLETE SET of scripts
+# that deploy publicly, so a third one cannot ship ungated.
+#
+# One assertion did NOT survive verbatim: the old suite asserted the query has
+# no `2>&1`. That is a code-SHAPE assertion, and the behavior it protected (a
+# gcloud stderr notice satisfying the check) is already impossible because
+# `grep -qx` requires the whole line to be exactly "roles/run.invoker" -- a
+# warning always carries surrounding text. Verified by mutation, not assumed.
+# test_gcloud_stderr_cannot_satisfy_the_check pins that OUTCOME instead.

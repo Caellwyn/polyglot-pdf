@@ -30,13 +30,14 @@ class _RecordingSession:
         self.audio_frames.append(bytes(data))
 
 
-def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20, native_vad=True):
+def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20):
     """Build a bare adapter with gap-fill config forced to test values.
 
     _audio_sender_loop reads get_settings() ONCE at entry, so patching the
     cached settings object's attributes before the call is sufficient.
-    native_vad=True (DISABLE_GEMINI_VAD=False) is the mode gap-fill targets;
-    manual VAD gates it OFF regardless of AUDIO_GAPFILL_ENABLED.
+    NOTE: gap-fill is now permanently OFF in production (bd polyglot-pdf-v1m8g
+    pins _gapfill_enabled=False). These tests still drive the sender plumbing so
+    it stays covered until that plumbing is removed (bd polyglot-pdf-ggdpn).
     """
     from backend.config import get_settings
 
@@ -45,7 +46,6 @@ def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20, native_vad=True)
     monkeypatch.setattr(settings, "AUDIO_GAPFILL_INTERVAL_MS", interval_ms, raising=False)
     monkeypatch.setattr(settings, "WS_CHUNK_MS", 20, raising=False)
     monkeypatch.setattr(settings, "AUDIO_IN_RATE", 16000, raising=False)
-    monkeypatch.setattr(settings, "DISABLE_GEMINI_VAD", not native_vad, raising=False)
     # These tests pin the LEGACY (un-paced) gap-fill path (bd polyglot-pdf-7f7m):
     # verbatim pass-through + wall-clock stall -> silence. The real-time pacer (bd
     # polyglot-pdf-3to5) re-chunks + clocks output, so it is covered separately in
@@ -81,14 +81,30 @@ async def test_real_chunks_pass_through_then_sentinel_exits(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gap_produces_silence_frame_while_streaming(monkeypatch):
-    """After real audio, a stall longer than the interval yields silence frames."""
+    """After real audio, a stall longer than the interval yields silence frames.
+
+    Drives _run_legacy_sender DIRECTLY with gapfill_enabled=True. The production
+    path can no longer reach this branch -- _audio_sender_loop pins
+    _gapfill_enabled=False (bd polyglot-pdf-v1m8g) -- but the machinery is still
+    present, and it stays covered until it is removed (bd polyglot-pdf-ggdpn).
+    Going through _audio_sender_loop here would test the pin, not the mechanism;
+    that is what the sibling `..._even_when_the_setting_is_on` test does.
+    """
     adapter = _make_adapter(monkeypatch, enabled=True, interval_ms=20)
     session = _RecordingSession()
 
     real = b"\x55\x66" * 320
     adapter._audio_queue.put_nowait(real)
 
-    loop_task = asyncio.create_task(adapter._audio_sender_loop(session))
+    async def _send_frame(data: bytes, *, is_silence: bool):
+        session.audio_frames.append(bytes(data))
+
+    loop_task = asyncio.create_task(adapter._run_legacy_sender(
+        _send_frame,
+        silence_frame=bytes(_SILENCE_LEN),
+        gapfill_enabled=True,
+        gapfill_timeout_s=0.02,
+    ))
     # Let the loop send the real frame, then STALL (no puts) across several
     # gap-fill intervals so silence frames accumulate.
     await asyncio.sleep(0.12)  # ~6 intervals of 20ms
@@ -164,13 +180,20 @@ async def test_gapfill_disabled_blocks_without_silence(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gapfill_off_in_manual_vad_mode(monkeypatch):
-    """Manual VAD (DISABLE_GEMINI_VAD=true) gates gap-fill OFF even if enabled.
+async def test_gapfill_off_even_when_the_setting_is_on(monkeypatch):
+    """Gap-fill NEVER emits, even with AUDIO_GAPFILL_ENABLED=true.
 
-    Gap-fill is a native-VAD keepalive; in manual/PTT mode audio must stay inside
-    activity_start/end brackets, so injecting silence between turns is wrong.
+    It was a native-VAD keepalive: it manufactured a continuous stream so Gemini's
+    own detector was not starved of trailing audio. Under push-to-talk (the only
+    input mode since bd polyglot-pdf-v1m8g) audio must stay INSIDE the
+    activity_start/end brackets, so injecting silence between turns would send
+    un-bracketed audio and desync the turn state.
+
+    The production pin is `_gapfill_enabled = False`, deliberately not read from
+    the setting -- so this passes the setting as ENABLED to prove the pin, not the
+    setting, is what stops it.
     """
-    adapter = _make_adapter(monkeypatch, enabled=True, interval_ms=20, native_vad=False)
+    adapter = _make_adapter(monkeypatch, enabled=True, interval_ms=20)
     session = _RecordingSession()
 
     real = b"\x0c\x0d" * 320
@@ -178,7 +201,7 @@ async def test_gapfill_off_in_manual_vad_mode(monkeypatch):
 
     loop_task = asyncio.create_task(adapter._audio_sender_loop(session))
     await asyncio.sleep(0.12)  # long stall that WOULD gap-fill under native VAD
-    assert session.audio_frames == [real], "manual VAD must not emit gap-fill silence"
+    assert session.audio_frames == [real], "gap-fill must never emit silence"
 
     adapter._audio_queue.put_nowait(None)
     await asyncio.wait_for(loop_task, timeout=2.0)

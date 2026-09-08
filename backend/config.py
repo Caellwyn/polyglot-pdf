@@ -113,17 +113,12 @@ class Settings(BaseModel):
 	#   Run) REFUSES TO START on this path; there is no override flag. 3.1 ships
 	#   only once it is GA for Vertex customers.
 	VERTEXAI: bool = os.getenv("VERTEXAI", "true").lower() == "true"
-	# CRITICAL VAD MODE TOGGLE (bd polyglot-pdf-333).
-	#   False (DEFAULT) -> NATIVE mode: Gemini's own automatic VAD drives turn
-	#     detection. The adapter sends the VAD_* sensitivity knobs below; the
-	#     frontend stops sending manual activity_start/end and streams continuous
-	#     audio (incl. silence) so Gemini's VAD has a stream to detect on.
-	#   True -> MANUAL mode: Gemini's VAD is off ({'disabled': True}); turn-taking
-	#     is driven by frontend client-side (Silero) VAD via manual activity
-	#     signals. This is the single revert switch.
-	# Env-overridable so demo/prod can flip without a code edit. See
-	# docs/standards/voice-and-vad.md.
-	DISABLE_GEMINI_VAD: bool = os.getenv("DISABLE_GEMINI_VAD", "false").lower() == "true"
+	# NOTE: there is no VAD mode toggle any more (bd polyglot-pdf-v1m8g).
+	# Gemini's automatic activity detection is unconditionally DISABLED and
+	# push-to-talk is the only input mode: PTT already KNOWS when the user is
+	# speaking (they are holding the button), so a second gate inferring the same
+	# thing from the audio could only disagree with it. One turn signal, stated
+	# rather than guessed. See docs/standards/voice-and-vad.md.
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 
 	# Audio settings
@@ -246,23 +241,12 @@ class Settings(BaseModel):
 	# (set DISABLE_MODEL_THINKING=false) if native-audio ever misbehaves with it.
 	DISABLE_MODEL_THINKING: bool = os.getenv("DISABLE_MODEL_THINKING", "true").lower() == "true"
 
-	# === VAD (Voice Activity Detection) Settings ===
-	# Gemini Live API automatic activity detection sensitivity
-	# START_SENSITIVITY: How quickly Gemini detects speech start
-	#   - LOW: More conservative, fewer false positives, might miss quiet speech
-	#   - HIGH: More aggressive, catches quiet speech, more false positives
-	# END_SENSITIVITY: How quickly Gemini detects speech end
-	#   - LOW: Waits longer for silence, reduces choppy cutoffs
-	#   - HIGH: Ends faster, more responsive but may cut off pauses
-	# Env-overridable (bd polyglot-pdf-4sv7: these were hard-coded literals, so
-	# the deploy env could not tune Gemini-side VAD at all). Default START=HIGH:
-	# measured on the audio path 2026-06-11, START_SENSITIVITY_LOW dropped 6/20
-	# turns (incl. the short "yes" confirmations the demo kept missing) while
-	# HIGH registered 20/20 -- see docs/standards/voice-and-vad.md.
-	VAD_START_SENSITIVITY: str = os.getenv("VAD_START_SENSITIVITY", "HIGH")  # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_END_SENSITIVITY: str = os.getenv("VAD_END_SENSITIVITY", "LOW")    # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_PREFIX_PADDING_MS: int | None = int(os.getenv("VAD_PREFIX_PADDING_MS") or "500")  # Milliseconds of audio before speech start to include
-	VAD_SILENCE_DURATION_MS: int | None = int(os.getenv("VAD_SILENCE_DURATION_MS") or "500")  # Milliseconds of silence before ending speech
+	# === VAD ===
+	# Gemini's automatic activity detection is unconditionally DISABLED
+	# (bd polyglot-pdf-v1m8g), so the sensitivity/padding knobs that used to
+	# tune it are GONE rather than left as dead settings -- a knob nothing can
+	# turn on is a trap for the next caller (CLAUDE.md scar #7). Turn-taking is
+	# push-to-talk only; see docs/standards/voice-and-vad.md.
 
 	# === Context-window compression (Gemini Live) ===
 	# Server-side ContextWindowCompressionConfig: a sliding window bounds the live
@@ -1354,8 +1338,7 @@ def get_settings() -> Settings:
 	"""Load and return validated settings.
 
 	Cached: Settings is static process-config built from os.environ, and several
-	hot-ish paths read it per call (e.g. the native-VAD guard fires get_settings()
-	per manual activity signal -- bd polyglot-pdf-efd), each previously
+	hot-ish paths read it per call (bd polyglot-pdf-efd), each previously
 	constructing a fresh Settings model. lru_cache returns one shared instance.
 	Tests that need a different config monkeypatch the module attribute
 	(monkeypatch.setattr(config, "get_settings", lambda: ...)), which replaces the

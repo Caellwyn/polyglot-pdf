@@ -74,7 +74,7 @@ Bash is not deny-blocked (powershell is). From the worktree:
 WT=<worktree-abs-path>; PY=<main-repo>/backend/.venv/Scripts/python.exe
 # backend on 8001, auth disabled (run_in_background):
 cd "$WT" && VERTEXAI=false USE_PREMIUM_MODEL=false PYTHONPATH="$WT" \
-  VFF_DISABLE_AUTH=true DISABLE_GEMINI_VAD=false SEND_TRANSCRIPT=true \
+  VFF_DISABLE_AUTH=true SEND_TRANSCRIPT=true \
   "$PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
 # frontend on 5174, demo mode (run_in_background):
 cd "$WT/frontend" && npm run build:worklet && \

@@ -189,12 +189,6 @@ start_backend() {
     echo "Created backend/.env.DEV (enables Gemini I/O logging to backend/logs/)."
   fi
 
-  # VAD mode (bd polyglot-pdf-6vo debugging): DISABLE_GEMINI_VAD chooses who detects
-  # turn boundaries. Default here is NATIVE (false) to match prod, but you can flip to
-  # MANUAL mode -- where the client sends explicit activity_start/end (PTT or Silero)
-  # and Gemini does NOT rely on detecting silence in a continuous stream -- with:
-  #   DISABLE_GEMINI_VAD=true ./scripts/dev-local.sh
-  local vad_mode="${DISABLE_GEMINI_VAD:-false}"
   # Backend selection (bd polyglot-pdf-6les). ALL sessions -- local or remote --
   # run on VERTEX by default so spend lands on ONE billing account
   # (GOOGLE_CLOUD_PROJECT below), never split across the AI Studio account
@@ -212,7 +206,7 @@ start_backend() {
   else
     vertexai=true
   fi
-  echo "Starting backend (uvicorn :8000, VERTEXAI=$vertexai, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
+  echo "Starting backend (uvicorn :8000, VERTEXAI=$vertexai, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed)..."
   # Echo the local-dev voice knobs so a sweep run is never ambiguous about which
   # value produced which recording (bd polyglot-pdf-0rpu).
   echo "  temperature=${LIVE_TEMPERATURE:-default(1.0)}   transcripts=${LIVE_DEV_TRANSCRIPTS:-false} (LOCAL-DEV ONLY)"
@@ -253,7 +247,6 @@ start_backend() {
     VERTEXAI="$vertexai" USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
     GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
-    DISABLE_GEMINI_VAD="$vad_mode" \
     SEND_TRANSCRIPT="${SEND_TRANSCRIPT:-true}" \
     LIVE_TEMPERATURE="${LIVE_TEMPERATURE:-}" \
     LIVE_DEV_TRANSCRIPTS="${LIVE_DEV_TRANSCRIPTS:-false}" \

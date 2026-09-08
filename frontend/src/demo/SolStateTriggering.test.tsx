@@ -83,7 +83,7 @@ function makeMockManager(
   // Cleared on unsubscribe (cb === null) and by the suite's fake-timer reset.
   let energyTimer: number | null = null
   const audioManager = {
-    setPTTMode: vi.fn(), setVADActive: vi.fn(), setNativeVad: vi.fn(),
+    setPTTMode: vi.fn(), setVADActive: vi.fn(),
     setEnergyCallback: vi.fn((cb: ((energy: number, sending: boolean) => void) | null) => {
       // Model the worklet's CONTINUOUS delivery (~50x/sec), not a single frame.
       // The overlay treats a frame older than 250ms as stale and decays energy
@@ -117,7 +117,6 @@ function makeMockManager(
     sendRecoveryPrompt: vi.fn(), endGeminiSession: vi.fn(),
     setPushToTalkMode: vi.fn(), setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => true),
-    isNativeVad: vi.fn(() => true),
     getFieldManager: vi.fn(() => null),
     getAudioManager: vi.fn(() => audioManager),
     startRecording: vi.fn(async () => {}), stopRecording: vi.fn(),

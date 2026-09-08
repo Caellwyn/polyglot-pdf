@@ -64,14 +64,6 @@
   This knob is DOUBLE-GATED on backend/.env.DEV, so it does nothing in a
   deployed service even if the env var is set -- deliberately.
 
-.PARAMETER DisableVad
-  Mirrors scripts/dev-local.sh's DISABLE_GEMINI_VAD (bd polyglot-pdf-6vo
-  debugging): chooses who detects turn boundaries. Default here is NATIVE
-  (Gemini's own VAD), matching prod. Pass this switch (or set
-  $env:DISABLE_GEMINI_VAD='true' before launching) for MANUAL mode -- the
-  client sends explicit activity_start/end (PTT or Silero) and Gemini does
-  NOT rely on detecting silence in a continuous stream.
-
 .PARAMETER Transcripts
   LOCAL-DEV-ONLY: capture what was SAID (both sides) into
   backend/logs/gemini_YYYY-MM-DD.jsonl as `transcript` records.
@@ -119,8 +111,7 @@ param(
     # drop it. Leave unset to send no temperature at all (Google default 1.0).
     [ValidateRange(0.1, 2.0)]
     [double]$Temperature = 0,
-    [switch]$Transcripts,
-    [switch]$DisableVad
+    [switch]$Transcripts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -279,24 +270,18 @@ $VertexProject = if ($env:GOOGLE_CLOUD_PROJECT) { $env:GOOGLE_CLOUD_PROJECT } el
 # CATALOGUE 401s and the app shows "Unable to load forms" -- a wider break than
 # the original WS-only symptom. Override per run: $env:VFF_DISABLE_AUTH='false'
 $DisableAuth = if ($env:VFF_DISABLE_AUTH) { $env:VFF_DISABLE_AUTH } else { 'true' }
-# DISABLE_GEMINI_VAD and SEND_TRANSCRIPT (bd polyglot-pdf-cgeh): scripts/
-# dev-local.sh sets both; this script omitted them, so a Windows dev-local
-# run got NATIVE VAD unconditionally (the -DisableVad switch below is the
-# only way to reach MANUAL mode) and NO audio transcription in the dev log
-# by default -- the decisive datapoint dev-local.sh's own comment calls out
-# for diagnosing "audio reaches Gemini but it stays silent". An explicit
-# $env:DISABLE_GEMINI_VAD / $env:SEND_TRANSCRIPT still wins over the
-# defaults below, matching the .sh script's ${VAR:-default} precedence.
-$VadMode = if ($env:DISABLE_GEMINI_VAD) { $env:DISABLE_GEMINI_VAD }
-    elseif ($DisableVad) { 'true' }
-    else { 'false' }
+# SEND_TRANSCRIPT (bd polyglot-pdf-cgeh): dev-local.sh sets it; without it a
+# Windows dev-local run had NO audio transcription in the dev log -- the
+# decisive datapoint for diagnosing "audio reaches Gemini but it stays silent".
+# An explicit $env:SEND_TRANSCRIPT still wins, matching the .sh precedence.
+# (DISABLE_GEMINI_VAD is gone -- bd polyglot-pdf-v1m8g made PTT the only
+# input mode, so there is no VAD mode to select.)
 $SendTranscript = if ($env:SEND_TRANSCRIPT) { $env:SEND_TRANSCRIPT } else { 'true' }
 $BackendEnvVars = @{
     'VERTEXAI'             = $VertexAi
     'USE_PREMIUM_MODEL'    = $UsePremium
     'GOOGLE_CLOUD_PROJECT' = $VertexProject
     'VFF_DISABLE_AUTH'     = $DisableAuth
-    'DISABLE_GEMINI_VAD'   = $VadMode
     'SEND_TRANSCRIPT'      = $SendTranscript
     'PYTHONPATH'           = $RepoRoot
     'PYTHONUNBUFFERED'     = '1'
@@ -320,7 +305,7 @@ foreach ($k in $BackendEnvVars.Keys) {
 Write-Host ""
 $TempLabel = if ($Temperature -gt 0) { "$Temperature" } else { 'default(1.0)' }
 $TxLabel = if ($Transcripts) { 'ON' } else { 'off' }
-Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth, DISABLE_GEMINI_VAD=$VadMode)..." -ForegroundColor Cyan
+Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth)..." -ForegroundColor Cyan
 Write-Host "  temperature=$TempLabel   transcripts=$TxLabel (LOCAL-DEV ONLY)   SEND_TRANSCRIPT=$SendTranscript" -ForegroundColor DarkGray
 
 try {

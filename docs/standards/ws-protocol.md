@@ -2,26 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every remaining
-`websocket_routes.py:<line>` citation re-anchored to a symbol/arm name
-instead of a line number -- a prior line-number fix (bd polyglot-pdf-x82ii,
-2026-08-17) had re-drifted by 60-140 lines after further code motion in
-`websocket_routes.py`, the second time this exact doc has drifted this way.
-Line numbers elsewhere in this doc (schemaFormState.ts, webFormConnection.ts,
-etc.) were left as-is -- only the specific citations verified drifted were
-touched. The `spellback_response` row covers the guard-refusal arms --
-`delivered`/`interrupted` acks that carry no timing fields because nothing
-played (bd polyglot-pdf-kvrfq, 2026-08-27; see the
-[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md)).
-The `initial_field_hint` row does not claim both handshake builders send it --
-only the JIT builder does, the same asymmetry documented for `section_id` and
-`kit_id` (bd polyglot-pdf-e3t7); the `spellback` / `spellback_response`
-round-trip pair is the flag-gated deterministic spell-back tool's wire
-messages (bd polyglot-pdf-22h1f). `kit_id` is sent by BOTH handshake builders,
-not just the JIT one -- the legacy builder's omission silently dropped it from
-the audit trail once the intro path made Agree's connect the session's only
-handshake (bd polyglot-pdf-s1iex.6). This doc's message-type union is pinned
-by backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: `switch_field_response`'s `has_value` and `already_confirmed` no longer report a whitespace-only field as holding an answer -- the backend's guidance keyed on them, so the model was told to read back a blank; the row's citation is re-anchored to the symbol. bd polyglot-pdf-wurj8: added the `voice_mode` / `voice_mode_ack` pair.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -110,7 +91,6 @@ The backend replies with `session_ready` (websocket_routes.py, the
 | `ephemeral` | bool (`true`) | Signals the client the backend is stateless. |
 | `jit_mode_enabled` | bool | Mirrors backend `USE_DTI` (the JIT SI mode was removed, bd polyglot-pdf-en2j); names the manifest-first handshake TRANSPORT the client should build next time -- DTI rides it. |
 | `dti_mode_enabled` | bool | Mirrors backend `USE_DTI`; consumed by the client's `handleSessionReady` destructure (sent-but-undocumented until the ceyt contract tests caught it). |
-| `native_vad` | bool | Mirrors `not DISABLE_GEMINI_VAD`; when true the client streams continuous audio and stops sending manual activity signals (bd polyglot-pdf-333). |
 | `continuous_session_enabled` | bool | Mirrors backend `CONTINUOUS_SESSION`; when true the client builds a single whole-form handshake and stops advancing sections, so the whole form runs as one compression-bounded session (bd polyglot-pdf-x8rt). |
 
 ---
@@ -134,7 +114,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `form_updated` | callback_handler.py's `send_form_update` | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py's `on_transcript` | AI/user transcript text. |
 | `turn_complete` | callback_handler.py's `on_transcript` | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
-| `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
+| `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn -- it rides `send_activity_end`, the PTT release, which is the only turn signal (bd polyglot-pdf-v1m8g; the `input_transcription` -> `on_user_activity` path served the retired native-VAD mode); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
 | `go_away` | callback_handler.py's `on_go_away` | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
 | `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
@@ -153,6 +133,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `hint_ack` | websocket_routes.py (next_field_hint arm) | Ack of a client `next_field_hint`. |
 | `completion_ack` | websocket_routes.py (completion_message arm) | Ack of a client `completion_message`. |
 | `recovery_prompt_ack` | websocket_routes.py (recovery_prompt arm) | Ack of a client `recovery_prompt`. |
+| `voice_mode_ack` | websocket_routes.py (voice_mode arm) | Ack of a client `voice_mode`, echoing the mode now in force. |
 | `section_completed_ack` | websocket_routes.py (section_completed arm) | Ack of a client `section_completed` (legacy reactive). |
 | `section_complete_ack` | websocket_routes.py (section_complete arm) | B / jnjj.16 (B4). Ack of the proactive `section_complete` event. |
 | `form_complete_ack` | websocket_routes.py (form_complete arm) | B / jnjj.16 (B4). Ack of the proactive `form_complete` event. |
@@ -191,14 +172,15 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `confirm_field_response` | webFormConnection.ts:3207 | Reply to backend `confirm_field`. Carries `recorded` (+ optional `reason`), and -- when this confirm completed a section that has a NEXT section to advance to -- an optional `section_complete: true` flag so the backend skips the next-field-hint round-trip that would race the FE's `switchToSection` teardown (bd polyglot-pdf-njvh). This is a SUB-FIELD of the confirm reply, distinct from the SI-reduction epic's planned top-level `section_complete` event (see `section_completed` above + the reserved extension points). |
 | `skip_field_response` | webFormConnection.ts:3328 | Reply to backend `skip_field` (bd polyglot-pdf-7yra). Same shape as `confirm_field_response`: `recorded` (+ optional `reason`, e.g. `unknown_field`/`already_filled`), and an optional `section_complete: true` when the skip completed a section with a next one to advance to. A skipped field satisfies the section, so a section-completing skip advances identically to a confirm. |
 | `spellback_response` | webFormConnection.ts:3303 | Reply to backend `spellback` (bd polyglot-pdf-22h1f). Carries `status` (`delivered` = the user HAS heard this spelling and was asked to confirm -- a full clip playback, or a stale-arrival dedup ack for a value delivered within the last ~3s (bd polyglot-pdf-kvrfq), the latter with NO timing fields; `interrupted` = the user's speech takes precedence -- a PTT press during the round-trip, or an instant guard refusal of a request arriving while PTT is held / within the ~5s post-interrupt cooldown (bd kvrfq), again timing-field-free -- PTT-ONLY today: in open-mic native-VAD mode the mic hold means voice alone cannot barge into a clip, so the press-driven variant is unreachable there (bd polyglot-pdf-flnz1); `error` = nothing played), an optional fixed `reason` token (`no_value`, `no_current_field`, `no_playback_path`, `playback_exception`, `no_audio_manager`, `value_too_long`, `cancelled`, `tts_fetch_failed`, `tts_http_<code>`), and optional `playback_ms`/`fetch_ms` timings (the bead's latency measurement). NEVER carries the field value. |
-| `switch_field_response` | webFormConnection.ts:2508 (+failure sites) | Reply to backend `switch_field` (bd polyglot-pdf-jnjj.36). `found` plus outcome keys: success carries `field_id`, `spoken_name`, `next_field_hint`, `already_confirmed`, `has_value` (+ `value` when filled, so the model can read it back -- same Gemini trust boundary as `ask_secretary`; + `next_field_schema` in DTI mode, the guidance/validation source). Failure carries a fixed `reason` token: `unknown_field`, `hidden` (conditionally inactive), or `other_section` (+ `section_label`/`section_order` so the model can `switch_section` first in section-scoped modes). |
+| `switch_field_response` | webFormConnection.ts `sendSwitchFieldResponse` (called from `handleSwitchFieldRequest`, success + failure sites) | Reply to backend `switch_field` (bd polyglot-pdf-jnjj.36). `found` plus outcome keys: success carries `field_id`, `spoken_name`, `next_field_hint`, `already_confirmed`, `has_value` (+ `value` when filled, so the model can read it back -- same Gemini trust boundary as `ask_secretary`; + `next_field_schema` in DTI mode, the guidance/validation source). Failure carries a fixed `reason` token: `unknown_field`, `hidden` (conditionally inactive), or `other_section` (+ `section_label`/`section_order` so the model can `switch_section` first in section-scoped modes). |
 | `manual_field_update` | webFormConnection.ts:3848 | User edited a field directly. Carries `next_field_hint` and -- in DTI mode -- an optional `next_field_schema` (the next unconfirmed field's full schema, no user values), so the backend can re-establish the DTI current-field coercion pointer + validation entry that the edit's pointer-clear would otherwise strand (a manual edit skips the `confirm_field` round-trip that normally carries the next schema; bd polyglot-pdf-ezg2). Both computed from the POST-edit persisted state. |
 | `manual_section_switch` | webFormConnection.ts:4630 | User-initiated section switch. |
 | `completion_message` | webFormConnection.ts:1227 (+others) | Form/section completion message to the AI. |
 | `recovery_prompt` | webFormConnection.ts:3953 | Escalating recovery prompt (level 1-3). |
 | `change_fill_language` | webFormConnection.ts:3988 | Change the AI fill language. |
 | `change_spoken_language` | webFormConnection.ts (session_ready opener) | MISNOMER -- does NOT switch language. The spoken language is PINNED per session; this RE-ASSERTS the same pinned language on a fresh Gemini session after a socket teardown (reconnect / section switch), so the backend re-sends the initiating message. See [voice-and-vad.md](voice-and-vad.md) ("the spoken language is pinned per session"); bd polyglot-pdf-87a9. |
-| `vad_activity_start` / `vad_activity_end` | webFormConnection.ts:3889 / :3916 | Manual activity signals (non-native-VAD mode). |
+| `vad_activity_start` / `vad_activity_end` | webFormConnection.ts `sendActivityStart` / `sendActivityEnd` | PTT press/release. The ONLY turn signal -- Gemini's own detection is disabled (bd polyglot-pdf-v1m8g). `vad_activity_start` also leaves manual mode (bd polyglot-pdf-wurj8). |
+| `voice_mode` | webFormConnection.ts `setVoiceMode` | Manual/voice mode toggle (bd polyglot-pdf-wurj8). `mode` is `manual` or `voice`; `manual` suppresses the model's proactive speech while the session stays live. Re-sent on every (re)connect -- the backend is stateless. An unrecognised `mode` is rejected rather than defaulted to manual. |
 | `clear_thinking` | webFormConnection.ts:3435 / :4220 | Thinking-indicator desync guard (bd polyglot-pdf-wpw.5, Codex PR #273): sent when the client's max-duration safety timer fires or on a server error, so the backend resets its `_processing_active` state too (else it stays stuck True and dedups the next turn's `agent_processing:true`). Backend handler `clear_processing_state` (the `clear_thinking` arm calls `service.clear_processing_state()`); fire-and-forget, no ack. |
 | `end_gemini_session` | webFormConnection.ts:3971 | Ask the backend to end the Gemini session. |
 | `ping` | -- | Liveness; backend replies `pong` (echoing `ts`). |
@@ -287,7 +269,7 @@ verifying:
    citations drifted once already when the builders moved down the file.
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
-   frontend switches on `case "field_update"` (`webFormConnection.ts:664` ->
+   frontend switches on `case "field_update"` (in `webFormConnection.ts`'s message switch ->
    `handleFieldUpdate`), but no backend `send_json` ever emits that type -- the
    live single-field push the backend actually sends is `form_updated`. So
    `field_update` is a dead/legacy receive path on the client; it is NOT in the

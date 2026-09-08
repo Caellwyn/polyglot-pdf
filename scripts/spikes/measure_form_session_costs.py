@@ -2297,14 +2297,13 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
     # model hangs ~41s until the NEXT utterance's audio flushes it (past the 40s
     # _wait_turn timeout -> the harness barges in -> escalating desync -> wedge;
     # observed 2026-07-05 on two 30q continuous runs, both dying ~q8). With
-    # DISABLE_GEMINI_VAD=True the adapter sends real ActivityStart/End and
-    # _build_vad_settings sends {'disabled': True} -- the h04c "explicit activity
-    # brackets" design, now actually wired.
-    s.DISABLE_GEMINI_VAD = True
-    s.VAD_START_SENSITIVITY = "UNSPECIFIED"
-    s.VAD_END_SENSITIVITY = "UNSPECIFIED"
-    s.VAD_PREFIX_PADDING_MS = None
-    s.VAD_SILENCE_DURATION_MS = None
+    # explicit activity brackets (the h04c design) the adapter sends real
+    # ActivityStart/End and _build_vad_settings sends {'disabled': True}.
+    #
+    # This block used to force that here. It is gone because it is now the ONLY
+    # behavior (bd polyglot-pdf-v1m8g retired native VAD), so there is nothing to
+    # override -- and the knobs it set no longer exist on Settings, which is a
+    # Pydantic model and rejects them.
     return s
 
 

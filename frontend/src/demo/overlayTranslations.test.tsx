@@ -54,7 +54,6 @@ function makeMockManager() {
     resumePlayback: vi.fn(),
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
-    setNativeVad: vi.fn(),
     setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
@@ -87,7 +86,6 @@ function makeMockManager() {
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => false),
-    isNativeVad: vi.fn(() => true),
     getFieldManager: vi.fn(() => null),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(),
@@ -113,6 +111,47 @@ describe('overlayTranslations map', () => {
       for (const [key, value] of Object.entries(strings)) {
         expect(value, `${lang}.${key}`).toBeTruthy()
       }
+    }
+  })
+
+  // bd polyglot-pdf-wurj8: the presence check above passes on a value left as
+  // bare English, which is how a Tagalog label shipped untranslated while its
+  // sibling on the line above was translated. Presence is not translation.
+  //
+  // Written as an ALLOWLIST of the pairs that legitimately match English, not as
+  // a ban on particular words: a blacklist is one synonym away from defeat, and a
+  // blanket "must differ" rule would be wrong for real loanwords. Adding a new
+  // identical value forces a deliberate entry here, which is the point -- the
+  // entry is where you say WHY it matches.
+  it('no value is left as untranslated English (allowlisted exceptions aside)', () => {
+    const english = OVERLAY_TRANSLATIONS['English'] as unknown as Record<string, string>
+    // `${language}.${key}` -> why this legitimately matches the English string.
+    const SAME_AS_ENGLISH_BY_DESIGN: Record<string, string> = {
+      'French.pause': 'Pause is the ordinary French word, not a missed translation',
+      'German.pause': 'Pause is the ordinary German word, not a missed translation',
+    }
+
+    const unexpected: string[] = []
+    for (const [lang, strings] of Object.entries(OVERLAY_TRANSLATIONS)) {
+      if (lang === 'English') continue
+      for (const [key, value] of Object.entries(strings as unknown as Record<string, string>)) {
+        const id = `${lang}.${key}`
+        if (value === english[key] && !(id in SAME_AS_ENGLISH_BY_DESIGN)) {
+          unexpected.push(id)
+        }
+      }
+    }
+    expect(
+      unexpected,
+      'these are byte-identical to the English string -- translate them, or add an ' +
+        'entry to SAME_AS_ENGLISH_BY_DESIGN saying why they legitimately match',
+    ).toEqual([])
+
+    // The allowlist must not rot: every entry has to still describe a real match.
+    for (const id of Object.keys(SAME_AS_ENGLISH_BY_DESIGN)) {
+      const [lang, key] = id.split('.')
+      const strings = OVERLAY_TRANSLATIONS[lang] as unknown as Record<string, string> | undefined
+      expect(strings?.[key], `stale allowlist entry ${id}`).toBe(english[key])
     }
   })
 
@@ -181,7 +220,10 @@ describe('overlay panels render translated copy (Spanish)', () => {
     )
     expect(await screen.findByText(/Reconectar/)).toBeTruthy()
     expect(screen.getByText(/Borrar formulario/)).toBeTruthy()
-    expect(screen.getByText(/Modo de entrada:/)).toBeTruthy()
+    // The "Modo de entrada:" (input-mode) label went with the PTT/Auto toggle
+    // itself -- bd polyglot-pdf-v1m8g made push-to-talk the only input mode, so
+    // there is no mode to label. The two assertions above still pin that this
+    // panel renders Spanish copy, which is what this test is for.
   })
 
   it('mobile (VoiceOverlayMobile): Spanish session shows Spanish panel labels', async () => {

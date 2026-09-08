@@ -14,7 +14,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 > **This repo's layout (polyglot-pdf).** The Python interpreter is the backend
 > venv, which lives ONLY in the main repo at `backend/.venv` -- worktrees do NOT
 > have their own venv. Resolve it from anywhere (main checkout or a worktree)
-> via the git common dir, and run pytest against `backend/tests/` with
+> via the git common dir, and run a bare pytest -- NO suite paths -- with
 > `PYTHONPATH` set to the repo root. The resolution is these two lines:
 >
 > ```bash
@@ -27,13 +27,15 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 > and reuse them in a later call. **Prepend both lines to every command** that
 > needs them, in the SAME Bash call. So a hand-run script step is
 > `REPO=...; PY=...; "$PY" "$REPO/scripts/X.py"` and the test step is
-> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`.
-> Target `backend/tests/` EXPLICITLY: since the root `pytest.ini` landed
-> (bd polyglot-pdf-uov.1) a bare `pytest` runs BOTH suites (`backend/tests/`
-> plus the top-level `tests/` harness suite); the closeout step names
-> `backend/tests/` for speed, not to exclude the harness suite. The `!`...``
-> lines that auto-run at skill-load (Step 1, Step 2) already inline the
-> resolution this way.
+> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest -q`.
+> Pass NO suite paths: a bare `pytest` from the repo root collects every root
+> in `pytest.ini`'s `testpaths` (`backend/tests`, `admin_backend/tests`, and
+> the top-level `tests/` harness suite). Naming a suite path here is how a
+> whole suite ships un-run -- `admin_backend/tests` was invisible to both this
+> gate and CI the day it landed (bd polyglot-pdf-pnoik), the same shape as bd
+> polyglot-pdf-3ave. `tests/test_every_suite_root_is_gated.py` pins it. The
+> `!`...`` lines that auto-run at skill-load (Step 1, Step 2) already inline
+> the resolution this way.
 
 ## Hard rules (read before doing anything)
 
@@ -235,13 +237,14 @@ the single write above:
 
 ## Step 4 detail -- Test suite (triage if prep flagged `tests`; re-run after a code fix)
 
-Prep already ran the suite in Step 0 (`backend/tests/`, excluding the flaky
-`external` live-Gemini test). That result stands through Steps 3/5 as long as you
-do NOT change code after it -- journal/doc work doesn't. **If you DO change code
+Prep already ran the suite in Step 0 (every root in `pytest.ini`'s
+`testpaths`, excluding the flaky `external` live-Gemini test). That result
+stands through Steps 3/5 as long as you do NOT change code after it --
+journal/doc work doesn't. **If you DO change code
 during triage** (a fresh-eyes gap fix in Step 5.5, an outer-review fix in Step 5.6, or a
 Step-1 fix that touched source), re-run the suite so the PR ships a green run:
 
-`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q -m "not external"`  -- `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the test path expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection. (If slow, run it in the background and wait for the notification rather than polling.)
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && PYTHONPATH="$WT" "$PY" -m pytest -q -m "not external")`  -- pass NO suite paths: the `(cd "$WT" && ...)` subshell puts the worktree's own `pytest.ini` in charge, so every root in its `testpaths` runs and a NEW suite is gated the day it lands (naming `backend/tests/` here is what hid `admin_backend/tests` from this step, bd polyglot-pdf-pnoik). `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the `cd` expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the cwd at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection. (If slow, run it in the background and wait for the notification rather than polling.)
 
 If anything FAILS, stop and fix it before continuing -- a red suite is not eligible for a PR. If the project defines extra verification harnesses for the area you touched, run those too.
 

@@ -1,5 +1,6 @@
 # What `gcloud builds submit` (repo-root context, bd 92qe.3) does NOT upload.
-# The image needs ONLY: backend/ + scripts/authoring/ + scripts/bakeoff/
+# The image needs ONLY: backend/ + admin_backend/ + scripts/authoring/ +
+# scripts/bakeoff/
 # (see Dockerfile). Everything else stays out so the Cloud Build upload is
 # a few MB, not the whole monorepo (PDF corpora, node_modules, docs, .git).
 
@@ -37,6 +38,7 @@ outputs/
 # bakeoff outputs/ subdir is excluded below).
 tests/
 backend/tests/
+admin_backend/tests/
 scripts/spikes/
 scripts/bakeoff/outputs/
 shared/

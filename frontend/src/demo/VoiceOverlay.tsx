@@ -17,7 +17,7 @@ declare global {
 }
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
-import type { ConnectionManager } from '../shared/connection'
+import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -97,20 +97,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
 	// breakpoint cross) restore the user's actual choice from the connection rather
 	// than resetting to true (Codex review PR #119).
-	const [pushToTalkMode, setPushToTalkMode] = useState(
-		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
+	// PTT is the ONLY input mode (bd polyglot-pdf-v1m8g), so this is a constant,
+	// not a restored user choice -- the mode toggle that used to set it is gone.
+	// Kept as state rather than inlined `true` because the PTT press/release
+	// handlers and the audio gate still read it as the "is PTT active" predicate.
+	const [pushToTalkMode] = useState(true)
+	// Manual/voice mode (bd polyglot-pdf-wurj8) -- the sticky half of the two-control
+	// voice UI. Seeded from the connection manager so a remount (e.g. a
+	// desktop<->mobile breakpoint flip onto a LIVE session) restores the user's real
+	// choice instead of silently putting them back into voice mode. Feature-detected:
+	// tests and older mocks supply a partial manager.
+	const [voiceMode, setVoiceModeState] = useState<VoiceMode>(() =>
+		typeof connectionManager?.getVoiceMode === 'function' ? connectionManager.getVoiceMode() : 'voice'
 	)
-	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD is driving turns. Set
-	// by the backend at session_ready (mirror of DISABLE_GEMINI_VAD) and reported
-	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
-	// continuous audio and the manual PTT control does not apply -- the toggle is
-	// disabled and the displayed mode reflects native VAD (not a stale "PTT").
-	const [nativeVad, setNativeVad] = useState(false)
-	// Continuous-session mode (bd polyglot-pdf-x8rt): when on, the form is one
-	// session with no sections to navigate -- the section-picker dropdown is hidden
-	// so a user cannot trigger a manual section switch (which would reset the
-	// session we deliberately keep open). Read from the persisted form state, which
-	// handleSessionReady sets from the backend flag.
 	const [continuousSession, setContinuousSession] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
@@ -450,11 +449,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}, [pushToTalkMode])
 
 	// Ensure connection manager + audio pipeline reflect current PTT mode.
-	// PTT is a client-side audio gate that works EVEN under native VAD (noisy-room
-	// support): we always apply the mute/unmute so PTT gates which client bytes
-	// reach Gemini. The worklet noise gate stays bypassed in native mode regardless
-	// of PTT (audioManager.setPTTMode honors nativeVad), so toggling PTT off does
-	// not re-arm the RMS gate and starve Gemini's VAD of its silence stream.
+	// PTT is the only input mode (bd polyglot-pdf-v1m8g): the mute/unmute here is
+	// what decides which client bytes reach Gemini, and holding the button is the
+	// turn signal itself.
 	useEffect(() => {
 		if (!connectionManager) return
 
@@ -526,25 +523,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}, [connectionManager, status])
 
-	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected. The
-	// session_ready handshake fires onNativeVadMode BEFORE flipping status to
-	// "connected", so isNativeVad() is reliable on connect. In native-VAD mode
-	// Gemini drives turns on a continuous stream -- NEITHER PTT nor client-side
-	// Silero VAD applies -- so the Input-Mode toggle is disabled and the displayed
-	// mode reads "Native" (see the JSX + the shouldRunVAD / PTT-button /
-	// Listening-badge guards, all keyed on `nativeVad`). We deliberately do NOT
-	// mutate pushToTalkMode: forcing it false would satisfy `!pushToTalkMode` and
-	// start Silero VAD in native mode, whose callbacks would block Gemini's audio
-	// (fresh-eyes on PR #110). Reset to false when not connected so a
-	// disconnect/reconnect into manual mode shows the normal enabled toggle.
+	// Read the connected-session flags the UI keys on. (This used to also learn
+	// the backend's VAD mode; that mode is gone -- bd polyglot-pdf-v1m8g -- so
+	// push-to-talk is unconditional and there is nothing to learn.)
 	useEffect(() => {
 		if (!connectionManager) {
-			setNativeVad(false)
 			return
 		}
-		const isConnected = status.toLowerCase() === 'connected' ||
-			status.toLowerCase().startsWith('connected ')
-		setNativeVad(isConnected ? connectionManager.isNativeVad() : false)
 		// Continuous-session mode is set on the persisted state by handleSessionReady.
 		try {
 			setContinuousSession(SchemaFormStateManager.load()?.continuousSessionEnabled === true)
@@ -894,16 +879,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const isConnected = status.toLowerCase() === 'connected' ||
 			status.toLowerCase().startsWith('connected ')
 
-		// VAD should run when:
-		// 1. Connected to backend
-		// 2. NOT in push-to-talk mode
-		// 3. VAD library finished loading
-		// 4. No VAD errors occurred
-		// bd polyglot-pdf-tlc: never run client Silero VAD in native mode -- Gemini's
-		// own VAD drives turns there, and Silero's onSpeechStart/End would block
-		// playback (flushAudioQueue) without a matching resume (onVADSpeechEnd
-		// no-ops on nativeVad).
-		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
+		// Client Silero VAD runs only when PTT is off -- which, since PTT is now the
+		// ONLY input mode (bd polyglot-pdf-v1m8g), means never in practice. The
+		// condition is kept rather than hardcoded false so the pause() branch below
+		// still fires if a VAD session were somehow live across the cutover; the
+		// hook itself is retired separately (bd polyglot-pdf-ggdpn).
+		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
 			console.log('[VoiceOverlay] [mic] Starting VAD (conditions met)')
@@ -920,7 +901,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// NOTE: vad.start and vad.pause intentionally excluded from deps
 		// They are stable callbacks that shouldn't trigger re-renders
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, pushToTalkMode, nativeVad, vad.loading, vad.errored, vad.userSpeaking])
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 	// Handle connect button
 	const handleConnect = async () => {
@@ -1021,65 +1002,53 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}
 
-	// Handle disconnect button (now "pause")
-	const handleDisconnect = () => {
+
+	// Keep the toggle honest (bd polyglot-pdf-wurj8). The mode changes WITHOUT a
+	// click: a PTT press auto-leaves manual mode. Without this the button would go
+	// on showing "quiet" while the assistant is live and about to speak -- the
+	// control's one job is telling the user at a glance whether they will be
+	// spoken to, and a stale label defeats exactly that.
+	//
+	// Re-reads on subscribe as well, to close the window between the mount-time
+	// initializer and this effect running.
+	useEffect(() => {
 		if (!connectionManager) return
+		if (typeof connectionManager.getVoiceMode === 'function') {
+			setVoiceModeState(connectionManager.getVoiceMode())
+		}
+		if (typeof connectionManager.onVoiceModeChange !== 'function') return
+		return connectionManager.onVoiceModeChange(setVoiceModeState)
+	}, [connectionManager])
 
-		// Pause instead of disconnect (keeps connection warm)
-		connectionManager.pause()
-
-		// Pause VAD
-		vad.pause()
+	// Manual/voice mode toggle (bd polyglot-pdf-wurj8). REPLACES the old Pause
+	// button. The crucial difference: pause() suspended the session -- it tore the
+	// mic down (user went mute, not merely deaf), discarded Gemini's in-flight
+	// question client-side, and made coming back cost a paid re-ask. Manual mode
+	// leaves the session live and the mic usable, and suppresses the model's
+	// proactive speech AT THE BACKEND, so nothing is billed for speech nobody hears
+	// and nothing has to be re-asked on the way back.
+	//
+	// The manager owns the authoritative mode (it survives a remount and is
+	// re-asserted on every reconnect); this component mirrors it for rendering.
+	const handleToggleVoiceMode = () => {
+		if (!connectionManager) return
+		const next: VoiceMode = voiceMode === 'voice' ? 'manual' : 'voice'
+		// Feature-detect: a partial mock lacking the setter must not throw out of a
+		// click handler and blank the overlay.
+		if (typeof connectionManager.setVoiceMode === 'function') {
+			connectionManager.setVoiceMode(next)
+		}
+		// Usually redundant -- the manager notifies its subscribers synchronously,
+		// so the effect above has already set this to the same value. KEPT because
+		// it is the only path that works for a manager without onVoiceModeChange
+		// (an older or partial one), where nothing else would ever move the label.
+		// Setting state to the value it already holds does not re-render.
+		setVoiceModeState(next)
 	}
 
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
 
 	// Handle push-to-talk mode toggle
-	const handlePushToTalkToggle = async () => {
-		// PTT is a CLIENT-SIDE AUDIO GATE layered on top of native VAD (user request,
-		// noisy-room support): native Gemini VAD always runs on the backend, but PTT
-		// can still gate which client audio bytes reach Gemini. So we run the full
-		// mute/unmute + worklet reconfig regardless of native-VAD mode. (We still
-		// never send manual activity_start/end in native mode -- those stay
-		// suppressed in connection.ts; PTT only decides which bytes are sent.)
-		const newMode = !pushToTalkMode
-		setPushToTalkMode(newMode)
-
-		// Update connection manager PTT mode (disables energy-based barge-in)
-		connectionManager?.setPushToTalkMode(newMode)
-		// A mode toggle ends any notion of an active hold; clear the hold flag so it
-		// can never go stale-true across the mode change (bd polyglot-pdf-qt7w). Both
-		// branches below re-apply the correct mute/unmute for the new mode.
-		connectionManager?.setPushToTalkHeld(false)
-
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
-			status.toLowerCase().startsWith('connected ') ||
-			status.toLowerCase() === 'switching_section' ||
-			status.toLowerCase().startsWith('reconnecting')
-
-		if (newMode) {
-			// Switching to push-to-talk: pause VAD (but keep mic recording for heartbeat)
-			vad.pause()
-			// Mute input so only silence is sent until button is pressed
-			const audioManager = connectionManager?.getAudioManager()
-			audioManager?.muteInput()
-		} else {
-			// Switching to VAD mode
-			// FIX #2: VAD will auto-start via consolidated useEffect (monitors pushToTalkMode)
-			// Unmute input for normal VAD operation
-			const audioManager = connectionManager?.getAudioManager()
-			audioManager?.unmuteInput()
-		}
-
-		// Blur the checkbox so spacebar doesn't toggle it again
-		setTimeout(() => {
-			const checkbox = document.activeElement as HTMLElement
-			if (checkbox && checkbox.tagName === 'INPUT') {
-				checkbox.blur()
-			}
-		}, 0)
-	}
-
 	// Handle push-to-talk button press (mouse/touch)
 	// TABLET FIX: Wrapper for touch events that prevents context menu
 	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
@@ -1557,8 +1526,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio.
 		// The user just agreed, so cut off any still-playing disclaimer read instead
 		// of letting it finish (matches VoiceOverlayMobile; bd polyglot-pdf-zq9l).
-		// No-op in native VAD (connection.ts suppresses activity_start there); in
-		// manual VAD it opens the user turn that the sendActivityEnd below closes.
+		// This ALWAYS fires (bd polyglot-pdf-v1m8g): the native-VAD suppression that
+		// used to make it a no-op is gone, so it opens the user turn that the
+		// sendActivityEnd below closes.
 		console.log('[VoiceOverlay] Sending activity_start to interrupt Gemini')
 		connectionManager?.sendActivityStart()
 
@@ -1643,8 +1613,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// SKIP on the reconnect path (bd polyglot-pdf-ala0): the sendActivityStart
 			// above opened the turn on the OLD (stale) connection, so the new connection
 			// has no matching open turn -- sending activity_end here would be an unmatched
-			// signal (in native VAD the backend turns it into a spurious audio_stream_end
-			// on a turn that never opened). On reconnect, switchToFirstSection below
+			// signal on a turn that never opened. On reconnect, switchToFirstSection below
 			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
 			if (!reconnected) {
 				console.log('[VoiceOverlay] [mic] Sending activity_end to signal user turn complete')
@@ -1996,37 +1965,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					    noisy rooms so background noise doesn't trip Gemini's VAD. PTT on =
 					    "PTT" (send only while held); PTT off = "Auto" (stream
 					    continuously). The toggle is always enabled. */}
-					<div className="vff-ptt-toggle-container">
-						<label
-							className="vff-ptt-toggle-label"
-							title={pushToTalkMode
-								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
-								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
-						>
-							<span className="vff-ptt-label-text">{overlayText.inputMode}</span>
-							<div className="vff-ptt-toggle-switch">
-								<input
-									type="checkbox"
-									checked={pushToTalkMode}
-									onChange={handlePushToTalkToggle}
-									className="vff-ptt-toggle-input"
-									onKeyDown={(e) => {
-										if (e.code === 'Space') {
-											e.preventDefault() // Prevent spacebar from toggling checkbox when focused
-										}
-									}}
-								/>
-								<span className="vff-ptt-toggle-slider">
-									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-auto">🎤</span>
-									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
-								</span>
-							</div>
-							<span className="vff-ptt-mode-label">{pushToTalkMode ? overlayText.modePTT : overlayText.modeAuto}</span>
-						</label>
-					</div>
 
-					{/* Push-to-Talk button: visible whenever PTT gating is on (works in
-					    native VAD too -- it gates the client audio bytes). */}
+					{/* Push-to-Talk button: holding it is the turn signal (bd
+					    polyglot-pdf-v1m8g -- PTT is the only input mode). */}
 					{pushToTalkMode && isConnected && (
 						<div className="vff-ptt-button-container">
 							<button
@@ -2067,11 +2008,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								▶️ {overlayText.resume}
 							</button>
 						) : isConnected ? (
+							/* Manual/voice mode toggle (bd polyglot-pdf-wurj8), replacing
+							   the old Pause button. Action-labelled like its neighbours:
+							   the label is what the click switches TO. aria-pressed marks
+							   it as the toggle it is, so a screen reader announces the
+							   state rather than just a changing label. */
 							<button
-								className="vff-button vff-pause"
-								onClick={handleDisconnect}
+								className={'vff-button vff-mode-toggle' + (voiceMode === 'manual' ? ' vff-mode-manual' : '')}
+								onClick={handleToggleVoiceMode}
+								aria-pressed={voiceMode === 'manual'}
 							>
-								⏸️ {overlayText.pause}
+								{voiceMode === 'voice'
+									? '🤫 ' + overlayText.switchToManual
+									: '🗣️ ' + overlayText.switchToVoice}
 							</button>
 						) : null}
 						<button className="vff-button vff-clear-form" onClick={handleClearForm}>
@@ -2420,12 +2369,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					margin-bottom: 16px;
 				}
 
-				.vff-ptt-toggle {
-					padding: 12px;
-					background: #f8f9ff;
-					border-radius: 8px;
-					border: 1px solid #d0dbff;
-				}
 
 				.vff-toggle-label-row {
 					display: flex;
@@ -2501,113 +2444,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					text-align: center;
 				}
 
-				/* PTT Toggle Container */
-				.vff-ptt-toggle-container {
-					padding: 12px;
-					background: #f8f9ff;
-					border-radius: 8px;
-					border: 1px solid #d0dbff;
-					margin-bottom: 12px;
-				}
 
-				.vff-ptt-toggle-label {
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					gap: 10px;
-					cursor: pointer;
-				}
 
-				.vff-ptt-label-text {
-					font-size: 13px;
-					font-weight: 600;
-					color: #374151;
-				}
 
-				.vff-ptt-toggle-switch {
-					position: relative;
-					display: inline-block;
-					width: 50px;
-					height: 24px;
-				}
 
-				.vff-ptt-toggle-input {
-					opacity: 0;
-					width: 0;
-					height: 0;
-				}
 
-				.vff-ptt-toggle-slider {
-					position: absolute;
-					cursor: pointer;
-					top: 0;
-					left: 0;
-					right: 0;
-					bottom: 0;
-					background-color: #667eea;
-					transition: 0.3s;
-					border-radius: 24px;
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					padding: 0 4px;
-				}
 
-				.vff-ptt-toggle-slider:before {
-					content: "";
-					position: absolute;
-					height: 18px;
-					width: 18px;
-					left: 3px;
-					bottom: 3px;
-					background-color: white;
-					transition: 0.3s;
-					border-radius: 50%;
-					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-					z-index: 1;
-				}
 
-				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider {
-					background-color: #4c51bf;
-				}
 
-				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider:before {
-					transform: translateX(26px);
-				}
 
-				.vff-ptt-toggle-input:focus + .vff-ptt-toggle-slider {
-					box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
-				}
 
-				.vff-ptt-toggle-icon {
-					font-size: 12px;
-					opacity: 0.7;
-					transition: opacity 0.3s;
-				}
 
-				.vff-ptt-toggle-icon-auto {
-					order: 1;
-				}
 
-				.vff-ptt-toggle-icon-ptt {
-					order: 2;
-				}
 
-				.vff-ptt-toggle-input:not(:checked) ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-auto {
-					opacity: 1;
-				}
 
-				.vff-ptt-toggle-input:checked ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-ptt {
-					opacity: 1;
-				}
 
-				.vff-ptt-mode-label {
-					font-size: 13px;
-					font-weight: 600;
-					color: #6b7280;
-					min-width: 40px;
-					text-align: right;
-				}
 
 			.vff-ptt-button-container {
 				margin-bottom: 12px;
@@ -2655,12 +2506,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 				}
 
-				.vff-pause {
+				.vff-mode-toggle {
 					background: #f59e0b;
 					color: white;
 				}
 
-				.vff-pause:hover {
+				/* Manual mode is a STATE the user sits in, and a silent assistant
+				   is indistinguishable from a broken one unless the control says
+				   so. Slate reads as "off/quiet" against the amber voice state,
+				   and the label changes too -- colour is never the only cue. */
+				.vff-mode-toggle.vff-mode-manual {
+					background: #475569;
+				}
+
+				.vff-mode-toggle.vff-mode-manual:hover {
+					background: #334155;
+				}
+
+				.vff-mode-toggle:hover {
 					background: #d97706;
 					transform: translateY(-1px);
 				}

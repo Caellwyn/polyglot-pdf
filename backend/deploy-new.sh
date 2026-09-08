@@ -1,8 +1,130 @@
 #!/bin/bash
 # Deploy a NEW backend service to Google Cloud Run
-# Usage: ./deploy-new.sh [SERVICE_NAME]
+# Usage: ./deploy-new.sh [SERVICE_NAME] [PROJECT_ID]
+#   SERVICE_NAME defaults to polyglot-backend.
+#   PROJECT_ID   pins the project; without it POLYGLOT_PROJECT_NAME is used,
+#                then the active gcloud config.
 
 set -e
+
+# Verify a just-deployed Cloud Run service is PUBLICLY REACHABLE, and abort if
+# it is not (bd polyglot-pdf-pidtg, extended to this script by bd
+# polyglot-pdf-6oi9s).
+#
+# WHY THIS EXISTS. A `gcloud run` deployment with --allow-unauthenticated only
+# REQUESTS an
+# allUsers -> roles/run.invoker binding, but that request can be REFUSED while
+# the deploy still succeeds and exits 0. The domain-restricted-sharing org
+# policy (constraints/iam.allowedPolicyMemberDomains) rejects allUsers; gcloud
+# creates the service, prints a NON-FATAL warning, and exits 0 -- leaving a
+# service that 403s every request at Cloud Run's own gate, BEFORE any
+# application code runs. The app then shows an auth error that has nothing to do
+# with app auth, sending the operator to debug the wrong layer entirely.
+#
+# It bites only a NEW service: an existing one's binding predates the policy and
+# is not retroactively stripped. So the scripts that create services are exactly
+# where this must be checked.
+#
+# --flatten='bindings[].members' is LOAD-BEARING, and both halves of the query
+# were got wrong once each before this was right:
+#   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
+#      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
+#      binding was missing and the service still 403'd everything.
+#   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
+#      evaluated against the WHOLE policy resource, not per binding, and
+#      `value(bindings.role)` emits every role ';'-joined on ONE line, so
+#      `grep -qx` stopped matching as soon as a service had a SECOND binding.
+# --flatten makes each member/role pair its own record, so the filter is
+# genuinely per-binding and each surviving role prints on its own line.
+#
+# BOTH failure directions matter. Failing OPEN hides the bug behind a green
+# check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
+# deleted -- taking the real check with it. An inconclusive IAM READ therefore
+# WARNS rather than aborting: being unable to check is not proof of breakage.
+#
+# stderr is NOT merged into the value (no 2>&1): a gcloud component-update nag
+# landing in the variable could otherwise satisfy a text match on its own.
+#
+# Args: $1 service name, $2 region, $3 project id, $4 severity ("fatal"
+# default, or "warn").
+#
+# SEVERITY. Exits 1 when the service is definitively unreachable; pass "warn" to
+# downgrade that to a warning and return 0. The frontend stage passes "warn"
+# because there the backend is pre-existing and possibly someone else's to fix
+# (bd polyglot-pdf-816te); the backend stage takes the default, because a deploy
+# that just CREATED an unreachable service must never exit 0
+# (bd polyglot-pdf-pidtg).
+#
+# AN ARGUMENT, NOT AN ENV VAR, and that distinction is the point. The first cut
+# read VERIFY_FAIL_IS_FATAL from the environment, which cannot tell "the frontend
+# stage set this for one call" from "it was ambient in the operator's shell" --
+# so an exported VERIFY_FAIL_IS_FATAL=false silently disarmed the BACKEND abort,
+# reproducing the exact bug this gate exists to stop (caught by the pre-PR
+# cross-surface review). A positional argument can only come from a real call
+# site.
+#
+# MUST match the sibling copies EXACTLY. This block is duplicated in THREE
+# scripts -- deploy-all.sh, backend/deploy-new.sh and deploy-editor.sh -- and
+# tests/test_deploy_reachability_gate.py pins all three byte-identical.
+# Any edit here must be made in all three.
+verify_service_publicly_reachable() {
+    local svc="$1" region="$2" project="$3" severity="${4:-fatal}" invoker_roles
+    # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
+    # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
+    # (a pre-PR review caught the extraction silently moving them to stderr and
+    # dropping the colour). The bootstrap script defines no such helpers, so it
+    # falls back to plain stderr -- which is why the function must not simply
+    # call log_warn/log_error unconditionally.
+    _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
+    _gate_error() { if declare -f log_error >/dev/null 2>&1; then log_error "$1"; else echo "[ERROR] $1" >&2; fi; }
+    invoker_roles=$(gcloud run services get-iam-policy "$svc" \
+        --region "$region" --project "$project" \
+        --flatten='bindings[].members' \
+        --filter='bindings.members:allUsers' \
+        --format='value(bindings.role)') || invoker_roles="__QUERY_FAILED__"
+
+    if [ "$invoker_roles" = "__QUERY_FAILED__" ]; then
+    _gate_warn "Could not read the IAM policy for $svc -- skipping the"
+    _gate_warn "reachability check. If the app cannot reach the backend, verify manually:"
+    _gate_warn "  gcloud run services get-iam-policy $svc --region $region --project $project"
+        return 0
+    fi
+    if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
+        return 0
+    fi
+    # Plain ASCII '=' -- a free choice, not a constraint. An earlier comment here
+    # claimed the shell could not carry a box-drawing glyph because the tests
+    # decode it as cp1252 on Windows; that was the TEST's defect (a
+    # subprocess.run without encoding=), since fixed, and this function is
+    # byte-identical in the sibling copy, which has no box-drawing at all.
+    # ASCII simply travels everywhere without depending on the reader's codec.
+    _gate_error "==========================================================="
+    if [ "$severity" = "warn" ]; then
+        _gate_error "  WARNING: the service is NOT publicly reachable"
+    else
+        _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    fi
+    _gate_error "==========================================================="
+    _gate_error "Service '$svc' has no allUsers invoker binding, so"
+    _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
+    _gate_error ""
+    _gate_error "--allow-unauthenticated was passed, but the binding was refused --"
+    _gate_error "almost always the domain-restricted-sharing org policy."
+    _gate_error ""
+    _gate_error "Fix it with:"
+    _gate_error "  gcloud run services add-iam-policy-binding $svc \\"
+    _gate_error "    --region $region --project $project \\"
+    _gate_error "    --member=allUsers --role=roles/run.invoker"
+    _gate_error ""
+    _gate_error "If that is itself refused, the org policy must be relaxed for this"
+    _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
+    _gate_error "See bd polyglot-pdf-pidtg."
+    if [ "$severity" = "warn" ]; then
+        _gate_warn "Continuing anyway (this stage treats an unreachable backend as a warning)."
+        return 0
+    fi
+    exit 1
+}
 
 # Default service name
 SERVICE_NAME=${1:-polyglot-backend}
@@ -52,6 +174,14 @@ gcloud run deploy $SERVICE_NAME \
     --timeout=3600 \
     --project $POLYGLOT_PROJECT_NAME \
     --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME"
+
+# REACHABILITY GATE (bd polyglot-pdf-6oi9s). This script's whole job is standing
+# up a NEW service, which is the ONLY case where the refused-invoker-binding bug
+# fires -- so it needs the gate at least as much as deploy-all.sh does. Runs
+# BEFORE the success banner: a service that 403s everything must never be
+# reported as "Deployment Complete".
+echo "🔎 Verifying the service is publicly reachable..."
+verify_service_publicly_reachable "$SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
 
 echo "✅ Deployment Complete!"
 echo "Service URL: $(gcloud run services describe $SERVICE_NAME --platform managed --region $REGION --project $POLYGLOT_PROJECT_NAME --format 'value(status.url)')"

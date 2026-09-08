@@ -407,6 +407,79 @@ def _backfill_positions(schema: dict, dump_path: str, *,
     }
 
 
+# US state / territory / military postal codes -> the name a person SAYS.
+# Used ONLY to label a dropdown option whose PDF display string is the bare code
+# (bd polyglot-pdf-jpjcv). The keys are USPS codes, which are stable; this is a
+# closed, deterministic set, NOT a guess -- the alternative was asking a model to
+# reproduce 62 codes from a 12-item sample, which is what produced nothing.
+# The code is kept in the label ("Alabama (AL)") so an author proof-reading the
+# kit against the PDF can still see which export code an option writes.
+_US_STATE_NAMES: dict[str, str] = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
+    "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida",
+    "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois",
+    "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky",
+    "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+    "MS": "Mississippi", "MO": "Missouri", "MT": "Montana",
+    "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire",
+    "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+    "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
+    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming",
+    # Territories and freely-associated states that appear on USCIS forms.
+    "AS": "American Samoa", "FM": "Federated States of Micronesia",
+    "GU": "Guam", "MH": "Marshall Islands",
+    "MP": "Northern Mariana Islands", "PR": "Puerto Rico",
+    "PW": "Palau", "VI": "U.S. Virgin Islands",
+    # Military postal codes -- the worst case read aloud as letters.
+    "AA": "Armed Forces Americas", "AE": "Armed Forces Europe",
+    "AP": "Armed Forces Pacific",
+}
+
+
+def _is_speakable_as_itself(value: str) -> bool:
+    """Whether the bare code IS a legitimate label, needing no expansion.
+
+    A digit is speakable as itself -- height_feet's `5` is labelled "5" and that
+    is CORRECT. An ALPHABETIC token is not: nobody says "A L" for Alabama. Any
+    length: an unmapped 4-letter code is exactly as unsayable as a 2-letter one,
+    and an earlier cut of this gated the report at `len <= 3`, so a code like
+    "ABCD" shipped bare with NO report -- the blind spot the report exists to
+    close (fresh-eyes, bd polyglot-pdf-jpjcv).
+
+    Mixed tokens ("A1") are treated as speakable: they are not the state-code
+    shape this closes, and reporting them would cry wolf on legitimate data.
+    """
+    v = value.strip()
+    return not v.isalpha()
+
+
+def _speakable_label(value: str, display: str | None) -> str | None:
+    """A label a voice model can SAY, or None if the code must go to a human.
+
+    The defect this closes: when a dropdown's /Opt display string is just the
+    export code again, the old fallback labelled the option with that code, so
+    the guidance block read `[AA, AE, AK, AL, ...]`. The user says "Alabama" and
+    the model has to map it to `AL` from a list carrying no state names.
+
+    NOT keyed on `label == value` -- that predicate is wrong and would cause a
+    bug. On the i-90, height_feet options are `5` -> `5`, where label == value is
+    CORRECT: the label for the number 5 IS "5". The real test is whether a label
+    is SPEAKABLE. A digit is speakable as itself; an alphabetic code is not.
+    """
+    if display and display.strip() and display.strip() != value:
+        return display.strip()          # the PDF gave a real name; trust it
+    name = _US_STATE_NAMES.get(value.strip().upper())
+    if name:
+        return f"{name} ({value.strip().upper()})"
+    return None                         # nothing speakable: caller reports it
+
+
 def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     """Deterministically set options[] on each SELECT from the dump's /Opt list
     (bd polyglot-pdf-hmkas).
@@ -428,12 +501,21 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     selects a real pdf_on_value channel, at which point this backfill should
     write code -> pdf_on_value and a slug -> value instead.
 
-    Label: a label the model already wrote for that exact code wins, else the
-    dump's display string, else the code itself. The value and the option SET
-    are always the dump's -- only the PDF knows the codes -- but the label is
-    what the voice model SPEAKS, and a state dropdown's display string is just
-    the code again ("AA" read aloud as letters vs "Armed Forces Americas (AA)").
-    The dump cannot know that; a model often can.
+    Label precedence: a label the model already wrote for that exact code wins,
+    else a SPEAKABLE label (_speakable_label: the dump's display string when it
+    is a real name, else the US code table), else the bare code -- and that last
+    case is named in the report's "unspeakable" list so a human editor is told.
+
+    The value and the option SET are always the dump's -- only the PDF knows the
+    codes -- but the label is what the voice model SPEAKS, and a state
+    dropdown's display string is just the code again ("AA" read aloud as letters
+    vs "Armed Forces Americas (AA)").
+
+    The model is NOT a reliable source for this any more: bd polyglot-pdf-hmkas
+    tells it to omit a select's options entirely (it only ever sees a truncated
+    12-item sample), so for a freshly extracted kit there is never a prior label
+    and the fallback is the only path. That is why the table exists
+    (bd polyglot-pdf-jpjcv).
 
     The BLANK placeholder choice is dropped -- an empty selection is the absence
     of a value, not a selectable option, and the filler skips empty values.
@@ -446,7 +528,8 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     Returns {"fields_filled": int, "options_written": int, "unmatched": [...]}.
     Every return path carries all three keys.
     """
-    empty = {"fields_filled": 0, "options_written": 0, "unmatched": []}
+    empty = {"fields_filled": 0, "options_written": 0, "unmatched": [],
+             "unspeakable": []}
     try:
         with open(dump_path, encoding="utf-8") as fh:
             dump = json.load(fh)
@@ -455,6 +538,7 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
 
     sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
     from backend.services.schema_lint import _match_dump_names  # noqa: E402
+    from backend.models.conditional_vocabulary import mint_select_slugs  # noqa: E402
 
     # isinstance-filtered like the siblings in this file
     # (_complete_grouped_families, _backfill_unclaimed_widgets): a dump whose
@@ -469,6 +553,7 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     fields_filled = 0
     options_written = 0
     unmatched: list[str] = []
+    unspeakable: list[str] = []
 
     for field in schema.get("fields") or []:
         if not isinstance(field, dict) or field.get("type") != "select":
@@ -499,8 +584,20 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
             if not isinstance(o, dict):
                 continue
             ov, ol = o.get("value"), o.get("label")
-            if isinstance(ov, str) and isinstance(ol, str) and ol.strip():
-                prior_labels[ov] = ol
+            # Key on the export CODE: a prior option in the v2 shape carries
+            # it in pdf_on_value (value is its slug); a legacy one in value.
+            # The ILLEGAL third shape -- a slug value with NO pdf_on_value,
+            # which PR 1's select-on-value-missing rule rejects -- has no
+            # code to key on: its label cannot be joined to a dump code and
+            # the table label wins. Deliberate: re-extracting over a kit that
+            # cannot publish is not a supported path, and inventing a join
+            # (slug-of-display) would not work for the very kits this exists
+            # for, where the display IS the code (fresh-eyes, g2fpr.2).
+            pov = o.get("pdf_on_value")
+            key = pov if isinstance(pov, str) and pov else ov
+            if isinstance(key, str) and isinstance(ol, str) and ol.strip():
+                prior_labels[key] = ol
+        fid = str(field.get("id"))
         options: list[dict] = []
         seen: set[str] = set()
         for widget in entry.get("widgets") or []:
@@ -516,10 +613,23 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
                     continue  # a duplicate value is a lint ERROR
                 seen.add(value)
                 display = choice.get("display")
-                label = prior_labels.get(value) or (
-                    display if isinstance(display, str) and display.strip()
-                    else value
-                )
+                # A label the model wrote wins; else a SPEAKABLE label derived
+                # from the display string or the code table; else the code
+                # itself, and the field is reported for a human to label
+                # (bd polyglot-pdf-jpjcv).
+                label = prior_labels.get(value)
+                if not label:
+                    label = _speakable_label(
+                        value, display if isinstance(display, str) else None
+                    )
+                if not label:
+                    label = value
+                    # ONE definition of "speakable", shared with the helper
+                    # above. An earlier cut restated the rule here with a
+                    # `len <= 3` cutoff the helper did not have, so a 4-letter
+                    # code shipped bare with NO report (fresh-eyes).
+                    if not _is_speakable_as_itself(value):
+                        unspeakable.append(f"{fid}:{value}")
                 options.append({"value": value, "label": label})
             if options:
                 break  # one widget owns the choice list
@@ -527,7 +637,18 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
         if not options:
             unmatched.append(str(field.get("id")))
             continue
-        field["options"] = options
+        # v2 shape (bd polyglot-pdf-g2fpr): value is a SLUG the voice model
+        # speaks; the export code the PDF wants lives in pdf_on_value, which
+        # is what the filler now writes. Minted over the WHOLE set so
+        # uniqueness holds across it; a code that is already a slug ('5')
+        # stays the value. Until now this loop wrote {value: code}, and the
+        # docstring above promised this change "at which point".
+        codes = [o["value"] for o in options]
+        slugs = mint_select_slugs([o["label"] for o in options], codes)
+        field["options"] = [
+            {"value": slug, "label": o["label"], "pdf_on_value": code}
+            for o, slug, code in zip(options, slugs, codes)
+        ]
         fields_filled += 1
         options_written += len(options)
 
@@ -535,6 +656,11 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
         "fields_filled": fields_filled,
         "options_written": options_written,
         "unmatched": unmatched,
+        # Codes we could neither read from the PDF nor expand from the table.
+        # Surfaced so a human editor is TOLD to supply labels rather than a
+        # bare code silently shipping into the voice guidance block
+        # (bd polyglot-pdf-jpjcv, exit criterion 1's second branch).
+        "unspeakable": unspeakable,
     }
 
 
@@ -1556,6 +1682,15 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     it exactly. Runs while the dump still exists (removed in the
         #     finally below).
         dropdowns = _backfill_dropdown_options(schema, dump_path)
+        if dropdowns.get("unspeakable"):
+            # LOUD: these ship into the voice guidance block as bare codes, so
+            # the model would have to map what the user SAYS onto a code with
+            # no name beside it (bd polyglot-pdf-jpjcv).
+            print(f"  [dropdowns] {len(dropdowns['unspeakable'])} option(s) "
+                  f"have a bare CODE for a label and need a human: "
+                  f"{', '.join(dropdowns['unspeakable'][:8])}"
+                  + (" ..." if len(dropdowns["unspeakable"]) > 8 else ""),
+                  file=sys.stderr)
         if dropdowns["fields_filled"] or dropdowns["unmatched"]:
             print(f"  [dropdowns] filled {dropdowns['options_written']} option(s) "
                   f"across {dropdowns['fields_filled']} select field(s)"
@@ -1737,6 +1872,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "positions_derived": completion_positions["fields_filled"],
         "option_positions_derived": completion_positions["options_filled"],
         "option_positions_unmatched": completion_positions["unmatched"],
+        # Dropdown options left with a bare CODE for a label. Persisted, not
+        # just printed: a stderr line is lost on a batch/CI extraction, and
+        # every sibling diagnostic in this block survives in the saved schema
+        # for whoever opens it later (fresh-eyes, bd polyglot-pdf-jpjcv).
+        "dropdown_labels_unspeakable": dropdowns["unspeakable"],
         # THE LIVE DIAGNOSTIC that positions_filled: 0 used to be -- see
         # _count_unresolved_positions. Expected 0 on an AcroForm.
         "positions_unresolved": _count_unresolved_positions(schema),

@@ -71,10 +71,14 @@ gap, but never shadows a distinct real field that happens to lack its own
   directly (xref surgery) onto the kid whose appearance table carries that
   state (`find_widget_by_state`) -- only the SELECTED option writes; a radio
   field holds one value, so there is no per-kid Off pass.
-- **select (dropdown / combobox)** -- has NO branch of its own: it
-  falls to the scalar path above, so `option.value` is written **verbatim**
-  into the widget and `pdf_on_value` is never consulted -- for a dropdown,
-  `option.value` IS the PDF export value. See the gotcha below.
+- **select (dropdown / combobox)** -- resolves the stored `option.value` to
+  its option and writes that option's `pdf_on_value` (the PDF export code)
+  through the scalar TEXT path (`resolve_select_fill_value`): a combobox is one
+  widget with an `/Opt` list and a plain `/V`, not a radio with per-kid
+  states. An option with no `pdf_on_value` (a kit not yet migrated) writes its
+  `value` verbatim, so a working kit never regresses mid-rollout. The read
+  side inverts it: `/resume-form` maps the code back to `option.value`
+  (`resolve_select_resume_value`). See the gotcha below (bd `polyglot-pdf-g2fpr`).
 - **checkbox / checkbox_group** -- a `bool` fills one widget; a `list` is a
   checkbox *group* (fill each selected option's widget). The v2
   `checkbox_group` TYPE (bd `h76m.17`) shares this branch -- it is the same
@@ -108,22 +112,21 @@ gap, but never shadows a distinct real field that happens to lack its own
 
 ### The widget gotchas (scar tissue)
 
-- **A dropdown's `option.value` is the PDF export value, and nothing validates
-  it.** A select has no fill branch of its own, so the filler writes
-  `str(option.value)` straight into the combobox and never reads
-  `pdf_on_value`. PyMuPDF does **not** check the write against the widget's
-  `/Opt` choice list, so any string is accepted silently and then renders
-  clipped to the box. Measured on `i-90_v2` `P1_Line6e_State[0]` (36x18pt):
-  `WY` renders `WY`; `wyoming` renders `wyomin`. No error, no warning -- the
-  same shape as the COMB gotcha below (the stored value round-trips fine while
-  the printed page is wrong). This CONTRADICTS the v2 option contract
-  (`conditional_vocabulary.py`: value is a semantic slug, widget identity lives
-  in `pdf_on_value`), which the select path never implemented. Until it does
-  (bd `polyglot-pdf-g2fpr`), a dropdown's values must be the PDF's own export
-  codes, and `schema_lint` / `schema_repair` exempt exactly those from the
-  option-slug rule -- evidence-based, keyed on the acroform dump's `/Opt`
-  (shared helper `schema_repair.pdf_choice_values`), so a value the PDF does
-  NOT declare is still an ERROR (bd `polyglot-pdf-4we6j`).
+- **What a dropdown writes is `pdf_on_value`, and PyMuPDF validates none of
+  it.** PyMuPDF does **not** check a combobox write against the widget's `/Opt`
+  choice list, so any string is accepted silently and then renders clipped to
+  the box. Measured on `i-90_v2` `P1_Line6e_State[0]` (36x18pt): `WY` renders
+  `WY`; `wyoming` renders `wyomin`. No error, no warning -- the same shape as
+  the COMB gotcha below. So the filler writes the option's `pdf_on_value` (the
+  export code) and `schema_lint` checks it against the acroform dump's `/Opt`
+  in BOTH directions (`select-on-value-not-in-pdf`; and `select-on-value-missing`
+  for a slug value with no code, which is the shape that printed the old i-90
+  clipped -- bd `polyglot-pdf-g2fpr`). Both are evidence-based (shared helper
+  `schema_repair.pdf_choice_values`) and are no-ops without a dump.
+  TRANSITION: a kit not yet migrated still carries the code in `option.value`
+  with no `pdf_on_value`; the filler writes that verbatim, and the
+  option-slug carve-out (bd `polyglot-pdf-4we6j`) keeps it lint-clean until the
+  migration lands (epic `polyglot-pdf-ps4hf`).
   The same exemption exists at the MODEL gate
   (`form_models._collect_v2_problems`), which runs BEFORE lint on the
   publish route and validates a schema with no dump -- so it defers the

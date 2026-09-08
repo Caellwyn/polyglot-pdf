@@ -30,6 +30,12 @@ Rules (stable ids; one finding per violation site):
 - option-value-comma    ERROR   an option value contains a comma (breaks the
                                 voice comma-join contract)
 - option-value-slug     ERROR   (v2 only) option value is not a valid slug
+- select-value-not-slug      ERROR (v2, select, dump) an option carries pdf_on_value but its
+                             value is not a slug -- regenerate the value from the label
+- select-on-value-not-in-pdf ERROR (v2, select, dump) pdf_on_value is not a code the
+                             widget's /Opt list declares -- it would print wrong
+- select-on-value-missing    ERROR (v2, select, dump) a slug value the PDF does not accept
+                             with no pdf_on_value -- would print the slug clipped (g2fpr)
 - ref-unresolved-field  ERROR   a condition or control action references a
                                 non-existent field id
 - operator-trigger      ERROR   operator is not valid on the trigger field's
@@ -609,7 +615,21 @@ def _check_options(
             # judged at all -- this route may simply have no kit identity to
             # load one from -- so say that instead of prescribing a fix that
             # would silently corrupt the form (bd polyglot-pdf-4we6j).
-            if f.get("type") == "select":
+            has_on_value = (
+                isinstance(o, dict)
+                and isinstance(o.get("pdf_on_value"), str)
+                and o["pdf_on_value"].strip() != ""
+            )
+            if f.get("type") == "select" and has_on_value:
+                # The option already carries its export code in pdf_on_value,
+                # so the value is free to be a slug -- and "do NOT regenerate"
+                # would be the WRONG advice here. Fresh-eyes (g2fpr.1) caught
+                # this remedy contradicting select-value-not-slug on one option.
+                remedy = (
+                    "regenerate it from the label; the PDF export code stays "
+                    "in pdf_on_value, which is what the filler writes"
+                )
+            elif f.get("type") == "select":
                 remedy = (
                     "for a dropdown this value must be the PDF's own export "
                     "code (e.g. 'WY'), which is checked against the form's "
@@ -626,6 +646,59 @@ def _check_options(
                 "(lowercase letters, numbers, hyphens, underscores only) -- "
                 + remedy,
             ))
+        # The select's SECOND channel (bd polyglot-pdf-g2fpr). Evidence-based,
+        # like the carve-out above: both rules are no-ops without a dump that
+        # resolves this widget, by the same convention (pdf_choice_values
+        # returns empty for "no evidence", never "nothing is legal").
+        #
+        # (a) An option that HAS pdf_on_value is in the v2 shape: its value
+        #     must be a slug, and its pdf_on_value must be a code the PDF's
+        #     /Opt list actually declares -- the filler now writes pdf_on_value
+        #     (pdf_fill_routes.resolve_select_fill_value), so a code the widget
+        #     does not accept prints wrong exactly as a slug did before.
+        # (b) An option whose value is a VALID SLUG but not in /Opt, with no
+        #     pdf_on_value, is the hole the carve-out above never closed: the
+        #     slug rule does not fire (it is a slug), the code check does not
+        #     fire (there is no code), and the filler writes the slug verbatim
+        #     -- 'wyoming' -> 'wyomin'. That is the c5r8 defect, still open
+        #     until this rule. A NON-slug value already trips option-value-slug
+        #     above, so (b) is scoped to the slug case to avoid a double finding.
+        if is_v2 and f.get("type") == "select" and pdf_choices and isinstance(o, dict):
+            on_value = o.get("pdf_on_value")
+            has_on = isinstance(on_value, str) and on_value.strip() != ""
+            if has_on:
+                # Scoped to the CODE-IN-BOTH shape (value is a legal /Opt code
+                # AND pdf_on_value is set): a value that is neither slug nor
+                # code already tripped option-value-slug above, whose remedy
+                # now says the right thing for an option carrying
+                # pdf_on_value -- one finding, not two contradicting ones.
+                if value_str in pdf_choices and not vocab.is_valid_option_slug(value_str):
+                    out.append(LintFinding(
+                        SEVERITY_ERROR, "select-value-not-slug", opt_path,
+                        f"this choice carries a PDF export code in pdf_on_value, "
+                        f"so its value {_quoted(value_str)} must be a plain slug "
+                        "(lowercase letters, numbers, hyphens, underscores) -- "
+                        "regenerate the value from the label; the code stays "
+                        "in pdf_on_value",
+                    ))
+                if on_value not in pdf_choices:
+                    out.append(LintFinding(
+                        SEVERITY_ERROR, "select-on-value-not-in-pdf", opt_path,
+                        f"pdf_on_value {_quoted(on_value)} is not one of the "
+                        f"{len(pdf_choices)} codes this dropdown's PDF widget "
+                        "accepts -- it would be written into the box and print "
+                        "wrong; set it to the form's own export code for this "
+                        "choice",
+                    ))
+            elif value_str not in pdf_choices and vocab.is_valid_option_slug(value_str):
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "select-on-value-missing", opt_path,
+                    f"the value {_quoted(value_str)} is a slug the PDF's dropdown "
+                    "does not accept, and no pdf_on_value gives the filler the "
+                    "real export code -- it would be written verbatim and print "
+                    "clipped; set pdf_on_value to this choice's export code (one "
+                    f"of the {len(pdf_choices)} the widget declares)",
+                ))
         seen_values[value_str] = seen_values.get(value_str, 0) + 1
     for value_str, count in seen_values.items():
         if count > 1:

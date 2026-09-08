@@ -23,7 +23,7 @@
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
-import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue';
+import { readFieldEntryWithAlias, isBlankFieldValue, isConfirmedButBlank } from './schema-forms/utils/fieldValue';
 import { kitTranslationKeys } from './shared/languages';
 
 // Navigation operates on the canonical schema FormField (it iterates
@@ -260,9 +260,18 @@ export function computeNextField(
     // (matching hasUsableValue), so a required-empty field is untouched by
     // this change and still falls through to Priority 2 for filling.
     const fieldIsRequired = field.validation?.required === true;
-    const hasValue = currentValue?.value !== null
-      && currentValue?.value !== undefined
-      && (currentValue?.value !== '' || !fieldIsRequired);
+    // Whitespace-only is BLANK on either kind of field (bd polyglot-pdf-5ovod),
+    // so a space-filled field falls through to Priority 2 to be FILLED rather
+    // than being offered as a filled-but-unconfirmed field to CONFIRM. Kept
+    // byte-for-byte in step with hasUsableValue above; the exact-'' carve-out
+    // for optional fields is untouched.
+    const rawCurrent = currentValue?.value;
+    const isWhitespaceOnly =
+      typeof rawCurrent === 'string' && rawCurrent !== '' && rawCurrent.trim() === '';
+    const hasValue = rawCurrent !== null
+      && rawCurrent !== undefined
+      && !isWhitespaceOnly
+      && (rawCurrent !== '' || !fieldIsRequired);
 
     // Return first field with value but NOT confirmed
     if (hasValue && !isConfirmed) {
@@ -287,15 +296,29 @@ export function computeNextField(
     const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     const isConfirmed = currentValue?.confirmed === true;
 
-    // Skip confirmed fields (skipConfirmed=true at this point)
-    if (isConfirmed) {
+    // Skip confirmed fields (skipConfirmed=true at this point) -- UNLESS the
+    // confirmed value is whitespace (bd polyglot-pdf-5ovod). A confirmation of
+    // blankness is not a real confirmation: before this bead a space-filled
+    // field could BE confirmed, and such an entry survives in any session saved
+    // beforehand. Without this arm it is invisible to BOTH loops -- Priority 1
+    // skips it (isConfirmed), this skips it too -- so the field is never asked
+    // about again and prints blank on the PDF. Re-offering it as a question is
+    // the recovery.
+    //
+    // A confirmed '' is NOT whitespace and is untouched: on an optional field
+    // that is the deliberate "does not apply" answer (bd polyglot-pdf-6oe6).
+    const confirmedButBlank = isConfirmed && isConfirmedButBlank(currentValue?.value);
+    if (isConfirmed && !confirmedButBlank) {
       continue;
     }
 
-    // Check if field has a value (null, undefined, or empty string means not filled)
-    const hasValue = currentValue?.value !== null
-      && currentValue?.value !== undefined
-      && currentValue?.value !== '';
+    // Check if field has a value. Whitespace-only counts as NOT filled
+    // (bd polyglot-pdf-5ovod) -- this is the second of the two hasValue
+    // predicates in this function, and missing it here made a space-filled field
+    // fall through BOTH priorities: Priority 1 said "not a value to confirm",
+    // this said "not empty either", and computeNextField returned null. The
+    // field became invisible to navigation entirely.
+    const hasValue = !isBlankFieldValue(currentValue?.value);
 
     // Return first empty field
     if (!hasValue) {
@@ -452,6 +475,21 @@ export function isFormComplete(state: SchemaFormState): boolean {
     const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     if (currentValue?.confirmed !== true) {
       return false; // Found a shown, unconfirmed field
+    }
+    // A confirmation of BLANKNESS does not complete the form (bd
+    // polyglot-pdf-5ovod). computeNextField's Priority-2 recovery arm re-offers
+    // such a field, so without the same rule here the two gates CONTRADICT: this
+    // reports complete while navigation is still asking for that very field.
+    // That is not just untidy -- completion fires the end-of-form pro validator
+    // (~$0.0093, see above), so the disagreement spends money validating a form
+    // with a whitespace field still open.
+    //
+    // Only whitespace, never a bare '': a skipped field carries value:null, and
+    // an optional field's confirmed '' is the deliberate "does not apply"
+    // answer (bd polyglot-pdf-6oe6). Both must still complete the form.
+    const confirmedButBlank = isConfirmedButBlank(currentValue?.value);
+    if (confirmedButBlank) {
+      return false;
     }
   }
 

@@ -257,6 +257,10 @@ class EditorKitInfo(BaseModel):
     # The person holding it (email, else uid). None for a lock written before
     # 5tuas, which stored only a role.
     heldByLabel: Optional[str] = None
+    # Hidden from the default catalogue (bd polyglot-pdf-n5fwd). DEFAULTED, so
+    # the onboard route's own EditorKitInfo need not name it: a kit is created
+    # visible, and only an explicit author action hides it.
+    hidden: bool = False
 
 
 class EditorKitListResponse(BaseModel):
@@ -337,6 +341,21 @@ class KitLabelBody(BaseModel):
     """The new display label for a kit (bd 15ic). Whitespace-stripped server-side;
     an empty/blank label is a 422."""
     label: str
+
+
+class KitHiddenBody(BaseModel):
+    """Whether a kit is HIDDEN from the catalogue (bd polyglot-pdf-n5fwd).
+
+    Deliberately a separate metadata key rather than a fifth lifecycle status:
+    status answers "where is this in its life?" and drags the write-lock set
+    with it, while hiding answers "do I want to look at this?" and must stay
+    orthogonal -- a published kit can be hidden, and hiding must not change
+    what anyone may do to it.
+
+    NOT the per-kit revision "archive", which is the frozen audit copy a
+    confirmation record points at. Different thing, different word.
+    """
+    hidden: bool
 
 
 class LintFindingOut(BaseModel):
@@ -744,6 +763,21 @@ def _status_of(meta: Optional[dict]) -> str:
 def _is_write_locked(meta: Optional[dict]) -> bool:
     """True when this kit's schema must not be rewritten in place."""
     return _status_of(meta) in _WRITE_LOCKED_STATUSES
+
+
+_HIDDEN_KEY = "hidden"
+
+
+def _is_hidden(meta: Optional[dict]) -> bool:
+    """True when this kit is hidden from the default catalogue (bd n5fwd).
+
+    TOLERANT BY DESIGN, and it fails VISIBLE. Anything that is not exactly
+    True -- absent, null, a string someone hand-edited in, unreadable metadata
+    -- means "not hidden", so a malformed value can never make a kit vanish
+    from the only list that shows it. Hiding must be something a human chose,
+    never something a parse accident did.
+    """
+    return (meta or {}).get(_HIDDEN_KEY) is True
 
 
 def _lock_reason(meta: Optional[dict]) -> str:
@@ -1154,10 +1188,58 @@ async def list_editor_kits(
                 # Rides along on the metadata this loop already read -- no extra
                 # per-kit fetch (sprint-18 C4).
                 readiness=_readiness_out(meta),
+                hidden=_is_hidden(meta),
             )
         )
     _log.info("editor_kits_listed", count=len(kits), role=role.role, actor=role.label())
     return EditorKitListResponse(kits=kits)
+
+
+# Whitespace, ENUMERATED rather than borrowed from the language
+# (bd polyglot-pdf-th60w).
+#
+# This class and its twin in schema-editor/src/utils/kitName.ts must agree
+# character for character, and "\s" does NOT. Measured by scanning the whole
+# code space on both runtimes (not read off a spec), Python and JavaScript
+# disagree on SIX characters, in BOTH directions:
+#
+#   Python strips, JS does not:  U+001C U+001D U+001E U+001F U+0085
+#   JS strips, Python does not:  U+FEFF
+#
+# Only U+0085 and U+FEFF are reachable here -- _safe_label already rejects
+# ord < 32, which covers the four separators -- and U+FEFF is an ordinary paste
+# artifact from a spreadsheet or a UTF-8-BOM file, which is exactly how labels
+# get typed. The consequence is not a crash: the server refusal and the client
+# notice would name the SAME kit two different ways, the "message cannot be
+# matched to the card" failure this helper exists to prevent, reintroduced
+# through the mirror rather than through a missed call site.
+#
+# The class is the UNION -- every character either language would have
+# stripped -- so neither side does less than its own language would, and both
+# do the same thing. Enumerating fixes the CLASS: patching the two known
+# characters would leave every future disagreement, and every runtime's
+# Unicode-version drift, open with no way to notice from inside either
+# language.
+#
+# Escapes, never literal glyphs (CLAUDE.md scar #6).
+_KIT_NAME_SPACE = (
+    "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+_KIT_NAME_CLASS = re.escape(_KIT_NAME_SPACE)
+_KIT_NAME_STRIP = re.compile(
+    "^[" + _KIT_NAME_CLASS + "]+|[" + _KIT_NAME_CLASS + "]+$"
+)
+_KIT_NAME_FLAT = re.compile("[-_" + _KIT_NAME_CLASS + "]+")
+
+
+def _kit_name_trim(text: str) -> str:
+    """`.trim()` over the shared class, rather than Python's own."""
+    return _KIT_NAME_STRIP.sub("", text)
+
+
+def _kit_name_flatten(text: str) -> str:
+    """Separator- and case-insensitive form, for judging a restatement."""
+    return _KIT_NAME_FLAT.sub("", text).lower()
 
 
 def _kit_name(kit_id: str, meta: Optional[dict]) -> str:
@@ -1175,14 +1257,11 @@ def _kit_name(kit_id: str, meta: Optional[dict]) -> str:
     one fact twice. Mirrors kitName() in schema-editor/src/utils/kitName.ts.
     """
     label = (meta or {}).get("label")
-    if not isinstance(label, str) or not label.strip():
+    if not isinstance(label, str) or not _kit_name_trim(label):
         return f'"{kit_id}"'
-    label = label.strip()
+    label = _kit_name_trim(label)
 
-    def flat(text: str) -> str:
-        return re.sub(r"[-_\s]+", "", text).lower()
-
-    if flat(label) == flat(kit_id):
+    if _kit_name_flatten(label) == _kit_name_flatten(kit_id):
         return f'"{kit_id}"'
     return f'"{label}" ({kit_id})'
 
@@ -3505,7 +3584,16 @@ async def delete_editor_kit(
     try:
         removed = await store.delete_kit(kit_id)
     except FormKitNotFound as exc:
-        raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
+        # A RACE: the kit was present at the guards above and gone at the write,
+        # so someone else deleted it in between. `label` was computed from the
+        # metadata read at the top and describes what the kit WAS a moment ago
+        # -- which is exactly what this message should say, because the author
+        # is looking at a card that still shows that name. Reading fresh
+        # metadata here is impossible (there is none) and unnecessary
+        # (bd polyglot-pdf-ytd3m).
+        raise HTTPException(
+            status_code=404, detail=f"Kit not found: {label}"
+        ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(
             status_code=502, detail=f"Unable to delete the kit: {exc}"
@@ -3680,6 +3768,50 @@ async def set_editor_kit_label(
         raise HTTPException(status_code=502, detail="Unable to update label") from exc
     _log.info("editor_label_set", kit_id=kit_id, role=role.role, actor=role.label())
     return {"ok": True, "label": label}
+
+
+@router.post("/kits/{kit_id}/hidden")
+async def set_editor_kit_hidden(
+    kit_id: str,
+    body: KitHiddenBody,
+    role: Annotated[EditorActor, Depends(require_author_role)],
+) -> dict:
+    """Hide a kit from the default catalogue, or bring it back (bd n5fwd).
+
+    The demo store fills with junk kits nobody is working on, and they crowd
+    out the real ones. Deleting them is the destructive half (bd 6zhaf); this
+    is the reversible half -- out of the way, nothing destroyed, one click back.
+
+    AUTHOR-ONLY (maintainer decision 2026-09-01). By the tier line this looks
+    editor-ish: it is reversible, spends no tokens and creates nothing, which
+    is where `POST /label` sits. But hiding changes what OTHER people see, and
+    the maintainer judged that consequential enough to restrict. An editor
+    tidying their own view is not worth a colleague losing sight of a form.
+
+    NO write-lock gate, matching /label: hiding touches no schema bytes, so a
+    complete or unpublished kit can be hidden. The revision an audit record
+    names is untouched -- it is still published, still fillable by a client,
+    still in the manifest. Only this catalogue view changes.
+
+    The edit lock IS honoured, also matching /label: hiding a kit out from
+    under someone mid-edit is exactly the disruption that lock exists to stop.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    _require_edit_lock(meta, role)
+    next_meta = {**(meta or {}), _HIDDEN_KEY: bool(body.hidden)}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        _log.error("editor_hidden_save_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to update whether {_kit_name(kit_id, meta)} is hidden",
+        ) from exc
+    _log.info("editor_kit_hidden_set", kit_id=kit_id, hidden=bool(body.hidden),
+              role=role.role, actor=role.label())
+    return {"ok": True, "hidden": bool(body.hidden)}
 
 
 # --- author tier: PDF onboarding + hosted extraction (bd polyglot-pdf-92qe.3) --

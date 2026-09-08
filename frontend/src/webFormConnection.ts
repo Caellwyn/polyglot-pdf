@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -145,10 +145,6 @@ export interface ConnectionCallbacks {
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
   onNextField?: (fieldId: string | null) => void;
-  // Native-VAD mode toggle from the backend session_ready handshake (bd
-  // polyglot-pdf-333). When enabled, the connection layer must stop sending
-  // manual activity signals and stream continuous audio.
-  onNativeVadMode?: (enabled: boolean) => void;
   // The Gemini Live server sent a GoAway: it is about to terminate this
   // connection (bd polyglot-pdf-c5t). timeLeft is a duration string (may be
   // null). The handler can pre-emptively reconnect before the abrupt close; the
@@ -746,7 +742,7 @@ export class WebFormConnection {
             this.clearThinking('agent_processing:false');
           }
           // TEST-ONLY observability (bd polyglot-pdf-fa4x): let the E2E voice
-          // harness see that the native-VAD START signal fired, without a human
+          // harness see that the thinking START signal fired, without a human
           // mic. Undefined in production; only the harness sets it.
           if (window.vffOnAgentProcessing) {
             window.vffOnAgentProcessing(message.processing === true);
@@ -875,7 +871,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad, continuous_session_enabled } = message;
+    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, continuous_session_enabled } = message;
 
     // Captured at ENTRY, before any of this handler's own state writes: the
     // setSessionId/setJitMode/setContinuousSession mutators below PERSIST
@@ -955,14 +951,6 @@ export class WebFormConnection {
     this.dtiModeEnabled = dti_mode_enabled === true;
     if (this.dtiModeEnabled) {
       console.log('[WebFormConnection] [OK] DTI mode enabled by backend');
-    }
-
-    // Native-VAD mode (bd polyglot-pdf-333): tell the connection/audio layer
-    // whether Gemini's own VAD is driving turns. Fire BEFORE onSessionReady so
-    // the audio layer is configured before any connected-state effects run.
-    // Default to false (manual VAD) when the backend doesn't send the field.
-    if (this.callbacks.onNativeVadMode) {
-      this.callbacks.onNativeVadMode(native_vad === true);
     }
 
     // If a reconnect-based section switch was in flight (startSection), THIS is
@@ -2010,8 +1998,15 @@ export class WebFormConnection {
     // never lands. Therefore, treat '' as usable when the field is not required.
     const fieldSchema = this.state.schema.fields.find(f => f.id === field_id);
     const fieldIsRequired = fieldSchema?.validation?.required === true;
+    // Whitespace-only is BLANK and never usable, on required OR optional fields
+    // (bd polyglot-pdf-5ovod): typing spaces is not the "does not apply" answer.
+    // The '' carve-out above stays as-is -- a genuine empty string on an OPTIONAL
+    // field is a deliberate verbal answer, and isBlankFieldValue treats '' and
+    // '   ' alike, so the carve-out is applied only to the exact-'' case.
+    const isWhitespaceOnly =
+      typeof fieldValue === 'string' && fieldValue !== '' && fieldValue.trim() === '';
     const hasUsableValue =
-      fieldValue !== null && fieldValue !== undefined &&
+      fieldValue !== null && fieldValue !== undefined && !isWhitespaceOnly &&
       (fieldValue !== '' || !fieldIsRequired);
 
     if (!hasUsableValue) {
@@ -2329,9 +2324,17 @@ export class WebFormConnection {
         field_id.endsWith('[]') ? field_id.slice(0, -2) : field_id + '[]'
       ]
     )?.value;
-    const alreadyFilled =
-      existing !== null && existing !== undefined && existing !== '' &&
-      !(Array.isArray(existing) && existing.length === 0);
+    // Whitespace is NOT a value, so it must not block a skip (bd
+    // polyglot-pdf-5ovod). This guard exists to stop a skip ERASING a real
+    // answer; there is no answer to protect here.
+    //
+    // Leaving it untrimmed created a DEADLOCK once the other exits tightened:
+    // confirm_field refuses (hasUsableValue rejects whitespace), skip_field
+    // refused here, and update_form_fields '' is rejected by the required
+    // check -- while the backend marks the skip refusal NON-RETRYABLE and
+    // computeNextField keeps re-offering the field. The model would be handed a
+    // field it could not answer, skip, or clear, and told not to try again.
+    const alreadyFilled = !isBlankFieldValue(existing);
     if (alreadyFilled) {
       console.warn('[WebFormConnection] skip_field refused -- field already has a value:', field_id);
       this.sendSkipFieldResponse(request_id, false, 'already_filled');
@@ -2492,17 +2495,30 @@ export class WebFormConnection {
     const currentValue = entry?.value;
     // An EMPTY checkbox-group ([]) is not a value -- treat it as unanswered so the
     // ack does not tell the model "it already holds an unconfirmed value" and ride
-    // value:[] (the model would read back nothing). Mirrors the skip path's guard
+    // value:[] (the model would read back nothing). Shares the skip path's guard
     // (handleSkipFieldRequest, bd polyglot-pdf-7yra) so the two agree (bd
-    // polyglot-pdf-luju nit 1).
-    const hasValue =
-      currentValue !== null && currentValue !== undefined && currentValue !== '' &&
-      !(Array.isArray(currentValue) && currentValue.length === 0);
+    // polyglot-pdf-luju nit 1) -- via the same predicate now, not a restatement
+    // of it: they had already drifted once on whitespace, and the comment went on
+    // claiming parity that no longer held (bd polyglot-pdf-5ovod).
+    //
+    // WHITESPACE IS NOT A VALUE HERE EITHER. Saying it is makes the ack tell the
+    // model "it already holds an unconfirmed value -- read it back and verify it"
+    // about a field containing only spaces: there is nothing to read back, and
+    // confirm_field now refuses that very field, so the guidance would steer the
+    // model at a closed exit.
+    const hasValue = !isBlankFieldValue(currentValue);
     this.sendSwitchFieldResponse(request_id, true, {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,
       next_field_hint: hint,
-      already_confirmed: !!entry?.confirmed,
+      // A confirmation of BLANKNESS is not a confirmed answer (bd
+      // polyglot-pdf-5ovod). The backend checks already_confirmed BEFORE
+      // has_value, so leaving this raw would announce a legacy
+      // confirmed-whitespace field as "it already has a confirmed answer -- read
+      // the current value back", with nothing to read back and confirm_field
+      // refusing that very field. Fixing has_value alone would have left this
+      // branch lying, one line above the one I had just corrected.
+      already_confirmed: !!entry?.confirmed && !isConfirmedButBlank(currentValue),
       has_value: hasValue,
       // The current value rides the ack so the model can read it back to the
       // user (same Gemini trust boundary as ask_secretary; never logged).
@@ -3952,6 +3968,32 @@ export class WebFormConnection {
     this.send({
       type: 'vad_activity_start',
       timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Tell the backend which mode the user is in (bd polyglot-pdf-wurj8).
+   *
+   * 'manual' suppresses the model's proactive speech AT THE BACKEND, which is
+   * what makes manual mode both silent and free -- muting the speaker here
+   * would leave the model talking (and billing) into a discarded buffer, the
+   * defect in the pause() this replaces. The session stays live and the mic
+   * stays usable in both modes.
+   *
+   * Fire-and-forget, and deliberately silent when the socket is not open: the
+   * mode is re-sent on every (re)connect from the client's own state, so a
+   * send that misses a closed socket is repaired by the reconnect rather than
+   * needing to be queued here.
+   */
+  setVoiceMode(mode: 'manual' | 'voice'): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log(`[WebFormConnection] setVoiceMode(${mode}) skipped - socket not open (re-sent on reconnect)`);
+      return;
+    }
+    console.log(`[WebFormConnection] [send] Sending voice_mode: ${mode}`)
+    this.send({
+      type: 'voice_mode',
+      mode,
     });
   }
 

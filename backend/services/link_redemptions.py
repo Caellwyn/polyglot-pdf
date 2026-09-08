@@ -35,6 +35,26 @@ _log = structlog.get_logger().bind(module="link_redemptions")
 
 COLLECTION = "link_redemptions"
 
+
+def _collection_name() -> str:
+    """The redemption collection for THIS channel.
+
+    The demo keeps the bare `link_redemptions` name so nothing already written
+    there is orphaned; every other channel gets its own suffixed collection
+    (bd polyglot-pdf-3q9qn).
+
+    WHY THIS MATTERS SEPARATELY FROM THE TOKEN CLAIM: a link is single-use, and
+    the burn is recorded under the jti alone. Two channels sharing one
+    collection means a staging test-drive marks a DEMO link used -- the client
+    then finds a dead link with no explanation. The `aud` claim stops a staging
+    link OPENING on the demo; this stops the two channels writing over each
+    other's ledger.
+    """
+    from backend.services.link_tokens import DEFAULT_CHANNEL, link_channel
+
+    channel = link_channel()
+    return COLLECTION if channel == DEFAULT_CHANNEL else f"{COLLECTION}_{channel}"
+
 # Same env-gate shape as the firms store (services/firms.py): off by default,
 # so a deployment that has not provisioned Firestore does not silently treat
 # every link as fresh.
@@ -88,7 +108,7 @@ def _collection():
     db = get_db()
     if db is None:
         raise RedemptionUnavailable("no firestore client")
-    return db.collection(COLLECTION)
+    return db.collection(_collection_name())
 
 
 def open_link(jti: str, firm_id: str, kit_id: str,

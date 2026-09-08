@@ -30,10 +30,17 @@ jobs:
           cache: pip
       - name: Install backend deps
         run: pip install -r backend/requirements.txt
-      - name: Run backend + harness suites (excluding flaky live-Gemini externals)
+      - name: Run all collected suites (excluding flaky live-Gemini externals)
+        # NO explicit suite paths: a bare `pytest` collects every root in
+        # pytest.ini's `testpaths`, so a NEW top-level suite runs in CI the day
+        # it is added instead of needing this line edited too. Hardcoding
+        # `backend/tests tests` here is what let a whole suite ship un-run
+        # before (bd polyglot-pdf-3ave: "CI runs `pytest backend/tests tests`,
+        # so the PR would have merged CI-red"), and it silently under-ran
+        # admin_backend/tests the day that package landed.
         # -m "not external" matches the project's flaky live-Gemini exclusion
         # (the `external` marker needs real Gemini creds CI does not have).
-        run: pytest backend/tests tests -q -m "not external"
+        run: pytest -q -m "not external"
 
   frontend-tests:
     name: frontend vitest

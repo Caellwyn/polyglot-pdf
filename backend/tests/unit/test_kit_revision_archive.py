@@ -788,6 +788,14 @@ _WRITE_LOCK_EXEMPT_ROUTES = {
     ("POST", "/api/editor/kits/{kit_id}/lock"): "acquires the edit-checkout lock, writes no schema",
     ("DELETE", "/api/editor/kits/{kit_id}/lock"): "releases the edit-checkout lock, writes no schema",
     ("POST", "/api/editor/kits/{kit_id}/label"): "writes a display label, not the answerable shape",
+    ("POST", "/api/editor/kits/{kit_id}/hidden"): (
+        "writes a CATALOGUE-VIEW flag, not the answerable shape (bd n5fwd). "
+        "Hiding is orthogonal to the lifecycle on purpose: a published kit "
+        "can be hidden, and the revision a confirmation record names stays "
+        "published, fillable and in the manifest -- only who sees it in the "
+        "editor list changes. Gating it on the write lock would be the "
+        "coupling the flag was designed to avoid."
+    ),
     ("POST", "/api/editor/kits"): "onboards a NEW kit_id; nothing published yet to protect",
 }
 

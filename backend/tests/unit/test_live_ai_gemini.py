@@ -791,111 +791,49 @@ async def test_session_cost_summary_not_emitted_for_zero_token_session():
     assert _count_summary_emits(adapter._log) == 0
 
 
-def _vad_settings(
-    *,
-    disabled=True,
-    start="LOW",
-    end="LOW",
-    prefix=500,
-    silence=500,
-):
-    """Build a settings stub for LiveAIGemini._build_vad_settings."""
-    return SimpleNamespace(
-        DISABLE_GEMINI_VAD=disabled,
-        VAD_START_SENSITIVITY=start,
-        VAD_END_SENSITIVITY=end,
-        VAD_PREFIX_PADDING_MS=prefix,
-        VAD_SILENCE_DURATION_MS=silence,
-    )
+def test_vad_settings_are_always_disabled():
+    """Gemini's automatic activity detection is ALWAYS off (bd polyglot-pdf-v1m8g).
 
+    Push-to-talk owns activation: PTT *knows* when the user is speaking (they are
+    holding the button) and brackets each turn with activity_start/end, so a
+    second detector inferring the same thing from the audio could only disagree.
+    _build_vad_settings therefore returns a CONSTANT.
 
-def test_vad_disabled_sends_only_disabled_flag():
-    """bd polyglot-pdf-p1t: when VAD is disabled, send ONLY {disabled: True}.
-
-    The Live API rejects (1007) a config that sets disabled=True alongside any
-    sensitivity/padding field -- so even though the VAD_* knobs are populated
-    (the default config), none of them may leak into the payload.
+    This also preserves the bd polyglot-pdf-p1t invariant: the Live API rejects
+    (close 1007) a config that sets disabled=True alongside any sensitivity or
+    padding field, so the payload must be exactly {'disabled': True} and nothing
+    else -- which is now true by construction rather than by branch.
     """
     from backend.adapters.live_ai_gemini import LiveAIGemini
 
-    # Defaults: disabled=True with all sensitivity/padding knobs set.
-    result = LiveAIGemini._build_vad_settings(_vad_settings())
+    # The real Settings object -- not a stub -- so this fails if a knob is ever
+    # re-introduced and starts leaking into the payload.
+    from backend.config import get_settings
 
-    assert result == {"disabled": True}
-
-
-def test_vad_enabled_sends_sensitivity_fields_and_no_disabled():
-    """When VAD is enabled, pass the knobs through and never set disabled."""
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-    from google.genai import types
-
-    result = LiveAIGemini._build_vad_settings(_vad_settings(disabled=False))
-
-    assert "disabled" not in result
-    assert result["start_of_speech_sensitivity"] == types.StartSensitivity.START_SENSITIVITY_LOW
-    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_LOW
-    assert result["prefix_padding_ms"] == 500
-    assert result["silence_duration_ms"] == 500
+    assert LiveAIGemini._build_vad_settings(get_settings()) == {"disabled": True}
 
 
-def test_vad_enabled_maps_mixed_sensitivity_values():
-    """HIGH/LOW map to the right enum members per axis (catches a prefix mixup)."""
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-    from google.genai import types
+def test_no_vad_tuning_knobs_survive_on_settings():
+    """The sensitivity/padding knobs are GONE, not defaulted off.
 
-    result = LiveAIGemini._build_vad_settings(
-        _vad_settings(disabled=False, start="HIGH", end="LOW")
-    )
-
-    assert result["start_of_speech_sensitivity"] == types.StartSensitivity.START_SENSITIVITY_HIGH
-    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_LOW
-
-
-def test_vad_enabled_omits_unspecified_and_none_knobs():
-    """Enabled VAD with no usable knobs yields {} (Gemini uses its defaults)."""
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-
-    result = LiveAIGemini._build_vad_settings(
-        _vad_settings(
-            disabled=False,
-            start="UNSPECIFIED",
-            end="UNSPECIFIED",
-            prefix=None,
-            silence=None,
-        )
-    )
-
-    assert result == {}
-
-
-def test_vad_invalid_sensitivity_is_skipped_not_fatal():
-    """bd polyglot-pdf-u01: a typo'd sensitivity (e.g. MEDIUM) is skipped, not raised.
-
-    A bad VAD_*_SENSITIVITY value used to KeyError out of _build_vad_settings;
-    the caller's broad except then dropped the ENTIRE realtime_input_config. The
-    fix whitelists LOW/HIGH/UNSPECIFIED and skips unknown values with a warning,
-    so the rest of the config (including the valid axis + padding) still applies.
+    Pins the SET (CLAUDE.md scar #8): a knob nothing can safely turn on is a trap
+    for the next caller, so re-adding any of these should fail here rather than
+    sit inert until someone sets it and wonders why nothing happens.
     """
-    import structlog
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-    from google.genai import types
+    from backend.config import get_settings
 
-    # start is a typo, end is valid -> end + padding survive, start is dropped,
-    # and the dropped axis emits the invalid_vad_sensitivity_skipped warning.
-    with structlog.testing.capture_logs() as logs:
-        result = LiveAIGemini._build_vad_settings(
-            _vad_settings(disabled=False, start="MEDIUM", end="HIGH")
+    settings = get_settings()
+    for dead in (
+        "DISABLE_GEMINI_VAD",
+        "VAD_START_SENSITIVITY",
+        "VAD_END_SENSITIVITY",
+        "VAD_PREFIX_PADDING_MS",
+        "VAD_SILENCE_DURATION_MS",
+    ):
+        assert not hasattr(settings, dead), (
+            f"{dead} is back on Settings -- native VAD was retired in "
+            "bd polyglot-pdf-v1m8g; PTT is the only turn signal."
         )
-
-    assert "start_of_speech_sensitivity" not in result
-    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_HIGH
-    assert result["prefix_padding_ms"] == 500
-    assert result["silence_duration_ms"] == 500
-
-    skipped = [e for e in logs if e.get("event") == "invalid_vad_sensitivity_skipped"]
-    assert len(skipped) == 1
-    assert skipped[0]["field"] == "VAD_START_SENSITIVITY"
-    assert skipped[0]["value"] == "MEDIUM"
 
 
 # === Context-window compression (epic polyglot-pdf-l3a, bead -45o) ===
@@ -1039,24 +977,18 @@ async def test_compression_clamped_value_reaches_connect(monkeypatch):
     assert cwc["sliding_window"]["target_tokens"] == 2000  # clamped, not 8000
 
 
-# --- Native-VAD activity-signal gating (bd polyglot-pdf-333) ---------------
+# --- Activity signals are UNCONDITIONAL (bd polyglot-pdf-v1m8g) ------------
 #
-# When Gemini's own VAD is enabled (DISABLE_GEMINI_VAD=False), the adapter must
-# NOT forward manual activity_start/end signals -- interleaving them with
-# automatic detection is the conflicting turn-taking state _build_vad_settings
-# warns about. When manual VAD is on (DISABLE_GEMINI_VAD=True) the signals fire.
+# Push-to-talk owns activation, so the manual activity_start/end brackets are the
+# ONLY turn signal and always fire. The suppression this block used to pin existed
+# because Gemini's own VAD was also detecting turns and interleaving the two was a
+# conflicting state; that detector is gone. The old native arm also swapped
+# activity_end for audio_stream_end (bd polyglot-pdf-6vo / PR #119) to close a PTT
+# turn without conflicting -- also gone with the mode it served.
 
-def _adapter_with_session_and_vad(monkeypatch, *, disable_gemini_vad):
-    """A LiveAIGemini with a mock active session and a patched DISABLE_GEMINI_VAD."""
+def _adapter_with_session(monkeypatch):
+    """A LiveAIGemini with a mock active session."""
     from backend.adapters.live_ai_gemini import LiveAIGemini
-    from backend import config as _config
-
-    # Fresh Settings, not the lru_cached get_settings() result -- mutating the
-    # cached singleton would leak into later tests (see _capture_session_config).
-    base = _config.Settings()
-    base.DISABLE_GEMINI_VAD = disable_gemini_vad
-    # send_activity_start/end import get_settings locally, so patch the module attr.
-    monkeypatch.setattr(_config, "get_settings", lambda: base)
 
     adapter = LiveAIGemini()
     adapter._log = MagicMock()
@@ -1065,49 +997,24 @@ def _adapter_with_session_and_vad(monkeypatch, *, disable_gemini_vad):
 
 
 @pytest.mark.asyncio
-async def test_activity_signals_suppressed_in_native_vad(monkeypatch):
-    """DISABLE_GEMINI_VAD=False (native VAD) -> the conflicting manual
-    activity_start/activity_end signals are suppressed (Gemini owns turn-taking).
-
-    activity_start is dropped entirely. activity_end does NOT send the conflicting
-    types.ActivityEnd; instead it sends audio_stream_end=True -- the documented
-    realtime signal that is compatible with automatic VAD -- so PTT-as-a-gate can
-    still finalize the audio segment after release without the session going silent
-    (bd polyglot-pdf-6vo / PR #119). So exactly ONE send_realtime_input fires here,
-    carrying audio_stream_end, and never activity_start or activity_end.
-    """
-    adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=False)
+async def test_activity_signals_always_fire(monkeypatch):
+    """activity_start and activity_end are both sent, with no mode gate."""
+    adapter = _adapter_with_session(monkeypatch)
     send = adapter._current_session.send_realtime_input
 
-    # start and end are asserted INDEPENDENTLY (Codex review, PR #122): an
-    # aggregate "exactly one call" check would still pass if native mode regressed
-    # to emit the realtime input on START and suppress END -- which would silently
-    # break the PTT-release turn-close. So pin each half on its own.
+    # Asserted INDEPENDENTLY (Codex review, PR #122): an aggregate "two calls"
+    # check would still pass if one half regressed while the other double-fired.
     await adapter.send_activity_start()
-    assert send.await_count == 0  # start is fully suppressed in native mode
+    assert send.await_count == 1
+    assert "activity_start" in send.await_args_list[0].kwargs
 
     await adapter.send_activity_end()
-    assert send.await_count == 1  # end is the ONLY emitter here
-    only_kwargs = send.await_args_list[0].kwargs
-    assert only_kwargs.get("audio_stream_end") is True
-    assert "activity_start" not in only_kwargs
-    assert "activity_end" not in only_kwargs
-
-
-@pytest.mark.asyncio
-async def test_activity_signals_fire_in_manual_vad(monkeypatch):
-    """DISABLE_GEMINI_VAD=True -> activity_start/end ARE sent (manual turn-taking)."""
-    adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=True)
-
-    await adapter.send_activity_start()
-    await adapter.send_activity_end()
-
-    assert adapter._current_session.send_realtime_input.await_count == 2
-    # The first call carries activity_start, the second activity_end.
-    first_kwargs = adapter._current_session.send_realtime_input.await_args_list[0].kwargs
-    second_kwargs = adapter._current_session.send_realtime_input.await_args_list[1].kwargs
-    assert "activity_start" in first_kwargs
-    assert "activity_end" in second_kwargs
+    assert send.await_count == 2
+    end_kwargs = send.await_args_list[1].kwargs
+    assert "activity_end" in end_kwargs
+    # The retired native arm sent audio_stream_end instead; it must not come back
+    # -- it does not close the turn when nothing is detecting on the other side.
+    assert "audio_stream_end" not in end_kwargs
 
 
 # ===========================================================================
@@ -1302,7 +1209,7 @@ def test_build_live_config_input_transcription_for_liveness(mock_google_ai_clien
     """`input_audio_transcription` is requested whenever the idle-liveness callback
     is registered, EVEN with transcripts off (bd polyglot-pdf-l3a.4; Codex PR #214).
 
-    The idle watchdog's `on_user_activity` callback fires on a native-VAD
+    The idle watchdog's `on_user_activity` callback fires on an
     `input_transcription`, which Gemini only emits when `input_audio_transcription`
     is in the connect config. In the DEFAULT production path send_transcript=False,
     so without this the callback never fires and an actively-speaking user would be

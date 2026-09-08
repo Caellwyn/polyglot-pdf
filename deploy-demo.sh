@@ -37,6 +37,22 @@ BUCKET_NAME="$CONSOLIDATED_PROJECT-form-kits"
 SA_NAME="polyglot-backend-sa"
 SA_EMAIL="$SA_NAME@$GCP_PROJECT.iam.gserviceaccount.com"
 
+# Secret Manager bindings, passed to gcloud as --set-secrets (bd
+# polyglot-pdf-hvui4). MUST stay identical to deploy-staging.sh's copy -- pinned
+# by tests/test_deploy_channel_parity.py, which derives both lists from the two
+# scripts rather than restating them.
+#
+# --set-secrets REPLACES the whole secret block, so this must name EVERY
+# binding the service should keep, not just the one being added. Today that is
+# the link signing key alone: the two SCHEMA_*_TOKEN bindings currently live on
+# this service are hand-applied drift for a gate that is RETIRED
+# (deploy-editor.sh, bd rhc2v), so the next deploy deliberately drops them.
+#
+# LINK_TOKEN_SECRET gates client-link minting: without it the mint route 503s.
+# The secret itself is provisioned out of band (maintainer, 2026-09-01); this
+# only binds the existing secret's latest version to the env var.
+BACKEND_SECRETS_COMMON="LINK_TOKEN_SECRET=LINK_TOKEN_SECRET:latest"
+
 # Determine which components to deploy
 DEPLOY_GCP=true
 DEPLOY_FIREBASE=true
@@ -51,6 +67,19 @@ if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
                 ;;
             --frontend)
                 DEPLOY_FIREBASE=true
+                ;;
+            *)
+                # UNKNOWN ARG IS FATAL (bd polyglot-pdf-7aez9). Without this arm
+                # a typo like --front-end silently matched nothing, every
+                # DEPLOY_* stayed false, the script deployed NOTHING, and still
+                # printed its success banner and exited 0. The operator then
+                # believes they verified a change they never deployed -- and on
+                # the staging channel that is exactly the false confidence the
+                # tier exists to remove. Mirrors deploy-all.sh, which has always
+                # errored on an unknown argument.
+                echo -e "${RED}[ERROR]${NC} Unknown argument: $arg" >&2
+                echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]" >&2
+                exit 1
                 ;;
         esac
     done
@@ -92,8 +121,11 @@ if [ "$DEPLOY_GCP" = true ]; then
     # keeps client data out of Google's model training. config.py REFUSES to
     # start with VERTEXAI=false whenever K_SERVICE is set, and there is no
     # override flag. Test 3.1 LOCALLY (no K_SERVICE) and deploy it only once it
-    # is GA for Vertex customers. GEMINI_API_KEY (still injected via Secret
-    # Manager) is unused on this Vertex path. See docs/standards/ai-models.md.
+    # is GA for Vertex customers. GEMINI_API_KEY is unused on this Vertex path
+    # -- and is NOT bound by any deploy script: --set-secrets carries
+    # LINK_TOKEN_SECRET alone (see BACKEND_SECRETS_COMMON above). Add it there
+    # if a channel ever needs the AI Studio path. See
+    # docs/standards/ai-models.md.
     # BACKEND_SERVICE_ACCOUNT pins the Cloud Run runtime identity (the custom SA
     # that holds roles/aiplatform.user for the Vertex path) IN the deploy itself,
     # so the new revision is created+routed under the right SA from the start --
@@ -151,13 +183,14 @@ if [ "$DEPLOY_GCP" = true ]; then
     # Firestore is the only durable one-time-use record -- same reason
     # CONFIRMATION_FIRESTORE_ENABLED is set in deploy-all.sh.
     #
-    # STILL REQUIRED AND NOT SET HERE: LINK_TOKEN_SECRET (>=32 chars). It is
-    # the HMAC SIGNING KEY for every link token, so it must be injected via
-    # Secret Manager (--set-secrets), NEVER as a plaintext env var -- the same
-    # rule this script's own comment states for GEMINI_API_KEY. Without it
-    # minting 503s. The mint page names BOTH this and LINK_BASE_URL on a 503,
-    # because the route cannot distinguish them. Provisioning it is a
-    # maintainer step.
+    # LINK_TOKEN_SECRET (>=32 chars) is the HMAC SIGNING KEY for every link
+    # token, so it is injected via Secret Manager, NEVER as a plaintext env
+    # var. It IS wired now -- see BACKEND_SECRETS_COMMON near the top of this
+    # file, passed as --set-secrets (bd polyglot-pdf-hvui4); this block used to
+    # say it was still unset, which my own change falsified. Without the
+    # binding, minting 503s and the mint page names BOTH this and LINK_BASE_URL,
+    # because the route cannot distinguish them. Provisioning the secret itself
+    # remains a maintainer step; this only binds an existing one.
     #
     # NOTE --set-env-vars REPLACES the whole env block, so a LINK_* var set by
     # hand on the service does NOT survive the next deploy. That is why these
@@ -168,7 +201,8 @@ if [ "$DEPLOY_GCP" = true ]; then
     # CLIENT_LINK_PATH); pointing it at Cloud Run would 404 every tester. The
     # token rides in the URL FRAGMENT, which browsers never send to a server,
     # so it stays out of access logs and referrers.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_CHANNEL=demo,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+        BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

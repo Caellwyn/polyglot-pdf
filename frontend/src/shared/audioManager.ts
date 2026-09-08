@@ -56,7 +56,6 @@ export interface AudioManager {
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
 	setPTTMode: (enabled: boolean) => void // FIX (Nov 7, 2025): Notify worklet about PTT mode
-	setNativeVad: (enabled: boolean) => void // bd polyglot-pdf-333: stream continuous ungated audio for Gemini's own VAD
 	// Subscribe to the live mic-energy stream the worklet already posts (bd
 	// polyglot-pdf-s3zv). Reuses the worklet's smoothed RMS (0-100) rather than
 	// adding an AnalyserNode on the CAPTURE path. `sending` is whether THIS frame
@@ -102,41 +101,25 @@ interface AudioNodes {
  * Mode-level gate: given the current audio-routing flags, should this captured
  * chunk be sent to Gemini at all? This is the routing decision ONLY -- the
  * caller still applies the all-zero silence skip (which depends on chunk
- * content) separately. Extracted as a pure function so the three-way logic is
- * unit-testable (bd polyglot-pdf -- PTT-as-a-gate over native VAD).
+ * content) separately. Extracted as a pure function so the gate is unit-testable
+ * (bd polyglot-pdf -- PTT-as-a-gate; simplified to PTT-only by bd
+ * polyglot-pdf-v1m8g).
  *
- * The three modes:
- * - NATIVE VAD on: Gemini's own VAD drives turns, so SOMETHING is always sent to
- *   keep the stream continuous (Gemini needs trailing audio to close a turn).
- *   This gate therefore returns true for native VAD regardless of PTT/mute --
- *   when PTT is muted the CALLER substitutes a silence frame (so the mic is not
- *   leaked) rather than dropping the chunk. Stopping the stream on PTT mute would
- *   strand native VAD and Gemini "stops responding" after release (bd
- *   polyglot-pdf-zivv). Native VAD and the manual turn signals (activity_start,
- *   activity_end, audio_stream_end) are mutually exclusive, so under native VAD
- *   PTT is ONLY an audio gate.
- * - NATIVE VAD off, PTT on: send only while the button is held.
- * - NATIVE VAD off, PTT off (client Silero VAD): send only when NOT muted AND the
- *   VAD has detected speech (vadActive).
+ * ONE mode now: push-to-talk. Send only while the button is held. The two other
+ * arms are gone with the detectors they served -- a native-VAD arm that always
+ * returned true (Gemini's own VAD needed a continuous stream, so a muted PTT sent
+ * silence rather than nothing) and a client-Silero arm gated on `vadActive`.
+ * Both inferred when the user was speaking; PTT knows.
  */
 export function shouldSendAudioChunk(flags: {
-	nativeVadEnabled: boolean
 	pttModeEnabled: boolean
 	inputMuted: boolean
-	vadActive: boolean
 }): boolean {
-	const { nativeVadEnabled, pttModeEnabled, inputMuted, vadActive } = flags
-	if (nativeVadEnabled) {
-		// Always send under native VAD -- the stream must stay continuous. PTT-mute
-		// is handled by the caller substituting silence, NOT by withholding here.
-		return true
-	}
-	if (pttModeEnabled) {
-		// PTT mode: only while the button is held.
-		return !inputMuted
-	}
-	// Client Silero VAD mode: require not-muted AND speech detected.
-	return !inputMuted && vadActive
+	const { pttModeEnabled, inputMuted } = flags
+	// Not in PTT mode means no gate has armed yet (pre-connect): withhold rather
+	// than leak an open mic.
+	if (!pttModeEnabled) return false
+	return !inputMuted
 }
 
 /**
@@ -180,9 +163,9 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let inputMuted = false // Track if input should be muted (send silence)
 	// Spell-back playback hold (bd polyglot-pdf-22h1f): while the deterministic
 	// letter-by-letter TTS clip plays, NOTHING from the mic may reach the model
-	// -- regardless of PTT mode or hold state. Under native VAD the stream is
-	// kept alive with silence (like PTT mute); in manual modes chunks are
-	// simply dropped. Cleared by the spell-back path's finally, and the PTT
+	// -- regardless of hold state: the chunk is simply DROPPED. (It used to
+	// substitute silence under native VAD, whose stream had to stay continuous;
+	// bd polyglot-pdf-v1m8g.) Cleared by the spell-back path's finally, and the PTT
 	// interrupt path clears it before capturing the user's barge-in.
 	let spellbackHold = false
 	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
@@ -190,7 +173,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// silence) ungated so Gemini's own VAD can detect turn boundaries. Bypasses
 	// the inputMuted/vadActive gate AND the all-zero silence skip below, and puts
 	// the worklet noise gate into bypass (via the setPTTMode worklet message).
-	let nativeVadEnabled = false
 
 	// Privacy gate: VAD-controlled audio flow
 	let vadActive = false // When false, don't send audio; when true, send real audio
@@ -478,14 +460,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			onAudioDataCallback = onAudioData
 
-			// bd polyglot-pdf-333: a freshly-created worklet defaults to
-			// noise-gate-ON. If native-VAD mode is active (e.g. after a
-			// reconnect/recording restart), re-apply the gate bypass so silence
-			// keeps streaming -- otherwise the gate silently re-arms mid-session.
-			if (nativeVadEnabled) {
-				nodes.workletNode.port.postMessage({ type: 'setPTTMode', enabled: true })
-			}
-
 			// Handle messages from AudioWorklet
 			nodes.workletNode.port.onmessage = (event: MessageEvent) => {
 				if (!recording || !onAudioDataCallback) return
@@ -506,41 +480,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					}
 				}
 
-			// NATIVE-VAD mode: Gemini's own VAD owns turn detection and needs a
-			// CONTINUOUS stream to find boundaries. PTT here is ONLY a client-side
-			// audio gate (noisy-room support) -- it must NEVER stop the stream or send
-			// a manual turn signal (activity_*/audio_stream_end are suppressed in the
-			// overlay; the two systems are mutually exclusive -- bd polyglot-pdf-zivv).
-			// So when PTT is muted we send SILENCE (a zeroed frame), not nothing:
-			// stopping the stream would leave native VAD with no trailing audio and
-			// the turn would never close (Gemini "stops responding" after PTT release).
-			if (nativeVadEnabled) {
-				if ((pttModeEnabled && inputMuted) || spellbackHold) {
-					// Muted under PTT -- or during a spell-back clip (bd 22h1f, which
-					// must gate even an open mic so the TTS playback cannot leak back
-					// in as user speech): keep the stream alive with silence so native
-					// VAD keeps detecting boundaries, but do not leak the muted mic.
-					const silence = new ArrayBuffer((pcmData as ArrayBuffer).byteLength)
-					emitEnergy(false)
-					onAudioDataCallback(silence)
-				} else {
-					emitEnergy(true)
-					onAudioDataCallback(pcmData)
-				}
-				return
-			}
-
-			// Spell-back playback hold (bd 22h1f): in the manual/client-VAD modes
-			// the stream is bursty anyway, so simply send nothing while the
-			// deterministic clip plays. (The native branch above substitutes
-			// silence instead -- its stream must stay continuous.)
+			// Spell-back playback hold (bd 22h1f): under PTT the stream is bursty
+			// anyway, so simply send nothing while the deterministic clip plays --
+			// the mic must not leak the TTS back in as user speech.
 			if (spellbackHold) {
 				emitEnergy(false)
 				return
 			}
 
-			// Manual-VAD / client-VAD routing gate (PTT held, or Silero speech).
-			if (!shouldSendAudioChunk({ nativeVadEnabled, pttModeEnabled, inputMuted, vadActive })) {
+			// Routing gate: send only while the PTT button is held.
+			if (!shouldSendAudioChunk({ pttModeEnabled, inputMuted })) {
 				emitEnergy(false)
 				return
 			}
@@ -686,11 +635,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// on the resume() await when a drain (resetPlaybackClock /
 			// flushAudioQueue) lands belongs to the DEAD generation and must not
 			// schedule after the drain returns (bd s7uf).
-			// SCOPE: the suspended-resume window only opens on
-			// the manual-VAD tentative-pause path -- native VAD never suspends, so
-			// there this guard is a no-op by design. The native-VAD ordering
-			// hazard lives a layer up and is owned by the WS
-			// binaryType='arraybuffer' wire-order guarantee (webFormConnection).
+			// SCOPE: the suspended-resume window only opens on the client-VAD
+			// tentative-pause path, which does not run under push-to-talk (the only
+			// input mode, bd polyglot-pdf-v1m8g) -- so this guard is a no-op in
+			// practice. The ordering hazard it guarded lives a layer up and is owned
+			// by the WS binaryType='arraybuffer' wire-order guarantee.
 			const epochAtStart = playbackEpoch
 
 			// Resume context if suspended (browser autoplay policy)
@@ -1084,47 +1033,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		console.log('[AudioManager] setPTTMode:', enabled)
 		pttModeEnabled = enabled
 
-		// Notify worklet about PTT mode change (bypasses the RMS noise gate). The
-		// worklet gate must ALSO stay bypassed whenever native VAD is on -- Gemini's
-		// VAD needs the raw continuous stream (incl. quiet speech) and the RMS gate
-		// would clip it -- so the bypass is (PTT on) OR (native VAD on). Turning PTT
-		// off under native VAD therefore does NOT re-arm the gate; PTT gating happens
-		// at the JS layer via inputMuted, not the worklet RMS gate.
+		// Notify worklet about PTT mode change (bypasses the RMS noise gate).
+		// PTT gating happens at the JS layer via inputMuted, not the worklet RMS
+		// gate. (The bypass used to be (PTT on) OR (native VAD on); the native arm
+		// is gone with the mode -- bd polyglot-pdf-v1m8g.)
 		if (nodes.workletNode) {
 			nodes.workletNode.port.postMessage({
 				type: 'setPTTMode',
-				enabled: enabled || nativeVadEnabled
-			})
-		}
-	}
-
-	/**
-	 * Set native-VAD mode (bd polyglot-pdf-333).
-	 *
-	 * When enabled, audio streams continuously and ungated (the worklet onmessage
-	 * handler short-circuits past the privacy gate + all-zero skip) so Gemini's own
-	 * VAD has a stream -- including silence -- to detect turns on.
-	 *
-	 * It ALSO bypasses the worklet's RMS noise gate by reusing the existing
-	 * `setPTTMode` worklet message (the worklet only knows "noise gate on/off"):
-	 * without this the worklet would zero sub-threshold audio before JS ever sees
-	 * it, starving Gemini's VAD of the silence it needs. The JS-side `pttModeEnabled`
-	 * var stays false (the native short-circuit handles JS gating) -- the worklet's
-	 * internal pttMode and the JS one are intentionally decoupled here.
-	 *
-	 * @param enabled - true for native Gemini VAD, false to restore manual-VAD gating
-	 */
-	function setNativeVad(enabled: boolean): void {
-		console.log('[AudioManager] setNativeVad:', enabled)
-		nativeVadEnabled = enabled
-
-		// Bypass (enabled) / restore (disabled) the worklet noise gate so silence
-		// is streamed in native mode. On disable we hand control back to the normal
-		// PTT state so manual mode behaves exactly as before.
-		if (nodes.workletNode) {
-			nodes.workletNode.port.postMessage({
-				type: 'setPTTMode',
-				enabled: enabled ? true : pttModeEnabled
+				enabled
 			})
 		}
 	}
@@ -1225,7 +1141,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		getStream,
 		setVADActive,
 		setPTTMode,
-		setNativeVad,
 		setEnergyCallback,
 		getOutputEnergy,
 		attachClipElement,

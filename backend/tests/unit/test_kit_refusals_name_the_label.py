@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import io
+import re
 from pathlib import Path
 
 import pytest
@@ -43,10 +44,6 @@ _ID_NAMES = {"kit_id", "superseded_kit", "other_id", "replaces_kit_id",
 _ALLOWED_BARE = {
     # The kit is not in the store, so there is no metadata to read a label from.
     ("editor_kit_routes.py", "_load_meta_or_404", "Unknown kit"),
-    # A delete race: the kit was there at the guard and gone at the write.
-    # Naming it from the metadata read earlier would assert a label for
-    # something that no longer exists.
-    ("editor_kit_routes.py", "delete_editor_kit", "Kit not found"),
 }
 
 
@@ -300,6 +297,30 @@ _PARITY_CASES = [
     ("w7", "W-7 (ITIN Application)", '"W-7 (ITIN Application)" (w7)'),
     ("form-2", "", '"form-2"'),
     ("form-2", "   ", '"form-2"'),
+    # NON-ASCII rows (bd polyglot-pdf-th60w). The table was all-ASCII, so it
+    # could not see that "\s" and .strip()/.trim() mean DIFFERENT THINGS in the
+    # two languages -- the pair diverged on six characters in both directions
+    # and every row still passed. These are the reachable two.
+    #
+    # U+FEFF: JS whitespace, Python's is not. A BOM is an ordinary paste
+    # artifact from a spreadsheet or a UTF-8-BOM file, and _safe_label lets it
+    # through (it rejects only quotes, backslashes and ord < 32).
+    ("form-2", "Form\ufeff2", '"form-2"'),
+    ("form-2", "\ufeffW-7", '"W-7" (form-2)'),
+    ("form-2", "W-7\ufeff", '"W-7" (form-2)'),
+    # U+0085 (NEL): the MIRROR case -- Python whitespace, JS's is not. The bead
+    # that found FEFF reported this one as agreeing; measuring the whole code
+    # space on both runtimes showed it diverging the other way.
+    ("form-2", "Form\u00852", '"form-2"'),
+    ("form-2", "\u0085W-7", '"W-7" (form-2)'),
+    # Characters NEITHER language strips must stay in the label, or the shared
+    # class has quietly grown past what it claims. U+200B is the trap: it LOOKS
+    # like whitespace and is not.
+    ("form-2", "Form\u200b2", '"Form\u200b2" (form-2)'),
+    ("form-2", "Form\u2013 2", '"Form\u2013 2" (form-2)'),
+    # ...and ones BOTH strip must behave like a plain space on both sides.
+    ("form-2", "Form\u00a02", '"form-2"'),
+    ("form-2", "Form\u30002", '"form-2"'),
 ]
 
 
@@ -333,4 +354,64 @@ def test_python_side_matches_the_shared_parity_table():
     for kit_id, label, expected in _PARITY_CASES:
         assert _kit_name(kit_id, {"label": label}) == expected, (
             f"parity row diverged for id={kit_id!r} label={label!r}"
+        )
+
+
+def _escape_list(text: str) -> list:
+    """Every \\uXXXX escape in a source file, lowercased, in order."""
+    return [m.lower() for m in re.findall(r"\\u[0-9a-fA-F]{4}", text)]
+
+
+def test_both_flatteners_enumerate_THE_SAME_whitespace_class():
+    """The two sides must agree character for character, not row for row.
+
+    A case table pins only the characters someone thought to write down. The
+    class is what the code actually applies, and it is the thing that silently
+    diverges -- `\\s` differs between Python and JavaScript on SIX characters,
+    which is how bd th60w happened while every ASCII row passed. So compare the
+    ENUMERATIONS directly: whichever side is edited, the other side's test says
+    so.
+    """
+    py_src = io.open(ROUTES_DIR / "editor_kit_routes.py",
+                     encoding="utf-8").read()
+    ts_src = io.open(_KITNAME_TS, encoding="utf-8").read()
+
+    py_class = re.search(
+        r"_KIT_NAME_SPACE = \(\s*(.*?)\s*\)", py_src, re.S)
+    ts_class = re.search(
+        r"const KIT_NAME_SPACE = '([^']*)'", ts_src)
+    assert py_class, "backend _KIT_NAME_SPACE not found -- was it renamed?"
+    assert ts_class, "frontend KIT_NAME_SPACE not found -- was it renamed?"
+
+    py_chars = _escape_list(py_class.group(1))
+    ts_chars = _escape_list(ts_class.group(1))
+    assert py_chars, "the backend class parsed as EMPTY -- the regex has rotted"
+    assert py_chars == ts_chars, (
+        "the two whitespace classes have diverged, so the same label can be "
+        "named two different ways:\n"
+        f"  only in python: {sorted(set(py_chars) - set(ts_chars))}\n"
+        f"  only in ts:     {sorted(set(ts_chars) - set(py_chars))}"
+    )
+
+    # It must actually CONTAIN the two characters the languages disagree on --
+    # an empty or ASCII-only class would pass the equality above while doing
+    # nothing.
+    for cp in ("\\u0085", "\\ufeff"):
+        assert cp in py_chars, f"{cp} missing: the divergence it fixes is back"
+
+
+def test_the_source_files_stay_ASCII():
+    """CLAUDE.md scar #6 -- and here it is load-bearing rather than stylistic.
+
+    The class is written as escapes precisely so a literal BOM never lands in a
+    .py file, where Windows' cp1252 console turns it into a UnicodeEncodeError
+    at print time. A helpful future edit pasting the real characters in would
+    look identical and break exactly that way.
+    """
+    for path in (ROUTES_DIR / "editor_kit_routes.py", _KITNAME_TS):
+        raw = io.open(path, "rb").read()
+        bad = [i for i, b in enumerate(raw) if b > 0x7F]
+        assert not bad, (
+            f"{path.name} contains non-ASCII bytes at {bad[:5]} -- write the "
+            f"whitespace class as \\uXXXX escapes, never as literal glyphs"
         )

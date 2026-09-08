@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-24. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for closeout details.*
+*Last updated: 2026-09-03 (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -51,16 +51,29 @@ pytest suite — do not let it get collected, and do not park real pytest files
 outside the two `testpaths` roots (they silently never run; bd polyglot-pdf-o0pc
 relocated one such orphan).
 
-There are **two collected suites** under `testpaths`:
+There are **three collected suites** under `testpaths`:
 
 - `backend/tests` — the product backend suite (below).
+- `admin_backend/tests` — the privileged admin service's suite (bd
+  `polyglot-pdf-pnoik`). `admin_backend/` is a **sibling top-level package**, so
+  it is not reached via `backend/tests` and needs its own root.
 - `tests` (repo root) — the **harness-tooling** suite (closeout, `bd_safe`,
   `next_bead`, doc-freshness, `pr_review_watcher`, pricing). It runs from the repo
   root on defaults and is now part of the same `pytest` run.
 
-> **Pre-PR, run BOTH roots — a bare `pytest`, not `pytest backend/tests`.** The
-> closeout recipe names `backend/tests` for speed, which silently skips the root
-> `tests/` suite; a **cross-suite leak is invisible to every scoped run**. Measured
+> **The gates must never re-list these roots by hand.** CI
+> (`.github/workflows/ci.yml`) and the pre-PR gate
+> (`closeout_prep.check_tests`) both run a **bare** `pytest` and inherit
+> `testpaths`, so a new suite is gated the day it is added. Hardcoding suite
+> paths there is what let a whole suite ship un-run twice — CI in bd
+> `polyglot-pdf-3ave`, and `admin_backend/tests` in bd `polyglot-pdf-pnoik`.
+> Pinned as a set by `tests/test_every_suite_root_is_gated.py`.
+
+<!-- suite-path-citation: names the anti-pattern, not a recipe -->
+> **Pre-PR, run EVERY root — a bare `pytest`, not `pytest backend/tests`.** A
+> scoped run silently skips the other roots, and a **cross-suite leak is invisible
+> to every scoped run**. (The closeout recipe used to name `backend/tests` for
+> speed; it no longer does — see the gates rule above.) Measured
 > (`polyglot-pdf-gnb0`): a new test under `backend/tests/unit/` assigned
 > `subprocess.run` directly instead of via `monkeypatch`, and because collection is
 > alphabetical that leak reddened **5 tests in two untouched files under `tests/`** —
@@ -107,7 +120,8 @@ The backend suite is organized **by directory**, not by marker:
 
 ### Running the backend suite (split-venv gotcha)
 
-The README shows `python -m pytest backend/tests -v`, which assumes an **activated
+<!-- suite-path-citation: quotes an older README line, not a recipe -->
+Older docs show `python -m pytest backend/tests -v`, which assumes an **activated
 venv**. In practice the dependency venv lives **only in the main repo at
 `backend/.venv`** — git **worktrees have no venv of their own**. From a worktree
 (or anywhere), resolve the main-repo interpreter and point `PYTHONPATH` at the repo
@@ -120,9 +134,9 @@ wrong CWD points `PYTHONPATH` at the wrong tree):
 # Windows; on macOS/Linux use backend/.venv/bin/python
 REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 PY="$REPO/backend/.venv/Scripts/python.exe"
-PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/ -q          # full suite (this checkout)
-PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/unit -q      # unit only
-PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/ -m "not external" -q  # skip live-Gemini
+PYTHONPATH="$PWD" "$PY" -m pytest -q                         # EVERY collected suite
+PYTHONPATH="$PWD" "$PY" -m pytest -q -m "not external"       # ditto, skip live-Gemini
+PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/unit -q      # narrow: one dir, while iterating
 ```
 
 > **Watch the COLLECTED count, not just pass/fail.** pytest does fail the run on a
@@ -265,7 +279,7 @@ measurement and center with margin for the spread (see the
 **Coverage tooling is wired on all three stacks but opt-in (a secondary signal,
 not enforced).** Run it explicitly:
 
-- **Backend:** `pytest backend/tests -m "not external" --cov --cov-report=term-missing`
+- **Backend:** `pytest -m "not external" --cov --cov-report=term-missing`
   (`pytest-cov`; source/omit scoping in the root `.coveragerc`).
 - **Frontend:** `npm run test:coverage` from `frontend/` (`@vitest/coverage-v8`).
 - **Schema-editor:** `npm run test:coverage` from `schema-editor/`.
@@ -326,6 +340,19 @@ the remaining guard with a one-token mutation. Standard practice, every time:
 The trap this most often prevents is the **self-fulfilling mock** (below): a test
 that constructs the expected payload, feeds it to a mock, and asserts the mock got
 it -- deleting the production code leaves it green.
+
+**Mutate the EXACT line that prompted the guard -- a near-miss variant is not the
+test.** When a reviewer finding is what made you write a pin, the first mutation
+must be that finding's own text, verbatim, not a tidier version of it. bd
+`polyglot-pdf-pnoik`'s round-2 pin against scoped `pytest` recipes was
+mutation-verified on a tidied-up form of the recipe and went red, which looked
+like proof:
+<!-- suite-path-citation: quotes the mutation pair under discussion -->
+tried `pytest backend/tests/ -q`, but the blocker read `pytest "$WT/backend/tests/"`.
+Against THAT the brand-new guard passed -- the `$WT/` prefix defeated a
+`(?<![\w/-])` lookbehind. A guard that is green on the one line it was written for is worse
+than no guard, because it also retires the reviewer's finding. Copy the offending
+string out of the report and mutate with that.
 
 **A CONCURRENCY test must reproduce production's concurrency, or it is vacuous.**
 Check what the harness actually does before believing a passing race test. FastAPI's

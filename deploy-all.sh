@@ -7,6 +7,22 @@
 #   ./deploy-all.sh --frontend   # Deploy frontend only
 #   ./deploy-all.sh --form-kits  # Deploy form-kits only
 #   ./deploy-all.sh --all        # Deploy everything (explicit)
+#
+# BACKEND_NO_TRAFFIC_TAG (bd polyglot-pdf-3l2vp, sprint-22 plan bead 1.3): when
+# a channel deploy script sets this, the backend stage deploys a NO-TRAFFIC
+# tagged revision instead of shifting traffic immediately -- `gcloud run
+# deploy ... --no-traffic --tag "$BACKEND_NO_TRAFFIC_TAG"` -- verifies /health
+# at the STABLE tag URL (https://<tag>---<service>-<hash>.a.run.app, which
+# `gcloud run services describe --format value(status.address.url)` cannot
+# give you; it is built from the base URL), and only THEN shifts 100% of
+# traffic to the new revision with `gcloud run services update-traffic
+# --to-latest`. There is ONE admin service and ONE console site backing BOTH
+# channels (the plan's "Staging tier for the admin service"), so a bad admin
+# deploy would take the control plane down for staging and the demo at once --
+# this is that service's staging tier. Empty (every existing channel) ->
+# unchanged behavior: --no-traffic and --tag are omitted entirely, so a plain
+# `deploy-all.sh --backend` run and the public/staging/demo channels produce
+# the exact gcloud invocation they always have.
 
 set -e
 
@@ -125,6 +141,125 @@ collect_publishable_kit_files() {
         case "$base" in _*) continue ;; esac
         _out+=("$entry")
     done
+}
+
+# Verify a just-deployed Cloud Run service is PUBLICLY REACHABLE, and abort if
+# it is not (bd polyglot-pdf-pidtg, extended to this script by bd
+# polyglot-pdf-6oi9s).
+#
+# WHY THIS EXISTS. A `gcloud run` deployment with --allow-unauthenticated only
+# REQUESTS an
+# allUsers -> roles/run.invoker binding, but that request can be REFUSED while
+# the deploy still succeeds and exits 0. The domain-restricted-sharing org
+# policy (constraints/iam.allowedPolicyMemberDomains) rejects allUsers; gcloud
+# creates the service, prints a NON-FATAL warning, and exits 0 -- leaving a
+# service that 403s every request at Cloud Run's own gate, BEFORE any
+# application code runs. The app then shows an auth error that has nothing to do
+# with app auth, sending the operator to debug the wrong layer entirely.
+#
+# It bites only a NEW service: an existing one's binding predates the policy and
+# is not retroactively stripped. So the scripts that create services are exactly
+# where this must be checked.
+#
+# --flatten='bindings[].members' is LOAD-BEARING, and both halves of the query
+# were got wrong once each before this was right:
+#   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
+#      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
+#      binding was missing and the service still 403'd everything.
+#   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
+#      evaluated against the WHOLE policy resource, not per binding, and
+#      `value(bindings.role)` emits every role ';'-joined on ONE line, so
+#      `grep -qx` stopped matching as soon as a service had a SECOND binding.
+# --flatten makes each member/role pair its own record, so the filter is
+# genuinely per-binding and each surviving role prints on its own line.
+#
+# BOTH failure directions matter. Failing OPEN hides the bug behind a green
+# check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
+# deleted -- taking the real check with it. An inconclusive IAM READ therefore
+# WARNS rather than aborting: being unable to check is not proof of breakage.
+#
+# stderr is NOT merged into the value (no 2>&1): a gcloud component-update nag
+# landing in the variable could otherwise satisfy a text match on its own.
+#
+# Args: $1 service name, $2 region, $3 project id, $4 severity ("fatal"
+# default, or "warn").
+#
+# SEVERITY. Exits 1 when the service is definitively unreachable; pass "warn" to
+# downgrade that to a warning and return 0. The frontend stage passes "warn"
+# because there the backend is pre-existing and possibly someone else's to fix
+# (bd polyglot-pdf-816te); the backend stage takes the default, because a deploy
+# that just CREATED an unreachable service must never exit 0
+# (bd polyglot-pdf-pidtg).
+#
+# AN ARGUMENT, NOT AN ENV VAR, and that distinction is the point. The first cut
+# read VERIFY_FAIL_IS_FATAL from the environment, which cannot tell "the frontend
+# stage set this for one call" from "it was ambient in the operator's shell" --
+# so an exported VERIFY_FAIL_IS_FATAL=false silently disarmed the BACKEND abort,
+# reproducing the exact bug this gate exists to stop (caught by the pre-PR
+# cross-surface review). A positional argument can only come from a real call
+# site.
+#
+# MUST match the sibling copies EXACTLY. This block is duplicated in THREE
+# scripts -- deploy-all.sh, backend/deploy-new.sh and deploy-editor.sh -- and
+# tests/test_deploy_reachability_gate.py pins all three byte-identical.
+# Any edit here must be made in all three.
+verify_service_publicly_reachable() {
+    local svc="$1" region="$2" project="$3" severity="${4:-fatal}" invoker_roles
+    # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
+    # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
+    # (a pre-PR review caught the extraction silently moving them to stderr and
+    # dropping the colour). The bootstrap script defines no such helpers, so it
+    # falls back to plain stderr -- which is why the function must not simply
+    # call log_warn/log_error unconditionally.
+    _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
+    _gate_error() { if declare -f log_error >/dev/null 2>&1; then log_error "$1"; else echo "[ERROR] $1" >&2; fi; }
+    invoker_roles=$(gcloud run services get-iam-policy "$svc" \
+        --region "$region" --project "$project" \
+        --flatten='bindings[].members' \
+        --filter='bindings.members:allUsers' \
+        --format='value(bindings.role)') || invoker_roles="__QUERY_FAILED__"
+
+    if [ "$invoker_roles" = "__QUERY_FAILED__" ]; then
+    _gate_warn "Could not read the IAM policy for $svc -- skipping the"
+    _gate_warn "reachability check. If the app cannot reach the backend, verify manually:"
+    _gate_warn "  gcloud run services get-iam-policy $svc --region $region --project $project"
+        return 0
+    fi
+    if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
+        return 0
+    fi
+    # Plain ASCII '=' -- a free choice, not a constraint. An earlier comment here
+    # claimed the shell could not carry a box-drawing glyph because the tests
+    # decode it as cp1252 on Windows; that was the TEST's defect (a
+    # subprocess.run without encoding=), since fixed, and this function is
+    # byte-identical in the sibling copy, which has no box-drawing at all.
+    # ASCII simply travels everywhere without depending on the reader's codec.
+    _gate_error "==========================================================="
+    if [ "$severity" = "warn" ]; then
+        _gate_error "  WARNING: the service is NOT publicly reachable"
+    else
+        _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    fi
+    _gate_error "==========================================================="
+    _gate_error "Service '$svc' has no allUsers invoker binding, so"
+    _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
+    _gate_error ""
+    _gate_error "--allow-unauthenticated was passed, but the binding was refused --"
+    _gate_error "almost always the domain-restricted-sharing org policy."
+    _gate_error ""
+    _gate_error "Fix it with:"
+    _gate_error "  gcloud run services add-iam-policy-binding $svc \\"
+    _gate_error "    --region $region --project $project \\"
+    _gate_error "    --member=allUsers --role=roles/run.invoker"
+    _gate_error ""
+    _gate_error "If that is itself refused, the org policy must be relaxed for this"
+    _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
+    _gate_error "See bd polyglot-pdf-pidtg."
+    if [ "$severity" = "warn" ]; then
+        _gate_warn "Continuing anyway (this stage treats an unreachable backend as a warning)."
+        return 0
+    fi
+    exit 1
 }
 
 # When this file is SOURCED (not executed directly), stop here -- expose only the
@@ -297,7 +432,14 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         aiplatform.googleapis.com \
         storage.googleapis.com \
         texttospeech.googleapis.com \
+        secretmanager.googleapis.com \
         --project "$POLYGLOT_PROJECT_NAME"
+    # secretmanager: --set-secrets below hard-depends on it (bd
+    # polyglot-pdf-hvui4). THIS list is the one that matters -- it runs on every
+    # backend deploy and self-heals, whereas scripts/setup-gcp-project.sh is a
+    # one-time bootstrap nobody re-runs. I added the API to the bootstrap first
+    # and missed this one; granting the ROLE without enabling the API was the
+    # round before that. Same dependency, three places.
 
     # Build the image using Cloud Build
     IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
@@ -310,8 +452,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # here (e.g. the demo sets VERTEXAI=true,USE_PREMIUM_MODEL=false -- the demo
     # runs on Vertex ADC, see deploy-demo.sh).
     # Default empty -> prod keeps the Vertex defaults baked into config.py.
-    # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
-    # NOT here -- never put the key in plaintext env vars.
+    # GEMINI_API_KEY and any other credential belong in Secret Manager, NOT
+    # here -- never put a key in a plaintext env var. The channel supplies them
+    # via BACKEND_SECRETS (see SECRETS_FLAG below); this script passes nothing
+    # of its own, so a channel that sets no secrets attaches none.
     # CONFIRMATION_FIRESTORE_ENABLED (bd polyglot-pdf-z2is): mirror the
     # liability confirmation trail to Firestore. Cloud Run's filesystem is
     # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
@@ -321,7 +465,25 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # CLOSED ([]), so the flag can only ever narrow what an outage shows.
     # (deploy-production.sh also sources this block, but that channel is dead
     # -- the former prod project is unreachable, purge bd polyglot-pdf-je6iy.)
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true"
+    #
+    # APP_MODULE + GIT_SHA (bd polyglot-pdf-3l2vp, sprint-22 plan bead 1.3):
+    # RUNTIME env, not build args -- `gcloud builds submit --tag` above cannot
+    # pass a --build-arg, so the ONE shared image (Dockerfile's
+    # `CMD uvicorn ${APP_MODULE:-backend.main:app} ...`) picks its ASGI target
+    # per Cloud Run service instead. APP_MODULE default is
+    # backend.main:app -- the public backend's Dockerfile fallback -- so a
+    # channel that sets nothing (every existing one) keeps serving exactly
+    # what it served before this existed. GIT_SHA feeds the eventual
+    # `GET /version` (bead 1.6, not this one): computed HERE, once, from the
+    # actual tree being built, rather than trusted from a caller-supplied env
+    # var that could name a different commit than the one Cloud Build just
+    # uploaded. `git rev-parse HEAD` reads the worktree at $SCRIPT_DIR
+    # (-C, not a bare cd, so this stays correct regardless of the caller's
+    # cwd); a detached/dirty tree still resolves to the checked-out commit,
+    # which is what actually got built.
+    APP_MODULE="${APP_MODULE:-backend.main:app}"
+    GIT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true,APP_MODULE=$APP_MODULE,GIT_SHA=$GIT_SHA"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
@@ -337,6 +499,26 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     SA_FLAG=()
     [ -n "$BACKEND_SERVICE_ACCOUNT" ] && SA_FLAG=(--service-account "$BACKEND_SERVICE_ACCOUNT")
 
+    # BACKEND_SECRETS: Secret Manager bindings, same optional-array shape as
+    # SA_FLAG above -- a channel that sets nothing produces a byte-identical
+    # gcloud invocation to before this existed.
+    #
+    # This flag was DOCUMENTED HERE FOR MONTHS AND NEVER PASSED (bd
+    # polyglot-pdf-hvui4). The BACKEND_ENV comment ABOVE used to say
+    # GEMINI_API_KEY "is injected separately via Secret Manager
+    # (--set-secrets)"; grep across every deploy-*.sh found the flag only in
+    # that sentence. Anything relying on it -- LINK_TOKEN_SECRET, which gates
+    # client-link minting -- silently got nothing and the route 503'd.
+    #
+    # --set-secrets REPLACES the service's entire secret block, exactly like
+    # --set-env-vars does for env. So a channel must list EVERY binding it
+    # wants to survive, not just the one it is adding. The live demo currently
+    # carries two hand-applied bindings no script sets (SCHEMA_EDITOR_TOKEN,
+    # SCHEMA_AUTHOR_TOKEN -- both retired per deploy-editor.sh, bd rhc2v);
+    # passing a partial list here would drop them without a word.
+    SECRETS_FLAG=()
+    [ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")
+
     # --timeout: Cloud Run kills any request at this limit, including live
     # WebSockets. The 300s default terminated every /ws/fill session at exactly
     # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
@@ -347,6 +529,21 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # optional instructions PDF in route memory AND as tmpfs copies (/tmp is
     # memory-backed on Cloud Run) while the pipeline child runs -- the 512Mi
     # default risks an opaque OOM kill mid-extraction.
+    #
+    # TAG_FLAG / NO_TRAFFIC_FLAG (bd polyglot-pdf-3l2vp): optional-array shape,
+    # same pattern as SA_FLAG/SECRETS_FLAG above -- BACKEND_NO_TRAFFIC_TAG unset
+    # (every existing channel) produces the exact invocation this had before
+    # tagged deploys existed. Set, it makes this revision receive ZERO traffic
+    # until verify_service_publicly_reachable AND a live /health check both
+    # pass at the TAG's own stable URL (below), so a broken admin revision
+    # never serves a single request before someone confirms it works.
+    TAG_FLAG=()
+    NO_TRAFFIC_FLAG=()
+    if [ -n "$BACKEND_NO_TRAFFIC_TAG" ]; then
+        TAG_FLAG=(--tag "$BACKEND_NO_TRAFFIC_TAG")
+        NO_TRAFFIC_FLAG=(--no-traffic)
+    fi
+
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
@@ -356,13 +553,76 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --memory=1Gi \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV" \
-        "${SA_FLAG[@]}"
-    
+        "${SA_FLAG[@]}" \
+        "${SECRETS_FLAG[@]}" \
+        "${TAG_FLAG[@]}" \
+        "${NO_TRAFFIC_FLAG[@]}"
+
+    # REACHABILITY GATE (bd polyglot-pdf-pidtg). --allow-unauthenticated above
+    # only REQUESTS the public invoker binding; the request can be refused while
+    # the deploy still exits 0, leaving a service that 403s everything at Cloud
+    # Run's gate. Aborts on a definitively-missing binding, warns if the IAM read
+    # itself fails. Full rationale on the function (which backend/deploy-new.sh
+    # carries a byte-identical copy of).
+    #
+    # This IAM read is unaffected by --no-traffic: the binding is on the
+    # SERVICE, not the revision, so it already reflects the tagged revision's
+    # eventual reachability once traffic shifts. It does NOT, by itself, prove
+    # the NEW revision's application code actually starts and answers --
+    # that is what the tag-URL /health probe below is for.
+    log_info "🔎 Verifying the service is publicly reachable..."
+    verify_service_publicly_reachable \
+        "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
+
+    if [ -n "$BACKEND_NO_TRAFFIC_TAG" ]; then
+        # TAGGED NO-TRAFFIC FLOW (bd polyglot-pdf-3l2vp, sprint-22 plan
+        # "Staging tier for the admin service"). There is ONE admin service
+        # backing BOTH channels' data, so a bad admin deploy would take the
+        # control plane down for staging and the demo at once -- this
+        # verify-before-traffic sequence is that service's own staging tier.
+        #
+        # The TAG URL is STABLE (unlike the auto-generated revision URL,
+        # which changes every revision) and reachable the moment --tag is
+        # applied, before any traffic shift: gcloud composes it as
+        # https://<tag>---<service>-<hash>.a.run.app, so build it from the
+        # service's own base URL by inserting "<tag>---" ahead of the host,
+        # rather than trusting a second `describe` call to report a
+        # revision-scoped address `gcloud run services describe` does not
+        # expose.
+        BASE_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" \
+            --platform managed --region "$REGION" \
+            --project "$POLYGLOT_PROJECT_NAME" \
+            --format 'value(status.url)')
+        TAG_URL=$(echo "$BASE_URL" | sed -E "s#https://#https://${BACKEND_NO_TRAFFIC_TAG}---#")
+
+        log_info "🏷️  Verifying the tagged candidate revision at $TAG_URL/health ..."
+        HEALTH_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            --max-time 30 "$TAG_URL/health" || echo "000")
+        if [ "$HEALTH_STATUS" != "200" ]; then
+            log_error "==========================================================="
+            log_error "  ABORT: the tagged candidate revision did not answer /health"
+            log_error "==========================================================="
+            log_error "GET $TAG_URL/health returned HTTP $HEALTH_STATUS (expected 200)."
+            log_error "Traffic was NOT shifted -- the previous revision is still live."
+            log_error "Inspect the candidate revision's logs before retrying:"
+            log_error "  gcloud run services logs read $BACKEND_SERVICE_NAME \\"
+            log_error "    --region $REGION --project $POLYGLOT_PROJECT_NAME"
+            exit 1
+        fi
+        log_success "✅ Tagged candidate is healthy at $TAG_URL"
+
+        log_info "🚦 Shifting 100% of traffic to the verified revision..."
+        gcloud run services update-traffic "$BACKEND_SERVICE_NAME" \
+            --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" \
+            --to-latest
+        log_success "✅ Traffic shifted to the new revision."
+    fi
+
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
-    log_success "✅ Backend deployed successfully!"
+    log_success "✅ Backend deployed successfully (and publicly reachable)!"
     echo "   URL: $BACKEND_URL"
     echo ""
-    
+
     cd "$SCRIPT_DIR"
 fi
 
@@ -536,6 +796,24 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         # https://host -> wss://host/ws/fill (the app's WS endpoint).
         export VITE_WS_URL="${BACKEND_URL/https:/wss:}/ws/fill"
         log_info "🔌 Injecting live backend URL into build: VITE_WS_URL=$VITE_WS_URL"
+
+        # REACHABILITY WARNING (bd polyglot-pdf-816te). Resolving a URL proves
+        # the service EXISTS, not that anyone may call it: `describe` returns a
+        # URL whether or not an allUsers invoker binding was ever granted. So a
+        # frontend-only deploy could bake in the URL of a service that 403s every
+        # request and publish reporting success -- the exact symptom bd
+        # polyglot-pdf-pidtg's gate prevents, reached by the one path that gate
+        # does not cover (it sits in the BACKEND stage, and both channel wrappers
+        # run the frontend as a SEPARATE `deploy-all.sh --frontend` process).
+        #
+        # WARNS rather than aborting, unlike the backend stage. There the deploy
+        # had just created the service, so an unreachable one is that run's own
+        # doing. Here the backend is pre-existing -- possibly mid-fix by someone
+        # else, or deliberately private -- and refusing to ship a frontend over
+        # someone else's IAM state is the gate crying wolf. Same remedy text
+        # either way; only the severity differs.
+        verify_service_publicly_reachable \
+            "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME" warn
     elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then
         # A CHANNEL was explicitly selected and its service could not be
         # resolved -- fail hard instead of warning (bd polyglot-pdf-9qn64,

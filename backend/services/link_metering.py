@@ -59,6 +59,17 @@ def billing_period(now: Optional[float] = None) -> str:
 
 
 def _usage_doc(firm_id: str, period: str):
+    """The per-firm, per-month counter document.
+
+    CHANNEL ISOLATION COMES FOR FREE HERE (bd polyglot-pdf-3q9qn), which is why
+    this file is unchanged while link_tokens and link_redemptions gained a
+    channel dimension: the path is already firm-scoped, so a staging channel
+    that only ever mints for its own mock firm writes to a different document
+    by construction. The isolation depends on staging having its OWN firm --
+    provision it with scripts/bootstrap_firm.py; it is NOT enforced in code
+    here, and a staging account stamped with a real firm_id would bill that
+    real firm.
+    """
     from backend.services.auth import get_db
 
     db = get_db()

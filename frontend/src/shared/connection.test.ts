@@ -8,23 +8,24 @@
  * names (currentPartId, startSection/switchSection/completeSection/
  * getCurrentSection/getCompletedSections) that the section-rename
  * (bd polyglot-pdf-gfb.4) removed; this rewrite targets the current API and the
- * three behaviors the bead names: (a) the section-based state contract,
- * (b) activity-signal suppression in native-VAD mode, and (c) audio-queue
- * barge-in flush/resume.
+ * behaviors the bead names: (a) the section-based state contract and (b) the
+ * audio-queue barge-in flush/resume. (A third -- activity-signal suppression in
+ * native-VAD mode -- went with that mode; bd polyglot-pdf-v1m8g.)
  *
- * WebFormConnection is mocked, so the backend-driven onNativeVadMode handshake
+ * WebFormConnection is mocked, so backend-driven handshake callbacks
  * is simulated by capturing the callbacks object the factory passes into the
  * WebFormConnection constructor and invoking it directly.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createConnectionManager } from './connection'
+import { createFieldManager } from './fieldManager'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import type { FormSchema } from '../schema-forms/types/schema'
 
 // Capture the most recent ConnectionCallbacks the factory hands to
 // WebFormConnection, plus the AudioManager mock, so a test can drive the
-// backend-originated callbacks (onNativeVadMode, etc.) and assert on the
+// backend-originated callbacks and assert on the
 // audio layer the factory wires up.
 let capturedCallbacks: any = null
 let audioManagerMock: any = null
@@ -60,7 +61,6 @@ vi.mock('./audioManager', () => ({
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),
       resumeAudioContext: vi.fn(),
-      setNativeVad: vi.fn(),
       // Used by the shared rehydrateAudio routine (bd polyglot-pdf-z9bc) to
       // re-sync PTT/mute after arming.
       setPTTMode: vi.fn(),
@@ -74,7 +74,7 @@ vi.mock('./audioManager', () => ({
 vi.mock('../webFormConnection', () => ({
   WebFormConnection: vi.fn(function (this: any, _schema: any, callbacks: any) {
     // Record the callbacks the factory passes in so a test can fire the
-    // backend handshake events (onNativeVadMode) by hand.
+    // backend handshake events by hand.
     capturedCallbacks = callbacks
     this.connect = vi.fn(() => Promise.resolve())
     this.disconnect = vi.fn()
@@ -86,6 +86,11 @@ vi.mock('../webFormConnection', () => ({
     this.sendPrompt = vi.fn()
     this.sendRecoveryPrompt = vi.fn()
     this.sendManualFieldUpdate = vi.fn()
+    // Present because the REAL WebFormConnection has it and connection.ts calls
+    // it (bd polyglot-pdf-wurj8). Without it every test reaching those call
+    // sites did so with connection === null, so `?.` short-circuited and the
+    // send path was never exercised at all.
+    this.setVoiceMode = vi.fn()
     this.setGetToken = vi.fn()
     this.getState = vi.fn()
     webFormConnectionMock = this
@@ -247,79 +252,6 @@ describe('Connection Manager (connection.ts)', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // (b) Activity-signal suppression in native-VAD mode (bd polyglot-pdf-333/zivv)
-  //
-  // When the backend reports native VAD, Gemini owns turn detection: the client
-  // must suppress ALL manual turn signals -- activity_start AND activity_end (and
-  // the Silero barge-in callbacks). Native automatic VAD and the manual signals
-  // are mutually exclusive; forwarding activity_end (mapped to audio_stream_end on
-  // the backend) into the continuous native stream interrupts Gemini's response
-  // ("Gemini stops responding after PTT press" -- bd zivv). PTT under native VAD
-  // is ONLY an audio gate: audioManager streams SILENCE while the button is
-  // released so native VAD finds the boundary itself -- no manual end needed. This
-  // supersedes the earlier bd-6vo audio_stream_end behavior.
-  // ---------------------------------------------------------------------------
-  describe('native-VAD activity-signal suppression', () => {
-    async function connected() {
-      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
-      await manager.connect()
-      // The factory created WebFormConnection and we captured its callbacks.
-      expect(capturedCallbacks).not.toBeNull()
-      return manager
-    }
-
-    it('forwards activity_start when NOT in native-VAD mode', async () => {
-      const manager = await connected()
-      manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).toHaveBeenCalledTimes(1)
-    })
-
-    it('suppresses activity_start once the backend reports native VAD', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
-      // Native mode reconfigures the audio layer to stream continuous audio.
-      expect(audioManagerMock.setNativeVad).toHaveBeenCalledWith(true)
-    })
-
-    it('suppresses activity_end in native-VAD mode (bd zivv -- no manual turn signal)', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      await manager.sendActivityEnd()
-      // activity_end IS suppressed under native VAD: forwarding it (backend maps to
-      // audio_stream_end) into the continuous stream interrupts Gemini's response.
-      // The turn closes from the trailing SILENCE the audio layer streams while PTT
-      // is released, not from a manual end signal.
-      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
-    })
-
-    it('still forwards activity_end in MANUAL-VAD mode (real activity_end)', async () => {
-      const manager = await connected()
-      // No native-VAD report -> manual mode; activity_end must still flow.
-      await manager.sendActivityEnd()
-      expect(webFormConnectionMock.sendActivityEnd).toHaveBeenCalledTimes(1)
-    })
-
-    it('suppresses the Silero barge-in callbacks in native-VAD mode', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      manager.onVADSpeechStart()
-      manager.onVADSpeechEnd()
-      // No client-side flush/resume: Gemini owns interruption in native mode.
-      expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
-      expect(audioManagerMock.resumePlayback).not.toHaveBeenCalled()
-      // And the Silero end-path must NOT forward activity_end in native mode --
-      // only the PTT wrapper (manager.sendActivityEnd) does, per criterion 2(b).
-      // Without the nativeVad gate on onVADSpeechEnd this would spuriously fire.
-      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
-    })
-  })
-
-  // ---------------------------------------------------------------------------
   // (b2) Shared audio rehydration across reconnect paths (bd polyglot-pdf-z9bc)
   //
   // Every reconnect / session-restart cause funnels through ONE rehydrateAudio
@@ -426,7 +358,7 @@ describe('Connection Manager (connection.ts)', () => {
       // resume() must clear that block; otherwise every AI audio chunk after resume
       // is silently dropped in playAudio() -- the mic comes back but the AI's voice
       // never does. Nothing else clears it on the default path (onVADSpeechEnd early-
-      // returns under PTT and native VAD, both defaults).
+      // returns under PTT, the only mode).
       await manager.resume()
       expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
     })
@@ -784,15 +716,16 @@ describe('Connection Manager (connection.ts)', () => {
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
     })
 
-    it('sendActivityStart cancels the re-prompt even under native VAD (signal suppressed, cancel not)', async () => {
+    it('sendActivityStart cancels the pending re-prompt', async () => {
+      // The user speaking supersedes a queued post-resume re-prompt (bd
+      // polyglot-pdf-yo5t). This used to also assert the signal itself was
+      // SUPPRESSED under native VAD; that mode is gone (bd polyglot-pdf-v1m8g),
+      // so the signal is now always forwarded -- and the cancel still happens.
       const manager = await pausedManager()
-      // Backend reports native VAD: the activity SIGNAL is suppressed, but the
-      // user-spoke fact must still cancel the pending re-prompt.
-      capturedCallbacks.onNativeVadMode(true)
 
       await manager.resume()
       manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
+      expect(webFormConnectionMock.sendActivityStart).toHaveBeenCalled()
 
       vi.advanceTimersByTime(5000)
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
@@ -827,4 +760,229 @@ describe('Connection Manager (connection.ts)', () => {
       expect(webFormConnectionMock.getStatus).toHaveBeenCalled()
     })
   })
+
+  /**
+   * Manual/voice mode notification (bd polyglot-pdf-wurj8).
+   *
+   * The mode changes WITHOUT any UI click -- a PTT press auto-leaves manual mode --
+   * so a UI that only tracks its own clicks renders a stale label: "quiet" while
+   * the assistant is live and about to speak. These drive the REAL manager (the
+   * overlay suite uses a mock, which can only pin the subscriber half).
+   */
+  describe('voice mode change notification', () => {
+    it('notifies subscribers when the mode is set', () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(seen).toEqual(['manual'])
+    })
+
+    it('notifies on the PTT auto-unmute, which no click produced', () => {
+      // The case a UI cannot observe on its own, and the reason this subscription
+      // exists at all.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      manager.setVoiceMode('manual')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.sendActivityStart()
+
+      expect(seen).toEqual(['voice'])
+      expect(manager.getVoiceMode()).toBe('voice')
+    })
+
+    it('does not notify when the mode does not actually change', () => {
+      // setVoiceMode is idempotent-guarded; a redundant call must not churn the UI.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      manager.setVoiceMode('manual')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(seen).toEqual([])
+    })
+
+    it('unsubscribes cleanly, and one listener cannot drop another', () => {
+      // A remounted overlay unsubscribes; a sibling's listener must survive it.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const a: string[] = []
+      const b: string[] = []
+      const offA = manager.onVoiceModeChange((m) => a.push(m))
+      manager.onVoiceModeChange((m) => b.push(m))
+
+      offA()
+      manager.setVoiceMode('manual')
+
+      expect(a).toEqual([])
+      expect(b).toEqual(['manual'])
+    })
+
+    it('sends the mode over the wire, not just into local state', async () => {
+      // The wire send had NO test at all: every case that reached
+      // `connection?.setVoiceMode(mode)` did so with connection === null, so the
+      // optional chain short-circuited and the call was never made. A manual
+      // mode the backend is never told about is not manual mode -- the model
+      // keeps talking.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+
+      manager.setVoiceMode('manual')
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('re-asserts manual mode to the backend when a session (re)establishes', async () => {
+      // The backend is stateless and every new Gemini session defaults to
+      // SPEAKING, so a GoAway/auto-drop reconnect silently returns the user to a
+      // talking assistant unless the client re-sends the mode. This is the path
+      // exit criterion 1 depends on for anyone whose session drops mid-form.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      manager.setVoiceMode('manual')
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionReady('sess_1')
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('re-asserts manual mode after a warm session restart too', async () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      manager.setVoiceMode('manual')
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionRestarted()
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('does NOT re-assert voice mode -- it is the backend default', async () => {
+      // Re-sending 'voice' would be pure traffic on every reconnect; a fresh
+      // Gemini session already speaks.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionReady('sess_1')
+
+      expect(webFormConnectionMock.setVoiceMode).not.toHaveBeenCalled()
+    })
+
+    it('does not leak listeners across repeated subscribe/unsubscribe cycles', () => {
+      // A breakpoint flip remounts the overlay onto the SAME manager, so the
+      // subscribe/unsubscribe pair runs again and again over a session. If
+      // unsubscribe did not really remove the listener, each remount would add
+      // another and every mode change would fan out to a growing set of dead
+      // React setters.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const live: string[] = []
+
+      for (let i = 0; i < 5; i++) {
+        const off = manager.onVoiceModeChange(() => live.push('stale'))
+        off()
+      }
+      manager.onVoiceModeChange((m) => live.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(live).toEqual(['manual'])
+    })
+
+    it('a throwing listener does not abort the mode change or starve the others', () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const seen: string[] = []
+      manager.onVoiceModeChange(() => { throw new Error('listener blew up') })
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(manager.getVoiceMode()).toBe('manual')
+      expect(seen).toEqual(['manual'])
+    })
+  })
+  describe('stale-session guard on the vanilla path (bd polyglot-pdf-g2fpr PR 3c)', () => {
+    // A session persisted under the PRE-migration shape (select value = export
+    // code 'AL') resumed against a MIGRATED schema (value 'alabama',
+    // pdf_on_value 'AL'). The factory reconciles the loaded state; fresh-eyes
+    // found the first cut keeping that in memory only, so the FIRST manual edit
+    // -- whose handler reads SchemaFormStateManager.load(), the raw bytes --
+    // re-persisted the un-reconciled value and undid the guard.
+    const migrated = () => ({
+      ...JSON.parse(JSON.stringify(testSchema)),
+      fields: [
+        ...JSON.parse(JSON.stringify(testSchema)).fields,
+        { id: 'state', name: 'State', spoken_name: 'state', type: 'select', section_id: 'section-1a',
+          options: [
+            { value: 'alabama', label: 'Alabama (AL)', pdf_on_value: 'AL' },
+            { value: 'alaska', label: 'Alaska (AK)', pdf_on_value: 'AK' },
+          ] },
+      ],
+    })
+    const legacyBlob = (stateValue: string) => JSON.stringify({
+      schema: { ...testSchema, fields: [...testSchema.fields,
+        { id: 'state', name: 'State', spoken_name: 'state', type: 'select', section_id: 'section-1a',
+          options: [{ value: 'AL', label: 'AL' }, { value: 'AK', label: 'AK' }] }] },
+      fieldValues: { state: { value: stateValue, confirmed: true, confirmationMethod: 'ai_voice', lastModified: 1 } },
+      currentSectionId: 'section-1a', completedSections: [], validationErrors: {},
+      lastUpdated: Date.now(), formSessionId: 'fss_legacy', loadedFieldIds: [],
+      jitModeEnabled: false, disclaimerAccepted: false,
+    })
+  
+    it('a migrated value is PERSISTED, so the first manual edit cannot undo it', () => {
+      sessionStorageMock['schema_form_state'] = legacyBlob('AL')
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      // Persisted at reconcile time (a real value change is a real migration).
+      expect(SchemaFormStateManager.load()?.fieldValues.state.value).toBe('alabama')
+      // The reviewer's repro: a manual edit on ANOTHER field re-reads load()
+      // and re-saves -- the select must still be the slug afterwards.
+      const fm = (createFieldManager as any).mock.calls.at(-1)[0]
+      fm.onManualEdit('field-1', 'typed')
+      const after = SchemaFormStateManager.load()!
+      expect(after.fieldValues.state.value).toBe('alabama')
+      expect(after.fieldValues.state.confirmed).toBe(true)
+    })
+  
+    it('an unmappable stored value is cleared and stays cleared across a manual edit', () => {
+      sessionStorageMock['schema_form_state'] = legacyBlob('ZZ')
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      expect(SchemaFormStateManager.load()?.fieldValues.state).toBeUndefined()
+    })
+  
+    it('a dangling pinned id / section reset is PERSISTED, so a pre-connect manual edit cannot restore it', () => {
+      // Fresh-eyes round 2: the fieldValues-only persist gate left the id
+      // reset in memory, and onManualEdit (which reads load()) re-saved the
+      // stale ids through the same door as the value bug.
+      const blob = JSON.parse(legacyBlob('alabama'))
+      blob.schema = migrated()
+      blob.pinnedFieldId = 'gone-field'
+      blob.currentSectionId = 'gone-section'
+      sessionStorageMock['schema_form_state'] = JSON.stringify(blob)
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      const fm = (createFieldManager as any).mock.calls.at(-1)[0]
+      fm.onManualEdit('field-1', 'typed')
+      const after = SchemaFormStateManager.load()!
+      expect(after.pinnedFieldId).toBeNull()
+      expect(after.currentSectionId).toBe(testSchema.sections[0].id)
+    })
+
+    it('AT CONSTRUCTION, a session whose values already match is NOT re-persisted', () => {
+      // Only the factory's own gate is pinned here: WebFormConnection is
+      // mocked in this file and connect() is never called, so the later
+      // re-persist by init() inside its constructor is invisible to this
+      // test (cross-surface, g2fpr.5; bd polyglot-pdf-20mw6 tracks the same
+      // blind spot in the pre-existing currentPartId laziness pin).
+      const blob = JSON.stringify({
+        ...JSON.parse(legacyBlob('alabama')), schema: migrated(),
+      })
+      sessionStorageMock['schema_form_state'] = blob
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      expect(sessionStorageMock['schema_form_state']).toBe(blob)   // bytes untouched
+    })
+  })
+  
 })

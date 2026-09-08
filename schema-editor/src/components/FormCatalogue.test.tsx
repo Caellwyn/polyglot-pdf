@@ -4,7 +4,7 @@
  * mocked via window.showDirectoryPicker.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 import { FormCatalogue } from './FormCatalogue';
 import { ForbiddenError } from '../utils/remoteKitStore';
@@ -773,6 +773,61 @@ describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
     expect(labels.some((t) => t.includes('Raw') && t.includes('no schema yet'))).toBe(true);
   });
 
+  it('the dropdown distinguishes two kits that share a label', async () => {
+    // bd polyglot-pdf-5ivqx. Nothing enforces label uniqueness, so two kits
+    // can both read "W-7" in the strip. The <option>'s value={k.id} settles
+    // what the select SUBMITS, but the human chooses by what they READ -- and
+    // picking the wrong form is how you edit the wrong form. Before the fix
+    // both options rendered the identical text.
+    const root = mockRoot([
+      mockKit('form-2', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+      mockKit('form-9', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const shown = Array.from(select.options).map((o) => o.text);
+    // Both are still named by the label a human gave them...
+    expect(shown.filter((t) => t.includes('W-7')).length).toBe(2);
+    // ...and the id is what tells them apart.
+    expect(shown.some((t) => t.includes('form-2'))).toBe(true);
+    expect(shown.some((t) => t.includes('form-9'))).toBe(true);
+    // The property that matters, stated directly: no two options read alike.
+    expect(new Set(shown).size).toBe(shown.length);
+  });
+
+  it('appends the id only when the label adds something', async () => {
+    // BOTH kinds in ONE render, because a restating label alone proves
+    // nothing: kitOptionName returns it unchanged, byte-identical to the bare
+    // {k.label} this replaced. An earlier draft asserted only that case and
+    // could not tell the fix from the bug -- it re-covered kitOptionName's
+    // unit behaviour, which kitName.test.ts already pins. The non-restating
+    // kit is what makes this test about the WIRING.
+    const root = mockRoot([
+      // No label in metadata -> the catalogue synthesises "Form 2" from the
+      // id, so appending "(form-2)" would print one fact twice.
+      mockKit('form-2', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ status: 'draft' }) }),
+      // A label a human chose -> both identities are real and both are shown.
+      mockKit('form-9', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const text = Array.from(select.options).map((o) => o.text).join('|');
+    expect(text).toContain('Form 2');
+    expect(text).not.toContain('(form-2)');   // no parenthesised repeat
+    // ...and the half that reverting the JSX to {k.label} breaks.
+    expect(text).toContain('W-7 (form-9)');
+  });
+
   it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {
     const root = mockRoot([
       mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
@@ -875,7 +930,10 @@ describe('FormCatalogue -- run extraction', () => {
   const okJson = (b: unknown) => ({ ok: true, status: 200, json: async () => b } as unknown as Response);
   const errJson = (b: unknown) => ({ ok: false, status: 500, json: async () => b } as unknown as Response);
 
-  afterEach(() => { vi.restoreAllMocks(); });
+  // restoreAllMocks does NOT undo the direct `global.fetch = ...` assignments
+  // below, so capture and put it back explicitly.
+  const realFetch = global.fetch;
+  afterEach(() => { vi.restoreAllMocks(); global.fetch = realFetch; });
 
   it('hides the button (shows the manual hint) when the endpoint is absent', async () => {
     global.fetch = fetchMock({ get: () => ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response) });
@@ -1846,5 +1904,193 @@ describe('local mode respects the submitted lock (bd polyglot-pdf-hqztg)', () =>
 
     expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
     expect(screen.getByText(/an author publishes it/i)).toBeTruthy();
+  });
+});
+
+// --- Hiding kits + catalogue filter, LOCAL mode (bd n5fwd, tx8gi) ----------
+//
+// Local mode reads the same metadata.json the backend writes, so the flag must
+// work here too or "hidden" means different things on the two surfaces. These
+// pin the local half of both exit criteria.
+
+describe('hiding kits and filtering the catalogue (local)', () => {
+  // Tests here replace global.fetch. Without this, the LAST one to do so leaks
+  // its stub into every later file in a full-suite run -- ten unrelated tests
+  // failed that way while this file passed alone.
+  //
+  // A capture-and-restore, NOT vi.restoreAllMocks(): that undoes vi.fn/spyOn,
+  // and a bare `global.fetch = ...` is neither, so it survives untouched. An
+  // earlier version of this comment credited the sibling block above with
+  // cleaning up, which it does not -- the file stopped leaking only because
+  // this block happens to run last. That is a property of ordering, not of
+  // cleanup, and it would break the moment anything moved.
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
+  const kitWith = (id: string, label: string, extra: Record<string, unknown> = {}) =>
+    mockKit(id, {
+      'schema.json': JSON.stringify(SCHEMA),
+      'metadata.json': JSON.stringify({ label, status: 'draft', ...extra }),
+    });
+
+  // Four kits, one already hidden -- above the filter bar's threshold.
+  const manyRoot = () => mockRoot([
+    kitWith('form-2', 'W-7 (ITIN)'),
+    kitWith('form-3', 'I-90', { status: 'complete' }),
+    kitWith('form-4', 'Junk One', { hidden: true }),
+    kitWith('form-5', 'Junk Two'),
+  ]);
+
+  async function openMany() {
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeTruthy());
+    return root;
+  }
+
+  it('keeps a hidden kit out of BOTH the cards and the selector strip', async () => {
+    await openMany();
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).queryByText(/Junk One/)).toBeNull();
+    expect(screen.queryByText('Junk One')).toBeNull();
+    expect(screen.getByText('W-7 (ITIN)')).toBeTruthy();
+  });
+
+  it('reads the SAME metadata key the backend writes', async () => {
+    // If local invented its own key, a kit hidden in the hosted editor would
+    // still show here -- two meanings of "hidden" on one store.
+    await openMany();
+    expect(screen.getByTestId('filter-withheld').textContent)
+      .toContain('1 not shown');
+  });
+
+  it('brings hidden kits back when asked', async () => {
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeTruthy());
+  });
+
+  it('searches by label and by id', async () => {
+    await openMany();
+    const box = screen.getByLabelText('Search forms by name or id');
+    fireEvent.change(box, { target: { value: 'itin' } });
+    await waitFor(() => expect(screen.queryByText('I-90')).toBeNull());
+    fireEvent.change(box, { target: { value: 'form-3' } });
+    await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
+  });
+
+  it('closes the editor when the OPEN kit is hidden (local too)', async () => {
+    // The hosted twin got this unwind first and local did not -- fixing the
+    // instance, not the set. Both catalogues render the same button, so both
+    // need the same close.
+    const clearOpenKit = vi.fn();
+    global.fetch = (async () => ({
+      ok: true, status: 200, json: async () => ({ ok: true, hidden: true }),
+    })) as unknown as typeof fetch;
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    // form-3 is I-90, which sorts FIRST by label -- so it is the kit the first
+    // Hide button targets. Asserting against the hosted id order would pass by
+    // coincidence.
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="form-3"
+      clearOpenKit={clearOpenKit} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    // OPENING THE FOLDER ALSO CALLS clearOpenKit (a fresh folder drops the
+    // open kit), so a bare toHaveBeenCalled() here passes before the Hide
+    // click ever happens -- it did, and the mutation survived. Count from the
+    // click instead.
+    clearOpenKit.mockClear();
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalledTimes(1));
+  });
+
+  it('opening a hidden kit from an already-mounted session keeps it open',
+    async () => {
+      // The hosted twin's rerender case, mirrored. The unwind must fire on the
+      // transition, never on arriving hidden -- otherwise a hidden kit cannot
+      // be opened at all, which breaks retrievability while fixing a desync.
+      const clearOpenKit = vi.fn();
+      const root = manyRoot();
+      (window as unknown as Record<string, unknown>).showDirectoryPicker =
+        vi.fn(async () => root);
+      const view = render(<FormCatalogue onOpenKit={vi.fn()}
+        selectedKitId="form-2" clearOpenKit={clearOpenKit} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      // Opening the folder calls clearOpenKit itself, so count from here.
+      clearOpenKit.mockClear();
+
+      // form-4 is hidden. Open it the way App does: same mount, new prop.
+      view.rerender(<FormCatalogue onOpenKit={vi.fn()}
+        selectedKitId="form-4" clearOpenKit={clearOpenKit} />);
+      await waitFor(() => expect(screen.getByTestId('catalogue-strip')).toBeTruthy());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+    });
+
+  it('asks before hiding the OPEN kit here too (local parity)', async () => {
+    // The guard is an exact mirror of the hosted one, and this bead's own
+    // history is three rounds of fixing one catalogue and missing its twin.
+    // Covering only one call site repeats that at the test layer: a refactor
+    // dropping the clause from THIS file alone would pass the whole suite.
+    const confirmDiscardOnHide = vi.fn(() => false);   // the human says no
+    let posted = false;
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      if ((init?.method ?? 'GET').toUpperCase() === 'POST'
+          && String(input).includes('/hidden')) posted = true;
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    // form-3 is I-90, which sorts FIRST by label -- the kit the first Hide
+    // button targets, and the one we mark open.
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="form-3"
+      confirmDiscardOnHide={confirmDiscardOnHide} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(confirmDiscardOnHide).toHaveBeenCalled());
+    expect(posted).toBe(false);   // declined -- nothing was hidden
+  });
+
+  it('hides through the SAME backend endpoint the hosted catalogue uses', async () => {
+    // One implementation cannot drift from itself. Local mode already routes
+    // status changes this way.
+    let posted: { url: string; body: unknown } | null = null;
+    // The file's okJson helper is scoped to a different describe block; a local
+    // equivalent beats hoisting someone else's helper out of the block that
+    // owns it.
+    const json = (b: unknown) => ({
+      ok: true, status: 200, json: async () => b,
+    } as unknown as Response);
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? 'GET').toUpperCase() === 'POST' && url.includes('/hidden')) {
+        posted = { url, body: JSON.parse((init?.body as string) ?? '{}') };
+        return json({ ok: true, hidden: true });
+      }
+      return json({ ok: true, detail: 'available' });
+    }) as unknown as typeof fetch;
+
+    await openMany();
+    // Local sorts by LABEL (listKits), so the first card is I-90 = form-3 --
+    // NOT form-2 as the hosted twin's id-sorted list would give. Asserting the
+    // hosted order here would pass only by coincidence of the fixture.
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(posted!.url).toContain('/api/editor/kits/form-3/hidden');
+    expect(posted!.body).toEqual({ hidden: true });
   });
 });

@@ -1,9 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-6p77c: the kit path rewrite is keyed
-on the STORE being authoritative, not on privacy -- see "The API-path rewrite"
-below. Line-number citations in this doc have drifted repeatedly; prefer the
-symbol names and re-verify against source.)*
+*Last updated: 2026-09-04 (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+
+> **Line-number citations in this file are not trustworthy without re-verifying
+> against source.** This doc has drifted the same way repeatedly -- bd
+> `polyglot-pdf-vdcm4` re-anchored one class of citation, then bd
+> `polyglot-pdf-nyc5j`/`qn8wv`/`x6dq1` had to re-anchor contract 2 again. Cite
+> a SYMBOL NAME rather than a line number when adding one.
 
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the
@@ -13,7 +16,7 @@ fallback). This guide lists the deploy flow + env vars; per-channel model/auth
 config detail lives in [standards/ai-models.md](standards/ai-models.md) and
 [components/config-deployment.md](components/config-deployment.md).
 
-**Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
+**Tracks:** `backend/main.py`, `admin_backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
 
 System-wide reference: routes/endpoints, cross-surface gotchas, environment
 differences. CURRENT STATE ONLY -- chronological history goes in the journal
@@ -60,16 +63,16 @@ production project is dead and unreachable; reference purge tracked in bd
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
-| `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
 | `FIRMS_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, consumed by the form-kit routes' firm-scoped visibility filter (bd vccy). Reads FAIL CLOSED to `[]` when off/broken, so an outage hides private kits rather than exposing them. Set in `deploy-all.sh`'s `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list hint enumerates it (pinned by `tests/test_deploy_form_kit_hints.py`). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
 `AUDIO_IN_RATE=16000`,
-`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. The VAD
-sensitivity knobs ARE env-overridable: `VAD_START_SENSITIVITY` (default
-`HIGH`) / `VAD_END_SENSITIVITY` (default `LOW`). The list is not
-exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
+`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. (The VAD
+sensitivity knobs that used to be env-overridable here are GONE -- Gemini's
+automatic activity detection is unconditionally disabled, so nothing reads them;
+bd polyglot-pdf-v1m8g.) The list is not
+exhaustive -- additional WS tuning constants live in `config.py`. Also there:
 `WS_IDLE_TIMEOUT_SEC` (`120`) -- the idle watchdog closes a WebSocket connection
 after this many seconds with no received message (audio, ping, or control).
 
@@ -81,13 +84,18 @@ again under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas
 Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 **not** part of that double-mount and have no `/api` mirror.
 
+This table covers the **public backend** (`backend.main:app`) only. The
+privileged admin service runs the SAME image with a different runtime
+`APP_MODULE` and has its own table below -- both apps declare `/health` and
+`/version`, so one merged table could not say which service a row describes.
+
 Rows are sorted by **path, then method**, and the set is pinned against the
 live app by `tests/test_technical_guide_routes_table.py`, keyed on
-`(path, method)`: a shipped route with no row -- including a NEW METHOD on an
-already-listed path, which needs its own row -- a row for a route that no
-longer ships, and an out-of-order row each fail that test. The sort is not
-cosmetic: it gives every row exactly one correct position, so two PRs adding
-different routes edit different lines instead of colliding over the same
+`(path, method)` **per app**: a shipped route with no row -- including a NEW
+METHOD on an already-listed path, which needs its own row -- a row for a route
+that no longer ships, and an out-of-order row each fail that test. The sort is
+not cosmetic: it gives every row exactly one correct position, so two PRs
+adding different routes edit different lines instead of colliding over the same
 insertion point.
 
 | Method | Path | Surface doc |
@@ -101,6 +109,7 @@ insertion point.
 | GET | `/api/editor/kits/{kit_id}/draft-snapshots` | Prior saved states of this kit's draft, newest-first (bd polyglot-pdf-y2l0p). EDITOR-accessible by deliberate maintainer decision (2026-08-18): routing recovery through an author means the person who lost the work cannot get it back themselves. 404 (not an empty list) for a kit that does not exist -- "no earlier versions" and "no such form" are different answers. Editor-tier (per-person Firebase claim). |
 | POST | `/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore` | Put a snapshot's schema back as the live draft. Snapshots what it REPLACES first, so restoring the wrong version is one more restore away rather than a second loss -- that is what makes it safe without an author. Refused on a write-locked kit (complete/unpublished), same as a save. Non-numeric snapshot ids 400 before reaching the store. Editor-tier (per-person Firebase claim). |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author-tier (per-person Firebase claim). `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
+| POST | `/api/editor/kits/{kit_id}/hidden` | **AUTHOR ONLY** -- hide a kit from the editor catalogue, or bring it back (bd polyglot-pdf-n5fwd). Body `{hidden: bool}`; a separate `hidden` metadata key, deliberately NOT a fifth lifecycle status: status answers "where is this in its life?" and drags `_WRITE_LOCKED_STATUSES` with it, while hiding answers "do I want to look at this?" and stays orthogonal. So there is NO write-lock gate (matching `/label`) -- a `complete` or `unpublished` kit can be hidden, and the revision a confirmation record names stays published, fillable and in the manifest; only the editor catalogue view changes. FAILS VISIBLE: `_is_hidden` returns True only for a literal `True`, so absent/malformed/hand-edited values mean visible and a parse accident can never make a kit vanish from the only list that shows it. Author-tier despite looking editor-ish by the reversible/no-tokens/creates-nothing line that puts `/label` at editor -- maintainer decision 2026-09-01, because hiding changes what OTHER people see. 409 when a different editor holds the edit lock, same as every sibling metadata write. Rides the existing `GET /kits` wire as `hidden`. NOT the per-kit revision ARCHIVE, which is the frozen audit copy. |
 | POST | `/api/editor/kits/{kit_id}/label` | Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every other metadata key (the read-merge-write shape of the status flip). Pure display -- the catalogue and form picker render it, nothing keys on it; kit identity is the immutable `kit_id`/storage path and is deliberately NOT renameable here. Exists because onboarding derives labels from PDF filenames, so nameless uploads collide into "Form", "Form 2", ... 409 when a different editor holds the kit's edit lock (bd polyglot-pdf-c63tu), naming the holder, same as every sibling metadata write route. Editor-tier (per-person Firebase claim). |
 | DELETE | `/api/editor/kits/{kit_id}/lock` | Release a kit. An author may release anyone's lock; an editor may release only a lock THEY hold (bd polyglot-pdf-5tuas) -- they can neither evict an author nor free another editor's kit. Author preemption is the stale-lock escape when someone closes their laptop. Editor-tier (per-person Firebase claim). |
 | POST | `/api/editor/kits/{kit_id}/lock` | Take a kit for editing (bd polyglot-pdf-hqztg). An AUTHOR can always take a lock back from an editor; the reverse 409s. That preemption IS the stale-lock release -- there is no timer, because a clock that steals from someone actively working is worse than a human deciding to take it. USER-scoped (bd polyglot-pdf-5tuas): the lock stores the holder's uid, so a second editor is refused 409 and the refusal NAMES the holder. Re-taking your OWN lock is not a steal. A pre-5tuas lock has no uid, so same-role contention falls back to ALLOW for it rather than stranding anyone. `heldBy` stays a ROLE on the wire; `heldByLabel` carries the person. Returns `{ok, kitId, heldBy, preempted}`. Editor-tier (per-person Firebase claim). |
@@ -123,17 +132,37 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed, and the demo now enables it). Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
 | POST | `/api/tts/notice` | Speak one of the app's OWN safety notices (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and deliberately NOT `require_paid_client_work`: the paid dependency redeems the link, which would answer a budget-exhausted client with silence and burn a live client's link to deliver a warning we chose to give. Caller sends a KEY, never text, so being free does not make it an open text-to-speech service. In-process cache per `(language, notice_key)`; `Cache-Control: private` + ETag with If-None-Match 304 (bd polyglot-pdf-see5j). `backend/services/notice_tts.py` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
-| GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
-| GET | `/version` | App version string. |
+| GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. The ADMIN service serves a different `/health` at its own hostname -- see "Admin service routes" below. |
+| GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`) -- `git_sha` reads the `GIT_SHA` runtime env var, `"unknown"` when unset or empty. The admin service serves its own `/version` at its own hostname. |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
+
+## Admin service routes
+
+The privileged admin service (`admin_backend.main:app`, Cloud Run service
+`polyglot-admin`) is a **separate deployment on its own hostname**, running the
+same image with `APP_MODULE=admin_backend.main:app`. Its paths therefore do not
+collide with the public backend's despite sharing names -- `/health` on the
+admin host is the row below, not the one above.
+
+Same rules as the table above: sorted by **path, then method**, and pinned
+against `admin_backend.main:app` by the same
+`tests/test_technical_guide_routes_table.py` (the checks are parametrized over
+every ASGI app the `Dockerfile` copies, so a third service cannot ship without
+its own table).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/admin/whoami` | The FIRST gated route (bd `polyglot-pdf-7w17m`): returns `{uid, email}` for the caller, gated by `require_app_admin`. Exists to prove the gate end to end before any business logic lands -- a stamped account passes, a valid unstamped account 403s with the `NO_ADMIN_ACCESS:` prefix, a tokenless caller 401s. `admin_backend/routes/whoami.py`, `admin_backend/services/admin_auth.py` |
+| GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and, together with `/version`, the ONLY routes that stay so -- every other route on this service carries one of the four gates named in `admin_backend/tests/unit/test_admin_route_auth.py`. `deploy-all.sh`'s IAM-based reachability check still issues no HTTP request against it, but `deploy-admin.sh`'s tagged flow (bd `polyglot-pdf-3l2vp`) DOES curl this exact route at the tagged candidate revision's stable URL and aborts the traffic shift on anything but a 200 -- so for the admin service, this route is now exercised by a real deploy gate, not just by an operator's manual curl. `admin_backend/main.py` |
+| GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`, same GIT_SHA env var and "unknown" fallback as the public backend's `/version`) -- the admin app's own `version`, not the public backend's. `admin_backend/main.py` |
 
 ## Gotchas
 
@@ -158,11 +187,11 @@ insertion point.
   server-side per-session field persistence, and never log field values/PII/PHI
   server-side. (Formalized in `standards/stateless-architecture.md` +
   `standards/hipaa-pii-policy.md`.)
-- **VAD mode.** The default is `DISABLE_GEMINI_VAD=False` -- **native** mode, where
-  Gemini's built-in VAD detects turn boundaries. Setting it `True` switches to
-  **manual** mode, where the frontend drives turn-taking with explicit
-  `activity_start`/`activity_end` messages instead; don't switch modes without
-  revisiting the client signals. (See `standards/voice-and-vad.md`.)
+- **Turn-taking is push-to-talk, and only push-to-talk.** Gemini's automatic
+  activity detection is unconditionally disabled; the frontend brackets every turn
+  with explicit `activity_start`/`activity_end`. There is no mode flag -- PTT knows
+  when the user is speaking, so a second detector inferring it could only disagree
+  (bd polyglot-pdf-v1m8g). (See `standards/voice-and-vad.md`.)
 - **Idle watchdog** closes a form-fill socket after `WS_IDLE_TIMEOUT_SEC` of no
   inbound traffic, sending a graceful `{"type":"idle_timeout"}` first.
 - **"Sections" is canon; "parts" is a distinct level, not a synonym.** The internal
@@ -352,12 +381,22 @@ Known traps (all deliberate, all pinned only by comments):
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
   label is deliberately never serialized (`_run_validation_and_push` in
   websocket_routes.py, contract pinned in `standards/validation-delegation.md`).
-- The `session_ready` message's `native_vad` flag (websocket_routes.py's
-  `session_ready` payload send) must agree with the backend's
-  `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`webFormConnection.ts`'s `native_vad`
-  destructure and its `onNativeVadMode` call ->
-  `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
+- `voice_mode` is CLIENT-OWNED and must be RE-SENT on every (re)connect
+  (bd polyglot-pdf-wurj8). Producer: `webFormConnection.ts`'s `setVoiceMode`,
+  called from the manager's `setVoiceMode` and from `reassertVoiceMode` in the
+  `onSessionReady` / `onSessionRestarted` callbacks. Consumer: the `voice_mode`
+  arm in `websocket_routes.py` -> `FormFillingService.set_voice_muted` ->
+  `LiveAIGemini.set_voice_muted`. The backend holds NO per-session mode across a
+  reconnect (it is stateless, and each new Gemini session defaults to speaking),
+  so a client that sends the mode only once silently drops the user back into a
+  talking session on the next GoAway or auto-drop. `vad_activity_start` also
+  clears the mute on BOTH ends, so a PTT press never lands in silence -- removing
+  either half leaves the other looking correct in isolation.
+- The `session_ready` message carries NO VAD-mode flag (bd polyglot-pdf-v1m8g).
+  It used to send `native_vad`, which the client destructured to pick its
+  activity-signal behavior; both ends are gone, and the client now always sends
+  manual activity signals. A re-added flag would be a contract change on both
+  sides, not a backend-only toggle.
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 
@@ -646,7 +685,8 @@ system that is NOT a Firebase account. Five coupled pieces:
   silently corrected -- a substitution would produce a confirmation record
   naming a form the client never saw. Any future code path that trusts the
   handshake's `kit_id` for a link session reopens this.
-- **One-time use lives in Firestore** (`link_redemptions`), not the token: a
+- **One-time use lives in Firestore** (`link_redemptions` on the demo,
+  `link_redemptions_<channel>` elsewhere -- see `LINK_CHANNEL`), not the token: a
   signed bearer string is replayable by construction. FAILS CLOSED BY
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
@@ -672,7 +712,12 @@ system that is NOT a Firebase account. Five coupled pieces:
     kit.
 
 - **SPEND is bounded per LINK, and metering is NOT a gate** (bd
-  polyglot-pdf-ik7e). Two different numbers, doing two different jobs:
+  polyglot-pdf-ik7e). Two different numbers, doing two different jobs. Both
+  numbers are RUNTIME settings now (bd polyglot-pdf-bg313): `link_budget.py`'s
+  `firm_link_cap()` and `default_cost_ceiling_usd()` resolve through
+  `backend/services/runtime_config.py` (`app_config/{channel}` in Firestore,
+  TTL-cached), not `os.getenv` -- an operator retunes either per channel with
+  `scripts/set_runtime_config.py` and no redeploy.
   - **Per-link cost ceiling ($10, `LINK_COST_CEILING_USD`) ENFORCES.**
     `link_spend.check_budget` runs at the socket's paid gate -- after the link
     verifies, before any Gemini session exists -- and a link at or over its
@@ -775,11 +820,22 @@ pinned, so a unilateral change on either reddens. The gate pins the form id via
 choice, the language is the client's.
 
 **Minting is off by default** -- a live link is an unauthenticated door to a
-paid session, so it stays off wherever `LINK_MINTING_ENABLED` is not explicitly
-set. The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped and the
-DEMO now enables it (bd polyglot-pdf-gob8l). The ceiling in force is the global
-one; per-form `link_cost_ceiling_usd` is declared by the shipped kits but not
-yet threaded through the handshake (bd polyglot-pdf-4tjt7).
+paid session, so it stays off wherever `LINK_MINTING_ENABLED` resolves false.
+The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped.
+`LINK_MINTING_ENABLED` is a RUNTIME setting now (bd polyglot-pdf-bg313):
+`backend/services/runtime_config.py` resolves it from `app_config/{channel}`
+in Firestore first, but the `deploy-demo.sh` / `deploy-staging.sh`
+`LINK_MINTING_ENABLED=true` env line is still LIVE as the fallback -- when a
+channel's Firestore doc has never had a value written (or a read fails with
+no last-known-good yet), `runtime_config.py` reads that same env var itself
+and parses it the same way the pre-bg313 call site did, before falling back
+further to the compiled default (`false`). An operator overrides it per
+channel by seeding `app_config/{channel}` with `scripts/set_runtime_config.py`,
+or the admin console's own config route once it lands (bd polyglot-pdf-li9x0).
+The ceiling in force is the global one (also runtime-config-backed now, with
+the same env-var fallback); per-form
+`link_cost_ceiling_usd` is declared by the shipped kits but not yet threaded
+through the handshake (bd polyglot-pdf-4tjt7).
 
 ### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 
@@ -811,3 +867,139 @@ once:
 
 Full detail: [`components/voice-ai.md`](components/voice-ai.md), which has
 its own "`LIVE_VOICE_NAME` has a SECOND consumer" section.
+
+### 12. `APP_MODULE`: one image, two Cloud Run services (bd polyglot-pdf-pnoik)
+
+The root `Dockerfile` copies BOTH top-level Python packages and chooses which
+ASGI app to serve at RUNTIME. There is no build arg -- `deploy-all.sh` builds
+with `gcloud builds submit --tag`, which cannot pass one.
+
+- **Producer:** `deploy-all.sh`'s backend stage (bd polyglot-pdf-3l2vp, sprint-
+  22 plan bead 1.3) computes `APP_MODULE="${APP_MODULE:-backend.main:app}"`
+  and passes it (plus `GIT_SHA=$(git rev-parse HEAD)`) as RUNTIME env in
+  `--set-env-vars` on EVERY backend deploy. A caller that sets nothing (every
+  existing channel: `deploy-staging.sh`, `deploy-demo.sh`, `backend/deploy-
+  new.sh`) still resolves to `backend.main:app`, so this is a config addition
+  with no behavior change for the public channels. `deploy-admin.sh` is the
+  one caller that overrides it, exporting `APP_MODULE=admin_backend.main:app`
+  ahead of the same `deploy-all.sh --backend` invocation.
+- **Staging tier (bd polyglot-pdf-3l2vp):** `deploy-admin.sh` also sets
+  `BACKEND_NO_TRAFFIC_TAG=candidate`, which makes `deploy-all.sh` deploy
+  `--no-traffic --tag candidate`, curl the TAGGED revision's own stable URL's
+  `/health` (built by inserting `<tag>---` ahead of the service's base host,
+  since `gcloud run services describe` reports no revision-scoped address),
+  and only on a 200 run `gcloud run services update-traffic --to-latest`. A
+  failing health check aborts the script WITHOUT shifting traffic, leaving the
+  previously-live revision serving. There is ONE admin service backing BOTH
+  channels' data, so this is that service's own staging tier -- it has no
+  second Cloud Run service to rehearse against first.
+- **Consumer:** the root `Dockerfile`'s
+  `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}`,
+  plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must
+  carry the SAME default string so the admin `/health`'s `app_module` field
+  does not lie about which app is live.
+- *Breaks if disagreed:* a service pointed at the wrong module starts cleanly
+  and serves the WRONG app -- the public voice API on the wide admin service
+  account, or an admin URL with none of the admin routes -- and every probe
+  short of reading `/health`'s `app_module` reports it healthy. An `ENV
+  APP_MODULE=` default, or `-` in place of `:-`, additionally hides a deploy
+  that passes an empty value, which crash-loops the container instead.
+- **Pinned by** `tests/test_dockerfile_app_module.py` (CMD shape, default,
+  no `ARG`, no `ENV` default, both `COPY` lines, and the constant/Dockerfile
+  agreement), `admin_backend/tests/unit/test_admin_health.py`, and
+  `tests/test_deploy_admin_tag_flow.py` (the untagged-vs-tagged `deploy-
+  all.sh` invocation: `APP_MODULE`/`GIT_SHA` always set; `--tag`/`--no-
+  traffic` only with `BACKEND_NO_TRAFFIC_TAG`; a failing tag-URL `/health`
+  aborts before `update-traffic` runs).
+
+### 13. `admin_backend/` -> `backend/` shared-code direction (bd polyglot-pdf-pnoik)
+
+The privileged admin service and the public backend are separate Cloud Run
+services with separate service accounts, built from one image. The dependency
+between their packages is one-directional and partial.
+
+- **Allowed:** `admin_backend/` imports `backend.services.*` and
+  `backend.config` (firms, link tokens, kit gates, the Firestore client,
+  `parse_extra_origins`).
+- **Forbidden:** `admin_backend/` importing `backend.routes.*`. Importing a
+  route module executes the public app's router construction inside the
+  PRIVILEGED process, binding handlers written and reviewed against the narrow
+  `polyglot-backend-sa` onto the wide `admin-backend-sa`.
+- **Forbidden in the other direction too:** `backend/` never imports
+  `admin_backend`. This is the direction that DEFEATS the scar-#7 guard, so it
+  is pinned rather than assumed: `backend/tests/unit/test_deployed_iam_envelope.py`
+  walks `backend/` only (its root is `parents[2]` of that test file), so a
+  privileged helper reached from `backend/` via `admin_backend` would sit in a
+  file that guard never opens -- and would run under the NARROW
+  `polyglot-backend-sa`.
+- **Pinned by**, in each direction:
+  - `admin_backend/` -/-> `backend.routes`:
+    `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+    (`test_admin_backend_never_imports_backend_routes`).
+  - `backend/` -/-> `admin_backend`:
+    `backend/tests/unit/test_deployed_iam_envelope.py`
+    (`test_the_public_backend_never_imports_the_admin_package`).
+
+  Each has a matching-rule test over synthetic sources (both import shapes,
+  plus a same-prefix package that must NOT be flagged) and a vacuity guard
+  asserting its source walk actually reaches the app module.
+
+### 14. Runtime config: `app_config/{channel}` (bd polyglot-pdf-bg313)
+
+Four backend settings moved off deploy-time env to a per-channel Firestore
+doc, so an operator retunes them with no redeploy.
+
+- **Producer (future):** the admin console's config route,
+  `PUT /admin/config/{channel}` (bd polyglot-pdf-li9x0), and, until that
+  ships or for direct verification, the operator CLI
+  `scripts/set_runtime_config.py <channel> set <KEY> <value> --project <p>`.
+  Both write `app_config/{channel}` with Admin-SDK `set(..., merge=True)`
+  (the console route additionally audits the write in the SAME transaction).
+- **Consumer:** `backend/services/runtime_config.py` -- the ONLY reader.
+  `RUNTIME_CONFIG_KEYS` = `LINK_MINTING_ENABLED` (bool),
+  `LINK_COST_CEILING_USD` (float), `LINK_FIRM_CAP` (int), `CREDITS_ENFORCED`
+  (bool, new -- Epic 2 bead A3 gates a zero-balance mint on it). A key
+  present in the doc but outside this set is logged and ignored, never
+  applied. TTL-cached per channel (`TTL_SECONDS`, 30-60s) -- explicitly NOT
+  `get_settings()` (`backend/config.py`), which is `lru_cached` for the whole
+  process lifetime and would never pick up a change.
+- **Fallback order** on a Firestore miss (unreachable store, missing doc, or
+  a key absent/malformed in it): the LAST-KNOWN-GOOD value from this
+  process's previous successful read of that key, then -- only when nothing
+  was EVER read successfully -- the env default. For the three legacy keys
+  (`LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD`, `LINK_FIRM_CAP`) that env
+  default is a LIVE `os.getenv` read INSIDE `runtime_config.py` itself
+  (`_legacy_env_default`), parsed exactly as the pre-bg313 call sites parsed
+  it, falling further back to the compiled constant only when the variable is
+  unset or unparsable -- this is what keeps `deploy-demo.sh` /
+  `deploy-staging.sh`'s `LINK_MINTING_ENABLED=true` a real fallback rather
+  than dead text. `CREDITS_ENFORCED` has no env var at all and always falls
+  straight to its compiled `false`. Env-first (ahead of last-known-good)
+  would be wrong regardless: a console that just LOWERED the ceiling must not
+  see a higher value -- from Firestore's old value OR the env var -- reappear
+  during a blip; both are pinned by `test_runtime_config.py`.
+- **Call sites swapped:** `backend/routes/link_routes.py`'s
+  `_minting_enabled()` and `backend/services/link_budget.py`'s
+  `firm_link_cap()` / `default_cost_ceiling_usd()` now call into
+  `runtime_config` instead of reading `os.getenv` directly. Pinned by a
+  grep-derived test (`test_runtime_config.py`) over the shipped sources, so a
+  reintroduced `os.getenv("LINK_MINTING_ENABLED", ...)` anywhere outside
+  `runtime_config.py` fails CI.
+- **NOT MOVED, deliberately:** `LINK_TOKEN_SECRET` (Secret Manager -- a
+  secret has no business in a plain Firestore doc), `LINK_BASE_URL`,
+  `LINK_CHANNEL` (topology; moving either would reopen the channel-isolation
+  bead polyglot-pdf-3q9qn).
+- **Deploy-script env lines are the fallback, not dead text.**
+  `deploy-demo.sh` and `deploy-staging.sh` still set
+  `LINK_MINTING_ENABLED=true` in `BACKEND_EXTRA_ENV` (pre-dates this bead);
+  `runtime_config.py` reads that SAME env var as its own fallback (see
+  above), so a freshly deployed channel with no `app_config/{channel}` doc
+  yet still mints exactly as before this bead. Seeding
+  `app_config/{channel}` via `scripts/set_runtime_config.py` or the console
+  route lets an operator override the deploy-time value per channel with no
+  redeploy; it is not required just to keep the deploy scripts' setting
+  working. `CREDITS_ENFORCED` is the one key with no env fallback (it is
+  brand new); it stays compiled `false` until a channel's doc sets it.
+- **`firestore.rules` deny block for `app_config/**`** ships with bd
+  polyglot-pdf-li9x0, alongside `admin_audit_log`, as part of that bead's
+  set-derived rules test -- not here, since this bead never writes rules.

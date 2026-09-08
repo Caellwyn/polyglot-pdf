@@ -2,10 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-lvhqa: documented the SECOND
-terminal status, `budget_exhausted` -- why one close code carries two reasons
-with opposite handling, and that the tokens are matched by string compare with
-no shared constant.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -61,11 +58,11 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    `type: "handshake"` explicitly (bd wq9y) — the backend always defaulted a
    missing `type` to that, so the wire routing is unchanged.
 5. Backend replies `{"type": "session_ready", "session_id": "web_…", "ephemeral":
-   true, "jit_mode_enabled": <bool>, "native_vad": <bool>}`. The `session_id` is an
-   ephemeral per-connection id for log correlation only — it is **not** the
-   `form_session_id`. `native_vad` (= `not DISABLE_GEMINI_VAD`) tells the frontend
-   whether Gemini's own VAD is driving turns, so it can suppress manual activity
-   signals and stream continuous audio (bd polyglot-pdf-333; see voice-and-vad).
+   true, "jit_mode_enabled": <bool>}`. The `session_id` is an ephemeral
+   per-connection id for log correlation only — it is **not** the
+   `form_session_id`. There is no VAD-mode field: push-to-talk is the only input
+   mode, so the frontend always sends manual activity signals and has nothing to
+   negotiate (bd polyglot-pdf-v1m8g; see voice-and-vad).
 
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.
@@ -108,8 +105,9 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync); in DTI mode an optional `next_field_schema` rider re-establishes the current-field pointer + validation entry via `merge_field_schema` (bd polyglot-pdf-ezg2) |
 | `read_disclaimer` | send disclaimer initiating message in a language → `disclaimer_read_initiated` |
 | `completion_message` | send a prompt that should make Gemini speak → `completion_ack` |
-| `recovery_prompt` | level 1/2/3 stall-recovery prompt → `recovery_prompt_ack` |
-| `vad_activity_start` / `vad_activity_end` | relay manual VAD signals (see voice-and-vad) |
+| `recovery_prompt` | level 1/2/3 stall-recovery prompt → `recovery_prompt_ack`. NO production caller: its only one was the post-unpause re-ask, and `pause()` is dead path (bd polyglot-pdf-wurj8) |
+| `voice_mode` | manual/voice mode toggle (bd polyglot-pdf-wurj8) → `voice_mode_ack`. `manual` suppresses the model's proactive speech at the adapter while the session stays live and the mic stays usable; an unrecognised `mode` is rejected, never coerced. Re-sent on every (re)connect -- the backend is stateless |
+| `vad_activity_start` / `vad_activity_end` | PTT press/release -- the only turn signal (see voice-and-vad). `vad_activity_start` also leaves manual mode, so a press never lands in silence |
 | `clear_thinking` | client's thinking-indicator max-duration safety timer fired (bd polyglot-pdf-wpw.5) -- fire-and-forget, resets the backend's processing state so it doesn't stay stuck `true` and dedup the next turn's `processing:true` |
 | `change_fill_language` | → `language_changed` |
 | `change_spoken_language` | MISNOMER (bd polyglot-pdf-87a9) -- the language is PINNED per session; this re-asserts the SAME language on a fresh Gemini session after a teardown: send initiating message → `spoken_language_changed` |
@@ -228,7 +226,15 @@ against the code:
   A documented **bug fix (Nov 10, 2025)** resets `paused = false` on connect, on
   error, on disconnect, and on any non-`connected`/`switching_section` status
   change — without it, after an idle timeout `isPaused()` stayed true and the app
-  tried to `resume()` a dead socket instead of `connect()`.
+  tried to `resume()` a dead socket instead of `connect()`. **Nothing sets it any
+  more:** the manual/voice mode toggle replaced `pause()`'s only UI caller
+  (bd polyglot-pdf-wurj8), so this whole branch is inert pending removal
+  (bd polyglot-pdf-oaidu).
+- **Manual/voice mode is re-asserted here.** The mode is client-owned, and each
+  (re)connect builds a Gemini session that defaults to speaking, so
+  `onSessionReady` / `onSessionRestarted` re-send `voice_mode` when the user is in
+  manual — otherwise a GoAway or auto-drop would silently start the assistant
+  talking again.
 - **Warm path:** if the WebSocket is still connected but Gemini was closed (post-
   Level-3), `connect()` sends `restart_gemini_session` with a freshly computed
   `next_field_hint` rather than a full reconnect.

@@ -1,8 +1,9 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the staging channel -- two live channels in one project, separated by Cloud Run service + Hosting site; the production channel is dead and its script refuses to run.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -28,12 +29,11 @@ which bypasses the cache).
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
-  `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
+  `USE_DTI`, `SECRETARY_TIMEOUT_S`,
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
-  `EXTRACTOR_MAX_PDF_MB`, `VAD_START_SENSITIVITY` (default `HIGH`) /
-  `VAD_END_SENSITIVITY` (default `LOW`).
+  `EXTRACTOR_MAX_PDF_MB`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -50,7 +50,6 @@ which bypasses the cache).
 | `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default. Effect on native-audio Live is unverified upstream, so safe-if-ignored. See [voice-ai.md](voice-ai.md). |
 | `USE_DTI` | `true` | Dynamic Turn Injection -- the shipped reduced-SI mode (code default flipped to `true` by bd `polyglot-pdf-7872` on 2026-07-11; `deploy-demo.sh` no longer needs to set it). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
 | `CONTINUOUS_SESSION` | `true` | Runs the whole form as one Gemini Live session bounded by context-window compression, instead of resetting the session per section (code default flipped to `true` alongside `USE_DTI` by bd `polyglot-pdf-7872`). Requires `USE_DTI`: if `CONTINUOUS_SESSION` is on and `USE_DTI` is off, `Settings` forces `USE_DTI` on and logs a warning rather than serve the inconsistent combination. `false` -> the legacy per-section-reset flow (used as the measurement-harness baseline). See [context-compression.md](context-compression.md). |
-| `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 | `SPELLBACK_TOOL_ENABLED` | `true` | Deterministic spell-back verification clip (bd 22h1f/44ywm): declares the `name_spellback` tool, appends the DTI spell-back addendum to the SI, and un-503s `POST /api/tts/spellback`. See [voice-ai.md](voice-ai.md) and the routes table in [../technical_guide.md](../technical_guide.md). |
 | `INTRO_TTS_ENABLED` | `false` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3): un-503s `POST /api/tts/intro`. The BACKEND half of the epic's two-flag design -- the frontend flag is `VITE_INTRO_CLIP_ENABLED` (below), and the two can skew across the two-surface deploy (skew matrix in `docs/sprint_20_sol-intro-tts_plan.md`; deploy backend first, frontend second). |
 
@@ -101,8 +100,12 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   that path (see the Vertex-only rule below). See
   [ai-models.md](../standards/ai-models.md).
 - **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
-  the Vertex path. On the demo Cloud Run service it is injected via **Secret
-  Manager** (`--set-secrets`), never as a plaintext env var.
+  the Vertex path, which is what the demo runs. A credential belongs in **Secret
+  Manager**, never in a plaintext env var — but note this key is **not bound by
+  any deploy script today**: `--set-secrets` existed only in comments until bd
+  `polyglot-pdf-hvui4`, and the channel scripts now bind `LINK_TOKEN_SECRET`
+  alone. Add it to `BACKEND_SECRETS_COMMON` if a channel ever needs the AI Studio
+  path.
 - **`backend/.env.DEV` marker file** — this **file's existence** (NOT an env var)
   flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`, which is the
   **single gate** for *both* dev-logging paths: the `DevFileLogger` itself **and**
@@ -161,19 +164,33 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **CLIENT MAGIC LINKS (bd `polyglot-pdf-ugm6`) -- FOUR variables, and a
   partial configuration is the hazard.** A live link is an unauthenticated
   door to a paid Gemini session, so read all four together:
-  - **`LINK_MINTING_ENABLED=true`** — THE INTERLOCK. `POST /api/links/mint`
-    404s while this is unset, which remains the default anywhere it is not
-    explicitly set. What it guarded -- the per-jti/per-firm limits and the
-    session cost ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so
-    enabling it is now legitimate: the DEMO sets it in `deploy-demo.sh`
-    (maintainer, 2026-08-28, so testers can reach the deployed app). Enabling
-    it in any environment where the ceiling is NOT enforced would still mean
-    an unauthenticated entry point to a paid session with nothing bounding
-    spend. The ceiling actually in force is the global
-    `LINK_COST_CEILING_USD`: a kit's own `link_cost_ceiling_usd` is read by
-    `cost_ceiling_usd_for_kit`, but the WS handshake does not yet pass kit
-    metadata to `check_budget`, so per-form caps are declared-but-inert (bd
-    `polyglot-pdf-4tjt7`).
+  - **`LINK_MINTING_ENABLED`** — THE INTERLOCK. `POST /api/links/mint` 404s
+    while it resolves false, which is the default anywhere it has never been
+    set. What it guarded -- the per-jti/per-firm limits and the session cost
+    ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so enabling it is
+    legitimate wherever the ceiling is enforced.
+    **This is now a RUNTIME setting (bd `polyglot-pdf-bg313`), read at CALL
+    TIME.** `LINK_MINTING_ENABLED` -- along with `LINK_COST_CEILING_USD` and
+    `LINK_FIRM_CAP` -- resolves through `app_config/{channel}` in Firestore
+    (`backend/services/runtime_config.py`, TTL-cached), with the deploy-time
+    environment variable of the SAME name as the fallback for a channel that
+    has never had a value written to Firestore (or is mid-blip): if the
+    Firestore doc has no value and nothing was ever read successfully on this
+    process, `runtime_config.py` reads `os.getenv("LINK_MINTING_ENABLED")`
+    itself, parsed the same way the pre-bg313 call site parsed it, before
+    falling back further to the compiled `false`. `deploy-demo.sh` and
+    `deploy-staging.sh` still carry `LINK_MINTING_ENABLED=true` in
+    `BACKEND_EXTRA_ENV` (predating bg313) and that line is exactly what keeps
+    a freshly deployed process minting-enabled with no `app_config/{channel}`
+    doc seeded yet -- an operator can override it per channel with
+    `scripts/set_runtime_config.py`, or the admin console's own config route
+    once it lands (bd `polyglot-pdf-li9x0`). See
+    [`technical_guide.md`](../technical_guide.md) contract 14 for the full
+    fallback order and call-site details. The ceiling actually in force is
+    the global `LINK_COST_CEILING_USD` (also runtime-config-backed now): a
+    kit's own `link_cost_ceiling_usd` is read by `cost_ceiling_usd_for_kit`,
+    but the WS handshake does not yet pass kit metadata to `check_budget`, so
+    per-form caps are declared-but-inert (bd `polyglot-pdf-4tjt7`).
   - **`LINK_TOKEN_SECRET`** — the HMAC signing key (>=32 chars). Fails CLOSED
     and loudly: minting and verification both refuse without it, deliberately
     rather than defaulting (a default key would be forgeable by anyone
@@ -181,6 +198,18 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     outstanding link on each restart, stranding a client mid-intake).
     **Rotating it invalidates every unopened link**, so rotate only with that
     understood.
+  - **`LINK_CHANNEL`** — which channel this backend is (`demo` / `staging`).
+    Minted into every token as the `aud` claim and checked on open, so a
+    staging-minted link is refused on the demo and vice versa (bd
+    `polyglot-pdf-3q9qn`); it also selects the redemption collection
+    (`link_redemptions` for the demo, `link_redemptions_<channel>` elsewhere),
+    so the two channels cannot burn each other's links. Defaults to `demo` —
+    the safe side, since an unconfigured deploy then behaves exactly as
+    before — but both deploy scripts set it explicitly. **Renaming a channel
+    orphans its redemption ledger and invalidates its outstanding links.**
+    Note the BILLING counter is firm-scoped, not channel-scoped: staging must
+    also use its own mock firm (`scripts/bootstrap_firm.py`) or it bills the
+    real one.
   - **`LINK_BASE_URL`** — origin the minted URL points at (e.g.
     `https://forms.example.com`; the route appends `/f#t=<token>`).
     Configured, never derived from the Host header -- trusting the header
@@ -239,8 +268,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   so quality beats per-call cost). Extraction runs
   `scripts/authoring/extract_form.py` as a subprocess — the image is built from
   the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
-  `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
-  Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
+  `scripts/authoring` + `scripts/bakeoff` ship in it, alongside `backend/` and
+  `admin_backend/`; `.gcloudignore` keeps the Cloud Build upload lean. Needs `GEMINI_API_KEY` on the AI Studio path — which
+  no deploy script binds today (`--set-secrets` carries `LINK_TOKEN_SECRET`
+  alone); the deployed channels run Vertex, where the key is unused.
 - **`OPTION_TRANSLATION_MODEL`** — the authoring-time option-label translation
   model (bd `polyglot-pdf-2h9j`; default `gemini-2.5-pro`, same one-off-per-form
   rationale). Read by the extraction post-pass (skippable via the extract
@@ -278,25 +309,73 @@ The two SHARE the project, form-kits bucket, Firestore, and Auth user pool, so
 staging isolates broken CODE, not bad DATA -- see
 [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-**`production` is DEAD.** `deploy-production.sh` targets `polyglot-forms-919f2`
-(still the `.firebaserc` `default`/`prod` alias), which is unreachable -- bd
-`polyglot-pdf-je6iy`. The script now refuses to run.
+**`production` is DEAD.** `deploy-production.sh` targets `polyglot-forms-919f2`,
+which is unreachable -- bd `polyglot-pdf-je6iy`. The script now refuses to run.
+`.firebaserc` no longer carries a `default` or `prod` alias for it (bd
+`polyglot-pdf-xsp5b`): they were REMOVED rather than repointed, so a `firebase`
+command with no `--project` now errors instead of silently resolving to a dead
+project -- and is not quietly aimed at the live demo either. Every scripted
+`firebase` call passes `--project` explicitly, so nothing depends on an alias.
 
 All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
 two channel scripts use.
 
+**The reachability gate lives in THREE byte-identical copies** --
+`deploy-all.sh`, `backend/deploy-new.sh` (bd `polyglot-pdf-6oi9s`) and
+`deploy-editor.sh` (bd `polyglot-pdf-dldwb`) -- pinned identical by
+`tests/test_deploy_reachability_gate.py`. Edit one and you must edit all three.
+
+That file pins **TWO different completeness sets**, and confusing them is what
+let the editor ship ungated for a round:
+
+| set | membership rule | members |
+|---|---|---|
+| `GATED_DEPLOY_SCRIPTS` | passes `--allow-unauthenticated` (deploys a public service) | `deploy-all.sh`, `backend/deploy-new.sh` |
+| `URL_BAKING_SCRIPTS` | calls `services describe` AND exports a `VITE_*` (bakes a backend URL into a frontend build) | `deploy-all.sh`, `deploy-editor.sh` |
+
+`deploy-editor.sh` deploys only Hosting, so it is correctly absent from the
+first; `backend/deploy-new.sh` builds no frontend, so it is correctly absent from
+the second. Both sets are derived mechanically, so a new script joining either
+one fails CI rather than slipping between them.
+
+The gate's SEVERITY differs by call site: a stage that just CREATED the service
+aborts, while a stage binding a PRE-EXISTING backend (the frontend stage, the
+editor) passes `warn` -- refusing to ship over someone else's IAM state would be
+the gate crying wolf. The counts are pinned per script.
+
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
-  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`). The
-  container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
-  backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`).
+  **`--set-secrets`** is added when the wrapper sets `BACKEND_SECRETS` (bd
+  `polyglot-pdf-hvui4`); a channel that sets none produces an invocation
+  identical to before the flag existed. It **REPLACES the service's entire
+  secret block** — gcloud's own help says "All existing secrets will be removed
+  first" — so a channel must list every binding it wants to survive, not just
+  the one it is adding. The
+  container (the ROOT `Dockerfile`, `python:3.12-slim`) runs
+  `uvicorn ${APP_MODULE:-backend.main:app}` on `$PORT` (8080) -- see
+  **One image, two services** below for why the module is a runtime variable.
+  `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
+
+  **Reachability gate (bd `polyglot-pdf-pidtg`).** After the deploy, `deploy-all.sh`
+  reads the service's IAM policy and **aborts with `exit 1` if there is no
+  `allUsers` invoker binding.** `--allow-unauthenticated` REQUESTS that binding but
+  the request can be REFUSED while the deploy still succeeds and exits 0 -- which is
+  exactly what happened on the first deploy of `polyglot-backend-staging`: the
+  domain-restricted-sharing org policy rejected `allUsers`, gcloud warned
+  non-fatally, and the service 403'd every request at Cloud Run's gate *before any
+  application code ran*. An EXISTING service never shows this (its binding predates
+  the policy and is not retroactively stripped), so the failure surfaces only when
+  standing up a NEW service. If the IAM read itself fails (no permission, transient
+  error) the gate WARNS instead of aborting -- being unable to check is not proof the
+  service is broken.
 - **Form-kits** — uploads the **complete** kits from the local `form-kits/` tree
   to `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`. A kit is
@@ -338,6 +417,121 @@ two channel scripts use.
   deploy would apply to the live demo. A project left on default-deny
   breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
   profile sync -- see [auth.md](auth.md).
+
+### One image, two services (`APP_MODULE`)
+
+The root `Dockerfile` copies BOTH top-level Python packages -- `backend/` (the
+public voice app) and `admin_backend/` (the privileged admin API, bd
+`polyglot-pdf-pnoik`) -- and its `CMD` picks which one to serve at RUNTIME:
+
+```
+CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}
+```
+
+**Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
+`gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
+here would freeze at its default in every image while the deploy-time value was
+silently ignored. `APP_MODULE` rides in through `gcloud run deploy
+--set-env-vars` instead, so one image can back both Cloud Run services.
+
+Rules the pin test `tests/test_dockerfile_app_module.py` enforces:
+
+- **The default is `backend.main:app`.** Every existing deploy passes no
+  `APP_MODULE` at all, so an unset value must keep serving the public backend.
+- **`:-`, not `-`.** A deploy that passes an EMPTY `APP_MODULE` (a real shape
+  when a bash variable is unset inside a `--set-env-vars` block) must fall back
+  too, or the container crash-loops with an empty uvicorn target.
+- **No `ENV APP_MODULE=`.** An `ENV` default satisfies the `:-` expansion with
+  its own value, making the fallback dead code and hiding exactly the
+  empty-string case above.
+- **No build `ARG`s**, and **both packages copied**, since `APP_MODULE` can only
+  point at a package the image actually contains.
+
+The two services differ in IDENTITY, not in image: `polyglot-backend` runs as
+the narrow `polyglot-backend-sa`, `polyglot-admin` as `admin-backend-sa`
+(provisioned by `scripts/setup-admin-service.sh`, role list pinned offline by
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`). Shipping both
+packages in one image is safe because the deployed service account -- not what
+is present on disk -- is what actually gates a privileged call
+(CLAUDE.md scar #7). `admin_backend/` imports `backend.services.*` and `backend.config` but
+**never `backend.routes`**: the services share business logic, not HTTP
+surface, and that direction is pinned by the same test. The **reverse**
+direction -- `backend/` importing `admin_backend` -- is pinned separately by
+`backend/tests/unit/test_deployed_iam_envelope.py`, because that is the one
+that would put a privileged call under the NARROW service account in a file
+the scar-#7 scan never opens.
+
+The admin service's `/health` reports the `app_module` it is actually running,
+because a service pointed at the wrong module otherwise looks perfectly healthy
+while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
+matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
+report an empty string in exactly that case. `verify_service_publicly_reachable()`
+itself still never calls this route -- it reads the Cloud Run IAM policy, not
+HTTP -- but `deploy-admin.sh`'s tagged flow (below) now DOES issue a real
+`GET .../health` against this exact route and gates traffic on its response,
+so it is no longer true that this route has no deploy-time behavioral
+coverage; that coverage exists only for the admin service's own deploy path,
+not for a bare `deploy-all.sh --backend` run.
+
+**`GET /version` on both services** (bd `polyglot-pdf-9hzod`) returns
+`{"version": app.version, "git_sha": ...}`. `git_sha` reads the `GIT_SHA`
+runtime env var, falling back to `"unknown"` on the SAME two shapes
+`APP_MODULE` guards above -- unset, and set-but-empty (`os.getenv("GIT_SHA")
+or "unknown"`, not a plain getenv default, for the same `--set-env-vars`
+reason). Nothing sets `GIT_SHA` on a deployed service yet -- that wiring
+(`--set-env-vars GIT_SHA=$(git rev-parse HEAD)` in the deploy bridge) is bead
+1.3; until it lands, every deployed `/version` reports `"unknown"`. Cloud
+Build's `$COMMIT_SHA` supersedes the bash-computed value in Epic 4. The admin
+console's "what is live per channel" view (bead 1.7) reads this field on
+both services via a Vite define carrying the same value at console build
+time.
+
+Cloud Run runs `polyglot-admin` with `--allow-unauthenticated`, so the
+app-level gate on every OTHER route is the whole access control.
+`admin_backend/services/admin_auth.py` mirrors
+`backend/services/editor_auth.py`: a boolean `app_admin` custom claim,
+`require_app_admin` (dev bypass refused on `K_SERVICE`, `verify_id_token` with
+`check_revoked` deliberately off, a 401/403 split with a machine-readable
+`NO_ADMIN_ACCESS:` prefix on the "no admin claim at all" 403). Its first route
+is `GET /admin/whoami`. `admin_backend/tests/unit/test_admin_route_auth.py`
+derives the registered route set from the live app and asserts every
+business route (everything but `/health` and `/version`) carries exactly one
+of four gate names -- `require_app_admin` is the only one that exists yet; the
+other three (`require_firm_manager`, `require_app_admin_or_owning_manager`,
+`require_google_oidc`) ship with their first consuming routes. The FIRST
+admin account is stamped by `scripts/bootstrap_admin_user.py`
+(`--email`/`--revoke`/`--list`, `--project` required with the same
+deterministic-project-pin + dead-project-refusal machinery as
+`scripts/bootstrap_firm.py`) -- there is no other way to create one.
+
+**`deploy-admin.sh` (bd `polyglot-pdf-3l2vp`, sprint-22 plan bead 1.3)** is the
+admin backend's own deploy bridge. It sets `BACKEND_SERVICE_NAME=polyglot-admin`,
+`BACKEND_SERVICE_ACCOUNT=admin-backend-sa@...`,
+`APP_MODULE=admin_backend.main:app`, and `CORS_EXTRA_ORIGINS` (both admin
+Hosting sites plus both channels' app origins, since the admin console -- and
+the main app's firm-manager `/console/*` pages -- always call this service
+cross-origin), then calls `deploy-all.sh --backend` with
+`BACKEND_NO_TRAFFIC_TAG=candidate` set. That variable is what makes
+`deploy-all.sh`'s backend stage deploy a **no-traffic tagged revision**
+(`--no-traffic --tag candidate`) instead of shifting traffic immediately: it
+verifies the tag's own stable URL's `/health` first (that URL is built by
+inserting `candidate---` ahead of the service's base host -- `gcloud run
+services describe` reports no revision-scoped address of its own), and only on
+a 200 response runs `gcloud run services update-traffic --to-latest`. A failed
+health check aborts WITHOUT shifting traffic, leaving the previous revision
+live. Unset (every other channel), the flag is a no-op: the same `--backend`
+call it wraps produces the identical `gcloud run deploy` invocation it always
+has. This exists because there is ONE admin service backing BOTH channels'
+data -- a bad admin deploy would otherwise take the control plane down for
+staging and the demo at once, and this sequence is that service's own staging
+tier. `deploy-all.sh` also computes `GIT_SHA=$(git rev-parse HEAD)` and passes
+it alongside `APP_MODULE` as runtime env on every backend deploy (feeding the
+eventual `GET /version` git-sha field, bead 1.6 -- not read by any route yet).
+Pinned by `tests/test_deploy_admin_tag_flow.py`. **What this script does NOT
+do:** deploy the admin-console Vite app -- its candidate + live Hosting sites
+are bead 1.7's `deploy-admin-console.sh`; running `deploy-admin.sh` alone
+stands the API up with no UI in front of it, which is a legitimate
+intermediate state.
 
 ### Hosted schema editor (second Hosting site)
 

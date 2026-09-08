@@ -23,7 +23,9 @@ describe('paintedValueFor', () => {
     expect(paintedValueFor(f, false)).toEqual({ kind: 'none' });
   });
 
-  it('resolves radio/select option values to their labels', () => {
+  it('resolves a RADIO option value to its label', () => {
+    // Titled "radio/select" until bd polyglot-pdf-jpjcv, but it only ever built
+    // a radio -- select is a different rule and now has its own tests below.
     const f: FormField = {
       ...base,
       type: 'radio',
@@ -191,5 +193,83 @@ describe('selectedOptionRects (bd polyglot-pdf-lp5v)', () => {
       options: [{ value: 'a', label: 'Alpha', pdf_position: rect(100) }], // page 3
     };
     expect(selectedOptionRects(f, 'a')).toEqual([]);
+  });
+});
+
+describe('a select paints its VALUE, not its label (bd polyglot-pdf-jpjcv)', () => {
+  const state: FormField = {
+    id: 'mail_state', name: 'mail_state', spoken_name: 'state',
+    type: 'select', section_id: 's',
+    options: [
+      { value: 'AL', label: 'Alabama (AL)' },
+      { value: 'AA', label: 'Armed Forces Americas (AA)' },
+    ],
+  } as unknown as FormField;
+
+  it('paints the export code, which is what actually prints', () => {
+    // For a select the VALUE is what PyMuPDF writes into the combobox, so the
+    // overlay showing it means the author sees exactly what will print.
+    expect(paintedValueFor(state, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+    expect(paintedValueFor(state, 'AA')).toEqual({ kind: 'text', text: 'AA' });
+  });
+
+  it('does NOT paint the speakable label, which would not fit', () => {
+    // THE REGRESSION THIS PREVENTS. jpjcv made labels speakable for the voice
+    // model, so painting the label put "Armed Forces Americas (AA)" -- ~86px at
+    // the 6px font floor -- into an i-90 state box 36px wide. The overlay clips,
+    // so the author read "Armed For" where "AA" used to sit crisp at 11px.
+    const painted = paintedValueFor(state, 'AA');
+    expect(painted).not.toEqual({ kind: 'text', text: 'Armed Forces Americas (AA)' });
+  });
+
+  it('the label really would have overflowed -- the reason, not just the rule', () => {
+    // Pins the GEOMETRY, so this stays honest if the font floor is ever tuned.
+    const W = 36, H = 18;                       // the real i-90 state rect
+    const fits = (t: string) => t.length * 0.55 * fittedFontSize(t, W, H) <= W;
+    expect(fits('AA')).toBe(true);
+    expect(fits('Armed Forces Americas (AA)')).toBe(false);
+  });
+
+  it('falls back to the raw token for an unknown value', () => {
+    expect(paintedValueFor(state, 'ZZ')).toEqual({ kind: 'text', text: 'ZZ' });
+  });
+});
+
+describe('a select paints its pdf_on_value when it has one (bd polyglot-pdf-g2fpr)', () => {
+  // The v2 shape: value is a slug the voice model speaks; pdf_on_value is the
+  // export code the filler writes. The overlay must mirror the FILLER, not the
+  // stored value, or it would show "alabama" where the form will say "AL".
+  const migrated: FormField = {
+    id: 'mail_state', name: 'mail_state', spoken_name: 'state',
+    type: 'select', section_id: 's',
+    options: [
+      { value: 'alabama', label: 'Alabama (AL)', pdf_on_value: 'AL' },
+      { value: 'armed_forces_americas', label: 'Armed Forces Americas (AA)', pdf_on_value: 'AA' },
+    ],
+  } as unknown as FormField;
+
+  it('paints the export code from pdf_on_value, not the slug', () => {
+    expect(paintedValueFor(migrated, 'alabama')).toEqual({ kind: 'text', text: 'AL' });
+    expect(paintedValueFor(migrated, 'armed_forces_americas')).toEqual({ kind: 'text', text: 'AA' });
+  });
+
+  it('a legacy option with no pdf_on_value still paints its value', () => {
+    // A kit not yet migrated: the filler writes the value verbatim, so the
+    // overlay does too. Both arms mirror the filler.
+    const legacy = { ...migrated, options: [{ value: 'AL', label: 'Alabama (AL)' }] } as unknown as FormField;
+    expect(paintedValueFor(legacy, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('an EMPTY pdf_on_value falls back to the value, matching the filler', () => {
+    const blank = { ...migrated, options: [{ value: 'AL', label: 'x', pdf_on_value: '' }] } as unknown as FormField;
+    expect(paintedValueFor(blank, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('a value matching no option paints the raw token (the stale-session shape)', () => {
+    expect(paintedValueFor(migrated, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('never paints the label, in either shape', () => {
+    expect(paintedValueFor(migrated, 'alabama')).not.toEqual({ kind: 'text', text: 'Alabama (AL)' });
   });
 });

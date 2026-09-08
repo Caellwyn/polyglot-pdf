@@ -83,13 +83,15 @@ describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
     return mgr
   }
 
-  it('forwards worklet energy to the subscriber on a SENT frame (client VAD active)', async () => {
+  it('forwards worklet energy to the subscriber on a SENT frame (PTT held)', async () => {
     const mgr = await startedManager()
     const onEnergy = vi.fn()
     mgr.setEnergyCallback(onEnergy)
-    // Default mode: native VAD off, PTT off. Activate client VAD so a signal frame
-    // passes the gate.
-    mgr.setVADActive(true)
+    // Open the gate the only way there is now: PTT held (bd polyglot-pdf-v1m8g).
+    // setVADActive no longer opens it -- client Silero VAD does not gate audio
+    // under push-to-talk.
+    mgr.setPTTMode(true)
+    mgr.unmuteInput()
 
     fireFrame(42, SIGNAL)
 
@@ -119,48 +121,35 @@ describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
     expect(onEnergy).toHaveBeenCalledWith(3, false)
   })
 
-  it('reports energy with sending=true in native-VAD mode (continuous stream)', async () => {
-    const mgr = await startedManager()
-    const onEnergy = vi.fn()
-    mgr.setEnergyCallback(onEnergy)
-    mgr.setNativeVad(true) // streams continuously, even silence
-
-    fireFrame(8, SILENCE)
-
-    expect(onEnergy).toHaveBeenCalledWith(8, true)
-  })
-
-  it('native VAD + PTT muted: substitutes SILENCE (sending=false, zeroed buffer same length) -- bd zivv', async () => {
-    // The core of the zivv fix: under native VAD, a PTT-muted frame must NOT stop
-    // the stream (that stalls Gemini's VAD) -- it sends a zeroed frame instead, so
-    // the stream stays continuous without leaking the muted mic. Energy is tagged
-    // sending=false (the user's mic is not contributing), and the forwarded buffer
-    // is all-zero PCM of the SAME length as the captured frame.
+  it('PTT muted: reports energy with sending=false and forwards NOTHING', async () => {
+    // The energy meter must still show the mic is alive while the gate withholds
+    // -- that is how the UI tells "mic alive but gated" from "no mic". Under PTT
+    // a released button DROPS the frame (nothing is forwarded).
+    //
+    // This replaces a native-VAD pair (bd polyglot-pdf-zivv) that asserted a
+    // ZEROED frame was forwarded instead of nothing: that mode needed the stream
+    // kept continuous or Gemini's VAD would never close the turn. With PTT owning
+    // activation there is no such requirement (bd polyglot-pdf-v1m8g).
     const sent: ArrayBuffer[] = []
     const mgr = createAudioManager({ id: 'fake' } as unknown as MediaStream)
     await mgr.startRecording((data: ArrayBuffer) => { sent.push(data) })
     const onEnergy = vi.fn()
     mgr.setEnergyCallback(onEnergy)
-    mgr.setNativeVad(true)
     mgr.setPTTMode(true)
     mgr.muteInput() // button released
 
-    fireFrame(7, SIGNAL) // real mic has signal, but PTT is muted -> must be zeroed
+    fireFrame(7, SIGNAL) // real mic has signal, but the button is not held
 
     expect(onEnergy).toHaveBeenCalledWith(7, false)
-    expect(sent).toHaveLength(1)
-    const forwarded = new Int16Array(sent[0])
-    expect(forwarded.length).toBe(SIGNAL.length)
-    expect(forwarded.every((s) => s === 0)).toBe(true) // silence, not the real mic
+    expect(sent).toHaveLength(0) // withheld -- the muted mic is never forwarded
   })
 
-  it('native VAD + PTT held (not muted): sends the REAL frame through -- bd zivv', async () => {
+  it('PTT held (not muted): sends the REAL frame through, sending=true', async () => {
     const sent: ArrayBuffer[] = []
     const mgr = createAudioManager({ id: 'fake' } as unknown as MediaStream)
     await mgr.startRecording((data: ArrayBuffer) => { sent.push(data) })
     const onEnergy = vi.fn()
     mgr.setEnergyCallback(onEnergy)
-    mgr.setNativeVad(true)
     mgr.setPTTMode(true)
     mgr.unmuteInput() // button held
 
@@ -188,7 +177,11 @@ describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
     const mgr = await startedManager()
     const onEnergy = vi.fn()
     mgr.setEnergyCallback(onEnergy)
-    mgr.setNativeVad(true)
+    // Open the gate so a frame actually flows (was setNativeVad before that mode
+    // was retired, bd polyglot-pdf-v1m8g -- this test is about unsubscribing, not
+    // about which gate is open).
+    mgr.setPTTMode(true)
+    mgr.unmuteInput()
 
     fireFrame(50, SIGNAL)
     expect(onEnergy).toHaveBeenCalledTimes(1)

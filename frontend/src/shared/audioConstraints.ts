@@ -1,10 +1,12 @@
 /**
  * Canonical microphone capture constraints (bd polyglot-pdf-gnmo).
  *
- * Acoustic echo cancellation (AEC) matters for Gemini native VAD: if Gemini's
- * own playback leaks back into the mic, its server-side VAD can register the
- * echo as a user barge-in, desync the turn state, and (on 2.5 native-audio) tear
- * the WebSocket down with a 1011. The single most important lever is browser AEC
+ * Acoustic echo cancellation (AEC) still matters under push-to-talk: if Gemini's
+ * own playback leaks back into the mic while the button is held, the echo reaches
+ * the model as user speech, desyncs the turn state, and (on 2.5 native-audio) can
+ * tear the WebSocket down with a 1011. (The original motivation was Gemini's own
+ * server-side VAD registering the echo as a barge-in; that detector is retired --
+ * bd polyglot-pdf-v1m8g -- but a held mic still carries the echo.) The single most important lever is browser AEC
  * on the capture stream -- echoCancellation cancels the system audio output (our
  * Web Audio playback of Gemini's voice) at the device level, independent of the
  * separate playback AudioContext.

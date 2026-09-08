@@ -57,9 +57,12 @@ class _Redemptions:
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("LINK_TOKEN_SECRET", _SECRET)
-    monkeypatch.setenv("LINK_MINTING_ENABLED", "true")
     monkeypatch.setenv("LINK_BASE_URL", "https://forms.example.com")
     monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+    # LINK_MINTING_ENABLED moved off os.getenv to runtime_config (bd
+    # polyglot-pdf-bg313): patch the resolver these tests actually exercise
+    # rather than an env var the route no longer reads.
+    monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: True)
 
     def _verify(token):
         claims = _TOKENS.get(token)
@@ -173,9 +176,53 @@ def test_minting_is_OFF_unless_explicitly_enabled(client, monkeypatch):
     Mutation: default the flag to "true" -- red.
     """
     c, _store = client
-    monkeypatch.delenv("LINK_MINTING_ENABLED", raising=False)
+    monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: False)
 
     assert _mint(c).status_code == 404
+
+
+def test_the_minting_flag_check_runs_OFF_the_event_loop(client, monkeypatch):
+    """bd polyglot-pdf-bg313, Opus cross-surface r1 (blocker).
+
+    _minting_enabled() now resolves runtime_config, which on a cache miss is
+    a SYNC Admin-SDK Firestore read -- exactly the hazard services/auth.py's
+    require_auth already documents: a sync read inside an async route blocks
+    the SHARED Cloud Run loop, stalling every concurrent request (in-flight
+    audio included). Every other test here stubs the resolver to return
+    instantly, which makes a missing to_thread wrapper invisible -- this one
+    pins that the route dispatches the check through asyncio.to_thread (the
+    same mechanism the sibling get_allowed_kits/enforce_link_redemption calls
+    in this file already use) instead of calling it directly.
+
+    TestClient runs the whole ASGI app in its own worker thread regardless of
+    what mint_link does internally, so comparing thread identities against
+    the pytest test-function thread is not a reliable signal here -- spying
+    on asyncio.to_thread itself is.
+
+    Mutation: replace `await asyncio.to_thread(_minting_enabled)` in
+    link_routes.mint_link with a direct `_minting_enabled()` call -- red,
+    because to_thread is then never invoked for this check.
+    """
+    import asyncio as _asyncio
+
+    c, _store = client
+    calls = []
+    real_to_thread = _asyncio.to_thread
+
+    async def spy_to_thread(func, *a, **kw):
+        calls.append(func)
+        return await real_to_thread(func, *a, **kw)
+
+    monkeypatch.setattr(_asyncio, "to_thread", spy_to_thread)
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    assert lr._minting_enabled in calls, (
+        "_minting_enabled was not dispatched via asyncio.to_thread -- a "
+        "Firestore cache miss on the mint route now blocks the shared "
+        "Cloud Run event loop for every concurrent request"
+    )
 
 
 def test_minting_refuses_when_no_base_url_is_configured(client, monkeypatch):
@@ -414,3 +461,29 @@ def test_a_caller_CANNOT_forge_attribution_through_the_request_body(client):
 
     assert payload["employee_id"] == "u-emp-a", "attribution came from the body"
     assert payload["firm_id"] == "firm-a"
+
+
+def test_a_link_from_ANOTHER_CHANNEL_is_a_404_at_the_route(client, monkeypatch):
+    """Channel isolation, end to end (bd polyglot-pdf-3q9qn).
+
+    Maintainer, 2026-09-01: "staging links only work for staging firms on the
+    staging site, and same with demo." The unit tests pin verify_link_token's
+    refusal; this pins that the REFUSAL REACHES THE ROUTE -- a link minted on
+    staging must not open here, and must be indistinguishable from any other
+    invalid link (the same 404 as a bad signature or an expired window, so the
+    response cannot be used to probe which channel minted a token).
+    """
+    c, _store = client
+
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    url = _mint(c).json()["url"]
+    token = url.split("#t=", 1)[1]
+
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    resp = _open(c, token)
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "This link is not valid."
+    # The channel name must NOT leak into the response -- the diagnosis is
+    # logged for the operator, never returned to the caller.
+    assert "staging" not in resp.text
