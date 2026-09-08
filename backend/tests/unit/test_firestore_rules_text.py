@@ -50,11 +50,45 @@ ADMIN_SDK_ONLY_COLLECTIONS = (
     # spend ceiling lives here; a client-writable copy would let a browser
     # raise its own).
     ("app_config", "channel"),
+    # Epic 2 bead A1 -- the per-firm credit ledger. A NESTED subcollection
+    # (firms/{firmId}/ledger/{entryId}): its "collection" entry carries the
+    # full path because a parent's deny block does not cascade to a
+    # subcollection in Firestore's rules language, so this needs its OWN
+    # block and its OWN entry here.
+    ("firms/{firmId}/ledger", "entryId"),
+    # Epic 2 bead A1 -- kit commercial docs (credit_cost, burn_cap_usd).
+    ("kits", "kitId"),
+    # Epic 2 bead A1 -- the client-link mint record, demo + staging channels
+    # (backend/services/links_store.py, mirroring link_redemptions.py's
+    # channel-suffix convention).
+    ("links", "jti"),
+    ("links_staging", "jti"),
+    # Epic 2 bead A1 fold-in: link_redemptions predates this rules-set test
+    # (bd polyglot-pdf-ugm6, channel isolation bd polyglot-pdf-3q9qn) and
+    # had NO deny block until now, despite being Admin-SDK-only by access
+    # pattern since it shipped.
+    ("link_redemptions", "jti"),
+    ("link_redemptions_staging", "jti"),
 )
 
 
 def _rules_text() -> str:
     return _RULES.read_text(encoding="utf-8")
+
+
+# Matches ANY `match /<collection>/{<wildcard>} { ... }` block in the file,
+# for the both-directions scan (does every full-deny block in the file have
+# a listed entry, and vice versa). The collection group allows ONE extra
+# `/{wildcard}/segment` hop before the final wildcard, so a NESTED
+# subcollection match (firms/{firmId}/ledger/{entryId}) is captured as the
+# single string "firms/{firmId}/ledger" rather than being silently invisible
+# to this scan (a parent's deny block does not cascade to a subcollection in
+# Firestore's rules language, so the nested block needs its own list entry,
+# and this pattern is what lets that entry round-trip against the file).
+_ANY_MATCH_BLOCK = (
+    r"match /([A-Za-z0-9_]+(?:/\{[A-Za-z0-9_]+\}/[A-Za-z0-9_]+)?)"
+    r"/\{[A-Za-z0-9_]+\}\s*\{([^}]*)\}"
+)
 
 
 def _deny_block_body(text: str, collection: str, wildcard: str):
@@ -110,8 +144,7 @@ def test_the_listed_set_is_the_complete_set_of_deny_blocks():
     text = _rules_text()
     in_file = {
         m.group(1)
-        for m in re.finditer(
-            r"match /([A-Za-z0-9_]+)/\{[A-Za-z0-9_]+\}\s*\{([^}]*)\}", text)
+        for m in re.finditer(_ANY_MATCH_BLOCK, text)
         if _is_full_deny(m.group(2))
     }
     listed = {c for c, _ in ADMIN_SDK_ONLY_COLLECTIONS}
@@ -152,8 +185,7 @@ def test_a_listed_collection_without_a_block_is_caught(collection, wildcard):
     # And the both-directions test would notice too.
     remaining = {
         m.group(1)
-        for m in re.finditer(
-            r"match /([A-Za-z0-9_]+)/\{[A-Za-z0-9_]+\}\s*\{([^}]*)\}", stripped)
+        for m in re.finditer(_ANY_MATCH_BLOCK, stripped)
         if _is_full_deny(m.group(2))
     }
     assert collection not in remaining

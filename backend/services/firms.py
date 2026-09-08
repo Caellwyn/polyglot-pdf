@@ -24,7 +24,35 @@ Doc shape (firms/{firm_id}):
     name: str              contact_email: str
     allowed_kits: [kit_id, ...]
     status: "active" | "suspended"
+    kind: "mock" | "live"  (required on CREATE; see firm_kind() below)
+    balance_credits: int          (materialized; written ONLY by the one
+                                    transactional ledger helper,
+                                    backend/services/credit_ledger.py -- Epic
+                                    2 bead A2. upsert_firm() initializes it to
+                                    0 on first create and NEVER touches it on
+                                    a re-run, so a re-bootstrap of an existing
+                                    firm cannot clobber a real balance.)
+    balance_updated_at            (set alongside balance_credits by the same
+                                    ledger helper; also 0-initialized here)
     created_at, updated_at: server timestamps
+
+THE BALANCE IS NOT CHANNEL-PARTITIONED: one firm, one balance_credits,
+whichever channel's mint debits it. That is safe ONLY because a `live` firm
+cannot mint outside the demo channel (Epic 2 bead A3's gate) and a `mock`
+firm carries no real money -- so nothing that debits a live firm's balance
+can happen on staging, and nothing staging debits matters financially. Do
+not read this as "channel doesn't matter here": it matters a great deal, and
+the invariant it rests on lives in the mint route, not in this module.
+
+kind DEFAULTING. A firm doc with NO `kind` key -- the window between this
+code deploying and the backfill migration (Epic 2 bead A6) running -- is
+treated as `live` by firm_kind() below. This is the deliberately
+conservative direction: a mis-defaulted `mock` firm merely blocks staging
+testing, while a mis-defaulted `live` firm mints for free. Every firm
+created from here on (scripts/bootstrap_firm.py, which now requires
+--kind) carries an explicit kind; only pre-migration docs and hand-crafted
+test fixtures ever hit the missing-key fallback in production.
+
 Deferred by design: token_hash (magic-link bead polyglot-pdf-ugm6), usage
 rollups (queried from confirmation_events by firm_id, never stored here).
 Staff membership lives ONLY as firm_id/firm_role custom claims on the staff
@@ -40,6 +68,9 @@ _FIRMS_COLLECTION = "firms"
 
 FIRM_STATUS_ACTIVE = "active"
 FIRM_STATUS_SUSPENDED = "suspended"
+
+FIRM_KIND_MOCK = "mock"
+FIRM_KIND_LIVE = "live"
 
 
 def _firms_enabled() -> bool:
@@ -90,25 +121,72 @@ def get_allowed_kits(firm_id: str) -> list[str]:
         return []
 
 
+def firm_kind(firm_id: str) -> str:
+    """Return this firm's kind: "mock" or "live".
+
+    FAILS CLOSED TO "live" -- the OPPOSITE polarity from get_allowed_kits'
+    fail-closed-to-[]. A mis-read here (store disabled, firm missing,
+    malformed doc, read error) must not let a firm mint for free, so every
+    failure branch resolves to the MORE RESTRICTIVE kind: "live", which the
+    mint gate (Epic 2 bead A3) then subjects to the demo-channel-only rule.
+    A doc with no `kind` key at all -- the pre-backfill window -- gets the
+    same treatment, for the same reason (see the module docstring).
+
+    This module's OTHER reader (get_allowed_kits) fails closed to [] because
+    widening kit visibility is the risk there; here, widening who can mint
+    without the live-firm gate is the risk, and "live" is what applies that
+    gate. Same discipline, different value, because the two calls guard
+    different failure directions.
+    """
+    if not _firms_enabled():
+        return FIRM_KIND_LIVE
+    try:
+        from backend.services.auth import get_db
+
+        snap = get_db().collection(_FIRMS_COLLECTION).document(firm_id).get()
+        if not snap.exists:
+            return FIRM_KIND_LIVE
+        doc = snap.to_dict() or {}
+        kind = doc.get("kind")
+        if kind not in (FIRM_KIND_MOCK, FIRM_KIND_LIVE):
+            return FIRM_KIND_LIVE
+        return kind
+    except Exception as e:
+        _log.error("firm_kind_read_failed", firm_id=firm_id, error=str(e))
+        return FIRM_KIND_LIVE
+
+
 def upsert_firm(
     firm_id: str,
     name: str,
     contact_email: str,
     allowed_kits: list[str],
+    kind: str,
     status: str = FIRM_STATUS_ACTIVE,
 ) -> dict:
     """Create or update firms/{firm_id}. Operator/bootstrap path ONLY.
+
+    `kind` is REQUIRED (no default): scripts/bootstrap_firm.py's --kind flag
+    is itself required, and this is the write-layer backstop for any other
+    caller -- a firm bootstrapped without deciding mock-vs-live is exactly
+    the ambiguity firm_kind()'s fail-closed-to-live default exists to absorb
+    for docs that predate this bead, not a way to opt out of choosing.
 
     NOT gated by FIRMS_FIRESTORE_ENABLED, and any failure RAISES to the
     caller: the bootstrap script maps that to its exit code 2 rather than
     letting an admin action silently no-op.
 
     Idempotent re-runs (read-first): a missing doc gets the full payload
-    with created_at=SERVER_TIMESTAMP; an existing doc gets
-    set(..., merge=True) with updated_at bumped and created_at OMITTED from
-    the payload entirely -- a SERVER_TIMESTAMP in the merge payload would
-    overwrite the original creation time on every re-run. Full-replace of
-    the known fields; there is deliberately no partial-update API.
+    with created_at=SERVER_TIMESTAMP, balance_credits=0, and
+    balance_updated_at=SERVER_TIMESTAMP; an existing doc gets
+    set(..., merge=True) with updated_at bumped and created_at,
+    balance_credits, balance_updated_at OMITTED from the payload entirely --
+    a SERVER_TIMESTAMP in the merge payload would overwrite the original
+    creation time on every re-run, and re-including balance_credits=0 would
+    zero out a real balance on every re-bootstrap. balance_credits is
+    written ONLY by the transactional ledger helper (Epic 2 bead A2) after
+    the first create. Full-replace of the known non-balance fields; there is
+    deliberately no partial-update API.
     """
     # The CLI's argparse choices= enforce this too, but this is the WRITE
     # layer: a future non-CLI caller passing junk would otherwise store a
@@ -118,6 +196,11 @@ def upsert_firm(
         raise ValueError(
             f"status {status!r} is not one of "
             f"({FIRM_STATUS_ACTIVE!r}, {FIRM_STATUS_SUSPENDED!r})"
+        )
+    if kind not in (FIRM_KIND_MOCK, FIRM_KIND_LIVE):
+        raise ValueError(
+            f"kind {kind!r} is not one of "
+            f"({FIRM_KIND_MOCK!r}, {FIRM_KIND_LIVE!r})"
         )
     from firebase_admin import firestore
 
@@ -130,6 +213,7 @@ def upsert_firm(
         "contact_email": contact_email,
         "allowed_kits": list(allowed_kits),
         "status": status,
+        "kind": kind,
         "updated_at": firestore.SERVER_TIMESTAMP,
     }
     if snap.exists:
@@ -137,6 +221,8 @@ def upsert_firm(
         created = False
     else:
         payload["created_at"] = firestore.SERVER_TIMESTAMP
+        payload["balance_credits"] = 0
+        payload["balance_updated_at"] = firestore.SERVER_TIMESTAMP
         ref.set(payload)
         created = True
     _log.info(
@@ -145,6 +231,7 @@ def upsert_firm(
         created=created,
         allowed_kits_count=len(allowed_kits),
         status=status,
+        kind=kind,
     )
     return {"firm_id": firm_id, "created": created}
 

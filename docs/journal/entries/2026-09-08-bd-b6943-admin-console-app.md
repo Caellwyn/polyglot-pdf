@@ -196,7 +196,7 @@ check had the test file not been updated in the same commit.
 
 ## Doc freshness
 
-`docs/technical_guide.md`: new Surface contract 16 (admin console -> admin
+`docs/technical_guide.md`: new Surface contract 17 (admin console -> admin
 service: sign-in gate + page reads/writes).
 
 `docs/components/config-deployment.md`: Tracks line extended with
