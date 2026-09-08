@@ -27,6 +27,13 @@ __pycache__/
 # would un-ignore a file of that name ANYWHERE -- including backend/, where
 # .env* files are exactly where real secrets live.
 !schema-editor/.env.hosted
+# admin-console/.env.hosted (bd polyglot-pdf-b6943) is the SAME class as
+# schema-editor's above, for the same reason: only public VITE_* values (the
+# admin service's Cloud Run URL + the Firebase web config, all client-side
+# and non-secret). Access is gated by the app_admin custom claim, never a
+# token baked into this file. Scoped to the admin-console PATH for the same
+# reason as schema-editor's entry.
+!admin-console/.env.hosted
 
 # example data files
 example_webforms/
