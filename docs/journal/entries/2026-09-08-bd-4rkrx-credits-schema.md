@@ -118,6 +118,31 @@ mistake the absence for an oversight: the atomic mint transaction
 (A3), the open-requires-a-mint-record check and revoke route (A3), the
 refund helper and sweep (A5), and the backfill/seed migration (A6).
 
+**Fresh-eyes + cross-surface review round.** Both review layers (fresh-eyes
+rubric, then the Opus outer cross-surface pass) returned clean: all 3 exit
+criteria scored PASS with verified evidence, and the outer review's final
+verdict was `NO-GAPS`. Breakdown of the round's findings:
+
+- Adopt (none) -- no rubric-fail or blocker was found, so no inline code
+  change was needed this round.
+- Reject (none) -- no finding was refuted against the code; both raised
+  findings held up as real, just not in-scope for an inline fix.
+- Defer (2, both filed as beads rather than fixed inline, per the
+  finding's own classification):
+  - `polyglot-pdf-o3l5z` (out-of-scope) -- `links_store.record_mint()`
+    (this bead) and the pre-existing `link_metering.record_mint()` share a
+    bare function name; a future route importing both under the plain name
+    would get a silent shadow rather than an ImportError. Real, but nothing
+    in this bead's diff wires the two together yet -- filed against the
+    future mint-route bead (A2/A3) that will.
+  - `polyglot-pdf-rrz0t` (nit) -- `link_redemptions.py`'s and
+    `links_store.py`'s `_collection()` both resolve channel via
+    `channel or link_channel()`, which treats an explicitly-passed empty
+    string the same as "omitted" and silently falls through to the
+    process's own channel. Low confidence (no current caller passes `""`)
+    and not a regression from `origin/dev` (the function didn't exist
+    there), so filed rather than fixed inline.
+
 ## Lessons
 
 The "both-directions" rules-text scan in `test_firestore_rules_text.py`
