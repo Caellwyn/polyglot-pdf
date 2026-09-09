@@ -216,6 +216,8 @@ def main(argv=None) -> int:
     # process env pointed at a project this run refused to write into.
     os.environ["GOOGLE_CLOUD_PROJECT"] = args.project
 
+    from firebase_admin import firestore
+
     from backend.services import credit_ledger
     from backend.services.auth import get_db
 
@@ -238,7 +240,13 @@ def main(argv=None) -> int:
         if not had_kind:
             payload["kind"] = target_kind
         if not had_balance:
+            # Mirrors upsert_firm()'s first-create payload
+            # (backend/services/firms.py): balance_credits and
+            # balance_updated_at are written together, never one without
+            # the other, so a backfilled firm's doc shape matches a
+            # normally-created firm's exactly.
             payload["balance_credits"] = 0
+            payload["balance_updated_at"] = firestore.SERVER_TIMESTAMP
 
         # Seed grant is scoped to firms this run is FIRST assigning a kind
         # to -- see the module docstring's idempotency section. A firm that

@@ -75,6 +75,43 @@ the relevant service-layer constants (`backend.services.firms.KIND_*`,
 that could race `firebase_admin.initialize_app`'s ordering -- pinned
 against drift by dedicated tests in each new suite.
 
+**Fresh-eyes review round (post-initial-push).** GAPS-FOUND(2), both
+adopted as real rubric-fail gaps, no refutations:
+- **Adopted --** `backfill_firm_kind.py` built the balance-init payload
+  with `payload["balance_credits"] = 0` but never `balance_updated_at`,
+  contradicting the script's own docstring and diverging from
+  `upsert_firm()`'s first-create payload
+  (`backend/services/firms.py`), which writes both fields together. Fixed:
+  `firestore.SERVER_TIMESTAMP` is now written alongside `balance_credits`
+  in the same `not had_balance` guard, so a backfilled firm's doc shape
+  matches a normally-created one exactly. Two new tests pin this
+  (`test_balance_backfill_writes_balance_updated_at_with_balance_credits`,
+  `test_existing_balance_never_gets_balance_updated_at_added`), each
+  mutation-verified red against the specific line/guard it claims to pin.
+- **Adopted --** the module docstring claimed a drift-guard test,
+  `test_kind_choices_match_service_constants`, that did not exist anywhere
+  in the repo -- `KIND_MOCK`/`KIND_LIVE` were unpinned literals, unlike the
+  sibling `seed_kit_commercials.py`'s real drift-guard tests for its own
+  duplicated constants. Fixed by adding the test the docstring already
+  claimed, asserting `backfill_firm_kind.KIND_MOCK ==
+  backend.services.firms.FIRM_KIND_MOCK` (and the LIVE pair), mutation-
+  verified red against a renamed literal.
+- **Deferred (nit beads, reviewer-filed, not fixed here) --** an unmatched
+  `--mock` firm_id produces no warning
+  (`polyglot-pdf-b51g1`); `docs/components/auth.md`'s pre-existing
+  chronological "Last updated" chain, confirmed present on `origin/dev`
+  before this bead and only extended (not introduced) by it
+  (`polyglot-pdf-e0b6x`).
+- **Not filed (checked and refuted as non-issues) --** `_positive_number`'s
+  lack of an explicit `.strip()` (behaviorally equivalent to the sibling's
+  `.strip()` since `float()` already strips whitespace); the
+  `docs/technical_guide.md` "written by a Track B admin-service route in a
+  later bead" line for `kits/{kit_id}` (still literally true -- that route
+  doesn't exist yet; this bead's script-based writer doesn't contradict it).
+
+Backend suite (3470 passed) and root tests (1432 passed) both re-run green
+after the fix, from the worktree with `PYTHONPATH` set to it.
+
 ## Lessons
 
 **A malformed-metadata parametrization catches exactly the guard

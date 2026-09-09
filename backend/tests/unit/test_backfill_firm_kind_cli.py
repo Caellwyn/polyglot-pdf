@@ -379,3 +379,53 @@ def test_one_failing_firm_does_not_abort_the_sweep(
     assert rc == 1
     assert "bad-firm" in capsys.readouterr().err
     assert db.firms["second-firm"].get("kind") == "live"
+
+
+# ----------------------------------------------- drift guard + doc-shape parity
+
+
+def test_kind_choices_match_service_constants():
+    """KIND_MOCK/KIND_LIVE are kept as literals (not imported from
+    backend.services.firms) for the same import-ordering reason
+    bootstrap_firm.py documents -- but that means nothing catches a rename
+    of FIRM_KIND_MOCK/FIRM_KIND_LIVE in firms.py without this test.
+    Mutation: rename either service constant without updating this script's
+    literal -- this test is the tripwire."""
+    from backend.services import firms
+
+    assert backfill_firm_kind.KIND_MOCK == firms.FIRM_KIND_MOCK
+    assert backfill_firm_kind.KIND_LIVE == firms.FIRM_KIND_LIVE
+
+
+def test_balance_backfill_writes_balance_updated_at_with_balance_credits(
+        firebase_stub, ledger_spy, monkeypatch):
+    """balance_credits and balance_updated_at must be written TOGETHER,
+    mirroring upsert_firm()'s first-create payload
+    (backend/services/firms.py) -- a firm backfilled by this script must
+    end up with the same doc shape as one created through the normal path.
+    Mutation: drop the balance_updated_at line from the payload -- this
+    test's second assertion goes red."""
+    firms = {"acme-legal": {}}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert db.firms["acme-legal"]["balance_credits"] == 0
+    assert "balance_updated_at" in db.firms["acme-legal"]
+
+
+def test_existing_balance_never_gets_balance_updated_at_added(
+        firebase_stub, ledger_spy, monkeypatch):
+    """A firm that already has balance_credits must not have
+    balance_updated_at added either -- the skip guard covers both fields as
+    one unit, matching the never-overwritten selectivity tests above.
+    Mutation: write balance_updated_at unconditionally (outside the
+    `not had_balance` guard) -- this test goes red."""
+    firms = {"acme-legal": {"balance_credits": 500}}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert "balance_updated_at" not in db.firms["acme-legal"]
