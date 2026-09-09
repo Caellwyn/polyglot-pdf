@@ -219,12 +219,21 @@ def option_label(field: dict, value: str) -> str:
 
     state_field = _is_state_field(field)
     color_field = _is_color_field(field)
+    # Since the select migration (bd polyglot-pdf-g2fpr) every dropdown choice
+    # carries its PDF export code in pdf_on_value -- for a state picker, the
+    # two-letter abbreviation itself. That is the authoritative reverse map;
+    # the hand-built _STATE_SLUG_TO_ABBR is only the fallback for a schema
+    # without the channel (bd polyglot-pdf-bxjck).
+    codes = {str(o.get("value")): str(o.get("pdf_on_value"))
+             for o in (field.get("options") or [])
+             if isinstance(o, dict) and isinstance(o.get("pdf_on_value"), str)
+             and o.get("pdf_on_value").strip()}
 
     def _resolve(token: str) -> str:
         if state_field:
             # keep the payload on the two-letter abbreviation; an already-abbreviated
             # or empty value (injection cases / foreign address) passes through.
-            return _STATE_SLUG_TO_ABBR.get(token, token)
+            return codes.get(token) or _STATE_SLUG_TO_ABBR.get(token, token)
         if color_field:
             # already-legible lowercase color slug -- leave as-is.
             return token

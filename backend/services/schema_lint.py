@@ -30,12 +30,11 @@ Rules (stable ids; one finding per violation site):
 - option-value-comma    ERROR   an option value contains a comma (breaks the
                                 voice comma-join contract)
 - option-value-slug     ERROR   (v2 only) option value is not a valid slug
-- select-value-not-slug      ERROR (v2, select, dump) an option carries pdf_on_value but its
-                             value is not a slug -- regenerate the value from the label
 - select-on-value-not-in-pdf ERROR (v2, select, dump) pdf_on_value is not a code the
-                             widget's /Opt list declares -- it would print wrong
-- select-on-value-missing    ERROR (v2, select, dump) a slug value the PDF does not accept
-                             with no pdf_on_value -- would print the slug clipped (g2fpr)
+                             PDF's /Opt list declares (it would print wrong)
+- select-on-value-missing    ERROR (v2, select, dump) a dropdown choice has no pdf_on_value,
+                             so the filler has no export code to write (the pre-migration
+                             shape; run scripts/migrate_select_on_values.py)
 - ref-unresolved-field  ERROR   a condition or control action references a
                                 non-existent field id
 - operator-trigger      ERROR   operator is not valid on the trigger field's
@@ -602,41 +601,37 @@ def _check_options(
                 "multi-select answers spoken aloud -- remove the comma "
                 "from the value",
             ))
-        if (
-            is_v2
-            and value_str not in pdf_choices
-            and not vocab.is_valid_option_slug(value_str)
-        ):
-            # The remedy differs by field type, and giving the WRONG one here
-            # is actively harmful: for a dropdown, "regenerate from the label"
-            # is exactly what breaks the printed form (the value is written
-            # verbatim into the combobox, so 'Alabama (AL)' -> alabama_al ->
-            # prints clipped). A dropdown checked WITHOUT a dump cannot be
-            # judged at all -- this route may simply have no kit identity to
-            # load one from -- so say that instead of prescribing a fix that
-            # would silently corrupt the form (bd polyglot-pdf-4we6j).
+        if is_v2 and not vocab.is_valid_option_slug(value_str):
+            # Every choice type, selects included, keeps a SLUG in value and
+            # its PDF identity in pdf_on_value (the g2fpr epic; the 4we6j
+            # carve-out that exempted a PDF-sanctioned export code in a
+            # dropdown's value was retired in g2fpr.4 once the kits were
+            # migrated). The remedy still differs: a dropdown whose value IS
+            # a legal export code with no pdf_on_value is the pre-migration
+            # shape, and the fix is the migration, not a hand edit.
             has_on_value = (
                 isinstance(o, dict)
                 and isinstance(o.get("pdf_on_value"), str)
                 and o["pdf_on_value"].strip() != ""
             )
             if f.get("type") == "select" and has_on_value:
-                # The option already carries its export code in pdf_on_value,
-                # so the value is free to be a slug -- and "do NOT regenerate"
-                # would be the WRONG advice here. Fresh-eyes (g2fpr.1) caught
-                # this remedy contradicting select-value-not-slug on one option.
                 remedy = (
                     "regenerate it from the label; the PDF export code stays "
                     "in pdf_on_value, which is what the filler writes"
                 )
+            elif f.get("type") == "select" and value_str in pdf_choices:
+                remedy = (
+                    "this dropdown choice is in the pre-migration shape (its "
+                    "value is the PDF export code and it has no pdf_on_value) "
+                    "-- run scripts/migrate_select_on_values.py on the kit, "
+                    "which moves the code into pdf_on_value and mints the "
+                    "value from the label"
+                )
             elif f.get("type") == "select":
                 remedy = (
-                    "for a dropdown this value must be the PDF's own export "
-                    "code (e.g. 'WY'), which is checked against the form's "
-                    "choice list -- if this kit has an acroform dump, lint it "
-                    "through the kit-scoped route so the code can be verified; "
-                    "do NOT regenerate it from the label, which would change "
-                    "what prints on the form"
+                    "regenerate it from the label, and put this choice's PDF "
+                    "export code in pdf_on_value (a kit-scoped lint with an "
+                    "acroform dump can verify it against the form's choice list)"
                 )
             else:
                 remedy = "regenerate it from the label"
@@ -646,41 +641,22 @@ def _check_options(
                 "(lowercase letters, numbers, hyphens, underscores only) -- "
                 + remedy,
             ))
-        # The select's SECOND channel (bd polyglot-pdf-g2fpr). Evidence-based,
-        # like the carve-out above: both rules are no-ops without a dump that
-        # resolves this widget, by the same convention (pdf_choice_values
-        # returns empty for "no evidence", never "nothing is legal").
-        #
-        # (a) An option that HAS pdf_on_value is in the v2 shape: its value
-        #     must be a slug, and its pdf_on_value must be a code the PDF's
-        #     /Opt list actually declares -- the filler now writes pdf_on_value
-        #     (pdf_fill_routes.resolve_select_fill_value), so a code the widget
-        #     does not accept prints wrong exactly as a slug did before.
-        # (b) An option whose value is a VALID SLUG but not in /Opt, with no
-        #     pdf_on_value, is the hole the carve-out above never closed: the
-        #     slug rule does not fire (it is a slug), the code check does not
-        #     fire (there is no code), and the filler writes the slug verbatim
-        #     -- 'wyoming' -> 'wyomin'. That is the c5r8 defect, still open
-        #     until this rule. A NON-slug value already trips option-value-slug
-        #     above, so (b) is scoped to the slug case to avoid a double finding.
+        # The select's SECOND channel (bd polyglot-pdf-g2fpr). Evidence-based:
+        # both rules are no-ops without a dump that resolves this widget
+        # (pdf_choice_values returns empty for "no evidence", never "nothing
+        # is legal"). Since g2fpr.4 they collapse to ONE statement: every
+        # dropdown choice carries a pdf_on_value that the PDF's /Opt list
+        # declares. The filler writes pdf_on_value
+        # (pdf_fill_routes.resolve_select_fill_value); a choice without one
+        # falls back to writing its value verbatim, which is the shape that
+        # printed the old i-90 clipped ('wyoming' -> 'wyomin', c5r8) -- so no
+        # legacy shape may publish. (The value's own SHAPE is option-value-slug's
+        # finding above; the former select-value-not-slug rule was that check
+        # restated for the code-in-both shape and was retired with the carve-out.)
         if is_v2 and f.get("type") == "select" and pdf_choices and isinstance(o, dict):
             on_value = o.get("pdf_on_value")
             has_on = isinstance(on_value, str) and on_value.strip() != ""
             if has_on:
-                # Scoped to the CODE-IN-BOTH shape (value is a legal /Opt code
-                # AND pdf_on_value is set): a value that is neither slug nor
-                # code already tripped option-value-slug above, whose remedy
-                # now says the right thing for an option carrying
-                # pdf_on_value -- one finding, not two contradicting ones.
-                if value_str in pdf_choices and not vocab.is_valid_option_slug(value_str):
-                    out.append(LintFinding(
-                        SEVERITY_ERROR, "select-value-not-slug", opt_path,
-                        f"this choice carries a PDF export code in pdf_on_value, "
-                        f"so its value {_quoted(value_str)} must be a plain slug "
-                        "(lowercase letters, numbers, hyphens, underscores) -- "
-                        "regenerate the value from the label; the code stays "
-                        "in pdf_on_value",
-                    ))
                 if on_value not in pdf_choices:
                     out.append(LintFinding(
                         SEVERITY_ERROR, "select-on-value-not-in-pdf", opt_path,
@@ -690,14 +666,27 @@ def _check_options(
                         "wrong; set it to the form's own export code for this "
                         "choice",
                     ))
-            elif value_str not in pdf_choices and vocab.is_valid_option_slug(value_str):
+            else:
+                if value_str in pdf_choices:
+                    detail = (
+                        f"its value {_quoted(value_str)} is the export code itself "
+                        "(the pre-migration shape) -- run "
+                        "scripts/migrate_select_on_values.py on the kit, which "
+                        "moves the code into pdf_on_value and mints the value "
+                        "from the label"
+                    )
+                else:
+                    detail = (
+                        f"its value {_quoted(value_str)} is not a code the PDF's "
+                        "dropdown accepts, so the filler would write it verbatim "
+                        "and it would print clipped -- set pdf_on_value to this "
+                        f"choice's export code (one of the {len(pdf_choices)} the "
+                        "widget declares)"
+                    )
                 out.append(LintFinding(
                     SEVERITY_ERROR, "select-on-value-missing", opt_path,
-                    f"the value {_quoted(value_str)} is a slug the PDF's dropdown "
-                    "does not accept, and no pdf_on_value gives the filler the "
-                    "real export code -- it would be written verbatim and print "
-                    "clipped; set pdf_on_value to this choice's export code (one "
-                    f"of the {len(pdf_choices)} the widget declares)",
+                    "this dropdown choice has no pdf_on_value, which is what the "
+                    "filler writes into the PDF: " + detail,
                 ))
         seen_values[value_str] = seen_values.get(value_str, 0) + 1
     for value_str, count in seen_values.items():

@@ -881,31 +881,24 @@ def _collect_v2_problems(schema: "FormSchema") -> List[str]:
                     f"{path}: {f.type.value} requires at least 2 options (found {len(opts)})"
                 )
             values = [o.value for o in opts]
-            # SELECT is exempt from the slug-SHAPE rule (bd polyglot-pdf-4we6j).
-            # A dropdown has no fill branch of its own: the filler writes
-            # str(option.value) verbatim into the combobox and never consults
-            # pdf_on_value, so for a select the value IS the PDF export code
-            # ('WY'), which is not slug-shaped. Enforcing the shape here would
-            # make every correct dropdown unpublishable, and "mint from the
-            # label" -- the remedy this message names -- is exactly what makes
-            # the form PRINT WRONG ('wyoming' clips to 'wyomin' in a 36pt box).
-            #
-            # Whether a select's value is LEGITIMATE is decided by schema_lint's
-            # option-value-slug rule, which has the acroform dump and can check
-            # the value against the widget's own /Opt list. This model validates
-            # a schema in isolation with no dump, so it structurally cannot make
-            # that call -- it defers rather than guessing. Every other rule
-            # below (uniqueness, arity, pdf mapping) still applies to selects.
-            # Retire this exemption when selects get a real pdf_on_value channel
-            # (bd polyglot-pdf-g2fpr).
-            if f.type != FieldType.SELECT:
-                for o in opts:
-                    if not vocab.is_valid_option_slug(o.value):
-                        problems.append(
-                            f"{path}: option value {o.value!r} is not a v2 slug "
-                            f"(lowercase ascii [a-z0-9_-], no commas/spaces; "
-                            f"mint from the label)"
-                        )
+            # Every choice type keeps a SLUG in value, selects included: a
+            # dropdown's PDF export code lives in pdf_on_value, which the
+            # filler writes (pdf_fill_routes.resolve_select_fill_value). The
+            # 4we6j exemption that let a select keep the code in value was
+            # retired in g2fpr.4 once the shipped kits were migrated
+            # (scripts/migrate_select_on_values.py). Whether the code is one
+            # the PDF accepts is still schema_lint's call (it has the dump).
+            for o in opts:
+                if not vocab.is_valid_option_slug(o.value):
+                    hint = (
+                        "run scripts/migrate_select_on_values.py, which moves a "
+                        "dropdown's export code into pdf_on_value and mints the value"
+                        if f.type == FieldType.SELECT else "mint from the label"
+                    )
+                    problems.append(
+                        f"{path}: option value {o.value!r} is not a v2 slug "
+                        f"(lowercase ascii [a-z0-9_-], no commas/spaces; {hint})"
+                    )
             dupes = sorted({v for v in values if values.count(v) > 1})
             if dupes:
                 problems.append(
