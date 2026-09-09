@@ -945,7 +945,7 @@ class TestSpellbackTtsRoute:
     def test_flag_on_returns_audio(self, monkeypatch):
         client, app, require_auth = self._client(monkeypatch, enabled=True)
 
-        async def fake_synth(value, settings, language_name=None):
+        async def fake_synth(value, settings, language_name=None, session_ctx=None):
             assert value == "Jose"
             # The session language must ride the request into synthesis
             # (bd 44ywm: the clip speaks the user's language).
@@ -964,7 +964,7 @@ class TestSpellbackTtsRoute:
             # never 422 on the missing optional field.
             seen = {}
 
-            async def fake_synth_no_lang(value, settings, language_name=None):
+            async def fake_synth_no_lang(value, settings, language_name=None, session_ctx=None):
                 seen["language_name"] = language_name
                 return b"MP3BYTES"
 

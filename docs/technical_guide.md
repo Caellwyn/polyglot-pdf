@@ -1596,12 +1596,28 @@ that drops a key breaks a consumer query silently.
   scope (operator budget, not product cost). Three sites today: the Live
   adapter, the text adapter, and `spellback_tts._synthesize_sync` -- which
   `intro_tts` and `notice_tts` both call, so all three TTS kinds share ONE call
-  site. The text and TTS emit proofs are `xfail(strict=True)` pending bead
-  `polyglot-pdf-t86oz`; strict, so wiring one turns the test red and forces
-  the marker off rather than letting a stale xfail mask a later regression.
-  The Live adapter's own proof was never xfail (`log_gemini_api_response` was
-  already called before this); bd `polyglot-pdf-cjifh` is what makes that
-  call's context ids real instead of always-None.
+  site. ALL THREE are `emit_wired: True` now (bd `polyglot-pdf-cjifh` for the
+  live site, bd `polyglot-pdf-t86oz` for the other two), so no case in
+  `test_paid_site_emits_a_usage_event` is xfail any more. The Live adapter's
+  own proof was never xfail (`log_gemini_api_response` was already called
+  before this); bd `polyglot-pdf-cjifh` is what makes that call's context ids
+  real instead of always-None. Bd `polyglot-pdf-t86oz` did the equivalent for
+  the other two: `TextAIGemini._generate` takes an optional `usage_kind` +
+  `session_ctx` (threaded through `validate`/`ask`/`translate_labels`/
+  `translate_items` -- `TextAIGemini` is a per-process SINGLETON, so these ids
+  ride the call rather than living on `self`) reaching `_log_usage` ->
+  `log_text_ai_usage`; and `synthesize_spellback`/`synthesize_notice`/
+  `synthesize_intro` each call a shared `_log_tts_usage_event` helper
+  (`spellback_tts.py`) after an ACTUAL synthesis (never on a cache hit) ->
+  `log_tts_usage`. Callers build the `session_ctx` dict from their own state:
+  `ValidatorService`/`FormFillingService` (a `_text_ai_session_ctx()` helper)
+  for the text side, `backend/routes/tts_routes.py`'s `_usage_session_ctx`
+  (built from the auth dependency's claims dict, mirroring the WS route's
+  staff-uid-as-employee_id fallback) for TTS. Two callers OUTSIDE this bead's
+  surfaces (`option_translation.py`'s authoring-time bake and runtime
+  override build) do not pass `session_ctx` yet, so their `text_translation`
+  events carry every context key null -- same shape as any other unmigrated
+  caller, not a bug.
 - **Pricing is a separate table per product** (`backend/config.py`).
   `GEMINI_PRICING_BY_FAMILY` prices the Live endpoint and does NOT transfer:
   `TEXT_GENERATION_PRICING` prices plain `generate_content`, and

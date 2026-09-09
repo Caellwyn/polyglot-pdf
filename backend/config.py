@@ -1450,9 +1450,15 @@ GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 # rates. Two tables, because they bill as two products.
 #
 # Verified against https://ai.google.dev/gemini-api/docs/pricing on 2026-09-09
-# (bd polyglot-pdf-wio6m), paid-tier rows, quoted per 1M tokens:
+# (bd polyglot-pdf-wio6m; gemini-2.5-pro row added on 2026-09-09 fixing a gap
+# found in cross-surface review of bd polyglot-pdf-t86oz), paid-tier rows,
+# quoted per 1M tokens:
 #   gemini-2.5-flash:       text in 0.30 / cached in 0.03 / out 2.50
 #   gemini-2.5-flash-lite:  text in 0.10 / cached in 0.01 / out 0.40
+#   gemini-2.5-pro:         text in 1.25 / cached in 0.125 / out 10.00
+#     (<=200k-token prompt tier; this app's validator/translation prompts are
+#     well under that. The page's >200k tier -- in 2.50 / cached 0.25 / out
+#     15.00 -- is NOT carried here; add a second row if a prompt ever needs it.)
 # Output rates include thinking tokens. Audio input is priced separately on that
 # page (2.5-flash 1.00, 2.5-flash-lite 0.30) and is NOT carried here: these are
 # the TEXT paths, which send no audio. Add an "audio_input" column if a text
@@ -1468,6 +1474,11 @@ TEXT_GENERATION_PRICING: dict[str, dict[str, float]] = {
 		"text_input": 0.10 / _PER_1M,
 		"cached_input": 0.01 / _PER_1M,
 		"text_output": 0.40 / _PER_1M,
+	},
+	"gemini-2.5-pro": {
+		"text_input": 1.25 / _PER_1M,
+		"cached_input": 0.125 / _PER_1M,
+		"text_output": 10.00 / _PER_1M,
 	},
 }
 

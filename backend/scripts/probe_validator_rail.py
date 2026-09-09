@@ -486,7 +486,7 @@ async def run_real_validator(fields: list, dry_run: bool) -> dict:
     call but exercises the SAME ValidatorService code path via a stub ITextAI."""
     if dry_run:
         class _StubTextAI:
-            async def validate(self, payload: dict) -> dict:
+            async def validate(self, payload: dict, session_ctx: dict | None = None) -> dict:
                 return {"conflicts": [{"field_ids": [M_STATE[0], M_ZIP[0]],
                                         "reason": "stub: state/zip mismatch"}]}
         return await ValidatorService(_StubTextAI()).validate(fields)

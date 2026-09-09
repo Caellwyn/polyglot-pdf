@@ -75,7 +75,7 @@ async def test_overlapping_windows_same_conflict_dedupes_to_one_steer():
     dedupe by field-id set, exactly one conflict survives and one steer fires."""
     conflict = {"field_ids": ["f2", "f3"], "reason": "state/ZIP mismatch"}
 
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         ids = _ids_in_payload(payload)
         # Both windows contain f2 and f3, so both return the conflict.
         if {"f2", "f3"} <= ids:
@@ -106,7 +106,7 @@ async def test_overlapping_windows_same_conflict_dedupes_to_one_steer():
 async def test_dedupe_is_order_insensitive_on_field_ids():
     """Two windows report the conflict with the field_ids in DIFFERENT order
     (['f2','f3'] vs ['f3','f2']); the frozenset key collapses them to one."""
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         ids = _ids_in_payload(payload)
         if "f1" in ids:  # window 1
             return {"conflicts": [{"field_ids": ["f2", "f3"], "reason": "a"}]}
@@ -126,7 +126,7 @@ async def test_dedupe_is_order_insensitive_on_field_ids():
 async def test_distinct_conflicts_across_windows_both_survive():
     """Different field-id sets are NOT deduped -- each real conflict rides the one
     combined steer."""
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         ids = _ids_in_payload(payload)
         if "f1" in ids:  # window 1
             return {"conflicts": [{"field_ids": ["f2", "f3"], "reason": "geo"}]}
@@ -147,7 +147,7 @@ async def test_distinct_conflicts_across_windows_both_survive():
 async def test_one_window_failing_open_does_not_block_the_others():
     """A window whose validate RAISES fails open (empty) without dropping the batch;
     the other window's conflict still surfaces."""
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         ids = _ids_in_payload(payload)
         if "f1" in ids:  # window 1 raises -> fail-open
             raise RuntimeError("window 1 boom")
@@ -165,7 +165,7 @@ async def test_one_window_failing_open_does_not_block_the_others():
 @pytest.mark.asyncio
 async def test_one_window_timeout_fails_open(monkeypatch):
     """A hung window fails open at VALIDATOR_TIMEOUT_SEC without blocking the batch."""
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         ids = _ids_in_payload(payload)
         if "f1" in ids:  # window 1 hangs
             await asyncio.sleep(10)
@@ -227,7 +227,7 @@ async def test_concurrency_is_bounded_by_the_config_cap(monkeypatch):
     in_flight = 0
     peak = 0
 
-    async def _validate(payload):
+    async def _validate(payload, session_ctx=None):
         nonlocal in_flight, peak
         in_flight += 1
         peak = max(peak, in_flight)

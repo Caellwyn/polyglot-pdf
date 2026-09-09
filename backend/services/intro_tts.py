@@ -41,6 +41,7 @@ from pathlib import Path
 import structlog
 
 from backend.services.spellback_tts import (
+    _log_tts_usage_event,
     _synthesize_sync,
     resolve_spellback_voice,
 )
@@ -146,7 +147,7 @@ _cache_lock = threading.Lock()
 
 
 async def synthesize_intro(language_name, form_number: str,
-                           settings) -> tuple[bytes, str]:
+                           settings, session_ctx: dict | None = None) -> tuple[bytes, str]:
     """Synthesize (or serve from cache) the intro clip.
 
     Returns (mp3_bytes, etag). Raises ValueError on an unknown form key;
@@ -154,6 +155,11 @@ async def synthesize_intro(language_name, form_number: str,
     502 without logging text). All blocking work -- voice resolution
     (list_voices is a network RPC on first use) AND synthesis -- runs in a
     worker thread, same loop discipline as synthesize_spellback.
+
+    session_ctx (bd polyglot-pdf-t86oz): the route's own claims-derived
+    context, forwarded to the usage_kind="tts_intro" event -- emitted ONLY
+    on an actual synthesis, never on a cache hit (a cache hit calls Cloud
+    TTS zero times).
     """
     if form_number not in KNOWN_FORMS:
         raise ValueError("unknown form")
@@ -168,9 +174,9 @@ async def synthesize_intro(language_name, form_number: str,
         voice_name, locale = resolve_spellback_voice(settings, language)
         text = build_intro_text(language, form_number)
         return _synthesize_sync(text, voice_name, locale,
-                                gain_db=INTRO_GAIN_DB)
+                                gain_db=INTRO_GAIN_DB), text, voice_name
 
-    audio = await asyncio.to_thread(_resolve_and_synthesize)
+    audio, text, voice_name = await asyncio.to_thread(_resolve_and_synthesize)
     etag = '"intro-%s"' % hashlib.sha256(audio).hexdigest()[:24]
     with _cache_lock:
         hit = _cache.get(key)
@@ -185,4 +191,5 @@ async def synthesize_intro(language_name, form_number: str,
         # concurrent first-request race the loser's bytes are discarded.
         audio_bytes=len(hit[0]),
     )
+    _log_tts_usage_event("tts_intro", text, voice_name, session_ctx)
     return hit

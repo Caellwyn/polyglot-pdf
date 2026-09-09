@@ -1,11 +1,14 @@
 # Logging & cost tracking
 
-**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
+**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
 shape for every paid call, the `usage_kind` closed set, and the text +
 TTS pricing tables. bd polyglot-pdf-cjifh: the live-voice path now threads
-firm/employee/link/kit/channel/model into every per-turn usage event.)*
+firm/employee/link/kit/channel/model into every per-turn usage event. bd
+polyglot-pdf-t86oz: the text (validator/secretary/translation) and TTS
+(spellback/notice/intro) paths now emit their usage events too -- see the
+Call-site coverage paragraph below.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -51,6 +54,15 @@ offline analysis. Counts and costs only — no field values, no transcript text.
   |-------|--------:|----------:|----:|
   | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 |
   | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 |
+  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 |
+
+  The `gemini-2.5-pro` row is the `<=200k`-token-prompt tier (this app's
+  validator/translation prompts never approach 200k); the page's `>200k` tier
+  is not carried here. It bills `VALIDATOR_PRO_MODEL`'s default-on whole-form
+  pass and `OPTION_TRANSLATION_MODEL`'s authoring-time bake -- both
+  `gemini-2.5-pro` by default (`backend/config.py`) -- so a missing row here
+  would leave the product's single most expensive text call reporting a null
+  cost.
 
   `get_text_generation_pricing(model_name)` matches on the id with any
   date/preview suffix stripped, **longest key first** so a `-lite` id is not
@@ -216,15 +228,26 @@ added rather than billing silently. `backend/scripts/` is deliberately out of
 scope: those probes run on an operator's own budget. Today the allowlist holds
 three sites — the Live adapter, the text adapter, and `spellback_tts._synthesize_sync`
 (which `intro_tts` and `notice_tts` both call, so the three TTS paths share one
-site). The text and TTS emit proofs are `xfail(strict=True)` until bead
-`polyglot-pdf-t86oz` plumbs the ids through; strict, so wiring one turns the test
-red and forces the marker off. The Live adapter's own proof is NOT xfail (it
-already called `log_gemini_api_response` before this): bd `polyglot-pdf-cjifh`
-widened that existing call with the firm/employee/link/kit/channel/model
-context ids (`_handle_fill_session` -> `FormFillingService.start_session` ->
+site). All three are `emit_wired: True` now — bd `polyglot-pdf-cjifh` (live)
+and bd `polyglot-pdf-t86oz` (text + TTS) both landed, so none of the
+allowlist's `test_paid_site_emits_a_usage_event` cases is xfail any more. The
+Live adapter's own proof was never xfail (it already called
+`log_gemini_api_response` before this): bd `polyglot-pdf-cjifh` widened that
+existing call with the firm/employee/link/kit/channel/model context ids
+(`_handle_fill_session` -> `FormFillingService.start_session` ->
 `LiveAIGemini.set_session_context`, threaded from the WS route's decoded
 token claims and `link_tokens.link_channel()`), so a live-voice usage event now
-actually carries them instead of six nulls.
+actually carries them instead of six nulls. bd `polyglot-pdf-t86oz` did the
+same for the other two: `TextAIGemini._generate` takes an optional
+`usage_kind` + `session_ctx` (the singleton adapter cannot hold session ids
+on `self`, so callers thread them through the call — `ValidatorService` and
+`FormFillingService._text_ai_session_ctx()`), emitting `log_text_ai_usage`
+with a cost from `TEXT_GENERATION_PRICING`; and each of `synthesize_spellback`
+/ `synthesize_notice` / `synthesize_intro` calls a shared
+`_log_tts_usage_event` helper (`spellback_tts.py`) after an ACTUAL synthesis
+(never on a cache hit), emitting `log_tts_usage` with a character count and a
+cost from `TTS_PRICING_USD_PER_CHAR` — `None` today since that table's
+Chirp3-HD rate is still the unverified `None` above.
 
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)

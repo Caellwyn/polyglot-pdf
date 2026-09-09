@@ -58,8 +58,9 @@ class _OracleTextAI:
         self._truth = truth_by_case
         self.last_payload = None
 
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         self.last_payload = payload
+        self.last_session_ctx = session_ctx
         tail = "".join(payload.get("fresh_tail", []))
         # Recover the fields the service rendered.
         try:
@@ -76,13 +77,13 @@ class _OracleTextAI:
 
 
 class _RaisingTextAI:
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         raise RuntimeError("simulated flash-lite outage")
 
 
 class _FailOpenTextAI:
     """Mirrors the adapter's own fail-open: returns the all-clear on any trouble."""
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         return {"conflicts": []}
 
 
@@ -90,7 +91,7 @@ class _BadShapeTextAI:
     def __init__(self, verdict):
         self._verdict = verdict
 
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         return self._verdict
 
 
