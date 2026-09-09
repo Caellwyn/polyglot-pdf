@@ -328,3 +328,105 @@ export async function setUserRole(
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the account'));
   return (await res.json()) as SetUserRoleResult;
 }
+
+/** One kit's resolved commercial, from either GET /admin/kits' `kits` array
+ * or GET /admin/kits/{kit_id}/commercial (admin_backend/routes/
+ * kit_routes.py) -- both spread `kit_commercials.resolve_commercial`'s
+ * return value, `{credit_cost, cap_usd, source}`, plus the route-added
+ * `kit_id`. `source` is "kit" when a commercial doc exists for this kit,
+ * "default" when it does not and the kit is riding the global fallback
+ * (kit_commercials.DEFAULT_CREDIT_COST / link_budget's default ceiling).
+ *
+ * NOTE ON THE FIELD NAME: this is deliberately `cap_usd`, not
+ * `burn_cap_usd` -- resolve_commercial's own vocabulary (bead A3), which
+ * kit_routes.py's GET routes pass straight through unrenamed. The PUT
+ * route's REQUEST body spells the same value `burn_cap_usd` (see
+ * KitCommercialPutRequest below) because that is the stored doc's own key;
+ * this client keeps both spellings distinct rather than picking one and
+ * translating, mirroring the route module's own docstring on why the two
+ * names coexist.
+ *
+ * NO `updated_by` HERE: kit_commercials.resolve_commercial's return value
+ * does not carry it (only the raw Firestore doc does, which neither GET
+ * route echoes) -- so this page cannot show who last edited a kit's
+ * pricing without a wire change on the READ side, which is out of this
+ * bead's scope (Surfaces lists only adminApi.ts + the page + the tab, not
+ * kit_routes.py).
+ */
+export interface KitCommercial {
+  kit_id: string;
+  credit_cost: number;
+  cap_usd: number;
+  source: 'kit' | 'default';
+}
+
+/** GET /admin/kits' response shape. */
+export interface KitsPage {
+  kits: KitCommercial[];
+}
+
+/** Every kit in the form-kit store, each joined with its resolved
+ * commercial doc or the global defaults -- the same list the mint path's
+ * pricing can never disagree with (kit_routes.py's list_kits docstring). */
+export async function listKits(): Promise<KitsPage> {
+  const res = await adminFetch('/admin/kits');
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the kit list'));
+  return (await res.json()) as KitsPage;
+}
+
+/** One kit's resolved commercial (GET /admin/kits/{kit_id}/commercial). */
+export async function getKitCommercial(kitId: string): Promise<KitCommercial> {
+  const res = await adminFetch(`/admin/kits/${encodeURIComponent(kitId)}/commercial`);
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load this kit\'s pricing'));
+  return (await res.json()) as KitCommercial;
+}
+
+/** PUT /admin/kits/{kit_id}/commercial's request body. All three fields are
+ * REQUIRED on the wire (kit_routes.py's KitCommercialPutRequest docstring:
+ * a PUT replaces the whole commercial doc, so a partial update that
+ * silently kept a stale ceiling from a previous edit is exactly the failure
+ * mode the per-kit ceiling rule exists to prevent) -- `display` defaults to
+ * an empty object here rather than being left optional on this client, so
+ * a caller can never accidentally send a partial body. */
+export interface SetKitCommercialRequest {
+  creditCost: number;
+  burnCapUsd: number;
+  display?: Record<string, string>;
+}
+
+/** PUT /admin/kits/{kit_id}/commercial's response shape. Echoes the just-
+ * validated value under BOTH `burn_cap_usd` (this request's own field name)
+ * and `cap_usd` (what the GET routes call the identical number) -- see
+ * kit_routes.py's put_kit_commercial docstring for why both names ride
+ * along on the same float rather than one being derived from the other. */
+export interface SetKitCommercialResult {
+  kit_id: string;
+  credit_cost: number;
+  burn_cap_usd: number;
+  cap_usd: number;
+  display: Record<string, string>;
+  before: unknown;
+  request_id: string;
+}
+
+/** Set a kit's commercial doc. The server validates BEFORE any write
+ * (credit_cost a positive int, burn_cap_usd a positive finite float, both
+ * refusing a stray bool/NaN/+-inf) and returns 422 on a bad value with no
+ * write and no audit row -- this client does not pre-validate and swallow
+ * that response, it surfaces the server's own detail message so the page's
+ * field-level error always matches the rule the route actually enforces. */
+export async function setKitCommercial(
+  kitId: string, req: SetKitCommercialRequest,
+): Promise<SetKitCommercialResult> {
+  const res = await adminFetch(`/admin/kits/${encodeURIComponent(kitId)}/commercial`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      credit_cost: req.creditCost,
+      burn_cap_usd: req.burnCapUsd,
+      display: req.display ?? {},
+    }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not save this kit\'s pricing'));
+  return (await res.json()) as SetKitCommercialResult;
+}
