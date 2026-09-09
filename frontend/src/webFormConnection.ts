@@ -4110,8 +4110,13 @@ export class WebFormConnection {
    * Update field value (user edit or AI fill)
    */
   updateField(
+    // string[] matches FieldValue.value, which has admitted a checkbox_group
+    // answer since bd polyglot-pdf-8ewxs. This signature was the last narrow
+    // restatement of the shape -- narrow enough that :3104 already had to cast
+    // through `as any` to pass one, which is the tell that the type was wrong
+    // rather than the caller.
     fieldId: string,
-    value: string | boolean | null,
+    value: string | string[] | boolean | null,
     options?: { confirmed?: boolean; emit?: boolean }
   ): void {
     const confirmed = options?.confirmed;

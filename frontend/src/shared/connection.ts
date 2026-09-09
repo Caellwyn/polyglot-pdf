@@ -180,7 +180,25 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 			(element as HTMLSelectElement).value = String(value)
 		} else if (element.tagName === 'INPUT') {
 			const inputEl = element as HTMLInputElement
-			if (inputEl.type === 'checkbox') {
+			// A GROUP is not a single control. Since bd polyglot-pdf-96um6 gave a
+			// group's option[0] an id, getElementById resolves here where it used to
+			// return null -- so without this branch a checkbox group restored as
+			// Boolean(['White']) === true, checking OPTION[0] regardless of what the
+			// user actually picked. A silently wrong race or reason answer.
+			const groupEls = document.querySelectorAll(
+				`input[name="${fieldId}[]"]`
+			) as NodeListOf<HTMLInputElement>
+			if (groupEls.length) {
+				const picked = Array.isArray(value) ? value.map(String) : [String(value)]
+				groupEls.forEach(el => { el.checked = picked.includes(el.value) })
+			} else if (inputEl.type === 'radio') {
+				// Likewise a radio group: select the MATCHING option rather than
+				// overwriting option[0]'s value attribute (bd polyglot-pdf-sjbdm).
+				const radios = document.querySelectorAll(
+					`input[name="${fieldId}"]`
+				) as NodeListOf<HTMLInputElement>
+				radios.forEach(el => { el.checked = el.value === String(value) })
+			} else if (inputEl.type === 'checkbox') {
 				inputEl.checked = Boolean(value)
 			} else {
 				inputEl.value = String(value)
@@ -221,14 +239,27 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 		if (!element) continue
 
 		// Get current value from DOM
-		let value: string | boolean | null = null
+		// string[] for a checkbox group -- the shape the rest of the app already
+		// stores for one (see FieldValue), and what this path failed to capture.
+		let value: string | string[] | boolean | null = null
 
 		if (element.tagName === 'SELECT') {
 			const selectEl = element as HTMLSelectElement
 			value = selectEl.value || null
 		} else if (element.tagName === 'INPUT') {
 			const inputEl = element as HTMLInputElement
-			if (inputEl.type === 'checkbox') {
+			// Same group-vs-single distinction as the restore above. Capturing a
+			// checkbox group as inputEl.checked stored the BOOLEAN true in place of
+			// the string[] selection -- and this path marks what it captures
+			// {confirmed: true}, which would have contradicted this bead's whole
+			// thesis that only an explicit act verifies a field.
+			const groupEls = document.querySelectorAll(
+				`input[name="${fieldId}[]"]`
+			) as NodeListOf<HTMLInputElement>
+			if (groupEls.length) {
+				const picked = Array.from(groupEls).filter(el => el.checked).map(el => el.value)
+				value = picked.length ? picked : null
+			} else if (inputEl.type === 'checkbox') {
 				value = inputEl.checked
 			} else if (inputEl.type === 'radio') {
 				// For radio groups, only capture if checked

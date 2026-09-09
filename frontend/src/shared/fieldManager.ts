@@ -257,6 +257,17 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			if (!element) {
 				console.warn('[VFF FieldManager] [X] Field not found:', update.fieldId)
 				results.notFound.push(update.fieldId)
+				// RELEASE THE FLAG BEFORE BAILING. It is set unconditionally above, and
+				// cleared only on the two paths that reach the end of the loop -- so this
+				// `continue` used to strand it set FOREVER, and setupEditListener's
+				// `if (aiUpdatingFields.has(fieldId)) return` then swallowed EVERY later
+				// manual edit to that field: no state write, no notify to the model. That
+				// is the precise failure this bead exists to prevent, so a field the AI
+				// could not fill must not also become uneditable by hand.
+				// Same 50ms settle as the success paths, for the same reason.
+				setTimeout(() => {
+					aiUpdatingFields.delete(update.fieldId)
+				}, 50)
 				continue
 			}
 		}		// Apply value to field based on element type

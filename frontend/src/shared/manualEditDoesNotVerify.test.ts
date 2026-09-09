@@ -358,3 +358,46 @@ describe('AI FILL still reaches a group after it gained an id (bd polyglot-pdf-9
     expect(male.checked).toBe(true)
   })
 })
+
+describe('CHECKBOX GROUPS survive the option[0] id (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GROUP_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+               options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  // Renders name="race[]" with the id on option[0], exactly as CheckboxField does.
+  function renderGroup() {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    return Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+  }
+
+  it('a manual edit still notifies AFTER a failed AI fill', async () => {
+    // applyUpdates sets aiUpdatingFields to suppress its own change events, and
+    // cleared it only on the paths reaching the end of the loop. A checkbox group
+    // bails at notFound, so the flag stranded SET and setupEditListener swallowed
+    // every later manual edit -- permanently. Measured 0 notifications.
+    renderGroup()
+    const onManualEdit = vi.fn()
+    const fm = createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    fm.applyUpdates([{ fieldId: 'race', value: ['White'] } as any])
+    await new Promise(r => setTimeout(r, 80))
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(
+      onManualEdit.mock.calls.length,
+      'a field the AI could not fill must not become uneditable by hand'
+    ).toBe(1)
+  })
+})
