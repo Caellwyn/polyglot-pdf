@@ -771,7 +771,11 @@ def test_reconcile_expired_for_firm_is_never_called_from_credit_ledger_module(
 def test_websocket_budget_exhausted_writes_the_telemetry_mirror(monkeypatch):
     """Socket teardown on LinkBudgetExhausted (plan: "writes the
     budget_exhausted mirror"). NO ledger call -- this is the telemetry-only
-    half, pinned by asserting credit_ledger is never touched.
+    half, pinned by asserting credit_ledger is never touched. The fake's
+    get() reports an EXISTING doc -- the normal case once A3's mint-route
+    rewrite (bd polyglot-pdf-jecrl) lands and writes a links doc before this
+    can ever run -- so the guard added for the orphan-doc case (see the
+    "does_not_create" test below) does not swallow this write too.
 
     Mutation: change the written status to STATUS_REVOKED, or drop the
     mirror call from the except block entirely -- both red. Verified
@@ -780,7 +784,13 @@ def test_websocket_budget_exhausted_writes_the_telemetry_mirror(monkeypatch):
 
     written = {}
 
+    class _FakeSnapshot:
+        exists = True
+
     class _FakeDocRef:
+        def get(self):
+            return _FakeSnapshot()
+
         def set(self, data, merge=False):
             written["data"] = dict(data)
             written["merge"] = merge
@@ -798,6 +808,53 @@ def test_websocket_budget_exhausted_writes_the_telemetry_mirror(monkeypatch):
     assert written["jti"] == "jti-teardown"
     assert written["data"] == {"status": links_store.STATUS_BUDGET_EXHAUSTED}
     assert written["merge"] is True
+
+
+def test_websocket_budget_exhausted_mirror_does_not_create_an_orphan_doc(
+        monkeypatch):
+    """GAP FIX (polyglot-pdf-1op3g cross-surface review, finding 1): today
+    NOTHING in production writes a links doc before this mirror can run --
+    links_store.record_mint() has zero production callers until A3's
+    mint-route rewrite (bd polyglot-pdf-jecrl) lands -- so every
+    budget-exhausted socket teardown hits a MISSING doc. A bare
+    .set(..., merge=True) on a missing doc CREATES it (the vendored SDK's
+    own merge docstring: "creating if the document does not exist"), which
+    would manufacture a links doc with no expire_at (the TTL policy in
+    scripts/setup-firestore-ttl.sh never reaps it) carrying
+    status=budget_exhausted forever -- a status A3's "open requires a mint
+    record" gate reads as an extant, non-revoked record for a jti that was
+    never minted, silently letting it back through a gate designed to
+    reject it. The fake distinguishes create-from-update (unlike the
+    original hand-rolled fake, whose bare set() recorder could not) by
+    having get() report a missing doc and asserting set() is never called.
+
+    Mutation: drop the `if not snap.exists: return` guard from
+    _mirror_budget_exhausted -- set() then gets called unconditionally and
+    this goes red. Verified 2026-09-08."""
+    import backend.routes.websocket_routes as ws_routes
+
+    calls = {"set": 0}
+
+    class _FakeSnapshot:
+        exists = False
+
+    class _FakeDocRef:
+        def get(self):
+            return _FakeSnapshot()
+
+        def set(self, data, merge=False):
+            calls["set"] += 1
+
+    class _FakeCollection:
+        def document(self, jti):
+            return _FakeDocRef()
+
+    monkeypatch.setattr(links_store, "_collection",
+                        lambda *a, **k: _FakeCollection())
+
+    ws_routes._mirror_budget_exhausted("jti-never-minted")
+
+    assert calls["set"] == 0
 
 
 def test_websocket_budget_exhausted_mirror_NEVER_raises_on_store_failure(

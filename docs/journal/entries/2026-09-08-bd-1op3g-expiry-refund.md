@@ -179,6 +179,37 @@ blocker the reviewer itself filed as a bead rather than blocking on
   call sites" count (there are at least four). Comment-only, no behavior
   change; left for a follow-up chore pass.
 
+**Fix-up round -- GAPS-FOUND (1), fixed.** A second cross-surface pass
+re-traced the same diff and confirmed exit criterion 3's "firm + kit"
+wording is satisfied (the test's tighter "exactly the firm doc" pin is
+what GUARANTEES A3's eventual composed transaction is `{firm, kit}`, not a
+rubric-fail), then re-raised the blocker the prior round had deliberately
+left filed-not-fixed:
+
+- ADOPTED (blocker, closes `bd polyglot-pdf-cppkx`): `_mirror_budget_exhausted`
+  now reads the doc before writing it -- `doc_ref.get()`, return silently
+  when `not snap.exists` -- so `set(..., merge=True)` only ever runs
+  against a links doc that already exists. Since A3 (the mint route,
+  `bd polyglot-pdf-jecrl`) has not landed, every jti reaching this teardown
+  today has no such doc, so before this fix EVERY budget-exhausted close
+  created a schema-violating, TTL-immune orphan; after it, none do (missing
+  doc: no-op; real mint record: status flips as before). New pinning test
+  `test_websocket_budget_exhausted_mirror_does_not_create_an_orphan_doc`
+  asserts `set()` is never called against a fake whose `get()` reports a
+  missing doc; mutation-verified by deleting the `if not snap.exists:
+  return` guard and confirming the test reddens (`assert 1 == 0`), then
+  restoring it green. The pre-existing
+  `test_websocket_budget_exhausted_writes_the_telemetry_mirror` test was
+  updated so its fake's `get()` reports an EXISTING doc, so the new guard
+  does not also swallow the real-mint-record case it pins (`bd
+  polyglot-pdf-cppkx`'s exit criterion 2). `docs(nits)` findings 2 and 3
+  from this round were both already filed by the reviewer (`bd
+  polyglot-pdf-yl1ln`, `bd polyglot-pdf-alziy`) -- no new nits bead needed.
+  Full backend suite (3457 passed, 72 skipped, 3 deselected) plus
+  `admin_backend` (115 passed) green after the fix; the pre-existing,
+  out-of-scope `tests/test_doc_freshness.py` failure (see below) still
+  reproduces identically with this round's diff stashed out.
+
 ## Lessons
 
 **A criterion can name a transaction that does not exist yet as code.**

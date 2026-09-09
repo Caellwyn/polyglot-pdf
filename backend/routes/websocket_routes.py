@@ -1196,6 +1196,22 @@ def _mirror_budget_exhausted(jti) -> None:
 	and a firm's link listing read; it never touches balance_credits or the
 	ledger, and credit_ledger.refund_expired_link() never runs from here.
 
+	READ-BEFORE-WRITE, ON PURPOSE: this must NEVER create a links doc. The
+	mint-route rewrite that calls links_store.record_mint() (Track A bead A3,
+	polyglot-pdf-jecrl) has not landed, so today NOTHING writes a links doc
+	before this mirror can run -- and .set(..., merge=True) on a missing doc
+	CREATES it (google-genai vendored SDK: document.py's merge docstring is
+	explicit that merge creates when the document does not exist). An
+	orphan doc here would have no expire_at, so the TTL policy
+	(scripts/setup-firestore-ttl.sh) never reaps it, AND it would carry
+	status=budget_exhausted forever -- a status the A3 "open requires a mint
+	record" gate (plan: refuse when the record is missing or
+	revoked/refunded, allow every other status through) would read as an
+	extant, non-revoked record for a jti that was never actually minted.
+	Skip silently (not an error -- no record existing is the expected case
+	pre-A3, and is a plain "nothing to mirror" case even after) when there
+	is no existing doc to update.
+
 	NEVER RAISES, and never blocks the close it runs alongside. A failure to
 	write a status label used only for a listing must not affect the socket
 	teardown that is already in flight for a real reason (the client hit
@@ -1208,7 +1224,11 @@ def _mirror_budget_exhausted(jti) -> None:
 	if not isinstance(jti, str) or not jti:
 		return
 	try:
-		_links_store._collection().document(jti).set(
+		doc_ref = _links_store._collection().document(jti)
+		snap = doc_ref.get()
+		if not snap.exists:
+			return
+		doc_ref.set(
 			{"status": _links_store.STATUS_BUDGET_EXHAUSTED}, merge=True)
 	except Exception as exc:  # noqa: BLE001 -- telemetry only, never raises
 		_log.error("link_budget_exhausted_mirror_failed", jti=jti,
