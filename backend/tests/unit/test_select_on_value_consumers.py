@@ -66,17 +66,19 @@ REVIEWED: dict[str, str] = {
     "backend/models/conditional_vocabulary.py":
         "the v2 contract statement: value is a slug, identity in pdf_on_value",
     "backend/models/form_models.py":
-        "FieldOption declares pdf_on_value (type-agnostic); select fillability exemption retired in g2fpr.4",
+        "FieldOption declares pdf_on_value (type-agnostic); _collect_v2_problems applies the slug rule to selects too since g2fpr.4 (the 4we6j exemption is gone; the remedy names the migration tool)",
     "backend/routes/editor_kit_routes.py":
         "widget-picker plumbing for shared-name radio kids; not a select reader",
+    "backend/scripts/g1b_answer_key.py":
+        "READER: option_label resolves a state picker through the option's pdf_on_value (the abbreviation), the hand-built table as fallback (bd bxjck, g2fpr.4)",
     "backend/routes/pdf_fill_routes.py":
         "READS it: radio shared-field kids; (g2fpr.1) resolve_select_fill_value on fill and resolve_select_resume_value on /resume-form, the inverse",
     "backend/services/manifest_service.py":
         "STRIPS it before the voice model sees options; the model speaks value only",
     "backend/services/schema_lint.py":
-        "rules select-value-not-slug / select-on-value-not-in-pdf / select-on-value-missing (g2fpr.1); carve-out retired in g2fpr.4",
+        "rules select-on-value-not-in-pdf / select-on-value-missing (g2fpr.1, collapsed in g2fpr.4: every dropdown choice carries a pdf_on_value the PDF declares; the 4we6j /Opt exemption in option-value-slug and the select-value-not-slug rule are retired)",
     "backend/services/schema_repair.py":
-        "_mint_slugs preserves a select code in value today; g2fpr.3 moves it, g2fpr.4 retires the branch",
+        "_mint_slugs CONVERTS a PDF-sanctioned code in a select value (code -> pdf_on_value, value minted with mint_select_slugs) since g2fpr.4; the alias tail registers pdf_on_value -> slug",
     "backend/services/widget_picker.py":
         "_claimed_widgets reads EVERY option's pdf_on_value type-agnostically, so since g2fpr.2 a select option enters the claimed set keyed (name, code) instead of (name, None); harmless because unclaimed_button_widgets filters candidates to _BUTTON_TYPES (comboboxes excluded) -- cross-surface, g2fpr.2",
     "frontend/src/pdf-view/valuePainting.ts":
@@ -105,7 +107,7 @@ REVIEWED: dict[str, str] = {
     "scripts/bakeoff/group_candidates.py":
         "grouping heuristic over widget on-states; not a select reader",
     "scripts/bakeoff/roundtrip_fill.py":
-        "the BAKEOFF filler: reads it for shared-field radios; must learn the select rule in g2fpr.4 or its scores lie",
+        "the BAKEOFF filler: reads it for shared-field radios; a select is still filled with option[0].value, not pdf_on_value -- bd polyglot-pdf-zmxuw (sonnet), deliberately not folded into g2fpr.4",
     "scripts/bakeoff/schema_contract.py":
         "the extraction prompt: a select condition references the SLUG; the code lives in pdf_on_value (g2fpr.2)",
     "scripts/migrate_schema_v2.py":
@@ -144,7 +146,10 @@ def test_the_three_sites_this_bead_changed_carry_their_new_symbols():
     paint = (_ROOT / "frontend/src/pdf-view/valuePainting.ts").read_text(encoding="utf-8")
     assert "def resolve_select_fill_value(" in fill
     assert 'field_type == "select"' in fill
-    for rule in ("select-value-not-slug", "select-on-value-not-in-pdf",
-                 "select-on-value-missing"):
-        assert rule in lint, rule
+    for rule in ("select-on-value-not-in-pdf", "select-on-value-missing"):
+        assert f'"{rule}"' in lint, rule
+    # The former select-value-not-slug rule was retired in g2fpr.4: it must not
+    # be EMITTED (the emission shape, not a substring -- a comment narrating
+    # its retirement made the old substring check pass vacuously).
+    assert 'SEVERITY_ERROR, "select-value-not-slug"' not in lint
     assert "pdf_on_value" in paint and "case 'select'" in paint

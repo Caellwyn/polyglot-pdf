@@ -133,6 +133,33 @@ def test_an_empty_pdf_on_value_falls_back_to_the_value(kit_root):
     assert _rendered(_fill(_schema(opts), "AL")) == "AL"
 
 
+def test_a_matched_option_with_no_pdf_on_value_is_written_verbatim_and_WARNED(monkeypatch):
+    """g2fpr.4: the matched-but-no-code branch was silent while the doc said
+    "loud". It warns now, every time, without logging the value (bd hjo)."""
+    from backend.routes import pdf_fill_routes as mod
+    calls = []
+
+    class _Rec:
+        def warning(self, ev, **kw):
+            calls.append((ev, kw))
+
+        def info(self, *a, **k):
+            pass
+
+        def debug(self, *a, **k):
+            pass
+    monkeypatch.setattr(mod, "_log", _Rec())
+    field = {"options": [{"value": "WY", "label": "Wyoming"}, {"value": "AL", "label": "Alabama"}]}
+    assert mod.resolve_select_fill_value(field, "WY", kit="k", field_id="f") == "WY"
+    hits = [kw for ev, kw in calls if ev == "select_option_without_pdf_on_value"]
+    assert len(hits) == 1 and hits[0]["field_id"] == "f" and "value" not in hits[0]
+    # A migrated option never warns.
+    calls.clear()
+    field2 = {"options": [{"value": "wyoming", "label": "Wyoming", "pdf_on_value": "WY"}]}
+    assert mod.resolve_select_fill_value(field2, "wyoming", kit="k", field_id="f") == "WY"
+    assert calls == []
+
+
 def test_a_value_matching_no_option_is_written_verbatim_and_warned(kit_root, monkeypatch):
     """The stale-session shape: a pre-migration 'AL' resumed against a schema
     whose values are now slugs. It prints right here only because the old

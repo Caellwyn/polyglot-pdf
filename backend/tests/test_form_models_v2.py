@@ -390,22 +390,30 @@ def _select(options):
     }
 
 
-def test_v2_select_option_values_are_exempt_from_the_slug_shape_rule():
-    """A dropdown's option.value IS the PDF export code (bd polyglot-pdf-4we6j).
 
-    The filler writes str(value) verbatim into the combobox and never consults
-    pdf_on_value, so a select's values are 'WY'-shaped, not slug-shaped.
-    Enforcing the shape HERE made every correct dropdown unpublishable: the
-    publish route runs model_validate (422) before lint (409), so fixing only
-    the lint rule left the kit just as blocked.
-
-    Whether the value is legitimate is schema_lint's call -- it has the
-    acroform dump and checks against the widget's own /Opt list. This model
-    sees no dump, so it defers rather than guessing.
+def test_v2_select_option_values_must_be_slugs_like_every_other_choice_type():
+    """The 4we6j exemption is RETIRED (g2fpr.4). A dropdown's PDF export code
+    lives in pdf_on_value, which the filler writes; its value is a slug like a
+    radio's. The pre-migration shape (code in value) is rejected at the model
+    gate with a remedy that names the migration tool, so the 422 tells the
+    author what to run rather than what to hand-edit.
     """
     validate(v2_schema([_select([
-        {"value": "WY", "label": "Wyoming (WY)"},
-        {"value": "AL", "label": "Alabama (AL)"},
+        {"value": "wyoming", "label": "Wyoming (WY)", "pdf_on_value": "WY"},
+        {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"},
+    ])]))
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([_select([
+            {"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"},
+        ])]))
+    msg = str(exc.value)
+    assert "is not a v2 slug" in msg
+    assert "migrate_select_on_values" in msg
+    # Numeric codes are already slugs: the height dropdowns' shape stays legal.
+    validate(v2_schema([_select([
+        {"value": "5", "label": "5", "pdf_on_value": "5"},
+        {"value": "6", "label": "6", "pdf_on_value": "6"},
     ])]))
 
 
@@ -427,44 +435,40 @@ def test_v2_select_still_enforces_every_other_option_rule():
     assert "at least 2 options" in str(exc.value)
 
 
-def test_model_exemption_never_widens_what_actually_publishes():
-    """The model gate is now LOOSER than lint for selects. That is only safe if
-    lint is a superset on every path, including the one where lint runs WITHOUT
-    a dump (the publish gate loads it best-effort, so None is reachable).
 
-    Pins the full matrix rather than the one cell I changed -- the asymmetry
-    "model always runs, lint sometimes has no dump" is exactly the shape of the
-    gap that made the first cut of this fix incomplete (bd polyglot-pdf-4we6j).
+def test_model_and_lint_agree_on_every_select_shape_with_and_without_a_dump():
+    """The model gate (422, no dump) and lint (409, dump best-effort) run in
+    sequence on the publish route. With the exemption retired they must agree
+    on the SHAPE: a code in value fails both; a slug with its code in
+    pdf_on_value passes the model, and passes lint whenever the dump says the
+    code is real. The matrix, not one cell (bd polyglot-pdf-4we6j's lesson).
     """
     from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
-
-    # The dump must name the SAME widget the field claims, or the exemption
-    # correctly never fires and this test would pass for the wrong reason.
     dump = {"fields": [{"name": "P1_Line6e_State[0]", "widgets": [
         {"choices": [{"value": "WY"}, {"value": "AL"}]}]}]}
 
-    def schema_with(values):
-        return v2_schema([_select(
-            [{"value": v, "label": "L" + v} for v in values])])
+    def schema_with(opts):
+        return v2_schema([_select(opts)])
 
-    def blocks(schema, d):
-        return any(f.severity == SEVERITY_ERROR and f.rule == "option-value-slug"
-                   for f in lint_schema(schema, d))
+    def errors(schema, d):
+        return sorted({f.rule for f in lint_schema(schema, d) if f.severity == SEVERITY_ERROR}
+                      & {"option-value-slug", "select-on-value-missing", "select-on-value-not-in-pdf"})
 
-    legit, junk = schema_with(["WY", "AL"]), schema_with(["Wyoming!!", "AL"])
-
-    # The model passes both -- it cannot tell them apart with no dump.
-    validate(legit)
-    validate(junk)
-
-    # With a dump, lint separates them: that is where the judgment lives.
-    assert not blocks(legit, dump)
-    assert blocks(junk, dump)
-
-    # With NO dump, lint blocks BOTH -- it never lets an unverifiable dropdown
-    # value publish just because the model stopped objecting.
-    assert blocks(legit, None)
-    assert blocks(junk, None)
+    migrated = schema_with([{"value": "wyoming", "label": "L", "pdf_on_value": "WY"},
+                            {"value": "alabama", "label": "M", "pdf_on_value": "AL"}])
+    legacy = schema_with([{"value": "WY", "label": "L"}, {"value": "AL", "label": "M"}])
+    junk = schema_with([{"value": "Wyoming!!", "label": "L"}, {"value": "AL", "label": "M"}])
+    # Model gate: only the migrated shape passes.
+    validate(migrated)
+    for bad in (legacy, junk):
+        with pytest.raises(ValidationError):
+            validate(bad)
+    # Lint, with and without a dump: the migrated shape is clean; the legacy
+    # shape is a slug-rule finding always, plus the channel finding with a dump.
+    assert errors(migrated, dump) == [] and errors(migrated, None) == []
+    assert errors(legacy, None) == ["option-value-slug"]
+    assert errors(legacy, dump) == ["option-value-slug", "select-on-value-missing"]
+    assert "option-value-slug" in errors(junk, dump) and "option-value-slug" in errors(junk, None)
 
 
 def test_v2_non_select_choice_types_still_enforce_the_slug_shape():

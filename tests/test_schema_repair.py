@@ -443,94 +443,117 @@ def test_pdf_choice_values_returns_empty_when_there_is_no_evidence(dump, claim):
     assert pdf_choice_values(dump, claim) == frozenset()
 
 
-def test_pdf_sanctioned_dropdown_codes_survive_repair():
-    """Minting a slug over a dropdown's export code makes the PDF print wrong
-    (the value is written verbatim; PyMuPDF does not validate against /Opt).
-    Repair must leave PDF-declared codes alone (bd polyglot-pdf-g2fpr).
-    """
+# Since g2fpr.4 repair CONVERTS a PDF-sanctioned export code sitting in a
+# select's value -- the code moves into pdf_on_value verbatim and the value is
+# minted from the label with the shared select minter -- instead of preserving
+# it (the g2fpr.1 branch, retired with the carve-out). Same rule as
+# scripts/migrate_select_on_values, applied per field by the editor's Repair.
+def _pairs(schema):
+    return [(o.get("value"), o.get("pdf_on_value"))
+            for o in schema["fields"][0]["options"]]
+
+
+def test_pdf_sanctioned_dropdown_codes_are_CONVERTED_by_repair():
+    """The code moves into pdf_on_value; the value becomes the label's slug
+    with the trailing "(CODE)" stripped; the repair is reported."""
     opts = [{"value": "WY", "label": "Wyoming (WY)"},
             {"value": "AL", "label": "Alabama (AL)"}]
     repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
-    assert _values(repaired) == ["WY", "AL"]
-    assert not any(r["action"] == "mint-option-slugs" for r in repairs)
+    assert _pairs(repaired) == [("wyoming", "WY"), ("alabama", "AL")]
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
+    # ...and the converted shape clears the gate.
+    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
 
 
-def test_dropdown_codes_survive_a_mint_triggered_by_a_sibling_defect():
-    """Minting is triggered per-FIELD: one duplicate anywhere in the dropdown
-    used to rewrite EVERY option, so a single unrelated defect broke printing
-    for all 62 state codes. The codes must survive their neighbour's repair.
-    """
+
+def test_a_sibling_defect_converts_the_whole_dropdown_consistently():
+    """Minting is triggered per FIELD; every code-in-value option in the
+    dropdown is converted, none is half-done, and the duplicate is repaired."""
     opts = [{"value": "WY", "label": "Wyoming (WY)"},
             {"value": "AL", "label": "Alabama (AL)"},
             {"value": "AL", "label": "Alabama duplicate"}]
     repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
-    assert _values(repaired)[:2] == ["WY", "AL"]
+    pairs = _pairs(repaired)
+    assert pairs[:2] == [("wyoming", "WY"), ("alabama", "AL")]
+    assert pairs[2][1] == "AL" and pairs[2][0] not in ("wyoming", "alabama", "AL")
+    assert len({v for v, _ in pairs}) == 3
 
 
-def test_preserved_code_cannot_collide_with_a_minted_sibling():
-    """A lowercase PDF code is itself slug-legal, so a slug minted from another
-    option's label can equal a preserved code -- manufacturing the very
-    duplicate this branch exists to repair. The minter must reserve them.
-    """
+
+def test_a_slug_shaped_code_is_kept_as_the_value_and_reserved():
+    """A lowercase PDF code is itself slug-legal, so it IS the value (the
+    shared minter's keep rule) and a sibling minted from a label cannot take
+    it. The empty value stays empty (held aside)."""
     dump = {"fields": [{"name": "X[0]", "widgets": [
         {"choices": [{"value": "wy"}, {"value": "al"}]}]}]}
     fields = [{"id": "m", "type": "select", "pdf_field_name": "X[0]", "options": [
         {"value": "wy", "label": "Wyoming"},
-        {"value": "", "label": "WY"},          # mints to 'wy' without the guard
+        {"value": "", "label": "WY"},          # held aside, never minted
         {"value": "al", "label": "Alabama"},
     ]}]
     repaired, _ = repair(_schema(fields), dump)
-    vals = _values(repaired)
+    pairs = [(o.get("value"), o.get("pdf_on_value")) for o in repaired["fields"][0]["options"]]
+    assert pairs[0] == ("wy", "wy") and pairs[2] == ("al", "al")
+    assert pairs[1][0] == ""
+    vals = [v for v, _ in pairs]
     assert len(vals) == len(set(vals)), "repair manufactured a duplicate: %r" % vals
-    assert vals[0] == "wy"
+
+
+
+def test_a_STALE_pdf_on_value_is_overwritten_by_the_real_code_in_value():
+    """Fresh-eyes (g2fpr.4): a value that IS a real code beside a pdf_on_value
+    the PDF does not declare skipped the conversion, so the real code was
+    minted away and the stale one stayed -- unrecoverable. Convert instead."""
+    opts = [{"value": "WY", "label": "Wyoming (WY)", "pdf_on_value": "ZZ"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _pairs(repaired) == [("wyoming", "WY"), ("alabama", "AL")]
+    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
+    # ...while a REAL pdf_on_value beside a code-shaped value is left alone by
+    # the conversion (the value is still minted, the code is not overwritten).
+    opts2 = [{"value": "WY", "label": "Wyoming (WY)", "pdf_on_value": "AL"},
+             {"value": "DC", "label": "DC"}]
+    repaired2, _ = repair(_schema(_combo(opts2)), _COMBO_DUMP)
+    assert _pairs(repaired2)[0] == ("wyoming", "AL")
 
 
 def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
-    """Uniqueness outranks preservation.
-
-    Two options cannot both keep the same code -- the widget holds one value,
-    so it is a real defect either way. Preserving both made repair no-op on
-    the very duplicate it exists to fix: repairs == [] while lint still
-    blocked on option-value-duplicate, an unfixable deadlock with no
-    diagnostic. First occurrence keeps the code; the rest are minted.
-    """
+    """Uniqueness outranks everything. Two options sharing a code are both
+    converted (both keep the code in pdf_on_value -- the widget really does
+    hold one value, and lint's duplicate-code rules say so), and their VALUES
+    are unique so the schema clears option-value-duplicate."""
     opts = [{"value": "WY", "label": "Wyoming"},
             {"value": "WY", "label": "Wyoming again"}]
     repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
-    vals = _values(repaired)
+    pairs = _pairs(repaired)
+    assert [c for _, c in pairs] == ["WY", "WY"]
+    vals = [v for v, _ in pairs]
     assert len(vals) == len(set(vals)), "duplicate survived repair: %r" % vals
-    assert vals[0] == "WY", "the first occurrence should keep the export code"
-    assert any(r["action"] == "mint-option-slugs" for r in repairs), \
-        "a repair that changes values must say so"
-    # And the repaired schema must actually clear the gate it was stuck at.
-    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
+    assert vals[0] == "wyoming"
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
+    assert not any(f.rule == "option-value-duplicate" for f in lint_schema(repaired, _COMBO_DUMP))
+
 
 
 def test_repair_leaves_a_selects_EMPTY_export_code_empty():
-    """Repair must not invent a code only the PDF can supply (bd ot284).
-
-    A dropdown's value goes verbatim into the combobox, so a minted 'option'
-    is absent from the widget's /Opt list and the form PRINTS "option" --
-    and because 'option' IS a valid slug, lint then reports nothing at all.
-    Repairing would convert a loud, blocking option-value-missing ERROR into
-    a silent mis-print. The schema editor creates a select option this way on
-    purpose (bd alzbr), so the guard has to survive a Repair click.
-    """
+    """Repair must not invent a code only the PDF can supply (bd ot284): the
+    empty value stays empty, its neighbours are converted, and the blocking
+    option-value-missing ERROR is still standing afterwards."""
     opts = [{"value": "WY", "label": "Wyoming"},
             {"value": "AL", "label": "Alabama"},
             {"value": "", "label": ""}]
     repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
-    assert _values(repaired) == ["WY", "AL", ""]
-    # ...and the blocking ERROR is still standing afterwards.
+    assert _pairs(repaired)[:2] == [("wyoming", "WY"), ("alabama", "AL")]
+    assert _values(repaired)[2] == ""
     assert any(f.rule == "option-value-missing" and f.severity == "ERROR"
                for f in lint_schema(repaired, _COMBO_DUMP))
 
 
-@pytest.mark.parametrize("blank", ["", "   ", "	", None])
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t", None])
 def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
     """The hold-aside must match schema_lint's own definition of a missing
     option value (`value is None or value.strip() == ""`), not a narrower one.
-
     A whitespace-only value is lint-ERROR "missing" but was still minted over,
     clearing the exact gate this bead exists to keep standing (found in review,
     measured: '   ' -> 'blank' -> has_errors False).
@@ -540,9 +563,10 @@ def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
             {"value": blank, "label": ""}]
     repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
     vals = _values(repaired)
-    assert vals[:2] == ["WY", "AL"]
+    assert vals[:2] == ["wyoming", "alabama"]          # neighbours converted
     assert vals[2] == blank, "a lint-missing value must survive repair unminted"
-    assert has_errors(lint_schema(repaired, _COMBO_DUMP)),         "repair cleared the publish gate it must preserve"
+    assert has_errors(lint_schema(repaired, _COMBO_DUMP)), \
+        "repair cleared the publish gate it must preserve"
 
 
 _COND_DUMP = {"fields": [
@@ -617,35 +641,34 @@ def test_an_ALREADY_blank_condition_value_is_not_newly_dropped():
     assert not any(r["action"] == "drop-condition" for r in repairs)
 
 
+
 def test_a_condition_on_a_REAL_option_value_still_resolves():
-    """The drop is scoped to a BLANK resolution -- a real value is untouched."""
+    """The drop is scoped to a BLANK resolution -- a real value is untouched,
+    and since the option it names is converted, the condition follows it to
+    the new slug (the export code is an alias of its slug)."""
     repaired, _ = repair(_select_with_dependent("", "WY"), _COND_DUMP)
     dep = next(f for f in repaired["fields"] if f["id"] == "dep")
-    assert dep["show_if"]["value"] == "WY"
+    assert dep["show_if"]["value"] == "wyoming"
 
 
-def test_a_FALSY_but_real_export_code_still_seeds_the_dedupe():
-    """A kept value of 0 / False is a REAL code (a dump can declare "0"), so it
-    must seed the mint dedupe like any other.
 
-    Guarding the reserved list with `x or ""` instead of `x is not None` drops
-    it, and mint_unique_slugs then hands a sibling the same slug -- manufacturing
-    the exact option-value-duplicate this branch exists to prevent. Found in
-    review; measured: options came back [0, '0'] with a duplicate ERROR on the
-    schema repair had just "fixed".
-    """
+def test_a_FALSY_but_real_export_code_is_converted_and_still_seeds_the_dedupe():
+    """A value of 0 is a REAL code (a dump can declare "0"): it is converted
+    -- pdf_on_value "0", value "0" (a slug-shaped code IS the value) -- and it
+    seeds the dedupe so a sibling whose LABEL mints to '0' cannot collide."""
     dump = {"fields": [{
         "name": "form1[0].P1_Line6e_State[0]",
         "widgets": [{"choices": [{"value": "0"}, {"value": "WY"}]}],
     }]}
-    # The second option's LABEL mints to '0', colliding with the first's code.
     opts = [{"value": 0, "label": "Zero-code"},
             {"value": "!!!", "label": "0"}]
     repaired, _ = repair(_schema(_combo(opts)), dump)
-    vals = [o.get("value") for o in repaired["fields"][0]["options"]]
-    assert vals[0] == 0, "the real falsy code must be preserved"
-    assert len({str(v) for v in vals}) == len(vals),         "repair manufactured a duplicate: %r" % (vals,)
+    pairs = _pairs(repaired)
+    assert pairs[0] == ("0", "0")
+    vals = [str(v) for v, _ in pairs]
+    assert len(set(vals)) == len(vals), "repair manufactured a duplicate: %r" % (vals,)
     assert not has_errors(lint_schema(repaired, dump))
+
 
 
 def test_a_select_option_with_NO_value_key_does_not_crash_repair():
@@ -659,12 +682,11 @@ def test_a_select_option_with_NO_value_key_does_not_crash_repair():
             {"value": "AL", "label": "Alabama"},
             {"label": "Blank"}]  # no "value" key at all
     repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
-    # .get(), not the shared _values() helper: that one subscripts o["value"]
-    # and would raise the very KeyError this test exists to prove is gone.
     got = [o.get("value") for o in repaired["fields"][0]["options"]]
-    assert got[:2] == ["WY", "AL"]
+    assert got[:2] == ["wyoming", "alabama"]
     assert got[2] in (None, ""), "the keyless option must not gain a minted code"
     assert has_errors(lint_schema(repaired, _COMBO_DUMP))
+
 
 
 def test_an_empty_select_code_does_not_block_repair_of_its_NEIGHBOURS():
@@ -675,9 +697,9 @@ def test_an_empty_select_code_does_not_block_repair_of_its_NEIGHBOURS():
             {"value": "", "label": ""}]
     repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
     vals = _values(repaired)
-    assert vals[0] == "WY"          # first occurrence keeps the code
-    assert vals[1] not in ("WY", "")  # the duplicate WAS repaired
-    assert vals[2] == ""            # the empty one was left alone
+    assert vals[0] == "wyoming"                        # converted
+    assert vals[1] not in ("WY", "wyoming", "")        # the duplicate WAS repaired
+    assert vals[2] == ""                               # the empty one was left alone
     assert any(r["action"] == "mint-option-slugs" for r in repairs)
 
 
@@ -694,17 +716,19 @@ def test_radio_and_checkbox_group_still_mint_over_an_empty_value():
         assert vals[0] == "male", "%s should still mint: %r" % (ftype, vals)
 
 
+
 def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
-    """No dump means no evidence: repair keeps its old, stricter behaviour
-    rather than preserving values it cannot verify.
+    """No dump means no evidence that a value is a real code, so repair cannot
+    move it into pdf_on_value; it mints from the label like any non-slug --
+    with the select minter, so "(CODE)" does not leak into the slug -- and
+    leaves pdf_on_value for the author (lint's select-on-value-missing will
+    say so once a dump is present).
     """
-    # 2+ options: _is_choice_field only treats an option-bearing field as a
-    # choice field at that size, so a single-option fixture would pass here
-    # for the wrong reason (no minting attempted at all).
     opts = [{"value": "WY", "label": "Wyoming (WY)"},
             {"value": "AL", "label": "Alabama (AL)"}]
     repaired, repairs = repair(_schema(_combo(opts)), None)
-    assert _values(repaired) == ["wyoming_wy", "alabama_al"]
+    assert _values(repaired) == ["wyoming", "alabama"]
+    assert all("pdf_on_value" not in o for o in repaired["fields"][0]["options"])
     assert any(r["action"] == "mint-option-slugs" for r in repairs)
 
 
@@ -1855,3 +1879,39 @@ def test_a_code_two_options_claim_is_NOT_an_alias():
     dep = next(f for f in repaired["fields"] if f["id"] == "dep")
     assert dep.get("show_if") is None            # dropped, not guessed
     assert any(r["action"] == "drop-condition" for r in repairs)
+
+
+def test_slug_shaped_legacy_codes_are_still_CONVERTED_by_repair():
+    """Cross-surface (g2fpr.4, bd kch40): the i-90 height dropdowns' legacy
+    values ('2'..'8') are already slug-shaped, so nothing triggered minting
+    and repair no-op-ed while lint (select-on-value-missing) blocked them. A
+    legal code with no slot is itself a reason to repair; the value is kept
+    (a slug-shaped code IS the value) and the code lands in pdf_on_value."""
+    dump = {"fields": [{"name": "form1[0].P1_Line6e_State[0]",
+                        "widgets": [{"choices": [{"value": str(n)} for n in range(2, 9)]}]}]}
+    opts = [{"value": str(n), "label": str(n)} for n in range(2, 9)]
+    repaired, repairs = repair(_schema(_combo(opts)), dump)
+    assert _pairs(repaired) == [(str(n), str(n)) for n in range(2, 9)]
+    assert not has_errors(lint_schema(repaired, dump))
+    # Idempotent: the converted field is not repaired again.
+    again, repairs2 = repair(repaired, dump)
+    assert again == repaired
+
+
+def test_a_conversion_that_keeps_the_value_is_still_REPORTED():
+    """Cross-surface (g2fpr.4, bd j12it): the height codes keep their value
+    ('5' -> '5') while the code moves into pdf_on_value -- a real write. The
+    report names it, like the migration tool's kept_codes; a silent schema
+    change on Repair is what the report exists to prevent."""
+    dump = {"fields": [{"name": "form1[0].P1_Line6e_State[0]",
+                        "widgets": [{"choices": [{"value": "5"}, {"value": "6"}]}]}]}
+    opts = [{"value": "5", "label": "5"}, {"value": "6", "label": "6"}]
+    repaired, repairs = repair(_schema(_combo(opts)), dump)
+    assert _pairs(repaired) == [("5", "5"), ("6", "6")]
+    mints = [r for r in repairs if r["action"] == "mint-option-slugs"]
+    assert len(mints) == 1
+    assert "'5': export code -> pdf_on_value" in mints[0]["detail"]
+    assert "'6': export code -> pdf_on_value" in mints[0]["detail"]
+    # ...and a second repair reports nothing (idempotent).
+    _, again = repair(repaired, dump)
+    assert not any(r["action"] == "mint-option-slugs" for r in again)

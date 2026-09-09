@@ -197,7 +197,9 @@ def option_label(field: dict, value: str) -> str:
 
     STATE pickers are special: their schema-v2 option slugs are full-name
     ("texas"), but the bead's coherence rule keeps the payload on two-letter
-    abbreviations ("TX"), so a state slug is resolved via _STATE_SLUG_TO_ABBR
+    abbreviations ("TX"), so a state slug is resolved through the option's own
+    pdf_on_value (the abbreviation, since bd polyglot-pdf-g2fpr), falling back
+    to the hand-built _STATE_SLUG_TO_ABBR for a schema without the channel,
     instead of to its full-name label. A value ALREADY a two-letter code (e.g. the
     corpus injection cases set state directly to "TX", or a foreign address leaves
     it "") passes through unchanged.
@@ -219,12 +221,21 @@ def option_label(field: dict, value: str) -> str:
 
     state_field = _is_state_field(field)
     color_field = _is_color_field(field)
+    # Since the select migration (bd polyglot-pdf-g2fpr) every dropdown choice
+    # carries its PDF export code in pdf_on_value -- for a state picker, the
+    # two-letter abbreviation itself. That is the authoritative reverse map;
+    # the hand-built _STATE_SLUG_TO_ABBR is only the fallback for a schema
+    # without the channel (bd polyglot-pdf-bxjck).
+    codes = {str(o.get("value")): str(o.get("pdf_on_value"))
+             for o in (field.get("options") or [])
+             if isinstance(o, dict) and isinstance(o.get("pdf_on_value"), str)
+             and o.get("pdf_on_value").strip()}
 
     def _resolve(token: str) -> str:
         if state_field:
             # keep the payload on the two-letter abbreviation; an already-abbreviated
             # or empty value (injection cases / foreign address) passes through.
-            return _STATE_SLUG_TO_ABBR.get(token, token)
+            return codes.get(token) or _STATE_SLUG_TO_ABBR.get(token, token)
         if color_field:
             # already-legible lowercase color slug -- leave as-is.
             return token
