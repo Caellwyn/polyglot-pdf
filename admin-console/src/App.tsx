@@ -4,25 +4,35 @@ import { WhoAmIPage } from './components/WhoAmIPage';
 import { AuditLogPage } from './components/AuditLogPage';
 import { ConfigEditorPage } from './components/ConfigEditorPage';
 import { UsersPage } from './pages/UsersPage';
+import { FirmsPage } from './pages/FirmsPage';
+import { FirmDetailPage } from './pages/FirmDetailPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
-type Tab = 'whoami' | 'audit' | 'config' | 'users';
+type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'firms';
 
 /**
- * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91):
- * the sign-in gate, then a simple tabbed shell over the console's pages --
- * who-am-I, the audit log list, the per-channel runtime-config editor, and
- * staff-account management (users).
+ * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91
+ * and polyglot-pdf-r8z9g): the sign-in gate, then a simple tabbed shell over
+ * the console's pages -- who-am-I, the audit log list, the per-channel
+ * runtime-config editor, staff-account management (users), and firms
+ * (list/detail with ledger, grants, links and revoke).
  *
  * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
  * state is simple enough that a router would be pure ceremony for this
  * bead's scope. A future bead can add one if the page count grows past what
  * tab state comfortably tracks.
+ *
+ * FIRM DETAIL IS A SUB-VIEW OF THE FIRMS TAB, not a fifth tab: `openFirmId`
+ * tracks which firm (if any) is open. Switching away to another tab and
+ * back to Firms always lands on the list (the tab click below clears
+ * `openFirmId`), matching how a router's own list link would behave rather
+ * than leaving a stale detail view mounted behind the wrong tab.
  */
 export const App: React.FC = () => {
   const [who, setWho] = React.useState<WhoAmI | null>(null);
   const [tab, setTab] = React.useState<Tab>('whoami');
+  const [openFirmId, setOpenFirmId] = React.useState<string | null>(null);
   // Set when a call from AuditLogPage/ConfigEditorPage fails with a 401 or
   // 403 MID-SESSION (an operator revoked this person's app_admin claim, or
   // their ID token simply expired, while the tab stayed open). Routes back
@@ -60,6 +70,15 @@ export const App: React.FC = () => {
     setWho(null);
   };
 
+  const handleSelectTab = (id: Tab) => {
+    setTab(id);
+    // A tab click is always "go to the top of this tab" -- clearing
+    // openFirmId here means re-clicking Firms (even while a detail view is
+    // open) returns to the list, and switching to another tab and back
+    // does the same rather than leaving a stale firm_id mounted.
+    setOpenFirmId(null);
+  };
+
   return (
     <div className="min-h-screen">
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
@@ -79,6 +98,7 @@ export const App: React.FC = () => {
             { id: 'audit', label: 'Audit log' },
             { id: 'config', label: 'Runtime config' },
             { id: 'users', label: 'Users' },
+            { id: 'firms', label: 'Firms' },
           ] as const
         ).map((item) => (
           <button
@@ -90,7 +110,7 @@ export const App: React.FC = () => {
                 ? 'border-primary-600 text-primary-700 font-medium'
                 : 'border-transparent text-gray-500 hover:text-gray-800')
             }
-            onClick={() => setTab(item.id)}
+            onClick={() => handleSelectTab(item.id)}
           >
             {item.label}
           </button>
@@ -102,6 +122,17 @@ export const App: React.FC = () => {
         {tab === 'audit' && <AuditLogPage onAuthExpired={handleAuthExpired} />}
         {tab === 'config' && <ConfigEditorPage onAuthExpired={handleAuthExpired} />}
         {tab === 'users' && <UsersPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'firms' && (
+          openFirmId ? (
+            <FirmDetailPage
+              firmId={openFirmId}
+              onAuthExpired={handleAuthExpired}
+              onBack={() => setOpenFirmId(null)}
+            />
+          ) : (
+            <FirmsPage onAuthExpired={handleAuthExpired} onOpenFirm={setOpenFirmId} />
+          )
+        )}
       </main>
     </div>
   );

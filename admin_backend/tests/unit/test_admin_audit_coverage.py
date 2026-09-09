@@ -106,6 +106,11 @@ MUTATION_KINDS = {
     # there is no balance mutation to join via extra_writes, since revoke
     # touches only links[_<channel>]/{jti}.status.
     ("POST", "/admin/links/{jti}/revoke"): MUTATION_KIND_FIRESTORE,
+    # Kit commercial settings (bd polyglot-pdf-f0kuu, Track B bead B3).
+    # Opens its OWN transaction (mirrors firm_routes.py's _apply_firm_patch
+    # shape) -- there is no other writer's transaction to join via
+    # extra_writes, since this route is the only writer of kits/{kit_id}.
+    ("PUT", "/admin/kits/{kit_id}/commercial"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
@@ -595,4 +600,20 @@ def test_the_shipped_link_routes_pass_the_synthetic_firestore_check():
         inspect.getsourcefile(link_routes)).read_text(encoding="utf-8")
     assert _firestore_verdict(source), (
         "link_routes.py does not satisfy the same in-transaction check the "
+        "synthetic cases are graded against")
+
+
+def test_the_shipped_kit_routes_pass_the_synthetic_firestore_check():
+    """The kit_routes.py counterpart of the config tie-back (bd
+    polyglot-pdf-f0kuu): put_kit_commercial opens its OWN transaction (like
+    firm_routes.py and link_routes.py's revoke), so it is graded against the
+    plain in-transaction form, not the extra_writes extension -- this route
+    is the only writer of kits/{kit_id}, so there is no other transaction to
+    join."""
+    from admin_backend.routes import kit_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(kit_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "kit_routes.py does not satisfy the same in-transaction check the "
         "synthetic cases are graded against")
