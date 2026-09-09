@@ -261,6 +261,79 @@ def _validate(
         raise LedgerError("{} requires a reason".format(entry_type))
 
 
+def _apply_entry_writes(
+    tx, firm_ref, entry_ref, firm: dict, firm_id: str, stamp: float, *,
+    entry_type: str, amount: int, usd_amount: Optional[float], actor: str,
+    channel: Optional[str], reason: Optional[str], link_jti: Optional[str],
+    kit_id: Optional[str], require_sufficient_balance: bool, extra_writes,
+    captured: dict,
+) -> None:
+    """The WRITE half of a ledger entry, shared by every caller that has
+    ALREADY read the firm doc inside its own transaction.
+
+    Factored out of append_entry() so a caller that must read OTHER
+    documents first -- refund_expired_link() below reads the redemption doc
+    and the links/{jti} record before it may even look at the firm's balance
+    -- can do all of ITS reads, then the firm read, then hand off to this
+    exact same balance/entry-shape logic. Two copies of "compute new_balance,
+    build the entry dict, tx.set both docs" would drift (a fixed field order,
+    a changed default) the moment one of them changes; this is the one
+    implementation both bodies call.
+
+    Takes the transaction, refs and firm snapshot as PARAMETERS rather than
+    re-deriving them: the caller has already done its own reads-before-writes
+    dance and this function must not read anything (Firestore refuses a read
+    after a write in the same transaction, and by the time a caller reaches
+    here for a refund it has already read the redemption + links docs).
+    """
+    balance = firm.get("balance_credits")
+    if not isinstance(balance, int) or isinstance(balance, bool):
+        # A missing or malformed balance is treated as 0 rather than
+        # refused: the pre-backfill window (Epic 2 bead A6) has firm docs
+        # with no balance_credits at all, and a grant is exactly how an
+        # operator gets one out of that window.
+        balance = 0
+    kind = firm.get("kind")
+    if kind not in ("mock", "live"):
+        kind = "live"
+
+    if require_sufficient_balance and amount < 0 and balance + amount < 0:
+        raise InsufficientCredits(firm_id, balance, amount)
+
+    new_balance = balance + amount
+    entry = {
+        "type": entry_type,
+        "amount": amount,
+        "usd_amount": (
+            float(usd_amount) if usd_amount is not None else None
+        ),
+        "firm_kind": kind,
+        "channel": channel,
+        "balance_after": new_balance,
+        "actor": actor,
+        "reason": reason,
+        "link_jti": link_jti,
+        "kit_id": kit_id,
+        "ts": stamp,
+    }
+
+    # --- WRITES ----------------------------------------------------
+    tx.set(firm_ref, {
+        "balance_credits": new_balance,
+        "balance_updated_at": stamp,
+    }, merge=True)
+    tx.set(entry_ref, entry)
+    if extra_writes is not None:
+        # Runs inside the SAME transaction so a caller's mint record
+        # either commits with the debit or not at all. Its exceptions
+        # are deliberately NOT caught: aborting is the contract.
+        extra_writes(tx, firm)
+
+    captured["entry"] = entry
+    captured["balance"] = new_balance
+    captured["firm_kind"] = kind
+
+
 def append_entry(
     db,
     firm_id: str,
@@ -334,52 +407,13 @@ def append_entry(
             raise LedgerError("firm {} does not exist".format(firm_id))
         firm = snap.to_dict() or {}
 
-        balance = firm.get("balance_credits")
-        if not isinstance(balance, int) or isinstance(balance, bool):
-            # A missing or malformed balance is treated as 0 rather than
-            # refused: the pre-backfill window (Epic 2 bead A6) has firm docs
-            # with no balance_credits at all, and a grant is exactly how an
-            # operator gets one out of that window.
-            balance = 0
-        kind = firm.get("kind")
-        if kind not in ("mock", "live"):
-            kind = "live"
-
-        if require_sufficient_balance and amount < 0 and balance + amount < 0:
-            raise InsufficientCredits(firm_id, balance, amount)
-
-        new_balance = balance + amount
-        entry = {
-            "type": entry_type,
-            "amount": amount,
-            "usd_amount": (
-                float(usd_amount) if usd_amount is not None else None
-            ),
-            "firm_kind": kind,
-            "channel": channel,
-            "balance_after": new_balance,
-            "actor": actor,
-            "reason": reason,
-            "link_jti": link_jti,
-            "kit_id": kit_id,
-            "ts": stamp,
-        }
-
-        # --- WRITES ----------------------------------------------------
-        tx.set(firm_ref, {
-            "balance_credits": new_balance,
-            "balance_updated_at": stamp,
-        }, merge=True)
-        tx.set(entry_ref, entry)
-        if extra_writes is not None:
-            # Runs inside the SAME transaction so a caller's mint record
-            # either commits with the debit or not at all. Its exceptions
-            # are deliberately NOT caught: aborting is the contract.
-            extra_writes(tx, firm)
-
-        captured["entry"] = entry
-        captured["balance"] = new_balance
-        captured["firm_kind"] = kind
+        _apply_entry_writes(
+            tx, firm_ref, entry_ref, firm, firm_id, stamp,
+            entry_type=entry_type, amount=amount, usd_amount=usd_amount,
+            actor=actor, channel=channel, reason=reason, link_jti=link_jti,
+            kit_id=kit_id, require_sufficient_balance=require_sufficient_balance,
+            extra_writes=extra_writes, captured=captured,
+        )
 
     _txn(db.transaction())
 
@@ -442,3 +476,308 @@ def read_entries(db, firm_id: str, limit: Optional[int] = None) -> list[dict]:
     if limit is not None:
         query = query.limit(limit)
     return [snap.to_dict() or {} for snap in query.stream()]
+
+
+# ================================================================
+# EXPIRY REFUND (Epic 2 bead A5, plan: "Refund on unopened expiry")
+# ================================================================
+#
+# ONE transactional helper, TWO callers: (i) an hourly sweep (Track B bead
+# B5, admin-service, NOT this bead) that queries links[_<channel>] for
+# status == minted AND open_deadline < now, and calls refund_expired_link()
+# once per hit; (ii) reconcile_expired_for_firm() below, a lazy best-effort
+# pass run by the admin-service and firm-console BEFORE a balance read, so a
+# dead Cloud Scheduler job cannot leave a firm's displayed balance visibly
+# wrong. Both converge on the SAME per-link transaction, so a sweep and a
+# lazy read racing on the same jti serialize on Firestore rather than
+# double-refunding: the loser's re-run reads the winner's committed
+# status=refunded and no-ops.
+#
+# WHY THE REDEMPTION DOC IS READ FIRST, AND WHY ITS EXISTENCE ALONE REFUSES.
+# link_redemptions[_<channel>]/{jti} is written on the client's FIRST open
+# (link_redemptions.open_link) and is the AUTHORITATIVE "did anyone ever
+# start filling this" fact -- unlike links[_<channel>]/{jti}'s `status`
+# field, which is a best-effort MIRROR that open_link's caller writes
+# separately and can fail to update even though the open itself succeeded.
+# Refunding on a missing `opened` mirror while the redemption doc exists
+# would credit a firm for a link a client is actively filling out --
+# certainly wrong, since the client already spent the session the credit
+# paid for. So the gate is "does the AUTHORITATIVE doc exist", never the
+# mirror, and it refuses on existence alone regardless of what the doc says.
+#
+# WHY links/{jti} IS READ SECOND, AND WHY ONLY `minted` PROCEEDS. A jti with
+# no mint record was never minted through the metered path (or predates the
+# open-requires-a-mint-record cutover, A3) and has no debit to reverse. A
+# jti already `refunded` is the idempotent re-run: the SAME sweep pass
+# hitting it twice, or the sweep and the lazy path racing on it, both need
+# to see "already done" and move on without a second credit. Every other
+# status (`opened`, `completed`, `revoked`, `budget_exhausted`) is refused
+# too -- `opened`/`completed` should already have a redemption doc and
+# never reach here, `revoked` is a deliberate staff action with its own
+# accounting question, and `budget_exhausted` earns no refund in this bead
+# (maintainer call, see the plan's Epic 2 section: "opened-but-abandoned
+# links are not refunded").
+
+
+class LinkNotRefundable(Exception):
+    """The link at this jti is not eligible for an expiry refund right now.
+
+    Raised for every refusal EXCEPT an unreachable store (RedemptionUnavailable
+    / LinksStoreUnavailable propagate as themselves, since those callers must
+    decide separately whether "cannot tell" should fail open or closed for
+    THEIR context -- a sweep skips and retries next hour, a lazy balance read
+    just shows the stale balance). Carries `reason` so a caller can log WHY
+    without parsing a message string: "redeemed" (the redemption doc exists),
+    "not_minted" (no links/{jti} record), or "not_pending" (a links record
+    exists but its status is not `minted`, e.g. an idempotent re-run reading
+    `refunded`, or a status this bead never refunds).
+    """
+
+    def __init__(self, jti: str, reason: str):
+        self.jti = jti
+        self.reason = reason
+        super().__init__("link {} is not refundable ({})".format(jti, reason))
+
+
+def refund_expired_link(
+    db, jti: str, *, actor: str, channel: Optional[str] = None,
+    now: Optional[float] = None,
+) -> dict:
+    """Refund the mint debit for ONE unopened, expired link. Returns the
+    committed ledger entry (the SAME shape append_entry() returns).
+
+    ATOMIC and IDEMPOTENT, per the plan: everything below runs inside ONE
+    Firestore transaction, in the reads-before-writes order the module
+    docstring's rule demands --
+
+        1. read link_redemptions[_<channel>]/{jti} -- refuse (LinkNotRefundable,
+           reason="redeemed") if it exists, REGARDLESS of the record's own
+           fields. A failed best-effort `opened` mirror on links/{jti} must
+           never let a real open through this gate.
+        2. read links[_<channel>]/{jti} -- refuse (reason="not_minted") if it
+           does not exist; refuse (reason="not_pending") unless its status is
+           exactly `minted`. This is what makes a second run, or a sweep and
+           a lazy reconcile racing on the same jti, a no-op rather than a
+           double credit: the loser re-reads the winner's committed
+           status=refunded and refuses here on the SAME snapshot Firestore
+           re-ran the body against.
+        3. read firms/{firm_id}(from the links record) -- the balance to
+           credit, via the SAME _apply_entry_writes() append_entry() uses, so
+           a refund is bit-for-bit the same entry shape as every other ledger
+           write.
+        4. write the balance + ledger entry (type=expiry_refund, amount=+
+           credit_cost, positive per POSITIVE_ONLY_TYPES) AND the links
+           record's status=refunded, atomically -- a refund that credited
+           the firm but left status=minted would be re-refunded by the very
+           next sweep pass.
+
+    Deliberately does NOT check open_deadline < now itself: the caller (the
+    sweep, or reconcile_expired_for_firm below) is what decides a link is
+    due, by querying on open_deadline. Re-checking it here would need a
+    SECOND clock reading inside the same transaction for no safety gain --
+    the sweep's query and the lazy path's per-record check already agree on
+    "is this link's window over", and this function's OWN idempotency comes
+    from `status`, not from time. `now` exists only to timestamp the entry
+    (mirrors append_entry's `ts`), not to gate anything.
+
+    Raises LinkNotRefundable for every ineligible case above,
+    link_redemptions.RedemptionUnavailable or
+    links_store.LinksStoreUnavailable if either store cannot be read (fail
+    closed: an unreachable store must not be read as "no record, refund"),
+    and LedgerError if the links record's firm_id does not exist as a firm.
+
+    SYNC (Admin SDK), like append_entry. Callers on an async path --
+    websocket_routes.py's teardown is the only caller who might reach this
+    directly rather than through a channel query, and even that is Track B's
+    sweep endpoint's job, not this bead's -- must wrap it in
+    asyncio.to_thread.
+    """
+    if db is None:
+        raise LedgerError("no firestore client")
+
+    from firebase_admin import firestore
+
+    from backend.services import link_redemptions as _redemptions
+    from backend.services import links_store as _links_store
+
+    redemption_ref = db.collection(
+        _redemptions._collection_name(channel or _link_channel())
+    ).document(jti)
+    links_ref = db.collection(
+        _links_store._collection_name(channel or _link_channel())
+    ).document(jti)
+    stamp = float(now if now is not None else time.time())
+    captured: dict[str, Any] = {}
+
+    @firestore.transactional
+    def _txn(tx):
+        # --- READS (all of them, before any write) ---------------------
+        redemption_snap = redemption_ref.get(transaction=tx)
+        if redemption_snap.exists:
+            raise LinkNotRefundable(jti, "redeemed")
+
+        link_snap = links_ref.get(transaction=tx)
+        if not link_snap.exists:
+            raise LinkNotRefundable(jti, "not_minted")
+        link = link_snap.to_dict() or {}
+        if link.get("status") != _links_store.STATUS_MINTED:
+            raise LinkNotRefundable(jti, "not_pending")
+
+        firm_id = link.get("firm_id")
+        if not isinstance(firm_id, str) or not firm_id:
+            raise LedgerError(
+                "links/{} has no firm_id to refund".format(jti))
+        credit_cost = link.get("credit_cost")
+        if not isinstance(credit_cost, int) or isinstance(credit_cost, bool) \
+                or credit_cost <= 0:
+            raise LedgerError(
+                "links/{} has no usable credit_cost to refund".format(jti))
+
+        firm_ref = db.collection(FIRMS_COLLECTION).document(firm_id)
+        firm_snap = firm_ref.get(transaction=tx)
+        if not firm_snap.exists:
+            raise LedgerError("firm {} does not exist".format(firm_id))
+        firm = firm_snap.to_dict() or {}
+
+        entry_ref = firm_ref.collection(LEDGER_SUBCOLLECTION).document()
+
+        def _mark_refunded(tx, _firm):
+            # Runs inside _apply_entry_writes, AFTER the balance + entry
+            # writes are queued -- joining the links record's status flip to
+            # the SAME transaction so a refund that credits the firm but
+            # fails to flip status (or vice versa) cannot happen: both
+            # commit together or neither does.
+            tx.set(links_ref, {
+                "status": _links_store.STATUS_REFUNDED,
+            }, merge=True)
+
+        _apply_entry_writes(
+            tx, firm_ref, entry_ref, firm, firm_id, stamp,
+            entry_type=TYPE_EXPIRY_REFUND, amount=credit_cost,
+            usd_amount=None, actor=actor, channel=channel, reason=None,
+            link_jti=jti, kit_id=link.get("kit_id"),
+            require_sufficient_balance=False, extra_writes=_mark_refunded,
+            captured=captured,
+        )
+
+        # Captured HERE, inside the body, because firm_id and entry_ref are
+        # local to this closure (re-derived from the links record on every
+        # retry) -- the caller below needs them for the return value and the
+        # ledger_export line, but must not re-read anything post-commit.
+        captured["firm_id"] = firm_id
+        captured["entry_ref"] = entry_ref
+
+    _txn(db.transaction())
+
+    entry = captured["entry"]
+    _log.info(
+        LEDGER_EXPORT_EVENT,
+        event_type=LEDGER_EXPORT_EVENT,
+        type=TYPE_EXPIRY_REFUND,
+        amount=entry["amount"],
+        usd_amount=entry["usd_amount"],
+        firm_id=captured["firm_id"],
+        firm_kind=captured["firm_kind"],
+        channel=channel,
+        link_jti=jti,
+    )
+    return {
+        **entry,
+        "doc_id": captured["entry_ref"].id,
+        "firm_id": captured["firm_id"],
+        "balance_credits": captured["balance"],
+    }
+
+
+def reconcile_expired_for_firm(
+    firm_id: str, channel: Optional[str] = None,
+    now: Optional[float] = None,
+) -> list[dict]:
+    """Best-effort catch-up: refund every one THIS FIRM's expired, unopened
+    links that the hourly sweep (Track B bead B5) has not gotten to yet.
+
+    CALLED ONLY BY the admin-service and firm-console BEFORE a balance read
+    (plan: "run as its own transaction before the read, so a dead scheduler
+    cannot leave a balance visibly wrong") -- NEVER by the mint transaction.
+    That exclusion is deliberate and load-bearing enough to be its own exit
+    criterion (bd polyglot-pdf-1op3g #3): the mint transaction is the
+    HOTTEST transaction in this codebase and already reads the firm and kit
+    docs; adding a query here would buy contention on every mint for a
+    problem an hourly sweep already solves. Nothing in append_entry() or
+    _apply_entry_writes() calls this function, and
+    test_credit_refunds.py pins that by inspecting append_entry's own
+    read set rather than trusting a docstring.
+
+    Queries links[_<channel>] for firm_id == the given firm, status ==
+    minted, and open_deadline < now, then calls refund_expired_link() once
+    per hit. A per-link failure (LinkNotRefundable from a race the sweep won
+    first, or a store hiccup) is logged and SKIPPED rather than aborting the
+    whole pass -- a lazy reconcile riding along on a balance read must not
+    turn "one link had a race" into "the balance page 500s".
+
+    Returns the list of committed refund entries (possibly empty).
+    """
+    from backend.services.auth import get_db
+    from backend.services import links_store as _links_store
+
+    db = get_db()
+    if db is None:
+        raise _links_store.LinksStoreUnavailable("no firestore client")
+
+    stamp = now if now is not None else time.time()
+    collection_name = _links_store._collection_name(
+        channel or _link_channel())
+    collection = db.collection(collection_name)
+    deadline = int(stamp)
+    try:
+        # Newer google-cloud-firestore deprecates positional where() (same
+        # fallback shape as confirmation_logger.py's
+        # _read_confirmation_log_firestore, kept in step with it so the two
+        # query call sites in this repo do not silently diverge).
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = (
+            collection
+            .where(filter=FieldFilter("firm_id", "==", firm_id))
+            .where(filter=FieldFilter("status", "==", _links_store.STATUS_MINTED))
+            .where(filter=FieldFilter("open_deadline", "<", deadline))
+        )
+    except ImportError:
+        query = (
+            collection
+            .where("firm_id", "==", firm_id)
+            .where("status", "==", _links_store.STATUS_MINTED)
+            .where("open_deadline", "<", deadline)
+        )
+
+    refunded = []
+    for snap in query.stream():
+        jti = snap.id
+        try:
+            refunded.append(
+                refund_expired_link(
+                    db, jti, actor="system:reconcile_expired_for_firm",
+                    channel=channel, now=stamp,
+                )
+            )
+        except LinkNotRefundable as exc:
+            # Already handled by the sweep, or a genuine ineligible hit
+            # (a redemption doc landed between the query and this read) --
+            # either way, not this pass's problem to raise.
+            _log.info("lazy_reconcile_skipped", jti=jti, reason=exc.reason,
+                      firm_id=firm_id)
+        except Exception as exc:  # noqa: BLE001 -- best-effort, never abort
+            _log.error("lazy_reconcile_failed", jti=jti, firm_id=firm_id,
+                       error=str(exc))
+    return refunded
+
+
+def _link_channel() -> str:
+    """Lazy import wrapper: link_tokens must not be imported at module scope
+    (mirrors link_redemptions._collection()'s own comment) since this
+    module's import must not require firebase_admin/link signing secrets to
+    be configured for the test suite and local dev to import it freely.
+    """
+    from backend.services.link_tokens import link_channel
+
+    return link_channel()
