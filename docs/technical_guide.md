@@ -180,8 +180,10 @@ its own table).
 | POST | `/admin/firms/{firm_id}/credits/adjust` | The operator's signed adjustment (bd `polyglot-pdf-zopqq`). Body `{amount, reason}` -- `amount` may be positive or negative, `reason` is REQUIRED (422 if blank). Calls `backend/services/credit_ledger.py::append_entry` with `entry_type=adjustment`, `actor=` the admin's uid, `channel=None`. Audited via `append_entry`'s `extra_writes` hook, joined to its OWN Firestore transaction (see Surface contract 18) -- a forced audit failure leaves the balance unchanged. `admin_backend/routes/credit_routes.py` |
 | POST | `/admin/firms/{firm_id}/credits/grant` | Grant credits (bd `polyglot-pdf-zopqq`). Body `{type, amount, usd_amount?, kit_id?}` -- `type` in `subscription_grant`\|`purchase`\|`promo_grant`; `usd_amount` REQUIRED for the first two and REFUSED otherwise (422), exactly as `append_entry`'s own validation enforces. Grants to `kind=mock` firms are allowed (staging needs credits to test); `firm_kind` is snapshotted onto the entry by `append_entry` itself. Same in-transaction audit form as `adjust`. `admin_backend/routes/credit_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/kind` | Reclassify a firm `mock`<->`live` (bd `polyglot-pdf-zopqq`). Body `{kind, reason}` -- `reason` is REQUIRED (422 if blank); the UI's confirm-twice is a console-side control this route cannot see or enforce. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
+| GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=`/`?employee_id=` optional equality filters. Gate: `require_app_admin_or_owning_manager` -- a manager reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/status` | Set a firm `active`\|`suspended` (bd `polyglot-pdf-zopqq`). Body `{status}`. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | POST | `/admin/links/sweep-expired` | The hourly expired-link refund sweep (bd `polyglot-pdf-8vgfh`, plan: "Refund on unopened expiry"). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the FOURTH and last admin-service gate, its first consumer. Cloud Scheduler presents a Google-signed OIDC token; the gate checks the token's `aud` against this route's own URL -- the bare `ADMIN_SERVICE_URL` env var (service root) with the route's own path appended -- AND its `email` claim against the scheduler job's service account (`SWEEP_SCHEDULER_SA_EMAIL` env var); both env vars are set automatically by `deploy-admin.sh` on every run -- on a public (`--allow-unauthenticated`) service, a matching audience alone is forgeable by anyone with a GCP project, so it is not by itself proof of caller identity. Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every channel in `KNOWN_CHANNELS`. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit, which itself re-reads `link_redemptions` first and refuses an opened link -- this route adds no refund logic of its own. Each committed refund's audit row is written IN THE SAME Firestore transaction as the refund via `refund_expired_link`'s `extra_writes` parameter (bd `polyglot-pdf-8vgfh`'s extension to that A5 helper) -- the SAME extra_writes-delegated shape of Surface contract 15's `MUTATION_KIND_FIRESTORE` the credit routes above use (see `_EXTRA_WRITES_TRANSACTION_OPENERS`). A per-link failure is logged and skipped rather than aborting the whole pass. Returns `{results: [{channel, refunded, skipped}], total_refunded, total_skipped}` -- counts only; the ledger entry and the audit row are the durable record. `admin_backend/routes/sweep_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/credit_ledger.py` |
+| POST | `/admin/links/{jti}/revoke` | Revoke a minted link (bd `polyglot-pdf-jmiys`, Track B bead B4). `?channel=` REQUIRED. One `@firestore.transactional` body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke touches only the link's own `status`) sets `status=revoked` with `revoked_by`/`revoked_at`, audited in the SAME transaction. Only a `minted` record may transition (409, naming the current status, otherwise). Gate: `require_app_admin_or_owning_manager` -- a manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti); an app admin may revoke any. This status flip is what Epic 2 Track A bead A3's open gate (`backend/routes/link_routes.py`) must refuse on once it lands -- see Surface contract 22. `admin_backend/routes/link_routes.py` |
 | GET | `/admin/users` | The firm's staff pool (bd `polyglot-pdf-dmjl5`). `?firm_id=` for an app admin; a firm manager sends none and gets their own. `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth has no server-side query over custom claims -- which is affordable only because the pool is firm staff, editors and devs: clients never get accounts, so this list does not grow with a firm's caseload and no members mirror is needed. Response is `{firm_id, users, truncated}`; each row is an EXPLICIT key allowlist, so a future internal claim does not reach the console the day it appears. A read, so no audit row. `admin_backend/routes/user_routes.py` |
 | POST | `/admin/users` | Create a staff account for a firm and return a password-**reset link** (bd `polyglot-pdf-dmjl5`). Body `{email, firm_role, firm_id?, display_name?}`. Gate: `require_app_admin_or_owning_manager` -- an app admin MUST name a firm (422 otherwise), a firm manager may NOT name one (403, even their own; see Surface contract 19). Creates the Firebase account with an unguessable random password that is never returned or logged, then stamps ONLY `firm_id` + `firm_role` merged over existing claims. NO outbound email in this epic: the console displays the link. 409 on a duplicate address; 422 on a role outside `{manager, employee}` or a firm slug failing `FIRM_ID_RE`. Audited pending-then-committed (contract 15). `admin_backend/routes/user_routes.py`, `admin_backend/services/user_admin.py` |
 | PATCH | `/admin/users/{uid}/disable` | Disable or re-enable a staff account (bd `polyglot-pdf-dmjl5`). Body `{disabled, firm_id?}` -- an explicit value, not a toggle, so a retrying console cannot land in whichever state the race decided. Claims are untouched: disabling is not deleting, and a deleted uid would take its audit trail's subject with it. The account must already be in the resolved firm, else the SAME 404 a nonexistent uid gets (a 403 would confirm a guessed uid names a real account). `admin_backend/routes/user_routes.py` |
@@ -1701,7 +1703,68 @@ per occurrence -- the load-bearing property this contract exists to pin.
   (acknowledge) and Epic 3's `POST /admin/alerts/dispatch` email sender are
   later beads, both reading/writing the same doc shape this contract fixes.
 
-### 22. Main app -> admin service: base URL + channel wiring (Epic 2 Track C bead C0, bd polyglot-pdf-z4ljj)
+### 22. Link listing + revoke: admin routes -> the mint record's `status` -> A3's open gate (Epic 2 Track B bead B4, bd polyglot-pdf-jmiys)
+
+**The FIRST bead to actually WRITE `links[_<channel>]/{jti}.status` past
+`minted`** (contract 16 laid the schema and left every non-mint transition
+"not wired to anything yet"). `POST /admin/links/{jti}/revoke`
+(`admin_backend/routes/link_routes.py`) is the producer: a
+`@firestore.transactional` read-check-write (mirrors `firm_routes.py`'s
+`_apply_firm_patch` shape) that flips `status` from `links_store.
+STATUS_MINTED` to `STATUS_REVOKED` and stamps `revoked_by`/`revoked_at`,
+with the audit row in the SAME transaction. Only a `STATUS_MINTED` record
+may transition (409 naming the current status otherwise) -- an
+opened/completed/refunded/already-revoked record's `status` is never
+overwritten by this route.
+
+**The consumer this status flip exists FOR is Epic 2 Track A bead A3's
+open gate** (`backend/routes/link_routes.py`'s `open_client_link`, reading
+`links_store.get_link(jti, channel=...)`): once A3 lands, a
+`STATUS_REVOKED` record must make `POST /api/links/open` return the SAME
+uniform 404 every other refusal on that route already returns (bd
+polyglot-pdf-ugm6's indistinguishable-refusals invariant) -- see bd
+polyglot-pdf-jecrl. **As of this bead, that consumer has NOT landed on
+`origin/dev`** (bd polyglot-pdf-jecrl shows CLOSED in beads with PR #749,
+but that PR was still OPEN and unmerged when this bead's worktree was
+created off `origin/dev` -- confirmed by diffing this branch's checkout of
+`backend/routes/link_routes.py` against the `feat/jecrl-mint-reserve-open-
+gate` branch, which shows the whole mint-reserve-then-sign +
+open-requires-a-mint-record change still absent here). This bead does not
+add that consumer itself -- doing so would fork A3's own gate outside its
+declared surfaces -- so `backend/tests/integration/test_revoked_link_open.py`
+(this bead's own surface) pins the CONTRACT the open route must satisfy
+once A3 lands, and is EXPECTED TO BE RED against a `backend/routes/
+link_routes.py` that predates A3; see that test file's own docstring
+before assuming a failure there is a bug in it rather than a landing-order
+gap.
+
+**Second consumer: the listing route's join.** `GET /admin/firms/{firm_id}
+/links` reads BOTH `links[_<channel>]` (bead A1's mint record: `jti`,
+`kit_id`, `employee_id`, `status`, `minted_at`, `open_deadline`, `cap_usd`,
+`credit_cost`) and `link_redemptions[_<channel>]` (contract 9's shape, plus
+bead ik7e's `spend_usd`/`turns` fields, `backend/services/link_spend.py`)
+by `jti`, and assembles the two into ONE explicit key allowlist
+(`link_routes._ALLOWLISTED_KEYS`) -- never `**doc`, so a field added to
+either stored document later does not silently reach a firm manager's
+response. There is no cross-collection query; a firm's link count is
+already bounded by bead ik7e's per-firm minting meter, so an N+1 per-jti
+redemption read is the same shape `credit_ledger.reconcile_expired_for_
+firm` and the sweep route (contract 15's neighbour) already accept.
+
+**The firm-scoping shape is NOT `admin_auth.resolve_target_firm`
+(contract 19).** That helper's rule is "a manager may not NAME a firm in
+the request body at all" -- correct for `/admin/users`, where a manager
+never has a reason to type their own `firm_id`. Both B4 routes take
+`firm_id`/the link's owning firm from a URL PATH, which a manager MUST be
+able to name (their own firm) to reach a `GET` at all -- so this bead adds
+its own small `_require_owning_firm(actor, firm_id)` helper, LOCAL to
+`admin_backend/routes/link_routes.py`, which refuses a manager acting on
+any OTHER firm with the SAME 404 an unknown firm_id/jti would get (never
+403, which would confirm the other firm exists). `resolve_target_firm`
+itself is untouched by this bead and stays the one home for the body-field
+rule it already owns.
+
+### 23. Main app -> admin service: base URL + channel wiring (Epic 2 Track C bead C0, bd polyglot-pdf-z4ljj)
 
 The main voice app's firm-console pages (`frontend/src/console/*`, alongside
 `MintLinkPage.tsx`) call the admin service directly, over plain HTTP -- a

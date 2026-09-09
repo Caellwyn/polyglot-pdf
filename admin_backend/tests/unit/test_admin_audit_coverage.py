@@ -101,6 +101,11 @@ MUTATION_KINDS = {
     # credit_routes.py uses with append_entry, so it is FIRESTORE too; see
     # _EXTRA_WRITES_TRANSACTION_OPENERS below.
     ("POST", "/admin/links/sweep-expired"): MUTATION_KIND_FIRESTORE,
+    # Link revoke (bd polyglot-pdf-jmiys, Track B bead B4). Opens its OWN
+    # transaction (mirrors firm_routes.py's _apply_firm_patch shape) --
+    # there is no balance mutation to join via extra_writes, since revoke
+    # touches only links[_<channel>]/{jti}.status.
+    ("POST", "/admin/links/{jti}/revoke"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
@@ -576,3 +581,18 @@ def test_the_shipped_sweep_routes_pass_the_synthetic_extra_writes_check():
     assert _firestore_verdict(source), (
         "sweep_routes.py does not satisfy the same extra_writes-delegated "
         "in-transaction check the synthetic cases are graded against")
+
+
+def test_the_shipped_link_routes_pass_the_synthetic_firestore_check():
+    """The link_routes.py counterpart of the config tie-back (bd
+    polyglot-pdf-jmiys): revoke_link opens its OWN transaction (like
+    firm_routes.py), so it is graded against the plain in-transaction form,
+    not the extra_writes extension -- there is no balance mutation for it
+    to join."""
+    from admin_backend.routes import link_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(link_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "link_routes.py does not satisfy the same in-transaction check the "
+        "synthetic cases are graded against")
