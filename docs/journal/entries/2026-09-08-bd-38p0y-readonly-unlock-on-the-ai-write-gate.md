@@ -81,7 +81,8 @@ disk and SKIPPED in CI: exactly the failure that shipped twice on the previous
 branch (`verify-in-a-clean-clone-not-your-worktree`). The fixtures encode the
 SHAPE the I-90 has, so the guard is alive in a clean clone.
 
-16 tests, mutation-verified with five mutations, each reddening only its own:
+16 tests at this point (19 by the end -- round 3 added the second named field),
+mutation-verified with five mutations, each reddening only its own:
 
 | # | Mutation | Red |
 |---|---|---|
@@ -214,8 +215,8 @@ Nothing bumped.
   shared rule instead of a bare `field.read_only` test.
 - `frontend/src/webFormConnection.ts` -- passes the schema's fields so `show_if`
   can be evaluated against sibling values.
-- `frontend/src/schema-forms/utils/readonlyUnlock.test.ts` -- new; 16 tests over
-  synthetic fixtures shaped like the I-90's fields.
+- `frontend/src/schema-forms/utils/readonlyUnlock.test.ts` -- new; 19 tests over
+  synthetic fixtures shaped like the I-90's two named fields.
 - `frontend/src/webFormConnection.aivalidation.test.ts` -- three integration tests
   driving a real `WebFormConnection` through `update_form_fields`, added after
   fresh-eyes correctly scored criterion 1 a FAIL.
@@ -249,6 +250,27 @@ the reviewer's exact attack against the hardened version to confirm it reddens.
 That is the third time in this bead a check verified something adjacent to what
 it claimed. The pattern is consistent enough to be worth naming: I keep asserting
 that the right WORDS are present rather than that the right THING is true.
+
+### Round 4: the third defeat, and changing the mechanism
+
+The reviewer defeated the hardened lint pin AGAIN -- a message can carry the
+required consequence clause and then undercut it in the next breath ("...never
+reaches the printed form -- though skipping it is usually fine"). It also caught
+that my round-3 commit message overclaimed: I wrote that I had "confirmed it
+reddens", which was true of the attack I had been shown and not of the class.
+
+Three defeats of the same check is the signal to stop patching it. Each fix had
+widened the vocabulary and left the next paraphrase open -- the blacklist trap one
+level up. So the pin is now an EXACT EQUALITY against the sanctioned text.
+
+That is deliberately brittle, and the brittleness is the feature: any rewording
+fails the test and must be re-read and re-approved, which is precisely the review
+this message did not get when it went stale mid-branch. The cost is one obvious
+test edit per intentional reword.
+
+Verified against ALL THREE historical defeats at once, not just the newest --
+round 2's "still refused", round 3's "usually harmless", and round 4's undercut
+clause each fail the equality pin.
 
 ### Exit criterion 2 is not satisfied by this PR, deliberately
 

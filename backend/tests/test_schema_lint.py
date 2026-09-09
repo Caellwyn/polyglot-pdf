@@ -503,10 +503,23 @@ def test_readonly_conditional_remedy_describes_flip_readonly_bit_as_WORKING():
     Left alone it steers authors away from the mechanism and toward permanently
     clearing read_only, which drops the form's own lock.
 
-    Asserted as an ALLOWLIST of the sanctioned remedies plus a no-residue check,
-    not as a banned phrase: banning one wording is a synonym away from defeat
-    (bd memory pin-message-tests-with-allowlists). The rule NAME and severity are
-    pinned by the sibling tests; this pins what the sentence MEANS.
+    WHY EXACT EQUALITY AND NOT A PHRASE CHECK. Three substring-based versions of
+    this pin were each defeated by a reviewer in turn: (1) asserting the phrases
+    were PRESENT allowed a message saying skipping pdf_field_flag_change "is
+    usually harmless"; (2) adding a consequence-clause check allowed the clause
+    to be present but undercut by the prose around it. Every fix widened the
+    vocabulary and left the next paraphrase open, which is the blacklist trap one
+    level up (bd memory stop-fixing-instances-after-two-failures): a substring
+    test cannot judge meaning, because meaning lives in the sentence AROUND the
+    substring.
+
+    So this asserts the message EQUALS its sanctioned text. That is deliberately
+    brittle: any rewording fails here and must be re-read and re-approved, which
+    is exactly the review this text did not get when it silently went stale
+    mid-branch. The cost is one obvious test edit per intentional reword; the
+    thing it buys is that no edit can quietly invert the advice.
+
+    The rule NAME and severity are pinned by the sibling tests.
     """
     fields = [
         _select("trig"),
@@ -516,31 +529,31 @@ def test_readonly_conditional_remedy_describes_flip_readonly_bit_as_WORKING():
     findings = lint_schema(_schema(fields))
     rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
     assert rel, "the rule must still fire for a locked conditional field"
-    msg = rel[0].message
 
-    # BOTH sanctioned remedies are offered...
-    assert "flip_readonly_bit" in msg
-    assert "clear read-only" in msg
-    # ...and the unlock path is named as one that WORKS for the voice assistant,
-    # which is the half that went stale.
-    assert "voice assistant may fill" in msg
-    # ...with the companion requirement stated as REQUIRED, not merely named.
-    # THE DEFEAT THIS CLOSES (fresh-eyes round 3): an earlier version asserted
-    # only that "pdf_field_flag_change" APPEARED, which a message saying
-    # "skipping pdf_field_flag_change is usually harmless" satisfies -- the
-    # opposite of the truth. apply_field_flag_changes (pdf_fill_routes.py)
-    # early-returns and never clears the bit when the descriptor is absent, so
-    # an unlock without it silently never reaches the printed form.
-    assert "pdf_field_flag_change" in msg
-    consequence = msg.split("pdf_field_flag_change", 1)[1].lower()
-    assert "never reaches" in consequence, (
-        "the message names pdf_field_flag_change but does not say what happens "
-        "without it -- an author reading this must learn it is mandatory")
-
-    # No residue of the superseded claim, in any of its plausible spellings.
-    lowered = msg.lower()
-    for dead in ("still refused", "stays unfillable", "cannot be filled by voice"):
-        assert dead not in lowered, f"stale remedy text survives: {dead!r}"
+    expected = (
+        "this field is locked, and a condition makes it appear or become "
+        "required, but nothing unlocks it -- when that happens, no one can "
+        "ever fill it in. Two ways to fix it. If the form itself locks the "
+        "box, set the unlock method to flip_readonly_bit: the PDF filler "
+        "clears the bit, and the voice assistant may fill the field once the "
+        "condition shows it (bd polyglot-pdf-38p0y). Pair it with a "
+        "pdf_field_flag_change, or the unlock never reaches the printed form. "
+        "If the form does NOT lock the box, just clear read-only -- simpler, "
+        "and nothing has to stay in sync. Either way the exception is a field "
+        "another field copies into, which is written for the applicant."
+    )
+    assert rel[0].message == expected, (
+        "the readonly-conditional-no-unlock remedy changed. This text tells a "
+        "human author which fix to apply, and it went silently WRONG once "
+        "before -- it advised clearing read_only on the grounds that an unlock "
+        "leaves the field unfillable by voice, false since bd "
+        "polyglot-pdf-38p0y. Re-read the new wording against the code before "
+        "updating this expectation. isFieldReadOnly (frontend/src/schema-forms/"
+        "utils/validation.ts) decides whether the AI may write a read_only "
+        "field; apply_field_flag_changes (backend/routes/pdf_fill_routes.py) "
+        "early-returns unless pdf_field_flag_change is present, so an unlock "
+        "without it never reaches the printed form. Got: " + rel[0].message
+    )
 
 
 def test_readonly_conditional_WITH_unlock_is_clean():
