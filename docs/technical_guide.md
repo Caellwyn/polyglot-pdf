@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -1348,6 +1348,39 @@ ledger on a read, so a second writer breaks the invariant silently.
   on) and does NOT sum the ledger; `read_entries(db, firm_id, limit=None)`
   returns entries oldest-first by `ts` (the replay shape, not the console's
   newest-n).
+- **Expiry refund (Epic 2 bead A5): `refund_expired_link(db, jti, *, actor,
+  channel=None, now=None) -> dict` and `reconcile_expired_for_firm(firm_id,
+  channel=None, now=None) -> list[dict]`.** ONE transactional helper, keyed
+  on the AUTHORITATIVE `link_redemptions[_<channel>]/{jti}` doc rather than
+  the `links` record's best-effort `opened` mirror: `refund_expired_link`
+  reads that doc first and refuses (`LinkNotRefundable(reason="redeemed")`)
+  on its existence ALONE, then reads `links[_<channel>]/{jti}` and proceeds
+  only from `status == "minted"` (`reason="not_minted"`/`"not_pending"`
+  otherwise) -- a re-run against an already-refunded jti no-ops, which is
+  what lets an hourly sweep (Track B bead B5, not yet built) and
+  `reconcile_expired_for_firm`'s lazy per-firm pass race on the same jti and
+  serialize on Firestore rather than double-crediting. Reuses the same
+  write path `append_entry()` does (extracted into `_apply_entry_writes()`
+  so both share one balance/entry-shape implementation) and joins the links
+  record's `status=refunded` flip to the SAME transaction via
+  `extra_writes`. `reconcile_expired_for_firm` queries `links[_<channel>]`
+  for one firm's `status == "minted"` and `open_deadline < now`, calling
+  `refund_expired_link` per hit and SKIPPING (never raising) a per-link
+  `LinkNotRefundable` so one race lost to the sweep does not fail a whole
+  balance read. **Consumer, and the load-bearing exclusion:** called ONLY
+  by admin-service/firm-console balance reads, as their OWN transaction
+  before the read -- NEVER by the mint transaction (bead A3). `append_entry()`'s
+  own transaction reads exactly the firm doc (pinned by a test asserting its
+  exact read set, plus an AST-walk guard that neither `append_entry` nor
+  `_apply_entry_writes` ever calls `reconcile_expired_for_firm`), so when A3
+  composes its own kit read around the same call, the combined mint
+  transaction's read set stays `{firm, kit}` with no reconciliation query on
+  the hottest transaction in the codebase. Opened-but-abandoned links are
+  NOT refunded (maintainer pricing call, per the plan). The socket's
+  `LinkBudgetExhausted` teardown (`websocket_routes._mirror_budget_exhausted`)
+  writes a TELEMETRY-ONLY `links[_<channel>]/{jti}.status =
+  "budget_exhausted"` mirror alongside this -- no ledger entry, pending a
+  maintainer call on refund/replacement pricing.
 - **`scripts/grant_credits.py`** (NEW) is the operator CLI on the same
   helper, so credits can be granted and rolled back before the console
   exists. Two subcommands: `grant` (positive only; `--type` in
