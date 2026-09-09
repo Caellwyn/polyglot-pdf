@@ -236,8 +236,14 @@ if [ "$DEPLOY_FIREBASE" = true ]; then
     # Build in demo mode so Vite loads .env.demo (the demo Firebase keys).
     # A bare "npm run build" loads .env.production, which has no Firebase config
     # for this project -- the app then dies with "auth/invalid-api-key".
+    #
+    # VITE_APP_CHANNEL=demo (bd polyglot-pdf-z4ljj, C0): explicit rather than
+    # relying on config.ts's getAppChannel() default, for the same reason
+    # deploy-staging.sh sets it explicitly to "staging" -- a future default
+    # change must not silently flip which channel the demo's firm-console
+    # pages claim to be on the admin service's required `?channel=` param.
     echo -e "${GREEN}[INFO]${NC} 🌐 Stage 2b: Deploying Frontend to Firebase ($FIREBASE_PROJECT)..."
-    FRONTEND_BUILD_CMD="npm run build:schema:demo" ./deploy-all.sh --frontend
+    FRONTEND_BUILD_CMD="npm run build:schema:demo" VITE_APP_CHANNEL="demo" ./deploy-all.sh --frontend
 fi
 
 echo -e "${GREEN}[INFO]${NC} ✅ Demo Deployment Complete!"
