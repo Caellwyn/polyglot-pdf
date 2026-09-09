@@ -15,7 +15,7 @@ import { clearClientLinkToken, setClientLinkToken } from '../shared/sessionCrede
 // The page reads its user from context, not from a prop -- the route element
 // passes no props. Firebase initializes at import time and throws without an
 // API key, so the whole auth chain is stubbed (same pattern as
-// clientRoute.test.tsx).
+// AppRoutes.test.tsx).
 vi.mock('../firebase/config', () => ({
   auth: { __sentinel: 'auth' },
   db: { __sentinel: 'db' },

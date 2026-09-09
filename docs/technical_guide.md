@@ -848,8 +848,10 @@ test could import it, which is itself the fix for a defect: while the table
 lived beside `createRoot`, wrapping the client route in `ProtectedRoute` or
 renaming its path both passed the entire frontend suite). Moving it inside
 bounces every client to a sign-in they can never pass. The path is the
-exported `CLIENT_LINK_PATH`; `clientRoute.test.tsx` pins it against the same
-`/f` literal `link_routes.py` builds links from -- each side independently
+exported `CLIENT_LINK_PATH`; `AppRoutes.test.tsx` (renamed from
+`clientRoute.test.tsx` by bd polyglot-pdf-krbol once the file grew to cover
+every console route, not just the client one) pins it against the same `/f`
+literal `link_routes.py` builds links from -- each side independently
 pinned, so a unilateral change on either reddens. The gate pins the form id via
 `saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
 choice, the language is the client's.

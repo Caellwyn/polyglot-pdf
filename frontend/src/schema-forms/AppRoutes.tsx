@@ -31,7 +31,7 @@ import { ProtectedRoute } from "../components/layout/ProtectedRoute";
  * (backend/routes/link_routes.py). Changing either side alone silently
  * breaks every link a firm has already sent, with no error anywhere -- the
  * client just lands on a sign-in screen. The pairing is asserted by
- * clientRoute.test.tsx against the backend's own constant.
+ * AppRoutes.test.tsx against the backend's own constant.
  */
 export const CLIENT_LINK_PATH = "/f";
 
