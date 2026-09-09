@@ -81,6 +81,40 @@ them as C4/C5):** no concrete firm-scoped route calls exist in `adminApi.ts`
 yet; C4 (`EmployeesPage.tsx`) and C5 (`LinkHistoryPage.tsx`) are its first
 real callers.
 
+**Cross-surface review round (fix pass).** The Opus outer review returned
+GAPS-FOUND with two rubric items to act on plus nits/refutations:
+- ADOPTED (blocker) -- `MintLinkPage.tsx`'s 503 branch enumerated only the
+  two config-missing 503s live on `dev` today, and missed the third A3
+  (bd `polyglot-pdf-jecrl`, PR #749) adds once it merges: a `LedgerError` ->
+  "Link minting is temporarily unavailable" (a deployment/data fault, not a
+  missing setting). Split the branch on the response detail so the
+  transient case gets its own message instead of being told to check
+  `LINK_BASE_URL`/`LINK_TOKEN_SECRET`, which are already correct. New test:
+  "does not blame LINK_BASE_URL/LINK_TOKEN_SECRET for a transient 503",
+  mutation-verified red/green. Also filed as `polyglot-pdf-i08xi` so it can
+  be sequenced with #749 if the orchestrator prefers.
+- ADOPTED (nit, fixed inline since it was small and touched the same file) --
+  `adminApi.ts`'s 403 branch threw a bare `ForbiddenError` with the server's
+  raw detail, including the `NO_ADMIN_ACCESS:` wire marker
+  (`admin_auth.NO_ADMIN_ACCESS_PREFIX`) when the gate that marks it
+  (`require_app_admin_or_owning_manager`, the route C4 will call) fires --
+  the one client of the four that mirror this shape that did not strip it.
+  Added `forbiddenFromDetail()` and a `noAdminAccess` flag on
+  `ForbiddenError`, matching `admin-console/src/utils/adminApi.ts` and
+  `schema-editor/src/utils/remoteKitStore.ts`. New tests in
+  `adminApi.test.ts` (both on `adminFetch` and on `forbiddenFromDetail`
+  directly), mutation-verified red/green.
+- DEFERRED (bead, not this diff's to fix) -- `APP_CHANNELS` mirrors
+  `config_routes.py`'s `KNOWN_CHANNELS` but the backend itself holds three
+  separate Python copies of that list, not one; filed `polyglot-pdf-lahuf`.
+- NOT ACTIONED (doc-sequencing nit, judgment call already surfaced in the
+  original merge report) -- Surface contract 22 in `technical_guide.md`
+  describes A3's `MintRefused` shape in the present tense while that code is
+  still only on PR #749's branch, not `dev`. Accurate against that branch,
+  inverted merge order against `dev`; re-check when #749 merges.
+- REFUTED (not filed) -- none; every other traced contract in the review
+  came back OK.
+
 ## Lessons
 
 A3 (bd `polyglot-pdf-jecrl`) was marked CLOSED in beads with its PR (#749)
@@ -124,10 +158,14 @@ Review outcomes recorded in the closeout ping.
 - `frontend/src/shared/config.ts` -- `getAdminApiBaseUrl()`, `getAppChannel()`,
   `APP_CHANNELS`.
 - `frontend/src/shared/config.test.ts` -- new.
-- `frontend/src/console/adminApi.ts` -- new.
-- `frontend/src/console/adminApi.test.ts` -- new.
-- `frontend/src/console/MintLinkPage.tsx` -- 402 and the second 403 handling.
-- `frontend/src/console/MintLinkPage.test.tsx` -- three new tests.
+- `frontend/src/console/adminApi.ts` -- new; fix round adds
+  `forbiddenFromDetail()` and `ForbiddenError.noAdminAccess`.
+- `frontend/src/console/adminApi.test.ts` -- new; fix round adds tests for
+  `forbiddenFromDetail()` and the `NO_ADMIN_ACCESS:` strip in `adminFetch`.
+- `frontend/src/console/MintLinkPage.tsx` -- 402 and the second 403 handling;
+  fix round splits the 503 branch for A3's new transient LedgerError case.
+- `frontend/src/console/MintLinkPage.test.tsx` -- three new tests; fix round
+  adds a fourth for the transient 503.
 - `tests/test_deploy_admin_url_injection.py` -- new.
 - `tests/test_deploy_reachability_gate.py` -- `URL_BAKING_SEVERITY` /
   `GATED_DEPLOY_SEVERITY` updated for `deploy-all.sh`'s new second warn-mode

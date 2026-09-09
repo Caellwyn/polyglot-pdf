@@ -27,12 +27,14 @@
  *      guessable at runtime.
  *
  * MIRRORS admin-console/src/utils/adminApi.ts's auth-error shape (AuthError /
- * ForbiddenError / errorDetail) against the SAME admin service, so a 401/403
- * means the same thing to a caller of either client. Deliberately duplicated
- * rather than imported -- admin-console/ and frontend/ do not import from
- * each other (same maintainer constraint documented on
- * admin-console/src/utils/adminAuth.ts: no new cross-surface dependencies to
- * unravel later).
+ * ForbiddenError / errorDetail / forbiddenFromDetail) against the SAME admin
+ * service, so a 401/403 means the same thing to a caller of either client --
+ * including stripping the NO_ADMIN_ACCESS_PREFIX wire marker, the same way
+ * schema-editor/src/utils/remoteKitStore.ts's forbiddenFromDetail does for
+ * NO_EDITOR_ACCESS_PREFIX. Deliberately duplicated rather than imported --
+ * admin-console/ and frontend/ do not import from each other (same
+ * maintainer constraint documented on admin-console/src/utils/adminAuth.ts:
+ * no new cross-surface dependencies to unravel later).
  */
 import { getAdminApiBaseUrl, getAppChannel } from '../shared/config';
 import { resolveStaffToken } from '../shared/sessionCredential';
@@ -45,12 +47,39 @@ export class AuthError extends Error {
   }
 }
 
-/** A signed-in account with no access to this firm-scoped route (HTTP 403). */
+/**
+ * A signed-in account with no access to this firm-scoped route (HTTP 403).
+ *
+ * Kept DISTINCT from AuthError -- same reasoning as
+ * admin-console/src/utils/adminApi.ts's ForbiddenError. `noAdminAccess` is
+ * true only for the ONE 403 that means "this account holds no admin access
+ * at all" (the server marks it with admin_auth.NO_ADMIN_ACCESS_PREFIX, a
+ * machine-readable prefix rather than prose this client string-matches
+ * against a moving target), so a caller can route it to an explicit
+ * not-authorized / sign-out screen rather than an ordinary in-app refusal.
+ */
 export class ForbiddenError extends Error {
-  constructor(message = 'You do not have access to this') {
+  readonly noAdminAccess: boolean;
+
+  constructor(message = 'You do not have access to this', noAdminAccess = false) {
     super(message);
     this.name = 'ForbiddenError';
+    this.noAdminAccess = noAdminAccess;
   }
+}
+
+/** Mirrors admin_backend/services/admin_auth.py's NO_ADMIN_ACCESS_PREFIX. */
+const NO_ADMIN_ACCESS_PREFIX = 'NO_ADMIN_ACCESS:';
+
+/** Build a ForbiddenError from a 403's detail, classifying it and stripping
+ * the wire marker. Mirrors admin-console/src/utils/adminApi.ts's
+ * forbiddenFromDetail and remoteKitStore's forbiddenFromDetail. */
+export function forbiddenFromDetail(detail: string): ForbiddenError {
+  const evicting = detail.startsWith(NO_ADMIN_ACCESS_PREFIX);
+  return new ForbiddenError(
+    evicting ? detail.slice(NO_ADMIN_ACCESS_PREFIX.length).trim() : detail,
+    evicting,
+  );
 }
 
 /** The admin service's base URL, resolved at build time (see config.ts's
@@ -98,7 +127,7 @@ export async function adminFetch(
   const res = await fetchImpl(`${adminApiBaseUrl()}${withChannel(path)}`, { ...init, headers });
   if (res.status === 401) throw new AuthError();
   if (res.status === 403) {
-    throw new ForbiddenError(await errorDetail(res, 'You do not have access to this'));
+    throw forbiddenFromDetail(await errorDetail(res, 'You do not have access to this'));
   }
   return res;
 }

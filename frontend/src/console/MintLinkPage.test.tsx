@@ -194,10 +194,12 @@ describe('MintLinkPage', () => {
     expect(text).not.toContain('LINK_MINTING_ENABLED');
   });
 
-  it('names BOTH settings that cause a 503', async () => {
+  it('names BOTH settings that cause a config-missing 503', async () => {
     // The route 503s for a missing LINK_BASE_URL *or* a missing
     // LINK_TOKEN_SECRET, so naming only one sends the operator to check a
-    // setting that is already right (cross-surface review r2).
+    // setting that is already right (cross-surface review r2). An empty
+    // body (no `detail`) is what today's two config-missing 503s look like
+    // when the response is not otherwise parsed by this branch.
     await mounted({ ok: false, status: 503, json: async () => ({}) });
 
     fireEvent.click(screen.getByText('Create link'));
@@ -206,6 +208,27 @@ describe('MintLinkPage', () => {
     const text = screen.getByRole('alert').textContent ?? '';
     expect(text).toContain('LINK_BASE_URL');
     expect(text).toContain('LINK_TOKEN_SECRET');
+  });
+
+  it('does not blame LINK_BASE_URL/LINK_TOKEN_SECRET for a transient 503', async () => {
+    // bd polyglot-pdf-jecrl (A3, cross-surface review polyglot-pdf-z4ljj
+    // finding 2): once the mint route's reservation step can fail against
+    // Firestore/the ledger, it 503s with detail "Link minting is
+    // temporarily unavailable" -- a deployment/data fault, not a missing
+    // setting. Folding it into the config-missing message would send an
+    // operator to check two settings that are already correct.
+    await mounted({
+      ok: false, status: 503,
+      json: async () => ({ detail: 'Link minting is temporarily unavailable' }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('temporarily unavailable');
+    expect(text).not.toContain('LINK_BASE_URL');
+    expect(text).not.toContain('LINK_TOKEN_SECRET');
   });
 
   it('explains a missing firm claim rather than blaming the server', async () => {

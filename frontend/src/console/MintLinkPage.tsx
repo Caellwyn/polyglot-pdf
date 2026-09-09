@@ -183,11 +183,25 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
         return;
       }
       if (response.status === 503) {
-        // The route returns 503 for EITHER missing setting, so naming only one
-        // sends the operator to check the wrong thing (cross-surface review).
+        // THREE different 503s share this status once PR polyglot-pdf-jecrl
+        // (A3, in flight -- see link_routes.py's LedgerError branch) is on
+        // dev: two config-missing faults this page already knew about
+        // (LINK_BASE_URL or LINK_TOKEN_SECRET unset) plus a NEW transient
+        // one -- the reservation's Firestore/ledger write itself failed
+        // ("Link minting is temporarily unavailable"), which is a
+        // deployment/data fault, not a missing setting. Folding it into the
+        // config-missing message would send the operator to check two
+        // settings that are already correct -- the exact anti-pattern the
+        // 404 and 403 branches above were split to avoid.
+        const detail = await response.json().then(
+          (d) => String((d as { detail?: unknown })?.detail ?? ''),
+          () => '',
+        );
         setPhase('error');
         setMessage(
-          'Link setup is incomplete on the backend: LINK_BASE_URL or LINK_TOKEN_SECRET is missing.',
+          detail === 'Link minting is temporarily unavailable'
+            ? 'Link minting is temporarily unavailable. Please try again in a moment.'
+            : 'Link setup is incomplete on the backend: LINK_BASE_URL or LINK_TOKEN_SECRET is missing.',
         );
         return;
       }
