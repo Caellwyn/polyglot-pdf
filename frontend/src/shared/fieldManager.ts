@@ -104,9 +104,21 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				if (groupEls.length) {
 					const picked = groupEls.filter(el => el.checked).map(el => el.value)
 					// Radio: a single string, matching what the rest of the app stores.
-					// Checkbox group: the array. An empty selection is a REAL answer
-					// change (the user cleared it), so it must notify -- unlike a blank
-					// text field, where the non-empty gate below is deliberate.
+					// Checkbox group: the array.
+					//
+					// An emptied CHECKBOX group notifies with [], because clearing every
+					// box is a real answer change -- unlike a blank text field, where the
+					// non-empty gate below is deliberate. The backend's own empty-value
+					// guard drops None and blank strings but NOT an empty list, so [] does
+					// reach the model (pinned in test_audio_handler.py from both sides).
+					//
+					// A cleared RADIO reports '' and that guard DOES drop it, so the model
+					// is not told. Deliberate rather than fixed: no native control
+					// deselects a radio -- they only switch, which reports the new value
+					// correctly -- and the app's own clear path goes through state, not
+					// this listener. Widening the guard to forward '' would make every
+					// emptied TEXT field notify too, which the guard exists to prevent.
+					// bd polyglot-pdf-9he8l holds the asymmetry if a real deselect appears.
 					const isRadio = groupEls[0]?.type === 'radio'
 					options.onManualEdit(fieldId, isRadio ? (picked[0] || '') : picked)
 				} else {

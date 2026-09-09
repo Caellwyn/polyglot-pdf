@@ -259,6 +259,25 @@ class TestManualFieldUpdate:
         assert "(nothing selected)" in mock_live_ai.send_text_message.call_args[0][0]
 
     @pytest.mark.asyncio
+    async def test_a_cleared_radio_is_dropped_and_that_is_deliberate(self):
+        """The asymmetry with the test above, asserted rather than merely
+        commented (bd polyglot-pdf-9he8l). A cleared checkbox group reports []
+        and reaches the model; a cleared RADIO reports '' and this guard drops
+        it. That is accepted, not overlooked: no native control deselects a
+        radio (they only switch, which reports the new value), and widening the
+        guard to forward '' would make every emptied TEXT field notify too --
+        which is precisely what the guard exists to prevent. Pinned so the
+        asymmetry cannot change silently in either direction."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_radio_clear")
+
+        await handler.send_manual_field_update(
+            field_id="sex", field_name="Sex", value=""
+        )
+
+        mock_live_ai.send_text_message.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_the_empty_guard_still_drops_a_blank_string(self):
         """The other half, so the test above is not read as widening the guard."""
         mock_live_ai = AsyncMock()
