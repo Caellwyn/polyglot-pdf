@@ -139,9 +139,47 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
         );
         return;
       }
-      if (response.status === 403) {
+      if (response.status === 402) {
+        // A3's credits-enforced gate (bd polyglot-pdf-jecrl): the firm's
+        // balance does not cover this kit's credit_cost. The route's
+        // detail is a plain string with no balance field today, but a
+        // future response MAY carry one (a numeric `balance` alongside
+        // `detail`) -- checked defensively so this page picks it up for
+        // free the moment the backend adds it, without a frontend change.
+        const body = await response.json().then(
+          (d) => d as { detail?: unknown; balance?: unknown },
+          () => ({}) as { detail?: unknown; balance?: unknown },
+        );
+        const balance = typeof body.balance === 'number' ? body.balance : undefined;
         setPhase('error');
-        setMessage('Your account is not attached to a firm, so it cannot mint links.');
+        setMessage(
+          balance !== undefined
+            ? `Your firm does not have enough credits to mint a link (balance: ${balance}).`
+            : 'Your firm does not have enough credits to mint a link.',
+        );
+        return;
+      }
+      if (response.status === 403) {
+        // TWO different 403s share this status (cross-surface shape, mirrors
+        // the 404 split above): the ORIGINAL "no firm claim" refusal (this
+        // account holds no firm_id/uid at all) vs. A3's NEW "live firm on a
+        // non-demo channel" refusal (bd polyglot-pdf-jecrl) -- a real firm
+        // account, refused only because THIS DEPLOYMENT may not mint for it.
+        // Distinguished by the route's detail text (link_routes.py's
+        // MintRefused), since the two need opposite remedies: the first
+        // means "ask an app admin to attach your account to a firm"; the
+        // second means "use the demo deployment for this firm, not this
+        // one" and is not something the signed-in staffer can fix at all.
+        const detail = await response.json().then(
+          (d) => String((d as { detail?: unknown })?.detail ?? ''),
+          () => '',
+        );
+        setPhase('error');
+        setMessage(
+          detail.toLowerCase().includes('live firm')
+            ? 'This deployment cannot mint links for a live firm. Use the demo deployment for this firm.'
+            : 'Your account is not attached to a firm, so it cannot mint links.',
+        );
         return;
       }
       if (response.status === 503) {
