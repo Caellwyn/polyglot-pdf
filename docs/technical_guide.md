@@ -1289,12 +1289,13 @@ sum(amount)` holds by construction rather than by six call sites each
 remembering to update the balance. Nothing recomputes the balance from the
 ledger on a read, so a second writer breaks the invariant silently.
 
-- **The one deliberate other site** is `firms.upsert_firm()` (contract 16),
-  which 0-initializes `balance_credits`/`balance_updated_at` on FIRST CREATE
-  and never touches them again -- a firm with no ledger and a zero balance.
+- **The two deliberate other sites** are `firms.upsert_firm()` (contract 16)
+  and `admin_backend/routes/firm_routes.py`'s create route, both of which
+  0-initialize `balance_credits`/`balance_updated_at` on FIRST CREATE and
+  never touch them again -- a firm with no ledger and a zero balance.
   `test_credit_ledger_is_the_only_module_that_writes_balance_credits` derives
-  the allowed set from the source tree and fails on any third writer under
-  `backend/`.
+  the allowed set from the source tree, walks both `backend/` and
+  `admin_backend/`, and fails on any writer outside that set.
 - **`append_entry(db, firm_id, *, entry_type, amount, actor, usd_amount=None,
   channel=None, reason=None, link_jti=None, kit_id=None,
   require_sufficient_balance=False, extra_writes=None, ts=None) -> dict`.**

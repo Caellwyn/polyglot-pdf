@@ -170,6 +170,53 @@ FastAPI's default exception middleware instead of a clean 500 -- unlike
 exceptions from their transactional bodies into `HTTPException(500)`.
 Added the same catch-all to `credit_routes.py::_run_append_entry`.
 
+### Second cross-surface round: the balance_credits guard's dead corner
+
+A follow-up cross-surface review traced `firms/{firm_id}.balance_credits`
+and `.balance_updated_at` specifically (both fields this bead's
+`_do_create_firm` writes on first create) and found the scar-#8 set-guard
+itself had a blind spot the two earlier rounds never exercised (STATUS:
+GAPS-FOUND (1)).
+
+- **ADOPTED -- the balance_credits set-guard walks only `backend/`, so this
+  bead's own write in `admin_backend/` escapes it (blocker).**
+  `backend/tests/unit/test_credit_ledger.py`'s
+  `test_credit_ledger_is_the_only_module_that_writes_balance_credits` roots
+  its AST walk at `backend/` only; `admin_backend/` is a sibling package at
+  the repo root and was never examined, so `firm_routes.py:351`'s
+  `payload["balance_credits"] = 0` (behaviourally correct -- it mirrors
+  `upsert_firm`'s zero-init for a brand-new firm with no ledger) got no
+  mechanical objection at all despite being a real second writer inside the
+  file this bead added. Widened the walk to cover both `backend/` and
+  `admin_backend/`, added `firm_routes.py` to the allowlist, and also
+  allowlisted `credit_routes.py` -- not because it writes the field, but
+  because the guard's own dict-literal check cannot distinguish its
+  `before={"balance_credits": firm.get(...)}` audit READ from a write, so
+  the widened walk now flags that pre-existing false positive too. Corrected
+  the three doc/docstring sentences that claimed `upsert_firm` is "the ONE"
+  or "the one deliberate other" writer: `docs/technical_guide.md`,
+  `docs/components/auth.md`, and `firm_routes.py`'s own module docstring
+  (which had contradicted itself ~330 lines above its own `create_firm`).
+  Mutation-verified two ways: (1) added a synthetic
+  `payload["balance_credits"] = 1` to `admin_backend/routes/audit_routes.py`
+  (a module NOT on the allowlist) and confirmed the widened guard goes red,
+  then reverted; (2) temporarily removed `firm_routes.py` from the allowlist
+  and confirmed the guard catches the REAL production write at
+  `firm_routes.py:351` (not just a synthetic probe), then restored. Full
+  backend suite (3530 passed), admin_backend suite (300 passed), and root
+  tests (1432 passed) all green after the fix.
+- **FILED, NOT FIXED -- `balance_updated_at` type split (pre-existing,
+  `polyglot-pdf-d0jan`).** `credit_ledger.py`'s ledger-movement write stores
+  a plain epoch float; `firms.py`'s (and now `firm_routes.py`'s)
+  first-create write stores `firestore.SERVER_TIMESTAMP`. Reproduces
+  unchanged on `origin/dev`; this bead mirrors the existing create-time
+  convention rather than introducing or worsening the split, so left as the
+  reviewer's own filed bead rather than fixed here.
+- **NO NEW NITS BEAD** -- both non-blocker findings from this round were
+  either the blocker above (fixed) or already filed
+  (`polyglot-pdf-d0jan`); `polyglot-pdf-0w13i` from the prior round already
+  covers the two nits deferred earlier and needed no update.
+
 ## Lessons
 
 A route that joins an EXISTING shared transaction via a documented
@@ -180,6 +227,15 @@ predates any real consumer of `append_entry`'s `extra_writes` hook. This is
 noted in `test_admin_audit_coverage.py`'s own docstring for the next reader
 who adds a third such consumer (the Track A mint route, when it lands, will
 be the second).
+
+A set-derived guard's walk ROOT is as load-bearing as its allowlist: a guard
+that correctly enumerates every writer under one package still misses a
+sibling package entirely if that is where its `rglob` starts. `admin_backend/`
+existing as a sibling of `backend/` (not a subpackage of it) made this
+invisible until a route actually landed there and wrote the guarded field --
+worth checking any future set-derived guard in this repo (there are others
+per CLAUDE.md scar #8) against both top-level Python packages, not just the
+one the guard's own module happens to live in.
 
 ## Doc freshness
 
@@ -209,5 +265,11 @@ be the second).
   gains the six new mutating routes; extended the in-transaction check to
   recognize the extra_writes extension-point shape)
 - `docs/technical_guide.md`, `docs/components/admin-service.md`
+- `backend/tests/unit/test_credit_ledger.py` (second cross-surface round:
+  widened `test_credit_ledger_is_the_only_module_that_writes_balance_credits`'s
+  walk to cover `admin_backend/` and allowlisted `firm_routes.py` +
+  `credit_routes.py`)
+- `docs/components/auth.md` (second cross-surface round: corrected the
+  "one deliberate other site" / "fails on any third" sentences)
 
 Review outcomes recorded in the closeout ping.

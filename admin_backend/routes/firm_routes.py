@@ -18,10 +18,13 @@ manager DOES reach, is Track B bead B4's require_app_admin_or_owning_manager
 route, not this one.)
 
 WRITES MATCH backend/services/firms.py::upsert_firm's FIELD SHAPE BUT DO NOT
-CALL IT. upsert_firm() is still the operator-bootstrap writer and the ONE
-place that 0-initializes balance_credits/balance_updated_at on first create
-(CLAUDE.md scar #8 covers that half unchanged). But upsert_firm() does its
-own non-transactional get()-then-set() -- it is not @firestore.transactional
+CALL IT. upsert_firm() is still the operator-bootstrap writer, and
+create_firm() below (this module) is the SECOND deliberate site that
+0-initializes balance_credits/balance_updated_at on first create -- both
+carve-outs are named in the scar #8 guard's allowlist
+(test_credit_ledger_is_the_only_module_that_writes_balance_credits, which
+walks both backend/ and admin_backend/). upsert_firm() does its own
+non-transactional get()-then-set() -- it is not @firestore.transactional
 and takes no `transaction` argument -- while every write in THIS module must
 share one Firestore transaction with its audit_log.record_in_transaction
 call (exit criterion 1). Firestore requires all reads in a transaction
