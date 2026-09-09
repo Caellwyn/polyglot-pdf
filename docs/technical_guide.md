@@ -1945,9 +1945,16 @@ a deploy script.
   group under `NULL` rather than being misattributed to one channel. Returns
   zero rows until the maintainer enables the export (Epic 3 bead 7) -- not
   retroactive.
+- **The sink step is create-or-update, not create-only (bd polyglot-pdf-f7f0h):**
+  `gcloud logging sinks describe` decides whether to `sinks create` (first
+  run) or `sinks update` (the sink already exists), so a re-run after
+  `SINK_FILTER` changes actually applies the new filter to the LIVE sink --
+  a bare `sinks create` fails on an existing sink and cannot do this.
 - **IAM, four grants total:** the sink's own writer identity (parsed at
-  runtime from `gcloud logging sinks create`'s output, NOT a hardcoded
-  principal) gets `roles/bigquery.dataEditor` on the dataset; `admin-backend-sa`
+  runtime -- from `gcloud logging sinks create`'s output on first creation, or
+  from a `gcloud logging sinks describe --format=value(writerIdentity)` call
+  on a re-run, NOT a hardcoded principal) gets `roles/bigquery.dataEditor` on
+  the dataset; `admin-backend-sa`
   gets project-level `roles/bigquery.jobUser` and dataset-scoped
   `roles/bigquery.dataViewer`. The latter two were moved OUT of
   `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s `DEFERRED_ROLES`

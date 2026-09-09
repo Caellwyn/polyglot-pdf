@@ -295,8 +295,18 @@ columns are pinned by `backend/tests/unit/test_telemetry_views.py` as a
 onto a column its source event does not emit fails there instead of shipping
 a silently-null dashboard column.
 
+**The sink step is create-or-update, not create-only** (bd polyglot-pdf-f7f0h):
+`scripts/setup-telemetry.sh` runs `gcloud logging sinks describe` first to
+decide between `sinks create` (first run) and `sinks update` (the sink
+already exists), so a re-run after `SINK_FILTER` changes -- e.g. a future
+bead adding the error-event clause -- actually applies the new filter to the
+live sink. A bare `sinks create` fails on an existing sink and cannot do
+this, which is why the script never relies on create alone.
+
 **IAM:** the sink's own writer identity (printed by `gcloud logging sinks
-create`, parsed at runtime) gets `roles/bigquery.dataEditor` on the dataset;
+create`'s output on first creation, or read back via `gcloud logging sinks
+describe --format=value(writerIdentity)` on a re-run, parsed at runtime
+either way) gets `roles/bigquery.dataEditor` on the dataset;
 `admin-backend-sa` gets `roles/bigquery.jobUser` (project-level, to run
 queries) and dataset-scoped `roles/bigquery.dataViewer` -- both moved out of
 `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s `DEFERRED_ROLES`

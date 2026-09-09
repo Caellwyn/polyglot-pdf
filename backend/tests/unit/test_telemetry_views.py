@@ -106,13 +106,40 @@ def test_every_named_view_exists_in_the_sql_file():
         _view_body(text, name)  # raises (via assert) if missing
 
 
+def test_no_view_wraps_a_jsonPayload_accessor_in_JSON_VALUE():
+    """bd polyglot-pdf-vqgkj: a Cloud Logging -> BigQuery sink materializes
+    `jsonPayload` as a RECORD (STRUCT) with individually-typed sub-fields,
+    NOT as a JSON or STRING column -- JSON_VALUE's first argument must be
+    JSON or STRING, so JSON_VALUE(jsonPayload...) either fails view creation
+    against the STRUCT the sink actually produces, or (if pointed at an
+    already-STRING sub-field) re-parses that string's own contents as JSON
+    and silently returns NULL for any value that is not itself valid JSON
+    (e.g. the bare word `live`) -- the exact silent-zero-rows failure mode
+    this bead's three-shape work exists to prevent, one layer down. Every
+    jsonPayload field is read via plain struct dot-access instead. Checks
+    the five view BODIES (the actual SQL statements), not the file's prose
+    comments, which legitimately name JSON_VALUE to document why it must
+    not be used. Mutation: wrap any jsonPayload.* accessor back in
+    JSON_VALUE(...) inside a view body -- red."""
+    text = _sql_text()
+    for name in ALL_VIEW_NAMES:
+        body = _view_body(text, name)
+        assert "JSON_VALUE" not in body, (
+            "{} uses JSON_VALUE on a jsonPayload accessor. The Cloud "
+            "Logging -> BigQuery sink materializes jsonPayload as a "
+            "RECORD/STRUCT, not JSON/STRING -- read fields via plain "
+            "struct dot-access (jsonPayload.foo, "
+            "jsonPayload.message.metadata.bar) instead, per bd "
+            "polyglot-pdf-vqgkj.".format(name))
+
+
 def test_income_month_hardcodes_the_live_firm_kind_filter():
     """THE headline assertion. Mutation: delete the firm_kind = 'live'
     predicate, or move it into a comment -- red."""
     text = _sql_text()
     body = _view_body(text, "income_month")
     assert re.search(
-        r"JSON_VALUE\(jsonPayload\.firm_kind\)\s*=\s*'live'", body), (
+        r"jsonPayload\.firm_kind\s*=\s*'live'", body), (
         "income_month's WHERE clause does not hard-code firm_kind = 'live'. "
         "This is Epic 3's exit criterion 5 (income filter half) and must "
         "live in the VIEW DEFINITION, not a caller's query.")
@@ -126,7 +153,7 @@ def test_income_month_filters_to_purchase_and_subscription_grant_only():
     text = _sql_text()
     body = _view_body(text, "income_month")
     type_filter = re.search(
-        r"JSON_VALUE\(jsonPayload\.type\)\s+IN\s+\(([^)]*)\)", body)
+        r"jsonPayload\.type\s+IN\s+\(([^)]*)\)", body)
     assert type_filter, "income_month has no jsonPayload.type IN (...) filter"
     types = {t.strip().strip("'") for t in type_filter.group(1).split(",")}
     assert types == {"purchase", "subscription_grant"}, (
@@ -143,7 +170,7 @@ def test_income_month_filters_to_the_ledger_export_event_type():
     text = _sql_text()
     body = _view_body(text, "income_month")
     assert re.search(
-        r"JSON_VALUE\(jsonPayload\.event_type\)\s*=\s*'ledger_export'",
+        r"jsonPayload\.event_type\s*=\s*'ledger_export'",
         body), (
         "income_month does not filter on the flat jsonPayload.event_type = "
         "'ledger_export' -- without it the view would aggregate usage rows "

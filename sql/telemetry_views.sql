@@ -34,6 +34,29 @@
 --      rather than hand-listing them here, so this file and those constants
 --      cannot silently drift apart.
 --
+-- ACCESSOR SHAPE: DIRECT FIELD ACCESS, NOT JSON_VALUE (bd polyglot-pdf-vqgkj).
+-- A Cloud Logging -> BigQuery sink materializes `jsonPayload` as a RECORD
+-- (STRUCT) column with one individually-typed sub-field per JSON key seen so
+-- far, NOT as a single JSON or STRING column -- this is documented sink
+-- behavior (schema auto-detection from the LogEntry's structured payload),
+-- and it is what backend/utils/log_schemas.py's "single column shape"
+-- comment and structured_logger.py's own docstring both presuppose. Every
+-- view below therefore reads columns via plain struct dot-access
+-- (`jsonPayload.message.metadata.firm_id`, `jsonPayload.firm_id`, ...), the
+-- SAME pattern hosting_cost_by_service_month already uses for
+-- `service.description` / `resource.name`. JSON_VALUE is wrong here: it
+-- requires a JSON or STRING argument, and would either fail view creation
+-- outright against the STRUCT the sink actually produces, or -- if pointed
+-- at an already-STRING sub-field -- re-parse that string's contents as JSON
+-- and return NULL for any value that is not itself valid JSON (e.g. the
+-- bare word `live`), silently zeroing every filtered view with no error.
+-- Numeric sub-fields (`cost_estimate_usd`, `usd_amount`, `amount`) are typed
+-- FLOAT64/INT64 directly by the sink's schema inference (the emitted JSON
+-- carries a numeric literal, not a quoted string), so those are read with a
+-- SAFE_CAST to FLOAT64 only to normalize INT64 sources -- no string CAST is
+-- needed or correct. String sub-fields (firm_id, channel, usage_kind, ...)
+-- are read as-is.
+--
 -- THE SINK LANDS ROWS IN TWO TABLES, NOT ONE (bd polyglot-pdf-ih428). A
 -- Cloud Logging -> BigQuery sink names its destination table per LOG ID
 -- (with --use-partitioned-tables, one partitioned table per log ID) -- NOT
@@ -82,13 +105,13 @@
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_firm_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  JSON_VALUE(jsonPayload.message.metadata.firm_id) AS firm_id,
-  JSON_VALUE(jsonPayload.message.metadata.channel) AS channel,
-  JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
+  jsonPayload.message.metadata.firm_id AS firm_id,
+  jsonPayload.message.metadata.channel AS channel,
+  jsonPayload.message.metadata.usage_kind AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
+WHERE jsonPayload.message.event_type IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, firm_id, channel, usage_kind;
@@ -99,13 +122,13 @@ GROUP BY month, firm_id, channel, usage_kind;
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_kit_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  JSON_VALUE(jsonPayload.message.metadata.kit_id) AS kit_id,
-  JSON_VALUE(jsonPayload.message.metadata.channel) AS channel,
-  JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
+  jsonPayload.message.metadata.kit_id AS kit_id,
+  jsonPayload.message.metadata.channel AS channel,
+  jsonPayload.message.metadata.usage_kind AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
+WHERE jsonPayload.message.event_type IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, kit_id, channel, usage_kind;
@@ -117,14 +140,14 @@ GROUP BY month, kit_id, channel, usage_kind;
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_employee_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  JSON_VALUE(jsonPayload.message.metadata.employee_id) AS employee_id,
-  JSON_VALUE(jsonPayload.message.metadata.firm_id) AS firm_id,
-  JSON_VALUE(jsonPayload.message.metadata.channel) AS channel,
-  JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
+  jsonPayload.message.metadata.employee_id AS employee_id,
+  jsonPayload.message.metadata.firm_id AS firm_id,
+  jsonPayload.message.metadata.channel AS channel,
+  jsonPayload.message.metadata.usage_kind AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
+WHERE jsonPayload.message.event_type IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, employee_id, firm_id, channel, usage_kind;
@@ -166,12 +189,12 @@ GROUP BY month, gcp_service, resource_name;
 CREATE OR REPLACE VIEW `${DATASET}.income_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  JSON_VALUE(jsonPayload.type) AS entry_type,
-  JSON_VALUE(jsonPayload.channel) AS channel,
+  jsonPayload.type AS entry_type,
+  jsonPayload.channel AS channel,
   COUNT(*) AS entry_count,
-  SUM(CAST(JSON_VALUE(jsonPayload.usd_amount) AS FLOAT64)) AS usd_amount
+  SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64)) AS usd_amount
 FROM `${TELEMETRY_TABLE_STDERR}`
-WHERE JSON_VALUE(jsonPayload.event_type) = 'ledger_export'
-  AND JSON_VALUE(jsonPayload.type) IN ('purchase', 'subscription_grant')
-  AND JSON_VALUE(jsonPayload.firm_kind) = 'live'
+WHERE jsonPayload.event_type = 'ledger_export'
+  AND jsonPayload.type IN ('purchase', 'subscription_grant')
+  AND jsonPayload.firm_kind = 'live'
 GROUP BY month, entry_type, channel;

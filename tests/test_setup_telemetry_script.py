@@ -180,6 +180,54 @@ def test_sink_filter_does_not_claim_a_single_flat_event_type_clause():
         "(flat event_type, nested message.event_type, flat event)")
 
 
+def test_sink_step_is_create_or_update_not_create_only():
+    """bd polyglot-pdf-f7f0h: a re-run must actually APPLY a changed
+    SINK_FILTER to the live sink, not just to the file. `gcloud logging
+    sinks create` fails on a sink that already exists, so a create-only
+    call cannot do this -- the script must branch on `gcloud logging sinks
+    describe` and call `gcloud logging sinks update` on the branch where
+    the sink already exists. Mutation: remove the `sinks update` call, or
+    remove the `sinks describe` branch so the script falls back to
+    create-only again -- red."""
+    text = _script_text()
+    assert "gcloud logging sinks describe" in text, (
+        "the script never calls `gcloud logging sinks describe` to decide "
+        "whether the sink already exists")
+    assert re.search(r"gcloud logging sinks update \"\$SINK_NAME\"", text), (
+        "the script never calls `gcloud logging sinks update` -- a re-run "
+        "against a project that already has the sink cannot apply a "
+        "changed SINK_FILTER without this call")
+    assert re.search(r"gcloud logging sinks create \"\$SINK_NAME\"", text), (
+        "the script must still call `gcloud logging sinks create` on the "
+        "branch where the sink does not exist yet")
+    # The update call must actually pass the (possibly changed) filter, not
+    # just re-touch the sink.
+    update_block = re.search(
+        r"gcloud logging sinks update \"\$SINK_NAME\"(?:[^\n]*\n){0,4}?"
+        r"[^\n]*--log-filter=\"\$SINK_FILTER\"",
+        text)
+    assert update_block, (
+        "the `sinks update` call does not pass --log-filter=\"$SINK_FILTER\" "
+        "-- a re-run would touch the sink without actually applying the "
+        "new filter")
+
+
+def test_sink_step_resolves_writer_identity_on_both_branches():
+    """The writer-identity grant (step 4) must not silently go missing on
+    a re-run: `gcloud logging sinks create` prints writerIdentity in its
+    output, but `gcloud logging sinks update` does not -- so the update
+    branch must fetch it via a separate `sinks describe --format=` call.
+    Mutation: drop the describe-for-writerIdentity call on the update
+    branch, leaving WRITER_IDENTITY empty on every re-run -- red."""
+    text = _script_text()
+    assert re.search(
+        r'WRITER_IDENTITY=\$\(gcloud logging sinks describe "\$SINK_NAME"'
+        r'(?:[^\n]*\n){0,3}?[^\n]*--format="value\(writerIdentity\)"',
+        text), (
+        "the update branch does not resolve WRITER_IDENTITY via "
+        "`gcloud logging sinks describe ... --format=value(writerIdentity)`")
+
+
 def test_sink_uses_partitioned_tables():
     """Mutation: drop --use-partitioned-tables -- red (the views assume
     partition pruning on a month-range filter)."""

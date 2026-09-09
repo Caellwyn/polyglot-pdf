@@ -173,6 +173,68 @@ own bead):** `docs/standards/logging-and-cost.md`'s roadmap table parks a
 "should be closed as duplicate" to-do about bd `polyglot-pdf-0bs` inside a
 current-state tier-2 doc -- filed as bd `polyglot-pdf-ert7t`.
 
+**Cross-surface review, round 3 (2026-09-09) -- 2 adopted (blockers), 0
+deferred.** The outer review traced two things the first two rounds did not
+reach: the accessor SYNTAX the views use to read `jsonPayload`, and whether
+the sink-create step is actually re-runnable the way the script's own header
+claims. **Adopted (blocker):** all four sink-backed views wrapped every
+`jsonPayload` field access in `JSON_VALUE(...)`, but a Cloud Logging ->
+BigQuery sink materializes `jsonPayload` as a RECORD/STRUCT with
+individually-typed sub-fields, not as a JSON or STRING column --
+`JSON_VALUE`'s first argument must be JSON or STRING. Pointed at a STRUCT it
+fails view creation outright; pointed at an already-STRING sub-field (the
+more likely shape in practice) it re-parses that string's own contents as
+JSON and silently returns NULL for any value that is not itself valid JSON
+(e.g. the bare word `live`), which would have made `income_month`'s
+`firm_kind = 'live'` filter -- this bead's headline exit criterion --
+silently match zero rows forever. Fixed by rewriting all five views in
+`sql/telemetry_views.sql` to read every `jsonPayload` field via plain struct
+dot-access (`jsonPayload.message.metadata.firm_id`, `jsonPayload.firm_id`,
+...), matching the pattern `hosting_cost_by_service_month` already used for
+`service.description`/`resource.name`; numeric sub-fields
+(`cost_estimate_usd`, `usd_amount`) use `SAFE_CAST(... AS FLOAT64)` instead
+of a string CAST, since the sink types them FLOAT64 directly from the
+emitted JSON's numeric literal. Filed as bd `polyglot-pdf-vqgkj`, fixed here
+rather than deferred (a blocker, not a nit). Added a new pinning test,
+`test_no_view_wraps_a_jsonPayload_accessor_in_JSON_VALUE`, scoped to the
+five view BODIES (not the file's prose comments, which now legitimately
+document why `JSON_VALUE` must not be used) -- mutation-verified by
+reintroducing `JSON_VALUE` into `income_month`'s filter and confirming red,
+then restoring. The existing `JSON_VALUE(...)`-anchored regexes in
+`backend/tests/unit/test_telemetry_views.py` were rewritten to match the
+new plain-accessor syntax; each rewritten regex was independently
+mutation-verified against the specific SQL clause it pins (not just
+re-passing against the fixed file). **Adopted (blocker):**
+`scripts/setup-telemetry.sh`'s own header says an operator can re-run it
+when "the sink filter ... changes," but the sink step only ever called
+`gcloud logging sinks create`, which fails on an existing sink and had that
+failure swallowed -- so a re-run after a filter change (the script's own
+next-edit example, Epic 3 bead 8 adding an error-event clause) would leave
+the LIVE sink on its original filter forever while the script printed
+`[NOTE]` and exited 0. Fixed by branching on `gcloud logging sinks describe`:
+`sinks create` on the branch where the sink does not exist yet, `sinks
+update --log-filter=...` on the branch where it does -- so a re-run now
+actually applies a changed `SINK_FILTER`. The writer-identity grant (step 4)
+had to move with it: `sinks create` prints `writerIdentity` in its output,
+but `sinks update` does not, so the update branch resolves it via a
+second `gcloud logging sinks describe --format=value(writerIdentity)` call
+instead. Also changed both `sinks create`/`sinks update` failures from a
+swallowed `[NOTE]`-and-continue to `[ERROR]` + `exit 1` -- with the
+already-exists case now handled explicitly by the `describe` branch, any
+remaining failure is a genuine error (e.g. a permission problem), not the
+benign case the old swallow was written for. Filed as bd
+`polyglot-pdf-f7f0h`, fixed here. Added two new pinning tests to
+`tests/test_setup_telemetry_script.py` (`test_sink_step_is_create_or_
+update_not_create_only`, `test_sink_step_resolves_writer_identity_on_
+both_branches`), each mutation-verified by reverting the script to its
+pre-fix (create-only) text and confirming both go red, then restoring.
+`docs/technical_guide.md`'s Surface contract 22 and
+`docs/standards/logging-and-cost.md`'s BigQuery section were updated for
+both fixes (the accessor shape needed no doc change -- neither doc names
+`JSON_VALUE`, only JSON field paths, which are unchanged). Full backend
+suite (3643 passed) and root suite (1463 passed) re-run clean after both
+fixes; tree left clean.
+
 ## Lessons
 
 A plan or bead description that names a single log field as a filter target

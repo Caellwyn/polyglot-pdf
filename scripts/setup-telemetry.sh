@@ -66,11 +66,12 @@
 #
 # Usage: ./scripts/setup-telemetry.sh <PROJECT_ID>
 #
-# Idempotent for the dataset/API/IAM steps (re-running is safe); the sink
-# create step is NOT idempotent (gcloud logging sinks create fails if the
-# sink already exists) -- re-running against a project that already has the
-# sink will print an error on that one step and continue, since it is not
-# fatal to re-applying the view definitions below it.
+# Idempotent throughout, including the sink step (bd polyglot-pdf-f7f0h):
+# `gcloud logging sinks describe` decides whether to `sinks create` (sink
+# does not exist yet) or `sinks update` (it does), so a re-run after
+# SINK_FILTER changes -- e.g. Epic 3 bead 8 adding the error-event clause --
+# actually applies the new filter to the live sink, rather than failing
+# silently on a create-only call that leaves the deployed filter stale.
 
 set -e
 
@@ -135,30 +136,60 @@ fi
 # --use-partitioned-tables: partitioned by the LogEntry's own timestamp, so
 # a month-range query in the views above prunes partitions instead of
 # scanning the whole sink history.
-echo -e "${GREEN}[INFO]${NC} Creating Cloud Logging sink $SINK_NAME..."
+#
+# CREATE-OR-UPDATE, NOT CREATE-ONLY (bd polyglot-pdf-f7f0h). `gcloud logging
+# sinks create` fails on a sink that already exists, so a bare create-only
+# call cannot be how a re-run applies a changed SINK_FILTER (e.g. Epic 3
+# bead 8 adding the error-event clause to the OR above, per this script's
+# own module docstring) -- create-only would leave the LIVE sink on its
+# original filter forever while gcloud printed a swallowed error and the
+# script exited 0. `gcloud logging sinks describe` decides which of
+# `sinks create` / `sinks update` to run: describe (unlike create) is safe
+# to call on a sink that does not exist yet (it just fails, which is
+# exactly the signal needed), and on a sink that DOES exist its output
+# carries writerIdentity -- the same field `sinks create` prints on first
+# creation -- so step 4 below can grant the writer identity
+# bigquery.dataEditor on either path, not just the create one.
+echo -e "${GREEN}[INFO]${NC} Checking whether Cloud Logging sink $SINK_NAME already exists..."
 SINK_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name=("polyglot-backend" OR "polyglot-backend-staging" OR "polyglot-admin") AND (jsonPayload.event_type="ledger_export" OR jsonPayload.message.event_type=("gemini_api_response" OR "text_ai_usage" OR "tts_usage") OR jsonPayload.event=("form_session_started" OR "form_session_ended"))'
 
-SINK_CREATE_OUTPUT=$(gcloud logging sinks create "$SINK_NAME" \
-    "bigquery.googleapis.com/projects/$PROJECT_ID/datasets/$DATASET" \
-    --project="$PROJECT_ID" \
-    --log-filter="$SINK_FILTER" \
-    --use-partitioned-tables \
-    2>&1) || {
-    echo -e "${YELLOW}[NOTE]${NC} sink create failed or the sink already exists -- see output below."
+if gcloud logging sinks describe "$SINK_NAME" --project="$PROJECT_ID" &>/dev/null; then
+    echo -e "${GREEN}[INFO]${NC} Sink $SINK_NAME already exists -- updating its filter..."
+    SINK_CREATE_OUTPUT=$(gcloud logging sinks update "$SINK_NAME" \
+        --project="$PROJECT_ID" \
+        --log-filter="$SINK_FILTER" \
+        2>&1) || {
+        echo -e "${RED}[ERROR]${NC} sink update failed -- see output below."
+        echo "$SINK_CREATE_OUTPUT"
+        exit 1
+    }
     echo "$SINK_CREATE_OUTPUT"
-}
-echo "$SINK_CREATE_OUTPUT"
+    WRITER_IDENTITY=$(gcloud logging sinks describe "$SINK_NAME" \
+        --project="$PROJECT_ID" --format="value(writerIdentity)" 2>/dev/null)
+else
+    echo -e "${GREEN}[INFO]${NC} Creating Cloud Logging sink $SINK_NAME..."
+    SINK_CREATE_OUTPUT=$(gcloud logging sinks create "$SINK_NAME" \
+        "bigquery.googleapis.com/projects/$PROJECT_ID/datasets/$DATASET" \
+        --project="$PROJECT_ID" \
+        --log-filter="$SINK_FILTER" \
+        --use-partitioned-tables \
+        2>&1) || {
+        echo -e "${RED}[ERROR]${NC} sink create failed -- see output below."
+        echo "$SINK_CREATE_OUTPUT"
+        exit 1
+    }
+    echo "$SINK_CREATE_OUTPUT"
+    WRITER_IDENTITY=$(echo "$SINK_CREATE_OUTPUT" | grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.iam\.gserviceaccount\.com' | head -1)
+fi
 
 # 4. Grant the sink's own writer identity roles/bigquery.dataEditor on the
-#    dataset. gcloud logging sinks create PRINTS this identity (a
-#    project-scoped service agent it provisions itself, NOT
-#    admin-backend-sa or polyglot-backend-sa) -- without this grant every
-#    row the sink tries to write 403s silently and the dataset stays empty
-#    while the sink itself reports healthy (the same "mock cannot tell you
-#    the real dependency is forbidden" trap as CLAUDE.md scar #7, just on
-#    the WRITE side instead of a read).
-WRITER_IDENTITY=$(echo "$SINK_CREATE_OUTPUT" | grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.iam\.gserviceaccount\.com' | head -1)
-
+#    dataset. The block above resolves this identity on BOTH the create and
+#    the update path (a project-scoped service agent the sink itself
+#    provisions, NOT admin-backend-sa or polyglot-backend-sa) -- without
+#    this grant every row the sink tries to write 403s silently and the
+#    dataset stays empty while the sink itself reports healthy (the same
+#    "mock cannot tell you the real dependency is forbidden" trap as
+#    CLAUDE.md scar #7, just on the WRITE side instead of a read).
 if [ -n "$WRITER_IDENTITY" ]; then
     echo -e "${GREEN}[INFO]${NC} Granting bigquery.dataEditor on $DATASET to sink writer $WRITER_IDENTITY..."
     bq add-iam-policy-binding \
@@ -167,7 +198,7 @@ if [ -n "$WRITER_IDENTITY" ]; then
         --role="roles/bigquery.dataEditor" \
         "$DATASET" > /dev/null
 else
-    echo -e "${YELLOW}[NOTE]${NC} Could not parse the sink's writer identity from sink-create output."
+    echo -e "${YELLOW}[NOTE]${NC} Could not resolve the sink's writer identity."
     echo -e "${YELLOW}[NOTE]${NC} Run 'gcloud logging sinks describe $SINK_NAME --project=$PROJECT_ID'"
     echo -e "${YELLOW}[NOTE]${NC} and grant roles/bigquery.dataEditor on $DATASET to its writerIdentity by hand:"
     echo -e "${YELLOW}[NOTE]${NC}   bq add-iam-policy-binding --project_id=$PROJECT_ID \\"
