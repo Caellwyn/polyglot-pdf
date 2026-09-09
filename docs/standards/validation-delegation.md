@@ -470,13 +470,15 @@ The net-new port, mirroring `ILiveAI`:
 # backend/ports/text_ai_port.py
 class ITextAI(ABC):
     @abstractmethod
-    async def validate(self, payload: dict) -> dict:
+    async def validate(self, payload: dict, session_ctx: dict | None = None) -> dict:
         """Run a contradiction check over the minimal client-state payload
         (contract 2) and return the verdict (contract 1). Fail-open: on
         timeout/error the caller advances unchecked (see PII sign-off)."""
         ...
 
-    async def ask(self, query: str, context: dict) -> tuple[str, list[dict], bool]:
+    async def ask(
+        self, query: str, context: dict, session_ctx: dict | None = None
+    ) -> tuple[str, list[dict], bool]:
         """Send a prose query + current-values context to the secretary agent
         and return (answer, sources, resolved). `sources` is the list of
         {field_id, spoken_name} dicts the answer was grounded in / identified
@@ -495,6 +497,25 @@ class ITextAI(ABC):
   `ask()` is declared non-abstract (default raises `NotImplementedError`) so an
   adapter that predates the secretary bead fails loudly rather than silently;
   `TextAIGemini` implements both.
+- **`session_ctx` (bd polyglot-pdf-t86oz, usage-event v2's text half):** an
+  OPTIONAL kwarg on `validate`, `ask`, `translate_labels`, and
+  `translate_items` -- `{firm_id, employee_id, link_jti, kit_id, channel,
+  form_session_id}`, any/all keys absent or `None`. `TextAIGemini` is a
+  per-process SINGLETON (`get_text_ai` below), so these ids must never live
+  on `self` -- they ride the call instead, threaded through
+  `_generate(usage_kind=..., session_ctx=...)` into
+  `_log_usage`, which emits `log_text_ai_usage(usage_kind=
+  "text_validator"|"text_secretary"|"text_translation", ...)` with a computed
+  cost from `TEXT_GENERATION_PRICING` (`backend/config.py`). Callers own
+  building the dict from their own session state:
+  `ValidatorService.validate()` and `FormFillingService` (via its
+  `_text_ai_session_ctx()` helper) pass it; the authoring-time translation
+  bake (`option_translation.py`) and the runtime option-override build are
+  OUTSIDE this bead's surfaces and do not pass it yet, so those calls still
+  emit a usage event with every context key null. See
+  [logging-and-cost.md](logging-and-cost.md) for the usage-event-v2 shape
+  and [hipaa-pii-policy.md](hipaa-pii-policy.md) for why the envelope has no
+  slot for a value or transcript.
 - The port's third method is `async translate_labels(labels, language_name,
   language_code) -> dict | None` (bd polyglot-pdf-ow1e, runtime option-label
   translation): one batched JSON call translating option labels into the
