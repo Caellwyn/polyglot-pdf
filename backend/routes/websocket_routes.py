@@ -1161,21 +1161,41 @@ async def _handle_fill_session(
 			# key: the link's employee_id for a client session, the staff
 			# uid for a staff session -- see this function's own parameter
 			# docstring for why the two names are NOT interchangeable.
+			#
+			# OFF THE EVENT LOOP (Opus cross-surface, bd polyglot-pdf-w828m
+			# finding 1). firm_kind() is an uncached sync Admin-SDK .get(),
+			# and record_session_end() does its own db lookup plus a
+			# batch.commit() -- both blocking network calls. Every sibling
+			# Firestore call in this same teardown block is already
+			# to_thread-dispatched (complete_link, _bank_link_spend's
+			# record_spend, enforce_link_redemption, _mirror_budget_exhausted
+			# -- whose own docstring states the rule by name); calling these
+			# two directly here would stall every OTHER concurrent
+			# connection on this Cloud Run instance, in-flight audio
+			# included, on what is now the highest-frequency teardown path
+			# in the app. BOTH resolved inside the SAME to_thread call
+			# (mirrors the ceiling+check_budget pattern above in this same
+			# file), since firm_kind's result feeds directly into
+			# record_session_end's `kind` argument.
 			try:
 				from ..services.link_tokens import link_channel
-				from ..services.firms import firm_kind
-				from ..services.usage_rollups import record_session_end
 
-				record_session_end(
-					firm_id=firm_id,
-					kit_id=kit_id,
-					employee_id=usage_employee_id,
-					language=_rollup_language_key(service),
-					channel=link_channel(),
-					kind=firm_kind(firm_id) if firm_id else "live",
-					completion_status="completed" if session_completed else "abandoned",
-					cost_usd=_session_cost_usd(service),
-				)
+				def _resolve_kind_and_record_rollup() -> None:
+					from ..services.firms import firm_kind
+					from ..services.usage_rollups import record_session_end
+
+					record_session_end(
+						firm_id=firm_id,
+						kit_id=kit_id,
+						employee_id=usage_employee_id,
+						language=_rollup_language_key(service),
+						channel=link_channel(),
+						kind=firm_kind(firm_id) if firm_id else "live",
+						completion_status="completed" if session_completed else "abandoned",
+						cost_usd=_session_cost_usd(service),
+					)
+
+				await asyncio.to_thread(_resolve_kind_and_record_rollup)
 			except Exception as e:
 				log.error("usage_rollup_telemetry_failed", error=str(e))
 

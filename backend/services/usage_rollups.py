@@ -1,5 +1,20 @@
-"""Session-end Firestore usage rollups: firms/{firm_id}/usage/{YYYY-MM} and
-kits/{kit_id}/usage/{YYYY-MM} (Epic 3 bead E3.4, bd polyglot-pdf-w828m).
+"""Session-end Firestore usage rollups: firms/{firm_id}/usage/{YYYY-MM[_channel]}
+and kits/{kit_id}/usage/{YYYY-MM[_channel]} (Epic 3 bead E3.4, bd
+polyglot-pdf-w828m).
+
+DOC ID IS CHANNEL-SUFFIXED, NOT firm_id/kit_id. Staging and demo share one
+Firestore project (docs/technical_guide.md, CLAUDE.md "Deployment /
+promotion"), and unlike credit_ledger.py's append-only entries -- where
+`channel` is honestly just a record of where a debit happened, per that
+module's own docstring -- these rollup docs are shared AGGREGATE counters
+that each write overwrites in place. A bare "YYYY-MM" id would let a
+staging test-drive increment the SAME document the demo's billing view
+reads, with no way to filter it back out at read time. So the month id
+itself is the partition key, following the established channel-suffix
+convention from bd polyglot-pdf-3q9qn (link_redemptions._collection_name /
+links_store._collection_name): the demo channel keeps the bare "YYYY-MM"
+id (nothing already written is orphaned), every other channel gets
+"YYYY-MM_{channel}". See `_month_key`'s docstring for the resolution order.
 
 WHAT THIS IS. TWO entry points write into the same rollup documents:
 
@@ -10,13 +25,13 @@ WHAT THIS IS. TWO entry points write into the same rollup documents:
   db.batch() -- so a mid-write failure cannot leave a firm's counters bumped
   with no matching kit counters (or vice versa):
 
-    firms/{firm_id}/usage/{YYYY-MM}:
+    firms/{firm_id}/usage/{YYYY-MM[_channel]}:
       connections_ended, sessions_completed, cost_usd_total,
       by_kit.{kit_id}.{sessions,cost_usd},
       by_employee.{uid}.{sessions,cost_usd},
       by_language.{code}.{sessions,cost_usd}, kind, channel
 
-    kits/{kit_id}/usage/{YYYY-MM}:
+    kits/{kit_id}/usage/{YYYY-MM[_channel]}:
       connections_ended, sessions_completed, cost_usd_total,
       by_firm.{firm_id}.{sessions,cost_usd}, kind, channel
 
@@ -121,9 +136,35 @@ KITS_COLLECTION = "kits"
 USAGE_SUBCOLLECTION = "usage"
 
 
-def _month_key(stamp: float) -> str:
-    """YYYY-MM in UTC, the rollup document id for both collections."""
-    return datetime.fromtimestamp(stamp, tz=timezone.utc).strftime("%Y-%m")
+def _month_key(stamp: float, channel: Optional[str] = None) -> str:
+    """The rollup document id for both collections: YYYY-MM in UTC, suffixed
+    by channel for every channel except the demo default.
+
+    Staging and demo share one Firestore project (docs/technical_guide.md,
+    CLAUDE.md "Deployment / promotion"), so a bare "YYYY-MM" id would let a
+    staging test-drive increment the SAME document the demo's billing view
+    reads -- this doc is a shared AGGREGATE counter, not an append-only row,
+    so there is no way to filter staging traffic back out at read time the
+    way credit_ledger.py's per-entry `channel` field allows (that module's
+    own docstring: "channel on an entry is a record of WHERE a debit
+    happened, not a partition key" -- a distinction that does NOT transfer
+    to a counter that overwrites in place). Mirrors the established
+    channel-suffix convention from bd polyglot-pdf-3q9qn
+    (link_redemptions._collection_name / links_store._collection_name):
+    the demo keeps the bare id so nothing already written is orphaned,
+    every other channel gets its own suffixed id.
+
+    `channel=None` (the two callers that have not been given a channel
+    explicitly cannot happen in production -- see record_session_end's own
+    channel parameter, which is required) falls back to link_channel(),
+    this process's own channel, matching link_redemptions' default-
+    resolution pattern.
+    """
+    from backend.services.link_tokens import DEFAULT_CHANNEL, link_channel
+
+    month = datetime.fromtimestamp(stamp, tz=timezone.utc).strftime("%Y-%m")
+    resolved = channel if channel is not None else link_channel()
+    return month if resolved == DEFAULT_CHANNEL else f"{month}_{resolved}"
 
 
 def _nest_increment(target: dict[str, Any], *parts: str, amount) -> None:
@@ -217,7 +258,7 @@ def record_session_end(
         return False
 
     stamp = float(now if now is not None else time.time())
-    month = _month_key(stamp)
+    month = _month_key(stamp, channel)
     cost = float(cost_usd) if cost_usd and cost_usd > 0 else 0.0
     completed = completion_status == "completed"
 
@@ -307,7 +348,15 @@ def _increment_firm_counter(
     firm_id: Optional[str], field: str, *, now: Optional[float] = None,
 ) -> bool:
     """Shared body for record_link_opened/record_link_completed: bump ONE
-    top-level counter on firms/{firm_id}/usage/{YYYY-MM}. Never raises.
+    top-level counter on firms/{firm_id}/usage/{YYYY-MM[_channel]}. Never
+    raises.
+
+    No `channel` parameter: both callers (open_link, complete_link) run only
+    on the public backend, which has exactly one channel of its own -- so
+    `_month_key`'s channel=None default (this process's own link_channel())
+    is always the right one here, the same default-resolution the sibling
+    `link_redemptions._collection()` uses. See `_month_key`'s docstring for
+    why the id is channel-suffixed at all.
     """
     if not firm_id:
         return False

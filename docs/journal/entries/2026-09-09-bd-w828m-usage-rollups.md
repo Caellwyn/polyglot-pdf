@@ -176,6 +176,80 @@ FieldPath test and the rules deny-block test) and returned `GAPS-FOUND (1)`:
   correctness gap and the reviewer explicitly did not ask for a fix or a
   new bead; no action taken.
 
+### Outer Opus cross-surface review -- adopt/reject/defer
+
+The full outer cross-surface pass (contract trace out into every consumer
+of `usage_rollups`' entry points and Firestore doc shapes) returned
+`GAPS-FOUND (2)`, both ADOPTED:
+
+- **ADOPTED -- finding 1 (untested event-loop blocking, blocker):**
+  `firm_kind(firm_id)` (an uncached sync Admin-SDK `.get()`) and
+  `record_session_end(...)` (its own db lookup plus a `batch.commit()`)
+  were called DIRECTLY in the teardown `finally` block, on the shared
+  Cloud Run event loop -- while every sibling Firestore call in the SAME
+  block (`complete_link`, `_bank_link_spend`'s `record_spend`,
+  `enforce_link_redemption`, `_mirror_budget_exhausted`) was already
+  `asyncio.to_thread`-dispatched, and `_mirror_budget_exhausted`'s own
+  docstring states the rule by name. Every existing usage-rollup test
+  stubbed `record_session_end` to return instantly, so the missing wrapper
+  was invisible to the suite -- the same shape `test_link_routes.py`'s
+  `test_the_minting_flag_check_runs_OFF_the_event_loop` already exists to
+  catch on a sibling route. Fixed by wrapping both calls in ONE
+  `asyncio.to_thread(_resolve_kind_and_record_rollup)` dispatch (mirrors
+  the existing `_resolve_ceiling_and_check_budget` pattern in this same
+  file, since `firm_kind`'s result feeds `record_session_end`'s `kind`
+  argument). Pinned by
+  `test_TEARDOWN_dispatches_the_usage_rollup_OFF_the_event_loop` in
+  `backend/tests/integration/test_websocket_ephemeral.py`, which spies on
+  `asyncio.to_thread` itself (the same technique
+  `test_link_routes.py`'s sibling test uses) rather than trusting a fake
+  Firestore's instant return. Mutation-verified red against a direct call
+  (dropping the `to_thread` wrapper), then restored.
+- **ADOPTED -- finding 2 (channel partitioning, medium-high confidence):**
+  the rollup documents (`firms/{firm_id}/usage/{YYYY-MM}`,
+  `kits/{kit_id}/usage/{YYYY-MM}`) used a bare month id with `channel` as a
+  last-writer-wins SCALAR FIELD each write overwrites -- not a partition
+  key. Because staging and demo share one Firestore project, a staging
+  test-drive would increment the SAME document the demo's billing view
+  (bd `polyglot-pdf-mpebj`) reads. This repo's established remedy is the
+  channel-suffix convention from bd `polyglot-pdf-3q9qn`
+  (`link_redemptions._collection_name` / `links_store._collection_name`:
+  the demo keeps the bare name, every other channel gets its own
+  suffixed one). That convention suffixes a COLLECTION name; these
+  rollup docs live at a fixed collection path keyed by firm_id/kit_id, so
+  the fix suffixes the MONTH DOCUMENT ID instead: `_month_key` now takes
+  an optional `channel` and returns `YYYY-MM` for the demo channel (its
+  pre-existing default, so nothing already written is orphaned) or
+  `YYYY-MM_{channel}` for every other channel, resolving to this
+  process's own `link_channel()` when no channel is given explicitly
+  (matching `link_redemptions._collection()`'s own default-resolution
+  pattern) -- covers `record_session_end` (channel is an explicit,
+  required parameter there) and `_increment_firm_counter` (backing
+  `record_link_opened`/`record_link_completed`, which have no channel
+  parameter of their own since both callers run only on the public
+  backend). Deliberately did NOT change `credit_ledger.py`'s reasoning
+  (channel stays a plain field there) -- that module's entries are
+  append-only rows where channel is a record of WHERE a debit happened,
+  not a partition key; that reasoning does not transfer to a shared
+  aggregate counter document that overwrites in place. Pinned by four new
+  tests in `backend/tests/unit/test_usage_rollups.py`: a staging session
+  does not touch the demo firm doc's totals, same for the kit doc, the
+  demo channel keeps its bare month id, and `record_link_opened`/
+  `record_link_completed` are also channel-partitioned. Mutation-verified
+  red against dropping the channel suffix in `_month_key` (3 of 4 new
+  tests went red; the fourth pins the unchanged demo-default behavior and
+  correctly stayed green), then restored.
+
+Whether the maintainer wants staging traffic PARTITIONED (this fix) vs.
+EXCLUDED from the rollups entirely was flagged by the reviewer as a
+product call with no obvious default; partitioning was chosen because it
+is the repo's own established convention for exactly this shared-project
+hazard, it is reversible (a later exclude-staging change is a filter on
+top of this, not a rework), and leaving it unpartitioned is an active
+correctness bug (demo billing figures inflated by staging test-drives) --
+not a case where "no fix" was a safe default to leave in place pending an
+answer.
+
 ## Lessons
 
 The generalizable lesson: **when a bead's own description names a specific

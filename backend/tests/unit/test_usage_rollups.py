@@ -420,6 +420,98 @@ def test_a_hyphenated_kit_id_ACCUMULATES_ACROSS_TWO_CONNECTIONS(db):
 
 
 # ---------------------------------------------------------------------------
+# Channel partitioning (Opus cross-surface, bd polyglot-pdf-w828m finding 2)
+# ---------------------------------------------------------------------------
+
+
+def test_a_STAGING_session_does_NOT_touch_the_DEMO_months_totals(db):
+    """Staging and demo share one Firestore project (CLAUDE.md "Deployment /
+    promotion"). Before the channel-suffixed doc id, both channels wrote
+    the SAME firms/{firm_id}/usage/{YYYY-MM} document, so a staging
+    test-drive would inflate the demo firm's connections_ended and
+    cost_usd_total -- the numbers bd polyglot-pdf-mpebj's admin console
+    reads as per-firm billing input.
+
+    Mutation: hard-code the demo doc id in _month_key (drop the channel
+    suffix) -- red, because the staging call's increment lands on
+    _FIRM_DOC instead of a separate document and this assertion fails.
+    """
+    usage_rollups.record_session_end(
+        firm_id="acme", kit_id=None, employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=5.0, now=_NOW,
+    )
+    usage_rollups.record_session_end(
+        firm_id="acme", kit_id=None, employee_id=None, language=None,
+        channel="staging", kind="live", completion_status="completed",
+        cost_usd=9.0, now=_NOW,
+    )
+    demo_doc = db.docs[_FIRM_DOC]
+    assert demo_doc["connections_ended"] == 1
+    assert demo_doc["cost_usd_total"] == pytest.approx(5.0)
+    assert demo_doc["channel"] == "demo"
+
+    staging_doc = db.docs["firms/acme/usage/2026-09_staging"]
+    assert staging_doc["connections_ended"] == 1
+    assert staging_doc["cost_usd_total"] == pytest.approx(9.0)
+    assert staging_doc["channel"] == "staging"
+
+
+def test_a_STAGING_session_does_NOT_touch_the_DEMO_kit_doc_either(db):
+    """Same partitioning, kit side."""
+    usage_rollups.record_session_end(
+        firm_id="acme", kit_id="i-90", employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=1.0, now=_NOW,
+    )
+    usage_rollups.record_session_end(
+        firm_id="acme", kit_id="i-90", employee_id=None, language=None,
+        channel="staging", kind="live", completion_status="completed",
+        cost_usd=2.0, now=_NOW,
+    )
+    demo_kit_doc = db.docs[_KIT_DOC]
+    assert demo_kit_doc["cost_usd_total"] == pytest.approx(1.0)
+
+    staging_kit_doc = db.docs["kits/i-90/usage/2026-09_staging"]
+    assert staging_kit_doc["cost_usd_total"] == pytest.approx(2.0)
+
+
+def test_the_demo_channel_keeps_the_BARE_month_id(db):
+    """The demo channel is the pre-existing default: its doc id must stay
+    the bare "YYYY-MM" so nothing already written under it is orphaned
+    (mirrors bd polyglot-pdf-3q9qn's link_redemptions/links_store
+    convention exactly).
+    """
+    usage_rollups.record_session_end(
+        firm_id="acme", kit_id=None, employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=1.0, now=_NOW,
+    )
+    assert _FIRM_DOC in db.docs
+    assert "firms/acme/usage/2026-09_demo" not in db.docs
+
+
+def test_link_opened_and_completed_counters_are_ALSO_channel_partitioned(
+    db, monkeypatch,
+):
+    """record_link_opened/record_link_completed share the SAME rollup
+    document as record_session_end (_increment_firm_counter), so they must
+    resolve the same channel-suffixed doc id -- via this process's own
+    link_channel(), since neither open_link() nor complete_link() is ever
+    called with an explicit channel argument (both run only on the public
+    backend, which has exactly one channel of its own).
+    """
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    usage_rollups.record_link_opened("acme", now=_NOW)
+    usage_rollups.record_link_completed("acme", now=_NOW)
+
+    assert _FIRM_DOC not in db.docs
+    staging_doc = db.docs["firms/acme/usage/2026-09_staging"]
+    assert staging_doc["links_opened"] == 1
+    assert staging_doc["links_completed"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Best-effort / never-raises
 # ---------------------------------------------------------------------------
 

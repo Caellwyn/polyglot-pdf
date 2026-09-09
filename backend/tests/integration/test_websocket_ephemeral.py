@@ -580,6 +580,111 @@ async def test_TEARDOWN_passes_usage_employee_id_not_link_employee_id_to_rollup(
 
 
 @pytest.mark.asyncio
+async def test_TEARDOWN_dispatches_the_usage_rollup_OFF_the_event_loop(
+    monkeypatch,
+):
+    """Opus cross-surface, bd polyglot-pdf-w828m finding 1 (blocker).
+
+    firm_kind() is an uncached sync Admin-SDK .get(), and
+    record_session_end() does its own db lookup plus a batch.commit() --
+    both blocking network calls. Every sibling Firestore call in this same
+    teardown `finally` block is already to_thread-dispatched (complete_link,
+    _bank_link_spend's record_spend, enforce_link_redemption,
+    _mirror_budget_exhausted -- whose own docstring states the rule by
+    name: "callers on the event loop must wrap it in asyncio.to_thread,
+    exactly like every other Firestore call on this route"). Calling
+    firm_kind/record_session_end directly here would stall every OTHER
+    concurrent connection on this Cloud Run instance, in-flight audio
+    included, on what is now the highest-frequency teardown path in the
+    app. Every existing usage-rollup test stubs record_session_end to
+    return instantly, which makes a missing to_thread wrapper invisible
+    (mirrors test_link_routes.py's
+    test_the_minting_flag_check_runs_OFF_the_event_loop exactly) -- this
+    test spies on asyncio.to_thread itself instead.
+
+    MUTATION HOOK: replace
+    `await asyncio.to_thread(_resolve_kind_and_record_rollup)` in
+    websocket_routes.py's `_handle_fill_session` teardown with a direct
+    `_resolve_kind_and_record_rollup()` call -- red, because
+    firm_kind/record_session_end are then never dispatched via to_thread.
+    """
+    from backend.routes import websocket_routes as wr
+
+    real_to_thread = asyncio.to_thread
+    dispatched: list = []
+
+    async def spy_to_thread(func, *a, **kw):
+        dispatched.append(func)
+        return await real_to_thread(func, *a, **kw)
+
+    monkeypatch.setattr(asyncio, "to_thread", spy_to_thread)
+
+    firm_kind_calls = []
+    record_calls = []
+
+    def _fake_firm_kind(firm_id):
+        firm_kind_calls.append(firm_id)
+        return "live"
+
+    def _fake_record_session_end(**kwargs):
+        record_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        "backend.services.firms.firm_kind", _fake_firm_kind,
+    )
+    monkeypatch.setattr(
+        "backend.services.usage_rollups.record_session_end",
+        _fake_record_session_end,
+    )
+
+    ws = MagicMock(spec=WebSocket)
+    ws.accept = AsyncMock()
+    ws.receive = AsyncMock(return_value={"type": "websocket.disconnect"})
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+
+    service = MagicMock(name="form_filling_service")
+    service._is_resume_session = False
+    service.start_session = AsyncMock()
+    service.end_session = AsyncMock()
+    service.confirmed_field_count = MagicMock(return_value=0)
+    del service.spoken_language
+
+    await asyncio.wait_for(
+        wr._handle_fill_session(
+            ws,
+            "session-to-thread-test",
+            service,
+            False,
+            accept_connection=False,
+            schema=None,
+            form_session_id="fs-to-thread-1",
+            firm_id="firm-off-loop",  # non-None -> firm_kind() is on the
+                                      # call path this time.
+            kit_id="i-90",
+            link_jti=None,
+            link_employee_id=None,
+            usage_employee_id="staff-uid-1",
+        ),
+        timeout=5.0,
+    )
+
+    assert firm_kind_calls == ["firm-off-loop"], (
+        "firm_kind was not called (or called with the wrong firm_id) -- "
+        f"got {firm_kind_calls!r}"
+    )
+    assert len(record_calls) == 1, (
+        f"record_session_end should be called exactly once, got {record_calls!r}"
+    )
+    # The dispatched closure resolves both firm_kind and record_session_end
+    # inside the SAME to_thread call -- assert at least one dispatched
+    # callable actually ran them (rather than asserting the closure's
+    # object identity, which is a fresh function object per call).
+    assert dispatched, "usage-rollup teardown never called asyncio.to_thread"
+
+
+@pytest.mark.asyncio
 @patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
 async def test_a_link_WITH_headroom_still_connects_normally(
     mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
