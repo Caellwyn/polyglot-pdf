@@ -86,6 +86,8 @@ class TextAIClaudeCli(TextAIGemini):
         system_instruction: str | None = None,
         response_mime_type: str | None = None,
         temperature: float | None = None,
+        usage_kind: str | None = None,
+        session_ctx: dict | None = None,
     ) -> str:
         """Run the assembled prompt through `claude -p` and return raw text.
 
@@ -97,6 +99,11 @@ class TextAIClaudeCli(TextAIGemini):
         paths pass 0.0 for determinism, which the CLI cannot honor. That is a
         fidelity gap accepted for a local authoring tool, not a correctness one:
         every caller re-validates the JSON shape before using it.
+
+        `usage_kind` / `session_ctx` (bd polyglot-pdf-t86oz): accepted for
+        signature compatibility with the base class's call site but ignored --
+        this adapter is the free local-CLI authoring path (no Google Gemini
+        billing), so there is nothing to price or attribute a usage event to.
         """
         prompt = "\n\n".join(
             str(p) for p in (list(stable_prefix) + list(fresh_tail)) if p

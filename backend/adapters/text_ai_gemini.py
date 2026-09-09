@@ -5,11 +5,13 @@ import structlog
 from google import genai
 from google.genai import types
 
+from backend.config import get_text_generation_pricing
 from backend.ports.text_ai_port import ITextAI
 from backend.services.secretary_context import (
     render_static_catalog,
     render_values_tail,
 )
+from backend.utils.structured_logger import get_logger as get_structured_logger
 
 # Secretary system instruction -- the "find relevant fields -> copy values ->
 # answer in prose" structure validated by the Gate-1 RECALL probe
@@ -218,12 +220,18 @@ class TextAIGemini(ITextAI):
     # ITextAI implementation
     # ------------------------------------------------------------------
 
-    async def validate(self, payload: dict) -> dict:
+    async def validate(self, payload: dict, session_ctx: dict | None = None) -> dict:
         """Run contradiction check via flash-lite.
 
         payload keys (from validation-delegation.md contract 2):
           stable_prefix: list of str/Part -- secretary SI + field catalog
           fresh_tail:    list of str/Part -- current values + query text
+
+        session_ctx (bd polyglot-pdf-t86oz): the caller's own
+        {firm_id, employee_id, link_jti, kit_id, channel, form_session_id}
+        session state, forwarded to the usage_kind="text_validator" event.
+        TextAIGemini is a per-process singleton, so this rides the call
+        rather than being stored on self.
 
         Returns contract-1 verdict {"conflicts": [...]} or fail-open {"conflicts": []}.
         PII rule: never log payload content, field values, or reason text.
@@ -253,6 +261,8 @@ class TextAIGemini(ITextAI):
                 stable_prefix=stable_prefix,
                 fresh_tail=fresh_tail,
                 response_mime_type="application/json",
+                usage_kind="text_validator",
+                session_ctx=session_ctx,
             )
             verdict = json.loads(raw)
             conflicts = verdict.get("conflicts", [])
@@ -286,9 +296,15 @@ class TextAIGemini(ITextAI):
             )
             return {"conflicts": []}
 
-    async def ask(self, query: str, context: dict) -> tuple[str, list[dict], bool]:
+    async def ask(
+        self, query: str, context: dict, session_ctx: dict | None = None
+    ) -> tuple[str, list[dict], bool]:
         """Secretary query (bd polyglot-pdf-jnjj.45b): map a prose question about
         the form to a prose answer, using the cheap text model.
+
+        session_ctx (bd polyglot-pdf-t86oz): the caller's own
+        {firm_id, employee_id, link_jti, kit_id, channel, form_session_id}
+        session state, forwarded to the usage_kind="text_secretary" event.
 
         context (assembled by the ask_secretary handler, jnjj.45c):
           schema:       full form schema (the whole form catalog, supplied by the
@@ -361,6 +377,8 @@ class TextAIGemini(ITextAI):
                 stable_prefix=stable_prefix,
                 fresh_tail=fresh_tail,
                 response_mime_type="application/json",
+                usage_kind="text_secretary",
+                session_ctx=session_ctx,
             )
             verdict = json.loads(raw)
             answer = verdict.get("answer", "")
@@ -397,7 +415,11 @@ class TextAIGemini(ITextAI):
             return "", [], True
 
     async def translate_labels(
-        self, labels: list, language_name: str, language_code: str
+        self,
+        labels: list,
+        language_name: str,
+        language_code: str,
+        session_ctx: dict | None = None,
     ) -> dict | None:
         """Translate option labels for the runtime option-translation path (bd
         polyglot-pdf-ow1e). One batched JSON call on the lite chain, following
@@ -405,6 +427,12 @@ class TextAIGemini(ITextAI):
         validate, fail-open) -- except the fail-open SIGNAL is None (not {}),
         so the caller can distinguish "call failed, do not cache" from a valid
         empty result.
+
+        session_ctx (bd polyglot-pdf-t86oz): the caller's own session state,
+        forwarded to the usage_kind="text_translation" event. The
+        authoring-time translation bake legitimately has only a kit_id (no
+        live session), so most keys are None there -- the emitter writes
+        every key regardless.
 
         Determinism levers (maintainer 2026-07-16): the text-generation config
         has no output-language field (unlike the Live API's transcription
@@ -443,6 +471,8 @@ class TextAIGemini(ITextAI):
                 fresh_tail=[],
                 response_mime_type="application/json",
                 temperature=0.0,
+                usage_kind="text_translation",
+                session_ctx=session_ctx,
             )
             parsed = json.loads(raw)
             if not isinstance(parsed, dict):
@@ -485,11 +515,19 @@ class TextAIGemini(ITextAI):
         *,
         form_name: str | None = None,
         glossary_context: dict | None = None,
+        session_ctx: dict | None = None,
     ) -> dict | None:
         """Context-carrying translation (bd polyglot-pdf-ch7j, the
         translation-gate epic's Part A) -- the successor to translate_labels'
         bare string list, which is the known worst case for short-string
         translation ("State"? "Single"? "Present"?).
+
+        session_ctx (bd polyglot-pdf-t86oz): forwarded to the
+        usage_kind="text_translation" event. backend/services/
+        option_translation.py (the authoring-time bake and the runtime
+        override build) is outside this bead's declared surfaces and does
+        not pass it yet -- those calls still emit a usage event, just with
+        every context key null, exactly like any other unmigrated caller.
 
         `items` is a list of dicts, each one of:
           {"id": <str>, "kind": "field-name" | "section-title",
@@ -617,6 +655,8 @@ class TextAIGemini(ITextAI):
                 fresh_tail=[],
                 response_mime_type="application/json",
                 temperature=0.0,
+                usage_kind="text_translation",
+                session_ctx=session_ctx,
             )
             parsed = json.loads(raw)
             if not isinstance(parsed, dict) \
@@ -1044,6 +1084,8 @@ class TextAIGemini(ITextAI):
         system_instruction: str | None = None,
         response_mime_type: str | None = None,
         temperature: float | None = None,
+        usage_kind: str | None = None,
+        session_ctx: dict | None = None,
     ) -> str:
         """Core generate_content call shared by validate() and future ask().
 
@@ -1056,6 +1098,18 @@ class TextAIGemini(ITextAI):
         error (5xx ServerError, or 404/429 ClientError) it tries the next model;
         a non-transient error (auth/config 4xx, or the last model failing) is
         re-raised so callers' fail-open path handles it. Logs which model served.
+
+        usage_kind + session_ctx (bd polyglot-pdf-t86oz): the usage-event-v2
+        identifiers for this call. TextAIGemini is a per-process singleton
+        (backend/dependencies.py), so these ids MUST NOT be stored on self --
+        they would leak across concurrent sessions. They ride the call instead,
+        all the way to _log_usage. session_ctx is the caller's own session
+        state ({firm_id, employee_id, link_jti, kit_id, channel,
+        form_session_id}, any/all keys may be absent or None); usage_kind
+        names which of the closed UsageKind set (backend/utils/log_schemas.py)
+        this call bills as. Both default to None so a caller that has not been
+        updated (an authoring-time translation bake passing kit_id only, or a
+        pre-bead test) still gets a usage event with those keys null.
 
         Raises on API error; callers wrap in try/except for fail-open.
         """
@@ -1100,7 +1154,8 @@ class TextAIGemini(ITextAI):
                         requested=self._model_name,
                     )
                 self._log_usage(response.usage_metadata, model=model_name,
-                                is_fallback=(i > 0))
+                                is_fallback=(i > 0), usage_kind=usage_kind,
+                                session_ctx=session_ctx)
                 return response.text or ""
             except Exception as exc:  # noqa: BLE001
                 if self._is_transient_availability(exc) and i < len(self._model_chain) - 1:
@@ -1147,17 +1202,82 @@ class TextAIGemini(ITextAI):
         return False
 
     def _log_usage(self, usage_metadata, model: str | None = None,
-                   is_fallback: bool = False) -> None:
-        """Log token counts and cache-hit status. Never logs content."""
+                   is_fallback: bool = False, usage_kind: str | None = None,
+                   session_ctx: dict | None = None) -> None:
+        """Log token counts and cache-hit status, plus a usage-event-v2 line.
+
+        Never logs content. Two emits, both counts/ids only:
+          1. The pre-existing structlog "text_ai_usage" debug line (model,
+             cache-hit) -- unchanged, kept for local log-reading habits.
+          2. log_text_ai_usage (bd polyglot-pdf-t86oz): the structured usage
+             event with a computed cost, usage_kind, and the session_ctx ids.
+             Only emitted when the caller supplied a usage_kind -- a caller
+             mid-migration (or a legacy test) that passes neither usage_kind
+             nor session_ctx still gets the old structlog line and nothing
+             more, rather than a usage event with a None usage_kind (which
+             would not be a member of the closed UsageKind set).
+        """
         if usage_metadata is None:
             return
+        resolved_model = model or self._model_name
         cached_tokens = getattr(usage_metadata, "cached_content_token_count", 0) or 0
+        prompt_tokens = getattr(usage_metadata, "prompt_token_count", None)
+        output_tokens = getattr(usage_metadata, "candidates_token_count", None)
+        total_tokens = getattr(usage_metadata, "total_token_count", None)
         self._log.info(
             "text_ai_usage",
-            model=model or self._model_name,
+            model=resolved_model,
             is_fallback=is_fallback,
-            prompt_tokens=getattr(usage_metadata, "prompt_token_count", None),
+            prompt_tokens=prompt_tokens,
             cached_tokens=cached_tokens,
-            output_tokens=getattr(usage_metadata, "candidates_token_count", None),
+            output_tokens=output_tokens,
             cache_hit=(cached_tokens > 0),
         )
+
+        if usage_kind is None:
+            return
+
+        ctx = session_ctx if isinstance(session_ctx, dict) else {}
+
+        # Cost: (prompt - cached) at text_input, cached at cached_input, output
+        # at text_output. get_text_generation_pricing returns None for an
+        # unrecognized model id -- an explicit gap beats a confident wrong
+        # number (docs/standards/logging-and-cost.md), so cost_estimate_usd is
+        # None in that case rather than computed from a guessed rate.
+        pricing = get_text_generation_pricing(resolved_model)
+        cost_estimate_usd = None
+        if pricing is not None:
+            safe_prompt = prompt_tokens or 0
+            safe_cached = min(cached_tokens, safe_prompt)
+            safe_output = output_tokens or 0
+            uncached_input = safe_prompt - safe_cached
+            cost_estimate_usd = round(
+                uncached_input * pricing["text_input"]
+                + safe_cached * pricing["cached_input"]
+                + safe_output * pricing["text_output"],
+                8,
+            )
+
+        try:
+            get_structured_logger().log_text_ai_usage(
+                usage_kind=usage_kind,
+                metadata={
+                    "prompt_token_count": prompt_tokens,
+                    "candidates_token_count": output_tokens,
+                    "total_token_count": total_tokens,
+                    "cached_content_token_count": cached_tokens,
+                    "cost_estimate_usd": cost_estimate_usd,
+                    "is_fallback": is_fallback,
+                },
+                form_session_id=ctx.get("form_session_id"),
+                firm_id=ctx.get("firm_id"),
+                employee_id=ctx.get("employee_id"),
+                link_jti=ctx.get("link_jti"),
+                kit_id=ctx.get("kit_id"),
+                channel=ctx.get("channel"),
+                model=resolved_model,
+            )
+        except Exception as exc:  # noqa: BLE001 -- telemetry must never break the call
+            self._log.warning(
+                "text_ai_usage_event_emit_failed", exc_type=type(exc).__name__
+            )
