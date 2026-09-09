@@ -13,6 +13,7 @@ from ..utils.confirmation_logger import (
 	log_form_session_end,
 )
 from ..utils.language_codes import bcp47_codes_for_spoken_language
+from ..utils.structured_logger import get_logger as get_structured_logger
 import structlog
 
 # Structured logger for websocket routes
@@ -1431,6 +1432,66 @@ def _verify_ws_credential(token: str) -> dict:
 		return claims
 	return verify_token(token)
 
+# ---------------------------------------------------------------------------
+# WebSocket close telemetry (bd polyglot-pdf-e4dt8 / E3.8)
+# ---------------------------------------------------------------------------
+# Every close on the /fill socket goes out through _close_ws() rather than a
+# bare websocket.close(), so the close is COUNTED as well as performed.
+#
+# WHY A WRAPPER RATHER THAN A LOG LINE AT EACH SITE. There are eight closes on
+# this route and they previously logged eight different ways: different event
+# names, some with the code, some with only a reason string, some (the
+# schema/source rejections) with no code at all. Cloud Monitoring's log-based
+# metrics (scripts/setup-monitoring.sh) count log ENTRIES matching a filter,
+# so no single filter could count "the 1013s" and no alert policy could fire
+# on the rate. One wrapper gives every close ONE shape with the code in ONE
+# place, and makes the SET of closes greppable -- the next close added to this
+# route is either routed through here or it is visibly not.
+#
+# The wrapper does NOT replace the existing per-site structlog lines: those
+# carry site-specific context (not_enrolled, the mismatched kit ids, the jti)
+# that a generic close event has no field for. It ADDS the counted event.
+#
+# NEVER RAISES. A close is the last thing this route does on a failing path;
+# a telemetry failure there must not turn a clean refusal into a 500 or leave
+# the socket open. Both the emit and the close itself are guarded.
+async def _close_ws(websocket, code: int, reason_token: str, *,
+	  reason: str | None = None, form_session_id=None,
+	  ws_session_id=None, metadata: dict | None = None) -> None:
+	"""Emit a counted ws_error event, then close the socket.
+
+	reason_token is a FIXED identifier ("budget_exhausted",
+	"handshake_json_decode"), never user-derived text -- a close reason built
+	from a client-supplied string would be a PII vector
+	(docs/standards/hipaa-pii-policy.md). `reason` is the separate ON-THE-WIRE
+	string the client sees; it defaults to reason_token, and the two are
+	distinct because the frontend BRANCHES on specific wire reasons
+	("budget_exhausted" in webFormConnection.handleClose) while others are
+	human prose ("This account is not enrolled...").
+	"""
+	try:
+		get_structured_logger().log_ws_close(
+			close_code=code,
+			reason_token=reason_token,
+			form_session_id=form_session_id,
+			ws_session_id=ws_session_id,
+			metadata=metadata,
+		)
+	except Exception:
+		# Telemetry is best-effort; the close below is not.
+		_log.warning("ws_close_event_emit_failed", close_code=code,
+					 reason_token=reason_token)
+	try:
+		if reason is None:
+			await websocket.close(code=code, reason=reason_token)
+		else:
+			await websocket.close(code=code, reason=reason)
+	except Exception:
+		# Already closed, or the peer vanished. Nothing to do and nothing
+		# to report -- the counted event above already recorded the intent.
+		pass
+
+
 @router.websocket("/fill")
 async def fill_form_from_schema(
 	websocket: WebSocket,
@@ -1502,7 +1563,9 @@ async def fill_form_from_schema(
 						not_enrolled=not_enrolled)
 			reason = ("This account is not enrolled for the voice application"
 					  if not_enrolled else "Authentication failed")
-			await websocket.close(code=1008, reason=reason)
+			await _close_ws(websocket, 1008, "auth_failed",
+							reason=reason,
+							metadata={"not_enrolled": not_enrolled})
 			return
 
 		await websocket.accept()
@@ -1519,7 +1582,7 @@ async def fill_form_from_schema(
 		log.error("handshake_failed", error=str(e))
 		try:
 			await websocket.send_json({"type": "error", "code": "invalid_handshake", "reason": "text_required"})
-			await websocket.close(code=1003)
+			await _close_ws(websocket, 1003, "handshake_not_text")
 		except:
 			pass
 		return
@@ -1529,13 +1592,13 @@ async def fill_form_from_schema(
 	except json.JSONDecodeError as e:
 		log.error("json_decode_failed", error=str(e))
 		await websocket.send_json({"type": "error", "code": "invalid_handshake", "reason": "json_decode"})
-		await websocket.close(code=1007)
+		await _close_ws(websocket, 1007, "handshake_json_decode")
 		return
 
 	if not isinstance(handshake, dict):
 		log.error("handshake_not_object", type=type(handshake).__name__)
 		await websocket.send_json({"type": "error", "code": "invalid_handshake", "reason": "not_object"})
-		await websocket.close(code=1007)
+		await _close_ws(websocket, 1007, "handshake_not_object")
 		return
 
 	# Extract handshake data.
@@ -1593,7 +1656,8 @@ async def fill_form_from_schema(
 			# link by an omission at this one call site.
 			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
 						error=str(exc))
-			await websocket.close(code=1008, reason="Authentication failed")
+			await _close_ws(websocket, 1008, "link_redeem_refused",
+							reason="Authentication failed")
 			return
 
 		# SPEND CEILING (bd polyglot-pdf-ik7e). Checked HERE -- after the
@@ -1678,7 +1742,8 @@ async def fill_form_from_schema(
 			# concurrent connection. Never awaited for success -- a failed
 			# mirror write must not delay or block the close below.
 			await asyncio.to_thread(_mirror_budget_exhausted, claims.get("jti"))
-			await websocket.close(code=1013, reason="budget_exhausted")
+			await _close_ws(websocket, 1013, "budget_exhausted",
+							form_session_id=form_session_id)
 			return
 		except RedemptionUnavailable as exc:
 			# FAILS CLOSED, same polarity as the redemption gate: if we cannot
@@ -1686,14 +1751,16 @@ async def fill_form_from_schema(
 			# paid session on it.
 			log.warning("ws_link_budget_unavailable", jti=claims.get("jti"),
 						error=str(exc))
-			await websocket.close(code=1013, reason="budget_unavailable")
+			await _close_ws(websocket, 1013, "budget_unavailable",
+							form_session_id=form_session_id)
 			return
 
 		_link_kit = claims.get("link_kit_id")
 		if isinstance(kit_id, str) and kit_id and kit_id != _link_kit:
 			log.warning("ws_link_kit_mismatch", link_kit_id=_link_kit,
 						handshake_kit_id=kit_id, jti=claims.get("jti"))
-			await websocket.close(code=1008, reason="Authentication failed")
+			await _close_ws(websocket, 1008, "link_kit_mismatch",
+							reason="Authentication failed")
 			return
 		# Absent/blank handshake kit_id: the token's is authoritative anyway.
 		kit_id = _link_kit
@@ -1770,7 +1837,8 @@ async def fill_form_from_schema(
 		if not schema or not isinstance(schema, dict):
 			log.error("schema_missing_or_invalid", schema_type=type(schema).__name__)
 			await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "schema_required"})
-			await websocket.close(code=1007)
+			await _close_ws(websocket, 1007, "schema_missing",
+							form_session_id=form_session_id)
 			return
 
 	current_values = handshake.get("current_values") or {}
@@ -1816,7 +1884,8 @@ async def fill_form_from_schema(
 	if source not in ("web", "pdf"):
 		log.error("invalid_source", source=source)
 		await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "source_must_be_web_or_pdf"})
-		await websocket.close(code=1008)
+		await _close_ws(websocket, 1008, "invalid_schema_source",
+						form_session_id=form_session_id)
 		return
 
 	# Generate session ID for logging correlation only
