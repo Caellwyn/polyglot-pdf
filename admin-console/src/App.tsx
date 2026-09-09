@@ -3,20 +3,22 @@ import { SignInGate } from './components/SignInGate';
 import { WhoAmIPage } from './components/WhoAmIPage';
 import { AuditLogPage } from './components/AuditLogPage';
 import { ConfigEditorPage } from './components/ConfigEditorPage';
+import { UsersPage } from './pages/UsersPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
-type Tab = 'whoami' | 'audit' | 'config';
+type Tab = 'whoami' | 'audit' | 'config' | 'users';
 
 /**
- * Admin console shell (bd polyglot-pdf-b6943): the sign-in gate, then a
- * simple tabbed shell over the three skeleton pages this bead ships --
- * who-am-I, the audit log list, and the per-channel runtime-config editor.
+ * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91):
+ * the sign-in gate, then a simple tabbed shell over the console's pages --
+ * who-am-I, the audit log list, the per-channel runtime-config editor, and
+ * staff-account management (users).
  *
- * Deliberately NO ROUTER: three tabs behind a boolean "signed in" state is
- * simple enough that a router would be pure ceremony for this bead's scope.
- * A future bead can add one if the page count grows past what tab state
- * comfortably tracks.
+ * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
+ * state is simple enough that a router would be pure ceremony for this
+ * bead's scope. A future bead can add one if the page count grows past what
+ * tab state comfortably tracks.
  */
 export const App: React.FC = () => {
   const [who, setWho] = React.useState<WhoAmI | null>(null);
@@ -76,6 +78,7 @@ export const App: React.FC = () => {
             { id: 'whoami', label: 'Who am I' },
             { id: 'audit', label: 'Audit log' },
             { id: 'config', label: 'Runtime config' },
+            { id: 'users', label: 'Users' },
           ] as const
         ).map((item) => (
           <button
@@ -98,6 +101,7 @@ export const App: React.FC = () => {
         {tab === 'whoami' && <WhoAmIPage who={who} />}
         {tab === 'audit' && <AuditLogPage onAuthExpired={handleAuthExpired} />}
         {tab === 'config' && <ConfigEditorPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'users' && <UsersPage onAuthExpired={handleAuthExpired} />}
       </main>
     </div>
   );
