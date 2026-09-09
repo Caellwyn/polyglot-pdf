@@ -107,6 +107,46 @@ The outer cross-surface review returned `GAPS-FOUND (2)`. Breakdown:
   in their environment -- so it is filed here instead). None of the three
   change behavior or trace to an exit criterion.
 
+### Fresh-eyes round 2 (post-review fixes)
+
+The outer cross-surface review returned `GAPS-FOUND (1)`. Breakdown:
+
+- **Adopted (rubric-fail) -- exit criterion 2's own named mechanism ("a test
+  asserts the import") was vacuous.**
+  `test_get_commercial_calls_the_shared_a3_reader` scanned
+  `inspect.getsource(kit_routes)` -- the WHOLE MODULE, not the function that
+  actually calls the reader -- for the literal string
+  `"kit_commercials.resolve_commercial"`. That exact string already appears
+  in the module's own docstring (line 26) and in `_validated_credit_cost`'s
+  docstring (line 125), so a module-wide scan stays green even if both real
+  call sites (`get_kit_commercial`, `list_kits`) were replaced with an
+  inlined second reader -- the precise regression the test's own docstring
+  says it exists to catch. Verified by direct simulation (reviewer) and by
+  mutation (this round): inlining a hardcoded dict in place of the
+  `kit_commercials.resolve_commercial` call in `get_kit_commercial` left the
+  old module-scoped assertion green. Fixed: the test is now parametrized
+  over both GET-side functions (`get_kit_commercial`, `list_kits`), each
+  checked via its own AST-derived function body with the docstring `Expr`
+  node stripped first, so a docstring mentioning the reader by name can no
+  longer stand in for a real call in the body. Re-verified the mutation:
+  the same inlined-dict mutation in `get_kit_commercial` now reddens
+  `test_get_commercial_calls_the_shared_a3_reader[get_kit_commercial]`
+  while `list_kits`'s parametrization (untouched by the mutation) stays
+  green, confirming the check is scoped per-function rather than
+  module-wide or all-or-nothing.
+- **Other findings (non-rubric, not changed):** the reviewer re-confirmed
+  the transactional write, the `Optional[dict]` typing on `display` (loose
+  Pydantic typing is intentional -- `_validated_display` does the real
+  validation manually), and the deliberate `merge=True` omission on the PUT
+  write (a full-document overwrite, matching `KitCommercialPutRequest`'s own
+  documented "a PUT replaces the whole commercial doc" contract) as correct
+  as shipped -- no code change. The `list_kits` sequential per-kit Firestore
+  read (no batching) was again flagged as a **nit**, explicitly not filed as
+  a new bead (matches the existing codebase's per-admin-route convention,
+  not a regression this diff introduces) -- already covered in spirit by
+  `polyglot-pdf-y2hht`'s "sequential, unbounded, unparalleled per-kit
+  Firestore fan-out" item from round 1.
+
 ## Lessons
 
 **A parametrized "malformed shape" list needs to be checked against what the
@@ -150,8 +190,9 @@ bead. Review outcomes recorded in the closeout ping.
   round 1 added the `FormKitStoreError` -> 502 catch in `list_kits` and the
   `cap_usd` echo in `put_kit_commercial`'s response.
 - `admin_backend/main.py` -- registers the router, docstring note.
-- `admin_backend/tests/unit/test_kit_routes.py` -- 46 tests (44 at initial
-  ship, +2 in fresh-eyes round 1).
+- `admin_backend/tests/unit/test_kit_routes.py` -- 47 tests (44 at initial
+  ship, +2 in fresh-eyes round 1, +1 in fresh-eyes round 2: the shared-reader
+  import-pin test was reworked into a 2-way parametrization, net +1 test).
 - `admin_backend/tests/unit/test_admin_route_auth.py` -- route-set pin.
 - `admin_backend/tests/unit/test_admin_audit_coverage.py` -- MUTATION_KINDS
   entry + tie-back test.

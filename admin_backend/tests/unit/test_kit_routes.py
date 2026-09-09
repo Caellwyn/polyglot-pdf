@@ -417,18 +417,43 @@ def test_a_malformed_kit_id_is_refused_with_no_write(client, fake_db, kit_id):
 # Exit criterion 2: GET reuses bead A3's reader, and defaults on a miss.
 # --------------------------------------------------------------------------
 
-def test_get_commercial_calls_the_shared_a3_reader():
+@pytest.mark.parametrize("func_name", ["get_kit_commercial", "list_kits"])
+def test_get_commercial_calls_the_shared_a3_reader(func_name):
     """Pins the IMPORT, not just the output: the plan says "do not write a
     second reader", and a future rewrite that inlines a second copy of the
     fallback logic would compute the same numbers today while silently
     drifting from kit_commercials.py's own defensive-parsing rules on the
-    next edit to either copy."""
+    next edit to either copy.
+
+    Scoped to each GET-side FUNCTION BODY (docstring stripped), not the
+    whole module: the module's own docstring and _validated_credit_cost's
+    docstring both already contain the literal string
+    "kit_commercials.resolve_commercial" in prose, so a module-wide source
+    scan stays green even if the real call sites below were replaced with
+    an inlined second reader -- checking the module would not catch the
+    exact regression this test exists to catch.
+    """
+    import ast
     import inspect
-    source = inspect.getsource(kit_routes)
-    assert "kit_commercials.resolve_commercial" in source, (
-        "the route must call kit_commercials.resolve_commercial -- the "
-        "SAME reader bead A3's mint transaction uses -- rather than "
-        "resolving the doc itself")
+    import textwrap
+
+    func = getattr(kit_routes, func_name)
+    source = textwrap.dedent(inspect.getsource(func))
+    tree = ast.parse(source)
+    func_def = tree.body[0]
+    body = func_def.body
+    # Drop a leading docstring Expr node so its prose can't satisfy the
+    # assertion in place of a real call in the function body.
+    if (body and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)):
+        body = body[1:]
+    body_source = "\n".join(
+        ast.get_source_segment(source, node) or "" for node in body)
+    assert "kit_commercials.resolve_commercial" in body_source, (
+        "{} must call kit_commercials.resolve_commercial -- the SAME "
+        "reader bead A3's mint transaction uses -- rather than resolving "
+        "the doc itself".format(func_name))
 
 
 def test_get_for_a_kit_with_no_commercial_doc_returns_the_global_defaults(
