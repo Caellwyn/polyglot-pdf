@@ -220,17 +220,27 @@ def record_credit_threshold(firm_id: str, *, balance: int, threshold: int,
     low threshold twice in one day yields one doc; crossing to zero yields
     the exhausted doc").
 
-    NOT MUTUALLY EXCLUSIVE BY DESIGN: a balance at or below zero is ALSO at
-    or below the low threshold (threshold is a positive credit count), so a
-    firm hitting zero gets BOTH docs -- `credit_low_{day}` and
-    `credit_exhausted_{day}` -- the same day, which is correct: they are
+    NOT MUTUALLY EXCLUSIVE BY DESIGN WHEN THRESHOLD IS POSITIVE: a balance at
+    or below zero is ALSO at or below a positive low threshold, so a firm
+    hitting zero with e.g. threshold=10 gets BOTH docs -- `credit_low_{day}`
+    and `credit_exhausted_{day}` -- the same day, which is correct: they are
     different severities an operator (and later, different email templates)
     treats differently, and the exhausted case is not a superset replacement
     for the low warning within the log.
 
-    Writes NOTHING when the balance is above the threshold -- this function
-    is the caller's ENTIRE threshold check, not just the write; a caller
-    that always invokes it unconditionally after every debit is correct.
+    THRESHOLD=0 IS THE ONE CARVE-OUT: runtime_config.py's coercion
+    deliberately accepts 0 for an operator who wants ONLY the zero-balance
+    alert, no separate low warning (see KEY_CREDIT_LOW_THRESHOLD's coercion
+    comment and test_credit_low_threshold_accepts_zero). Emitting credit_low
+    at threshold=0 would defeat that operator's choice -- balance<=0 and
+    balance<=0 are the same boundary, so the "low" doc would carry no
+    information the "exhausted" doc doesn't already have. The low branch
+    below therefore requires `threshold > 0` before comparing balance to it.
+
+    Writes NOTHING when the balance is above the threshold (or the threshold
+    is 0) -- this function is the caller's ENTIRE threshold check, not just
+    the write; a caller that always invokes it unconditionally after every
+    debit is correct.
 
     NEVER RAISES: a failure here must not undo or fail a debit that already
     committed.
@@ -246,7 +256,7 @@ def record_credit_threshold(firm_id: str, *, balance: int, threshold: int,
             context={"balance": int(balance), "threshold": int(threshold)},
             now=stamp,
         )
-    if balance <= threshold:
+    if threshold > 0 and balance <= threshold:
         _write(
             "{}_credit_low_{}".format(firm_id, day),
             firm_id=firm_id,

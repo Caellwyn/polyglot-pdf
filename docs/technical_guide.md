@@ -1675,11 +1675,13 @@ per occurrence -- the load-bearing property this contract exists to pin.
   is unreachable, and a debit already committed in `append_entry` is never
   undone by a telemetry failure downstream of it.
 - **`CREDIT_LOW_THRESHOLD`** joins `RUNTIME_CONFIG_KEYS` (contract 14) as a
-  THIRD never-had-an-env-var key alongside `CREDITS_ENFORCED` -- no
+  SECOND never-had-an-env-var key alongside `CREDITS_ENFORCED` -- no
   `os.getenv` fallback exists or may exist for either; the coercion rejects
   a `bool` (the same int-subclass trap `LINK_FIRM_CAP` guards) and any
   negative value, but ACCEPTS zero (an operator who wants only the
-  zero-balance/exhausted alert, no separate low warning).
+  zero-balance/exhausted alert, no separate low warning -- `alerts.py`'s
+  `record_credit_threshold` gates its low-alert write on `threshold > 0` so
+  a threshold of exactly zero never emits the separate `credit_low` doc).
 - **`firestore.rules` denies `alerts/{alertId}` to all clients**, pinned by
   the same set-derived test as every other Admin-SDK-only collection
   (contract 15's neighbour, `test_firestore_rules_text.py`).

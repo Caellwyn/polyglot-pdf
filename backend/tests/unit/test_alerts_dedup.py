@@ -204,6 +204,27 @@ def test_crossing_to_ZERO_yields_the_EXHAUSTED_doc(store):
     )
 
 
+def test_threshold_ZERO_writes_ONLY_the_EXHAUSTED_doc(store):
+    """threshold=0 is the documented carve-out (runtime_config.py's
+    KEY_CREDIT_LOW_THRESHOLD coercion comment and
+    test_credit_low_threshold_accepts_zero): an operator who sets the
+    threshold to 0 wants ONLY the zero-balance/exhausted alert, never a
+    separate credit_low doc, since both would trip on the identical
+    balance<=0 boundary.
+
+    Mutation: drop the `threshold > 0` guard from the low branch's `if` in
+    record_credit_threshold -- red, because credit_low would also be
+    written here.
+    """
+    alerts.record_credit_threshold("acme", balance=0, threshold=0,
+                                    now=_SAME_DAY)
+
+    kinds = {v["kind"] for v in store.docs.values()}
+    assert kinds == {alerts.KIND_CREDIT_EXHAUSTED}, (
+        "threshold=0 must suppress the separate credit_low doc"
+    )
+
+
 def test_crossing_to_exhausted_TWICE_in_one_day_yields_ONE_doc(store):
     alerts.record_credit_threshold("acme", balance=-2, threshold=10,
                                     now=_SAME_DAY)

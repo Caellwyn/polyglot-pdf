@@ -74,6 +74,37 @@ Design points:
 into `ADMIN_SDK_ONLY_COLLECTIONS` in the existing set-derived rules test
 (`test_firestore_rules_text.py`).
 
+## Fresh-eyes round 1 (post-review fix)
+
+The Opus cross-surface reviewer found a real doc/code mismatch and one
+low-severity doc miscount; both fixed, no other findings changed code:
+
+- **Adopted -- `threshold=0` did not behave as its own doc claimed.**
+  `record_credit_threshold`'s low-alert branch (`if balance <= threshold`)
+  fired even when `threshold == 0`, so an operator who set the threshold to
+  zero explicitly to get "only the exhausted alert, no separate low
+  warning" (the documented intent in `runtime_config.py`'s
+  `KEY_CREDIT_LOW_THRESHOLD` coercion comment and
+  `test_credit_low_threshold_accepts_zero`) got BOTH docs anyway, since
+  `balance<=0` and `balance<=0` are the same boundary at threshold zero.
+  Fixed by gating the low branch on `threshold > 0 and balance <= threshold`
+  in `backend/services/alerts.py`; new mutation-verified test
+  `test_threshold_ZERO_writes_ONLY_the_EXHAUSTED_doc` in
+  `test_alerts_dedup.py` pins it. Docstrings in `alerts.py` updated to state
+  the threshold=0 carve-out explicitly instead of the blanket ("threshold is
+  a positive credit count") claim the coercion code no longer matched.
+- **Adopted -- `docs/technical_guide.md` miscounted the never-had-an-env-var
+  keys.** Surface contract 21 called `CREDIT_LOW_THRESHOLD` the "THIRD"
+  such key; only `CREDITS_ENFORCED` and `CREDIT_LOW_THRESHOLD` skip
+  `_legacy_env_default`'s os.getenv reads (`LINK_MINTING_ENABLED`,
+  `LINK_COST_CEILING_USD`, and `LINK_FIRM_CAP` all read env). Corrected to
+  "SECOND" and added a one-line pointer to the threshold=0 gating above.
+- **Not adopted (observation, not a gap) -- `_alert_on_low_balance`'s
+  `TYPE_MINT_DEBIT`-only gating** (a negative `adjustment` entry draining a
+  firm to zero fires no alert). This is documented, deliberate design
+  matching the bead's stated scope ("after a `mint_debit` commits"); the
+  reviewer explicitly declined to file it as a gap, and it is left as-is.
+
 ## Lessons
 
 A best-effort helper's "never raises" contract must wrap the ENTIRE call
@@ -115,7 +146,8 @@ value misbehaves.
 - `backend/routes/websocket_routes.py` -- passes `firm_id=claims.get("firm_id")`
   to `check_budget`.
 - `firestore.rules` -- deny block for `alerts/{alertId}`.
-- `backend/tests/unit/test_alerts_dedup.py` -- new, 17 tests.
+- `backend/tests/unit/test_alerts_dedup.py` -- new, 18 tests (17 initial +
+  1 added in the fresh-eyes fix round, `threshold=0` gating).
 - `backend/tests/unit/test_firestore_rules_text.py` -- `alerts` added to
   `ADMIN_SDK_ONLY_COLLECTIONS`.
 - `backend/tests/unit/test_runtime_config.py` -- `CREDIT_LOW_THRESHOLD`
