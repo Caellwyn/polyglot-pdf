@@ -1399,10 +1399,17 @@ async def fill_form_from_schema(
 		try:
 			await asyncio.to_thread(enforce_link_redemption, claims)
 		except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
-			# Same refusal for already-used, window-closed, and
-			# store-unreachable: the socket must not be an oracle either, and
-			# an unreachable store FAILS CLOSED (the guarded failure is a
-			# replayed link starting a second paid session).
+			# Same refusal for already-used, window-closed, store-
+			# unreachable, and NO USABLE MINT RECORD: the socket must not
+			# be an oracle either, and an unreachable store FAILS CLOSED
+			# (the guarded failure is a replayed link starting a second
+			# paid session).
+			#
+			# The mint-record refusal (bd polyglot-pdf-jecrl) arrives here
+			# as LinkNotMinted, a SUBCLASS of RedemptionUnavailable, so
+			# this tuple already catches it -- deliberately, so the
+			# socket's paid gate could not be left admitting a revoked
+			# link by an omission at this one call site.
 			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
 						error=str(exc))
 			await websocket.close(code=1008, reason="Authentication failed")

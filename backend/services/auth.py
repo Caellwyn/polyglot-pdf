@@ -293,9 +293,13 @@ async def require_paid_client_work(
         # would stall every concurrent request, in-flight audio included.
         await asyncio.to_thread(enforce_link_redemption, claims)
     except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
-        # One refusal for all three -- already-used, window-closed and
-        # store-unreachable must be indistinguishable, and an unreachable
-        # store FAILS CLOSED.
+        # One refusal for all of them -- already-used, window-closed,
+        # store-unreachable, and (bd polyglot-pdf-jecrl) no usable mint
+        # record -- must be indistinguishable, and an unreachable store
+        # FAILS CLOSED. The mint-record refusal is LinkNotMinted, a
+        # SUBCLASS of RedemptionUnavailable, so this tuple already
+        # catches it: a paid door cannot be left admitting a revoked
+        # link by an omission at one call site.
         logger.warning("link_redemption_refused", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
