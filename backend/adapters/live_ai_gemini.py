@@ -637,6 +637,17 @@ class LiveAIGemini(ILiveAI):
         self._form_session_id: Optional[str] = None
         self._form_id: Optional[str] = None
         self._current_section_id: Optional[str] = None
+        # Usage-event context ids (bd polyglot-pdf-cjifh, E3.2 live-voice
+        # plumbing): firm/employee/link/kit/channel, threaded from the service's
+        # set_session_context call and read by the per-turn usage emit below.
+        # employee_id carries the link's employee_id for a client session, or
+        # the staff uid for a staff session -- both session shapes attribute to
+        # a person. link_jti is None for a staff session.
+        self._firm_id: Optional[str] = None
+        self._employee_id: Optional[str] = None
+        self._link_jti: Optional[str] = None
+        self._kit_id: Optional[str] = None
+        self._channel: Optional[str] = None
 
         # BCP-47 transcription language bias (bd polyglot-pdf-y25o; set by the
         # service from the handshake's spoken_language, read at connect time).
@@ -819,6 +830,11 @@ class LiveAIGemini(ILiveAI):
         form_session_id: str,
         form_id: str,
         current_section_id: Optional[str] = None,
+        firm_id: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        channel: Optional[str] = None,
     ):
         """Set session context for token logging.
 
@@ -827,10 +843,26 @@ class LiveAIGemini(ILiveAI):
             form_id: Form identifier (e.g., "I-90")
             current_section_id: Current section ID (the user-facing navigation unit;
                 "section", never "part" -- see docs/standards/terminology.md)
+            firm_id: The paying firm, when known (bd polyglot-pdf-cjifh).
+            employee_id: The link's employee_id for a client session, or the
+                staff uid for a staff session.
+            link_jti: The client-link token id; None for a staff session.
+            kit_id: The form kit being filled.
+            channel: staging | demo -- which deploy channel this connection is on.
+
+        No contextvar here: one adapter instance is built per WebSocket (see
+        dependencies.get_live_ai), so the ids set here already scope correctly
+        to this one connection -- there is nothing shared to leak across
+        sessions the way there is on the per-process TextAIGemini singleton.
         """
         self._form_session_id = form_session_id
         self._form_id = form_id
         self._current_section_id = current_section_id
+        self._firm_id = firm_id
+        self._employee_id = employee_id
+        self._link_jti = link_jti
+        self._kit_id = kit_id
+        self._channel = channel
 
     def set_transcription_language_codes(self, codes: Optional[List[str]]):
         """Set the BCP-47 language_codes hint for input/output transcription
@@ -3446,6 +3478,12 @@ class LiveAIGemini(ILiveAI):
                                                         form_version="",
                                                         form_session_id=self._form_session_id,
                                                         ws_session_id=self._instance_id,
+                                                        firm_id=self._firm_id,
+                                                        employee_id=self._employee_id,
+                                                        link_jti=self._link_jti,
+                                                        kit_id=self._kit_id,
+                                                        channel=self._channel,
+                                                        model=self._model_name,
                                                         metadata={
                                                             # This turn's counts (raw + per-modality)
                                                             "prompt_token_count": prompt_tokens,

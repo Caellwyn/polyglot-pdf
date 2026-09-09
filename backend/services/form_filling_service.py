@@ -135,6 +135,13 @@ class FormFillingService:
         # polyglot-pdf-47r3), stored for the same reason as _form_session_id.
         self._kit_id: Optional[str] = None
         self._firm_id: Optional[str] = None
+        # Client-link identity for usage-event attribution (bd polyglot-pdf-cjifh,
+        # E3.2 live-voice plumbing). None for a staff session -- see start_session's
+        # docstring. Preserved across a section-switch restart the same way
+        # kit_id/firm_id are (the internal restart re-enters start_session with
+        # both args None).
+        self._link_jti: Optional[str] = None
+        self._employee_id: Optional[str] = None
         # Session-scoped confirmed-field tally for the session-end telemetry
         # record (bd polyglot-pdf-xwlt). Lives HERE, not on the callback
         # handler, because the handler is rebuilt on every section switch and
@@ -282,6 +289,8 @@ class FormFillingService:
         kit_id: Optional[str] = None,
         firm_id: Optional[str] = None,
         current_section_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        employee_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
 
@@ -305,6 +314,14 @@ class FormFillingService:
             form_session_id: Persistent form session ID from frontend (survives reconnects)
             current_section_id: Current section ID, threaded into token-logging context
                 so token events carry the active section (bd polyglot-pdf-tb7)
+            link_jti: The client-link token id (bd polyglot-pdf-ugm6), when this
+                session was opened with a magic link. None for a staff session.
+                PRESERVED across the internal section-switch restart the same way
+                kit_id/firm_id are (see the assignment below).
+            employee_id: The firm employee whose link this is (link_employee_id at
+                the WS route) -- a staff session instead carries the staff uid here.
+                Rides the usage event's employee_id context key so BOTH session
+                shapes attribute to a person. Same preserve-across-restart rule.
         """
         self._websocket = websocket
         self._session_id = session_id
@@ -403,6 +420,14 @@ class FormFillingService:
         # 1 -- the exact shape of the 47r3 kit_id bug (bd polyglot-pdf-xwlt).
         if firm_id is not None:
             self._firm_id = firm_id
+        # PRESERVED for the same reason as kit_id/firm_id above (bd
+        # polyglot-pdf-cjifh): the internal section-switch restart re-enters
+        # start_session with link_jti/employee_id=None, and overwriting would
+        # strip link/employee attribution from every usage event after section 1.
+        if link_jti is not None:
+            self._link_jti = link_jti
+        if employee_id is not None:
+            self._employee_id = employee_id
         if full_schema is not None:
             # Look for the government edition in the per-section schema FIRST
             # (where a 47r3-aware client puts it via the handshake key), then in
@@ -518,10 +543,22 @@ class FormFillingService:
                      session_id=session_id,
                      form_session_id=form_session_id)
             try:
+                # channel is process-wide (which deploy channel this Cloud Run
+                # revision IS), not per-session -- link_channel() reads the
+                # LINK_CHANNEL env var, the same helper the mint/redeem paths
+                # use, so a usage event and its originating link agree on
+                # which channel spent the money (bd polyglot-pdf-cjifh).
+                from backend.services.link_tokens import link_channel
+
                 self._live_ai.set_session_context(
                     form_session_id=form_session_id or session_id,  # Use persistent ID if available
                     form_id=form_id,
                     current_section_id=current_section_id,
+                    firm_id=self._firm_id,
+                    employee_id=self._employee_id,
+                    link_jti=self._link_jti,
+                    kit_id=self._kit_id,
+                    channel=link_channel(),
                 )
                 _log.info("Token logging context set successfully",
                          form_session_id=form_session_id or session_id)
