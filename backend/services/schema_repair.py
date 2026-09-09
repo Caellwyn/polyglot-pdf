@@ -296,21 +296,15 @@ def _mint_slugs(
             needs_mint = invalid or missing or dupes
 
         if needs_mint:
-            # Never mint over a PDF-sanctioned export code: minting is
-            # triggered per-FIELD, so without this an unrelated defect
-            # elsewhere in the same dropdown (one duplicate, one missing
-            # value) would rewrite ALL the good codes and break printing for
-            # every option. Preserved codes are held aside and re-registered
-            # as their own alias so conditions still resolve.
-            #
-            # Preserve at most ONE option per code: uniqueness outranks
-            # preservation. Two options sharing a code cannot both keep it --
-            # the PDF widget holds a single value, so the duplicate is a real
-            # defect either way -- and preserving both would let this branch
-            # no-op on the very duplicate it exists to repair, leaving the
-            # schema stuck (repair reports nothing to fix while lint still
-            # blocks on option-value-duplicate). First occurrence keeps the
-            # code; the rest fall through to minting.
+            # Since g2fpr.4 nothing in a select is PRESERVED for being a PDF
+            # export code: a code in value is CONVERTED (moved into
+            # pdf_on_value, the value minted from the label with the shared
+            # select minter), so one unrelated defect in the dropdown never
+            # leaves the good codes half-migrated. Two options sharing a code
+            # both convert (both keep the code in pdf_on_value; lint reports
+            # the duplicate code) and their VALUES come out unique. The
+            # minter reserves the held-aside values so a converted sibling
+            # cannot collide with them.
             #
             # A SELECT's EMPTY value is likewise held aside (bd
             # polyglot-pdf-ot284). Minting invents a slug, and a dropdown's
