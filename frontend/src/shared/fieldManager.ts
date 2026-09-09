@@ -100,8 +100,17 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				// race = 'White': an un-selection recorded as a selection, persisted
 				// over the real array AND sent to the model. Groups only reach this
 				// listener at all since bd polyglot-pdf-96um6 attached them.
-				const groupEls = groupInputsFor(fieldId)
-				if (groupEls.length) {
+				// Gate on the EDITED ELEMENT, not just the name lookup. A text field
+				// whose id equals another field's group NAME (id="sex" vs a radio
+				// group name="sex") made groupInputsFor return the OTHER field's
+				// radios, so typing in the text box reported their selection -- or
+				// nothing. Only an element that is itself a group member takes this
+				// branch.
+				const editedIsGroupMember =
+					element instanceof HTMLInputElement &&
+					(element.type === 'radio' || element.type === 'checkbox')
+				const groupEls = editedIsGroupMember ? groupInputsFor(fieldId) : []
+				if (groupEls.length && groupEls.includes(element as HTMLInputElement)) {
 					const picked = groupEls.filter(el => el.checked).map(el => el.value)
 					// Radio: a single string, matching what the rest of the app stores.
 					// Checkbox group: the array.
@@ -156,7 +165,16 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// polyglot-pdf-96um6) -- see groupInputsFor. Binding only the id'd
 			// option would leave every OTHER option unlistened, so selecting any
 			// but the first would stop notifying the model.
-			const groupEls = groupInputsFor(fieldId)
+			// ...but only when the id does NOT already resolve to a non-group
+			// element. A text field whose id equals another field's group NAME
+			// (id="sex" vs a radio group name="sex") otherwise bound the OTHER
+			// field's radios and `continue`d, leaving the text field with NO
+			// listener at all -- so typing in it never reached the model.
+			const idIsNonGroup =
+				element instanceof HTMLInputElement
+					? element.type !== 'radio' && element.type !== 'checkbox'
+					: element !== null
+			const groupEls = idIsNonGroup ? [] : groupInputsFor(fieldId)
 			if (groupEls.length) {
 				groupEls.forEach(input => setupEditListener(input as HTMLElement, fieldId))
 				continue

@@ -535,3 +535,46 @@ describe('a CLEARED group cannot masquerade as answered (bd polyglot-pdf-96um6)'
     expect(isFormComplete(stateWith(['Asian'], true))).toBe(true)
   })
 })
+
+describe('an id/name COLLISION must not redirect the notify (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // Resolving the group by NAME alone meant a text field whose id equals another
+  // field's group name took the group branch and reported the OTHER field's
+  // radios -- or nothing. Ids and names share no namespace in HTML, so this
+  // collision is legal and a kit author would have no reason to expect it.
+  const TEXT_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex detail', spoken_name: 'sex detail', type: 'text' }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('typing in a text field reports the TYPED value, not a colliding groups selection', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex_text" type="text" value="typed" />
+      <input name="sex" type="radio" value="Male" checked />
+      <input name="sex" type="radio" value="Female" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: TEXT_SCHEMA, onManualEdit })
+
+    const text = document.getElementById('sex') as HTMLInputElement
+    text.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
+  })
+
+  it('and the same field notifies identically with NO colliding group present', () => {
+    // The control: proves the assertion above is about the collision, not about
+    // text fields being broken generally.
+    document.body.innerHTML = `<input id="sex" name="sex_text" type="text" value="typed" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: TEXT_SCHEMA, onManualEdit })
+
+    const text = document.getElementById('sex') as HTMLInputElement
+    text.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
+  })
+})
