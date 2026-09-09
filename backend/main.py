@@ -23,6 +23,7 @@ from .utils.confirmation_logger import (
     confirmation_sink_status,
     flush_confirmation_sink,
 )
+from .services.firms import firms_store_status
 from .utils.logging import configure_logging
 
 
@@ -102,6 +103,14 @@ app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)
 
 
+# Per-probe budget on /health. Named (not two inline 3.0s literals) so the
+# two probes cannot drift apart, and so a test can shorten it instead of
+# waiting out a real stall -- asyncio.wait_for does not CANCEL the
+# underlying to_thread worker on timeout, so a test that stalls the probe
+# for the full budget pays that wall clock however it is written.
+HEALTH_PROBE_TIMEOUT_S = 3.0
+
+
 @app.get("/health")
 async def health(settings: Annotated[Settings, Depends(get_settings)]):
     # Sink probe (bd z2is round 3): verifies the confirmation trail can WRITE
@@ -109,13 +118,40 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]):
     # bounds a stalled Firestore so /health never hangs on a broken sink.
     try:
         sink_status = await asyncio.wait_for(
-            asyncio.to_thread(confirmation_sink_status), timeout=3.0
+            asyncio.to_thread(confirmation_sink_status),
+            timeout=HEALTH_PROBE_TIMEOUT_S,
         )
     except asyncio.TimeoutError:
         sink_status = "error: probe timed out"
+
+    # Firms store READ probe (bd polyglot-pdf-vq5wd, wired by
+    # polyglot-pdf-e4dt8). The mirror image of the sink probe above: that
+    # writer fails OPEN (looks healthy while writing nothing), this reader
+    # fails CLOSED -- under IAM drift every firm's private kits silently
+    # vanish and nothing anywhere reports it. Surfacing it here means the
+    # standard post-deploy check and the per-channel uptime checks
+    # (scripts/setup-monitoring.sh) both see it.
+    #
+    # SEPARATE wait_for, not one shared budget: a stalled firms store must not
+    # be able to eat the confirmation probe's answer (and vice versa). The
+    # worst case is therefore ~6s, which is well inside the uptime check's
+    # 10s timeout.
+    #
+    # The probe caches for 5 minutes and coalesces concurrent callers
+    # internally; the wait_for is the third guard, because neither of those
+    # makes a STALLED Firestore return.
+    try:
+        firms_status = await asyncio.wait_for(
+            asyncio.to_thread(firms_store_status),
+            timeout=HEALTH_PROBE_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        firms_status = "error: probe timed out"
+
     return {
         "status": "ok",
         "confirmation_sink": sink_status,
+        "firms_store": firms_status,
         "models": {
             "native": settings.MODEL_NATIVE,
             "labeling": settings.MODEL_LABELING,

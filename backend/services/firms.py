@@ -59,6 +59,8 @@ Staff membership lives ONLY as firm_id/firm_role custom claims on the staff
 Firebase accounts -- no roster on this doc (one source of truth).
 """
 import os
+import threading
+import time
 from typing import Optional
 
 import structlog
@@ -314,7 +316,21 @@ def upsert_firm(
     return {"firm_id": firm_id, "created": created}
 
 
-def firms_store_status() -> str:
+# Probe cache for firms_store_status (monotonic timestamp, status), and the
+# in-flight Event that coalesces concurrent callers onto ONE round trip.
+# Same shape and the same reason as confirmation_sink_status's
+# (backend/utils/confirmation_logger.py, bd polyglot-pdf-fzwp): /health is
+# UNAUTHENTICATED (backend/main.py), so any caller can drive this probe at
+# their own request rate. Without the coalescing, N concurrent /health polls
+# on a cold or stale cache each fall through to their OWN Firestore round
+# trip -- and a stalled Firestore, which is exactly the outage this probe
+# exists to detect, is when that pile-up is worst.
+_probe_cache: Optional[tuple] = None
+_probe_lock = threading.Lock()
+_probe_in_flight: Optional[threading.Event] = None
+
+
+def firms_store_status(max_age_s: float = 300.0) -> str:
     """Report whether the firms store can actually be READ.
 
     The mirror image of confirmation_sink_status's reason to exist: that
@@ -325,19 +341,57 @@ def firms_store_status() -> str:
     READ-shaped (limit-1 stream), deliberately NOT the sink probe's
     write+delete: this path never needs write permission, and probing with a
     write would test the wrong grant. Returns "disabled", "ok", or
-    "error: <msg>". No cache: nothing calls this on a hot path today; bd
-    polyglot-pdf-vq5wd owns the /health wiring and MUST add the cache +
-    in-flight coalescing + wait_for bound first (/health is unauthenticated
-    -- the confirmation_sink_status probe pattern exists for exactly this,
-    bd polyglot-pdf-fzwp).
+    "error: <msg>".
+
+    CACHED + COALESCED (bd polyglot-pdf-vq5wd, wired into /health by bd
+    polyglot-pdf-e4dt8). The cache bounds how often an unauthenticated caller
+    can reach Firestore through /health; the in-flight Event bounds how many
+    can do so AT ONCE. The caller (/health) additionally wraps this in an
+    asyncio.wait_for, because neither guard makes a stalled Firestore return.
     """
+    global _probe_cache, _probe_in_flight
+
     if not _firms_enabled():
         return "disabled"
+
+    with _probe_lock:
+        if _probe_cache and (time.monotonic() - _probe_cache[0]) < max_age_s:
+            return _probe_cache[1]
+        if _probe_in_flight is not None:
+            in_flight = _probe_in_flight
+            we_are_prober = False
+        else:
+            # Claim the probe BEFORE releasing the lock, so no other thread
+            # starts a duplicate round trip.
+            in_flight = _probe_in_flight = threading.Event()
+            we_are_prober = True
+
+    if not we_are_prober:
+        # Bounded WELL UNDER /health's own 3.0s wait_for budget. asyncio's
+        # wait_for does NOT cancel the underlying to_thread worker on
+        # timeout -- it just stops awaiting it -- so a waiter blocked here
+        # past that deadline keeps occupying a thread-pool slot it can no
+        # longer usefully return through (the lesson bd polyglot-pdf-fzwp
+        # round 2 learned on the confirmation probe).
+        in_flight.wait(timeout=2.0)
+        with _probe_lock:
+            if _probe_cache:
+                return _probe_cache[1]
+        # REACHABLE, not dead code: a genuinely stalled prober -- the outage
+        # this probe exists to detect -- is still running past our wait.
+        return "error: probe coalescing timed out waiting for another in-flight probe"
+
     try:
         from backend.services.auth import get_db
 
         list(get_db().collection(_FIRMS_COLLECTION).limit(1).stream())
-        return "ok"
+        status = "ok"
     except Exception as e:
         _log.error("firms_store_probe_failed", error=str(e))
-        return f"error: {e}"
+        status = f"error: {e}"
+
+    with _probe_lock:
+        _probe_cache = (time.monotonic(), status)
+        _probe_in_flight = None
+    in_flight.set()
+    return status
