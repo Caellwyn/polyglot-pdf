@@ -23,12 +23,19 @@ test_admin_health.py): the unauthenticated liveness/identity probe.
 from admin_backend.main import app
 from admin_backend.services.admin_auth import require_app_admin
 
-# The other three gates do not exist yet -- each ships with its first
-# consuming route, proven against a real route rather than shipped untested
-# (plan, "Admin service" gating). Named here as STRINGS, not imports: an
-# import of a name that does not exist would fail at COLLECTION, which is a
-# worse failure mode than this test failing with a clear message the day one
-# of them is expected to exist.
+# THREE of the four gates now exist. require_app_admin shipped with
+# /admin/whoami (bd polyglot-pdf-7w17m); require_app_admin_or_owning_manager
+# ships with the user routes below and require_firm_manager with the retire
+# route it moved into backend/services/auth.py (bd polyglot-pdf-dmjl5). Only
+# require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3), and it stays a
+# STRING rather than an import: importing a name that does not exist would
+# fail at COLLECTION, which is a worse failure mode than this test failing
+# with a clear message the day it is expected to exist.
+#
+# require_firm_manager appears in the known set even though no route on THIS
+# service declares it (its consumer is the public backend's retire route):
+# the four names are the vocabulary of legal gates, and dropping one from the
+# set would silently make a route carrying it look ungated here.
 _FUTURE_GATE_NAMES = (
     "require_firm_manager",
     "require_app_admin_or_owning_manager",
@@ -103,6 +110,10 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/config/{channel}"),
         (("PUT",), "/admin/config/{channel}"),
         (("GET",), "/admin/audit"),
+        (("POST",), "/admin/users"),
+        (("GET",), "/admin/users"),
+        (("PATCH",), "/admin/users/{uid}/disable"),
+        (("PATCH",), "/admin/users/{uid}/role"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
