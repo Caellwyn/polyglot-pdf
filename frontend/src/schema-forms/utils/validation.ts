@@ -873,9 +873,13 @@ export function isFieldRequired(
  *
  * Checks the canonical key (conditional_behavior) and the legacy alias
  * (conditional_logic) still emitted by generated form-kit schemas (e.g. i-90).
- * This is the SAME rule FieldRenderer uses to lift the UI disable and
- * FieldEditPopover uses to allow manual typing; it lives here so the surfaces
- * cannot drift apart again (bd polyglot-pdf-38p0y).
+ *
+ * This is the SAME rule FieldRenderer (the UI disable) and FieldEditPopover
+ * (manual typing) apply -- but note they still carry their OWN copies of the
+ * expression; this helper consolidates only the three AI-write gates, which is
+ * where the bug was (bd polyglot-pdf-38p0y). Folding those two surfaces in as
+ * well is bd polyglot-pdf-6sfal. Until that lands, a change to the unlock rule
+ * must be applied here AND in those two files.
  */
 export function declaresShownUnlock(field: FormField): boolean {
   return (

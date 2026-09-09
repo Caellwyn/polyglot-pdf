@@ -41,10 +41,17 @@ or (b) teach the gate to honor the unlock. **(b), because (a) fixes two fields
 and leaves the class alive** -- and because three surfaces already implementing
 the rule is strong evidence the rule is right and the fourth is the outlier.
 
-### The rule now has one home
+### The rule now has one home -- for the write gates
 
-`declaresShownUnlock()` in `validation.ts` is the single definition; three gates
-call it rather than keeping a fourth private copy:
+`declaresShownUnlock()` in `validation.ts` is the single definition for the three
+AI-write gates, which is where the bug was. It does NOT consolidate the other two
+surfaces: `FieldRenderer` and `FieldEditPopover` still carry their own copies of
+the expression, so until bd `polyglot-pdf-6sfal` lands, a change to the unlock
+rule must be applied in three files. My first version of this helper's docstring
+claimed the consolidation was complete; the reviewer caught it, and a comment
+that overstates what a diff did is worse than no comment.
+
+The three gates it does own:
 
 - `isFieldReadOnly` -- the shared rule
 - `checkFieldAccess` -- the by-spoken-name tool path
@@ -87,6 +94,28 @@ SHAPE the I-90 has, so the guard is alive in a clean clone.
 4 and 5 exist because a shared helper means one caller can regress while the
 others stay green -- a single mutation of the helper would not have caught that.
 
+A sixth mutation SURVIVED, and diagnosing it was worth more than the five that
+bit. Dropping the `schema.fields` argument at the `webFormConnection` call site
+changes nothing, because `evaluateAtomicCondition` accepts `fields` and never
+dereferences it. The argument is inert today. That is category 1 of
+`surviving-mutation-three-causes` -- structurally impossible to fail, not an
+untested gap -- so the correct response was to write the limit into the test
+rather than invent a test for it. It is passed for correctness under a future
+evaluator that does use it.
+
+### The integration layer the unit tests could not reach
+
+Fresh-eyes scored exit criterion 1 a FAIL, correctly. The criterion asks for a
+test *driving webFormConnection's update path*; my 16 tests called the three gate
+functions directly. The repo already had the pattern I needed -- a real
+`WebFormConnection` over a `MockWebSocket`, with a `read_only` rejection suite for
+the sibling bead one file over -- and I had not used it.
+
+Three integration tests now drive the genuine path: the write LANDS once the
+trigger is filled, is still refused before it, and a no-unlock field is still
+refused however it is shown. Reverting the gate reddens them, which is what
+proves they exercise the real wiring rather than the helper.
+
 ### Caught by the typechecker, not by me
 
 My first negative test asserted that `unlock_method: 'something_else'` does not
@@ -113,6 +142,17 @@ member of the union instead.
 whole point of extracting the rule was that callers could drift; a mutation of
 the helper alone would have left that drift unpinned.
 
+**A test that calls the helper is not a test of the feature.** Unit tests over
+the three gate functions cannot see the code that decides whether to call them.
+When a bead's exit criterion names an integration point, satisfying it at a lower
+layer is a narrowing -- and the honest move is to check whether the repo already
+has a harness for that layer before declaring the substitution necessary. It did.
+
+**Do not claim a consolidation you did not perform.** The helper's first docstring
+said the rule "lives here so the surfaces cannot drift apart again" while two
+surfaces kept their own copies. That sentence would have taught the next reader
+to change one file and believe they were done.
+
 ## Doc freshness
 
 Checked at closeout. This change is confined to three frontend files plus a new
@@ -131,3 +171,15 @@ Nothing bumped.
   can be evaluated against sibling values.
 - `frontend/src/schema-forms/utils/readonlyUnlock.test.ts` -- new; 16 tests over
   synthetic fixtures shaped like the I-90's fields.
+- `frontend/src/webFormConnection.aivalidation.test.ts` -- three integration tests
+  driving a real `WebFormConnection` through `update_form_fields`, added after
+  fresh-eyes correctly scored criterion 1 a FAIL.
+
+## Deferred
+
+- `polyglot-pdf-6sfal` -- fold `FieldRenderer` and `FieldEditPopover` onto
+  `declaresShownUnlock` so the rule lives in one file rather than three.
+- `polyglot-pdf-cgb5a` -- the required+read_only guard (already in `dev`, not
+  this diff) never inspects `show_if`, and its `require_if` half is
+  mutation-blind on both tracked kits. Pre-existing, so filed rather than fixed
+  here.
