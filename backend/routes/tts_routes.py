@@ -31,6 +31,7 @@ import structlog
 
 from backend.config import get_settings
 from backend.services.auth import require_auth, require_paid_client_work
+from backend.services.link_tokens import link_channel
 from backend.services.notice_tts import KNOWN_NOTICES, synthesize_notice
 from backend.services.intro_tts import (
     KNOWN_FORMS,
@@ -48,6 +49,35 @@ _log = structlog.get_logger()
 router = APIRouter()
 
 
+def _usage_session_ctx(claims: dict) -> dict:
+    """This request's usage-event context from the auth dependency's claims
+    dict (bd polyglot-pdf-t86oz -- "backend/routes/tts_routes.py has the
+    claims dict from its auth dependency").
+
+    No form_session_id: these are ordinary HTTP routes, not a WebSocket
+    session -- the usage-event schema allows None here (bd polyglot-pdf-wio6m).
+
+    Two claim SHAPES reach these routes (see backend/services/auth.py):
+      - a client-LINK credential: firm_id, link_kit_id, employee_id, jti,
+        is_client_link=True;
+      - a staff Firebase token: firm_id, uid, no employee_id/jti/link_kit_id.
+    Mirrors websocket_routes.py's usage_employee_id derivation (bd
+    polyglot-pdf-cjifh): a staff caller still attributes to a PERSON (their
+    uid) even though they carry no link_jti.
+    """
+    if not isinstance(claims, dict):
+        return {}
+    is_link = bool(claims.get("is_client_link"))
+    return {
+        "firm_id": claims.get("firm_id"),
+        "employee_id": (claims.get("employee_id") if is_link
+                        else claims.get("uid")),
+        "link_jti": claims.get("jti") if is_link else None,
+        "kit_id": claims.get("link_kit_id") if is_link else None,
+        "channel": link_channel(),
+    }
+
+
 class SpellbackRequest(BaseModel):
     value: str
     # The session's spoken-language NAME as the frontend holds it ("Spanish").
@@ -58,7 +88,7 @@ class SpellbackRequest(BaseModel):
 
 @router.post("/api/tts/spellback")
 async def spellback_tts(
-    request: SpellbackRequest, _user: dict = Depends(require_paid_client_work)
+    request: SpellbackRequest, user: dict = Depends(require_paid_client_work)
 ) -> Response:
     settings = get_settings()
     if not getattr(settings, "SPELLBACK_TOOL_ENABLED", False):
@@ -72,7 +102,8 @@ async def spellback_tts(
 
     try:
         audio = await synthesize_spellback(
-            value, settings, language_name=request.language
+            value, settings, language_name=request.language,
+            session_ctx=_usage_session_ctx(user),
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid value")
@@ -98,7 +129,7 @@ class IntroRequest(BaseModel):
 async def intro_tts(
     request: IntroRequest,
     http_request: Request,
-    _user: dict = Depends(require_paid_client_work),
+    user: dict = Depends(require_paid_client_work),
 ) -> Response:
     settings = get_settings()
     if not getattr(settings, "INTRO_TTS_ENABLED", False):
@@ -112,7 +143,8 @@ async def intro_tts(
 
     try:
         audio, etag = await synthesize_intro(
-            request.language, form_number, settings
+            request.language, form_number, settings,
+            session_ctx=_usage_session_ctx(user),
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="unknown form")
@@ -160,7 +192,7 @@ class NoticeRequest(BaseModel):
 async def notice_tts(
     request: NoticeRequest,
     http_request: Request,
-    _user: dict = Depends(require_auth),
+    user: dict = Depends(require_auth),
 ) -> Response:
     """Speak one of our own safety notices. FREE, deliberately.
 
@@ -172,7 +204,10 @@ async def notice_tts(
       - BURN a live client's link to deliver a warning we chose to give.
 
     A client still needs a valid credential to reach it, so this is not an open
-    endpoint -- it simply does not charge for our own words.
+    endpoint -- it simply does not charge for our own words. It still emits a
+    usage_kind="tts_notice" event (this speech has a real Cloud TTS cost even
+    though it is free to the client) -- "FREE" means not billed against the
+    client's link/credit, not that it has no telemetry.
     """
     settings = get_settings()
 
@@ -182,7 +217,10 @@ async def notice_tts(
         raise HTTPException(status_code=400, detail="unknown notice")
 
     try:
-        audio, etag = await synthesize_notice(request.language, notice, settings)
+        audio, etag = await synthesize_notice(
+            request.language, notice, settings,
+            session_ctx=_usage_session_ctx(user),
+        )
     except ValueError:
         raise HTTPException(status_code=400, detail="unknown notice")
     except Exception as exc:

@@ -39,7 +39,9 @@ from pathlib import Path
 
 import structlog
 
+from backend.config import TTS_PRICING_USD_PER_CHAR, tts_voice_tier
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
+from backend.utils.structured_logger import get_logger as get_structured_logger
 
 _log = structlog.get_logger()
 
@@ -320,7 +322,61 @@ def _synthesize_sync(text: str, voice_name: str, locale: str,
     return response.audio_content
 
 
-async def synthesize_spellback(value: str, settings, language_name=None) -> bytes:
+def _tts_cost_estimate_usd(char_count: int, voice_name: str) -> tuple[float | None, str | None]:
+    """(cost_estimate_usd, tier) for `char_count` characters synthesized with
+    `voice_name`. Both members are None when the voice's tier is unrecognized
+    OR the tier's per-char rate is unverified (TTS_PRICING_USD_PER_CHAR's
+    Chirp3-HD row is None until an operator fills in the verified rate --
+    docs/standards/logging-and-cost.md) -- an explicit gap beats a confident
+    wrong number.
+    """
+    tier = tts_voice_tier(voice_name)
+    if tier is None:
+        return None, None
+    rate = TTS_PRICING_USD_PER_CHAR.get(tier)
+    if rate is None:
+        return None, tier
+    return round(char_count * rate, 8), tier
+
+
+def _log_tts_usage_event(
+    usage_kind: str,
+    text: str,
+    voice_name: str,
+    session_ctx: dict | None,
+) -> None:
+    """Emit one log_tts_usage event (bd polyglot-pdf-t86oz). Character count is
+    the SYNTHESIZED text's length (the frame-rendered plain text actually sent
+    to Cloud TTS), not any raw caller input -- that is what the API bills by.
+    Never logs the text itself. Telemetry must never break the caller, so any
+    emit failure is swallowed after a warning.
+    """
+    ctx = session_ctx if isinstance(session_ctx, dict) else {}
+    char_count = len(text)
+    cost_estimate_usd, tier = _tts_cost_estimate_usd(char_count, voice_name)
+    try:
+        get_structured_logger().log_tts_usage(
+            usage_kind=usage_kind,
+            metadata={
+                "character_count": char_count,
+                "cost_estimate_usd": cost_estimate_usd,
+                "voice_tier": tier,
+            },
+            form_session_id=ctx.get("form_session_id"),
+            firm_id=ctx.get("firm_id"),
+            employee_id=ctx.get("employee_id"),
+            link_jti=ctx.get("link_jti"),
+            kit_id=ctx.get("kit_id"),
+            channel=ctx.get("channel"),
+            model=voice_name or None,
+        )
+    except Exception as exc:  # noqa: BLE001 -- telemetry must never break synthesis
+        _log.warning("tts_usage_event_emit_failed", exc_type=type(exc).__name__)
+
+
+async def synthesize_spellback(
+    value: str, settings, language_name=None, session_ctx: dict | None = None
+) -> bytes:
     """Synthesize the verification-clip MP3 for `value` in the session language.
 
     Runs ALL blocking work in a worker thread so the event loop (and with it
@@ -331,6 +387,11 @@ async def synthesize_spellback(value: str, settings, language_name=None) -> byte
     the handshake path (Opus cross-surface review). Raises ValueError on an
     empty/oversized value; propagates TTS client errors to the caller (the
     route maps them to a 502 without logging the value).
+
+    session_ctx (bd polyglot-pdf-t86oz): the route's own
+    {firm_id, employee_id, link_jti, kit_id, channel} claims-derived context
+    (no form_session_id -- this is an ordinary HTTP route, not a WebSocket
+    session), forwarded to the usage_kind="tts_spellback" event.
     """
     if not value or not value.strip():
         raise ValueError("empty value")
@@ -340,13 +401,14 @@ async def synthesize_spellback(value: str, settings, language_name=None) -> byte
     def _resolve_and_synthesize():
         voice_name, locale = resolve_spellback_voice(settings, language_name)
         text = build_spellback_text(value, locale)
-        return _synthesize_sync(text, voice_name, locale), locale
+        return _synthesize_sync(text, voice_name, locale), locale, text, voice_name
 
-    audio, locale = await asyncio.to_thread(_resolve_and_synthesize)
+    audio, locale, text, voice_name = await asyncio.to_thread(_resolve_and_synthesize)
     _log.info(
         "spellback_tts_synthesized",
         value_chars=len(value),
         audio_bytes=len(audio),
         locale=locale,
     )
+    _log_tts_usage_event("tts_spellback", text, voice_name, session_ctx)
     return audio
