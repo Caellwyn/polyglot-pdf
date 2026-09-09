@@ -53,12 +53,12 @@ describe('adminFetch', () => {
   });
 
   it('sends no Authorization header when no user is signed in', async () => {
-    const impl = vi.fn(async () => (
+    const impl = vi.fn(async (_url: unknown, init?: RequestInit) => (
       { ok: true, status: 200, json: async () => ({}) } as unknown as Response
     ));
     await adminFetch('/admin/whoami', null, {}, impl as unknown as typeof fetch);
-    const init = impl.mock.calls[0][1] as RequestInit;
-    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+    const init = impl.mock.calls[0][1];
+    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
   it('throws AuthError on a 401', async () => {
