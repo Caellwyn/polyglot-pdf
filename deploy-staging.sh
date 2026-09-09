@@ -223,10 +223,21 @@ if [ "$DEPLOY_FIREBASE" = true ]; then
     # resolves the LIVE Cloud Run URL for BACKEND_SERVICE_NAME at deploy time
     # and passes it as VITE_WS_URL, so exporting the staging service name here
     # is what points the staging build at the staging backend.
+    #
+    # VITE_APP_CHANNEL=staging (bd polyglot-pdf-z4ljj, C0): since the Vite MODE
+    # itself is "demo" for this build (see above -- staging reuses the demo
+    # mode for its Firebase keys), config.ts's getAppChannel() cannot derive
+    # the channel from MODE. This is the ONLY signal that tells the built
+    # firm-console pages which channel's `?channel=` to send the admin
+    # service -- required on every firm-scoped admin route (sprint_22_admin-
+    # console_plan.md "Architecture"). Omitting it would silently claim
+    # 'demo' (getAppChannel()'s default), sending staging's traffic against
+    # the DEMO's Firestore data through the admin service.
     FRONTEND_BUILD_CMD="npm run build:schema:demo" \
         BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \
         FRONTEND_HOSTING_TARGET="$STAGING_HOSTING_TARGET" \
         FRONTEND_SITE_NAME="$STAGING_SITE" \
+        VITE_APP_CHANNEL="staging" \
         ./deploy-all.sh --frontend
 fi
 

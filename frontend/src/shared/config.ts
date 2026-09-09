@@ -189,6 +189,63 @@ export function isDebugMetricsEnabled(): boolean {
 }
 
 /**
+ * The admin service's base URL for the firm-console pages
+ * (frontend/src/console/*, bd polyglot-pdf-z4ljj / C0).
+ *
+ * Resolved ENTIRELY at build time by VITE_ADMIN_API_BASE_URL -- there is no
+ * runtime-override or Cloud-Run-detection fallback chain the way
+ * getBackendUrl() has, because the admin service is deploy-injected the same
+ * way (deploy-all.sh's frontend stage resolves the LIVE `polyglot-admin`
+ * Cloud Run URL and exports it, mirroring VITE_WS_URL -- see
+ * docs/components/config-deployment.md). An empty string in local dev means
+ * "no admin backend configured"; set VITE_ADMIN_API_BASE_URL directly
+ * (frontend/.env.local, gitignored) to point a local firm-console session at
+ * a real or local admin service.
+ */
+export function getAdminApiBaseUrl(): string {
+	return (import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined) ?? ''
+}
+
+/**
+ * The two channels that actually exist for this app (mirrors
+ * admin_backend/routes/config_routes.py's KNOWN_CHANNELS). There is no
+ * `prod` -- deploy-production.sh targets a dead project and refuses to run
+ * (see CLAUDE.md, docs/doctrine/promotion-tiers.md).
+ */
+export const APP_CHANNELS = ['demo', 'staging'] as const
+export type AppChannel = (typeof APP_CHANNELS)[number]
+
+/**
+ * This build's OWN channel -- required on every firm-scoped admin-service
+ * call (`?channel=`), because the admin service is a SINGLE Cloud Run
+ * service backing BOTH channels' Firestore data and has no channel identity
+ * of its own (sprint_22_admin-console_plan.md, "Architecture" section).
+ *
+ * BUILD-TIME ONLY, deliberately NOT derived from `import.meta.env.MODE`:
+ * deploy-staging.sh and deploy-demo.sh both build with
+ * `npm run build:schema:demo` (mode `demo`) -- staging reuses the demo Vite
+ * mode because the two channels share one Firebase project and therefore one
+ * set of client-side Firebase keys (docs/components/config-deployment.md,
+ * "Frontend" bullet). So Vite's own MODE cannot distinguish them; VITE_APP_CHANNEL
+ * is a SEPARATE build-time var deploy-staging.sh/deploy-demo.sh each export
+ * explicitly before calling deploy-all.sh, the same pattern BACKEND_SERVICE_NAME
+ * and LINK_CHANNEL already use to tell the two channels apart.
+ *
+ * Defaults to 'demo' when unset -- the SAME "unset means demo" convention
+ * the backend's link_channel() and every bucket-default in this repo already
+ * use (CLAUDE.md scar tissue, docs/components/config-deployment.md), so a
+ * local dev build or a bare `vite build` never silently claims to be
+ * 'staging'. An unrecognized value also falls back to 'demo' rather than
+ * being passed through, so a typo'd env var cannot mint a channel query
+ * param the admin service does not know (it 404s any value outside
+ * KNOWN_CHANNELS).
+ */
+export function getAppChannel(): AppChannel {
+	const raw = (import.meta.env.VITE_APP_CHANNEL as string | undefined) ?? ''
+	return (APP_CHANNELS as readonly string[]).includes(raw) ? (raw as AppChannel) : 'demo'
+}
+
+/**
  * Print development configuration help
  */
 export function printDevHelp(): void {

@@ -806,7 +806,12 @@ URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh", "deploy-admin-console
 #
 # {script: (n_warn, n_fatal)}
 URL_BAKING_SEVERITY = {
-    "deploy-all.sh": (1, 1),
+    # bd polyglot-pdf-z4ljj (C0): the frontend stage now bakes TWO resolved
+    # URLs -- VITE_WS_URL (the voice backend) and VITE_ADMIN_API_BASE_URL
+    # (the admin service) -- and both calls are warn-mode for the same
+    # "pre-existing service" reasoning; only the backend stage's own call
+    # stays fatal.
+    "deploy-all.sh": (2, 1),
     "deploy-editor.sh": (1, 0),
     # The admin service is PRE-EXISTING from this script's point of view
     # (deploy-admin.sh's job, not this one's) -- same reasoning as the
@@ -996,7 +1001,10 @@ def test_gate_copies_are_identical_across_all_four_scripts():
 # counts also make config-deployment.md's "the counts are pinned per script"
 # literally true rather than true-of-today's-tree.
 GATED_DEPLOY_SEVERITY = {
-    "deploy-all.sh": (1, 1),        # frontend stage warns, backend stage aborts
+    # bd polyglot-pdf-z4ljj (C0): the frontend stage's two warn-mode calls
+    # (VITE_WS_URL + VITE_ADMIN_API_BASE_URL) plus the backend stage's one
+    # fatal call -- see URL_BAKING_SEVERITY's note above.
+    "deploy-all.sh": (2, 1),        # frontend stage warns (x2), backend stage aborts
     "backend/deploy-new.sh": (0, 1),  # only ever creates; always fatal
 }
 

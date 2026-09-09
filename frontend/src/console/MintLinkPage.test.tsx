@@ -194,10 +194,12 @@ describe('MintLinkPage', () => {
     expect(text).not.toContain('LINK_MINTING_ENABLED');
   });
 
-  it('names BOTH settings that cause a 503', async () => {
+  it('names BOTH settings that cause a config-missing 503', async () => {
     // The route 503s for a missing LINK_BASE_URL *or* a missing
     // LINK_TOKEN_SECRET, so naming only one sends the operator to check a
-    // setting that is already right (cross-surface review r2).
+    // setting that is already right (cross-surface review r2). An empty
+    // body (no `detail`) is what today's two config-missing 503s look like
+    // when the response is not otherwise parsed by this branch.
     await mounted({ ok: false, status: 503, json: async () => ({}) });
 
     fireEvent.click(screen.getByText('Create link'));
@@ -208,6 +210,27 @@ describe('MintLinkPage', () => {
     expect(text).toContain('LINK_TOKEN_SECRET');
   });
 
+  it('does not blame LINK_BASE_URL/LINK_TOKEN_SECRET for a transient 503', async () => {
+    // bd polyglot-pdf-jecrl (A3, cross-surface review polyglot-pdf-z4ljj
+    // finding 2): once the mint route's reservation step can fail against
+    // Firestore/the ledger, it 503s with detail "Link minting is
+    // temporarily unavailable" -- a deployment/data fault, not a missing
+    // setting. Folding it into the config-missing message would send an
+    // operator to check two settings that are already correct.
+    await mounted({
+      ok: false, status: 503,
+      json: async () => ({ detail: 'Link minting is temporarily unavailable' }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('temporarily unavailable');
+    expect(text).not.toContain('LINK_BASE_URL');
+    expect(text).not.toContain('LINK_TOKEN_SECRET');
+  });
+
   it('explains a missing firm claim rather than blaming the server', async () => {
     await mounted({ ok: false, status: 403, json: async () => ({}) });
 
@@ -215,6 +238,59 @@ describe('MintLinkPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect(screen.getByRole('alert').textContent).toContain('firm');
+  });
+
+  it('shows insufficient-credits on a 402', async () => {
+    // bd polyglot-pdf-jecrl (A3): the firm's balance does not cover this
+    // kit's credit_cost. Distinct wording from every other refusal so an
+    // operator does not read it as "no firm claim" or "minting is off".
+    await mounted({
+      ok: false, status: 402,
+      json: async () => ({ detail: 'This firm does not have enough credits to mint a link.' }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('credits');
+    expect(text).not.toContain('firm claim');
+  });
+
+  it('shows the balance in the 402 message when the body carries one', async () => {
+    await mounted({
+      ok: false, status: 402,
+      json: async () => ({
+        detail: 'This firm does not have enough credits to mint a link.',
+        balance: 3,
+      }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByRole('alert').textContent).toContain('3');
+  });
+
+  it('distinguishes "live firm, wrong deployment" from "no firm claim" -- both are 403', async () => {
+    // bd polyglot-pdf-jecrl (A3): a REAL firm account, refused only because
+    // THIS deployment may not mint for a live firm. Needs the opposite
+    // remedy from the original "not attached to a firm" 403 -- an app admin
+    // cannot fix this by attaching a firm, and a signed-in staffer cannot
+    // fix it at all (it is a deployment choice, not an account problem).
+    await mounted({
+      ok: false, status: 403,
+      json: async () => ({ detail: 'This deployment cannot mint links for a live firm.' }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('live firm');
+    // Emphatically NOT the "not attached to a firm" message -- that sends an
+    // operator to the wrong fix (attaching a firm claim helps nothing here).
+    expect(text).not.toContain('not attached to a firm');
   });
 
   it('shows no link when the mint is refused', async () => {

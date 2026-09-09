@@ -1763,3 +1763,91 @@ any OTHER firm with the SAME 404 an unknown firm_id/jti would get (never
 403, which would confirm the other firm exists). `resolve_target_firm`
 itself is untouched by this bead and stays the one home for the body-field
 rule it already owns.
+
+### 23. Main app -> admin service: base URL + channel wiring (Epic 2 Track C bead C0, bd polyglot-pdf-z4ljj)
+
+The main voice app's firm-console pages (`frontend/src/console/*`, alongside
+`MintLinkPage.tsx`) call the admin service directly, over plain HTTP -- a
+THIRD destination distinct from both the `/api/**` Hosting rewrite (which
+proxies only the public backend) and the WebSocket path (contract 9 /
+`config.ts`'s `getBackendUrl()`). This contract is the plumbing bead C4
+(employees) and C5 (link history) build their actual route calls on; neither
+of those routes exists yet.
+
+- **Producer:** `deploy-all.sh`'s frontend stage. `ADMIN_SERVICE_NAME`
+  (`${ADMIN_SERVICE_NAME:-polyglot-admin}`, matching `deploy-admin.sh`'s and
+  `deploy-admin-console.sh`'s own default) is resolved to a live Cloud Run URL
+  via `gcloud run services describe`, the SAME mechanism `VITE_WS_URL` already
+  uses for the public backend -- a second, independent `gcloud` call and a
+  second `export VITE_ADMIN_API_BASE_URL=...` in the same stage. Unlike
+  `BACKEND_SERVICE_NAME`, `ADMIN_SERVICE_NAME` is never overridden by either
+  channel wrapper: there is ONE admin service serving BOTH channels'
+  Firestore data (see contract 17 and `docs/doctrine/promotion-tiers.md`), so
+  staging and demo both want the same value. Each resolution is followed by
+  its own `verify_service_publicly_reachable(..., warn)` call -- warn, not
+  fatal, because the admin service is pre-existing from this script's point
+  of view (`deploy-admin.sh`'s job, not this one's), the same reasoning
+  `deploy-admin-console.sh`'s and `deploy-editor.sh`'s identical warn-mode
+  calls already use. An EXPLICITLY-selected channel (`BACKEND_SERVICE_NAME_
+  EXPLICIT` -- the SAME capture `VITE_WS_URL`'s abort branch reads; there is
+  only one such signal in `deploy-all.sh`) whose admin URL cannot be resolved
+  aborts the build (`exit 1`); a bare run warns and falls back to the
+  committed `.env.demo` literal, exactly mirroring `VITE_WS_URL`'s two-branch
+  shape. Pinned by `tests/test_deploy_admin_url_injection.py` and
+  `tests/test_deploy_reachability_gate.py`'s `URL_BAKING_SEVERITY["deploy-
+  all.sh"] = (2, 1)` / `GATED_DEPLOY_SEVERITY["deploy-all.sh"] = (2, 1)`.
+- **`VITE_APP_CHANNEL`**, the SECOND half of this contract: `deploy-
+  staging.sh` exports `VITE_APP_CHANNEL="staging"` and `deploy-demo.sh`
+  exports `VITE_APP_CHANNEL="demo"`, each as a `VAR=value` prefix on their own
+  `FRONTEND_BUILD_CMD=...` invocation of `deploy-all.sh` -- inherited by
+  `deploy-all.sh`'s own `$FRONTEND_BUILD_CMD` child process without
+  `deploy-all.sh` needing to `export` it itself (unlike the two
+  `gcloud`-resolved URLs, which `deploy-all.sh` computes rather than
+  receives). This is deliberately NOT derived from Vite's `MODE`: both
+  channel wrappers build with `npm run build:schema:demo` (mode `demo`,
+  because staging and demo share one Firebase project and therefore one set
+  of client Firebase keys -- see "Frontend" in
+  `docs/components/config-deployment.md`), so `import.meta.env.MODE` cannot
+  tell the two apart.
+- **Consumer:** `frontend/src/shared/config.ts`'s `getAdminApiBaseUrl()`
+  (reads `VITE_ADMIN_API_BASE_URL`, empty string when unset -- no
+  runtime-detection fallback chain the way `getBackendUrl()` has, since a
+  wrong guess here would point firm-console pages at a plausible but wrong
+  URL rather than failing visibly) and `getAppChannel()` (reads
+  `VITE_APP_CHANNEL`, falling back to `'demo'` on an unset OR unrecognized
+  value -- the same "unset means demo" convention `link_channel()` and every
+  bucket default in this repo already use, and a defense against a typo
+  minting a `channel` value the admin service's own `KNOWN_CHANNELS` check
+  would 404 on). `APP_CHANNELS = ['demo', 'staging']` mirrors
+  `admin_backend/routes/config_routes.py`'s `KNOWN_CHANNELS` -- there is no
+  `prod`.
+  `frontend/src/console/adminApi.ts` wraps both into `adminFetch(path, user,
+  init, fetchImpl)`: resolves the caller's Bearer token via
+  `resolveStaffToken` (never `resolveSessionToken` -- firm-console actions
+  are staff-only, and the form-filling resolver's client-link-wins
+  precedence would send the wrong credential the moment a staffer has opened
+  one of their own links in the same tab, bd `polyglot-pdf-so88g`, the exact
+  workaround `MintLinkPage.tsx` already applies), appends `?channel=<this
+  build's channel>` via the exported `withChannel()` helper (preserving any
+  query params the caller's `path` already carries), and classifies a 401 as
+  `AuthError` / a 403 as `ForbiddenError` carrying the server's `detail` --
+  mirroring `admin-console/src/utils/adminApi.ts`'s identical shape against
+  the SAME admin service, deliberately duplicated rather than imported (no
+  new cross-surface dependency between `frontend/` and `admin-console/`, the
+  same constraint `admin-console/src/utils/adminAuth.ts` documents). Neither
+  client is yet wired to a concrete admin-service route from this app;
+  C4/EmployeesPage.tsx and C5/LinkHistoryPage.tsx are the first real callers.
+- **`MintLinkPage.tsx`'s A3 responses** (bd `polyglot-pdf-jecrl`, contract 9):
+  the mint route's 402 (`credit_ledger.InsufficientCredits` ->
+  `MintRefused(402, ...)`) and its SECOND 403 (a live firm on a non-demo
+  `LINK_CHANNEL` -> `MintRefused(403, "This deployment cannot mint links for
+  a live firm.")`, distinct from the pre-existing "no firm claim" 403) are
+  each shown as their own plain-language message. The two 403s are
+  distinguished by a substring check on the response `detail` (`"live
+  firm"`), since they need opposite remedies -- the original means "ask an
+  app admin to attach your account to a firm"; the new one means "this
+  firm's deployment choice is wrong" and is not fixable by the signed-in
+  staffer at all. The 402 body carries no `balance` field today
+  (`link_routes.py`'s `MintRefused` detail is always a plain string); the
+  page checks for one defensively (`typeof body.balance === 'number'`) so a
+  future response gains the richer message with no frontend change required.
