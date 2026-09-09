@@ -1997,6 +1997,12 @@ save. A 422 is classified onto the `credit_cost`/`burn_cap_usd` field it
 names (an allowlist prefix match against the route's own detail strings)
 and shown as a field-level error rather than a generic banner. The console
 does not surface `updated_by`: neither GET route's response carries it.
+KNOWN GAP (bd `polyglot-pdf-zcbm1`): neither GET route surfaces a kit's
+`display` value either (`resolve_commercial`'s own docstring: "not read
+here"), so every save through this page sends `display: {}`, silently
+erasing any label a kit was seeded with by
+`scripts/seed_kit_commercials.py` -- fixing this needs `display` added to
+`resolve_commercial`'s return value.
 
 ### 25. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
 

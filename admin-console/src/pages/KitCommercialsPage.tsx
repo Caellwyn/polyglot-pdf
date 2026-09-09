@@ -74,12 +74,26 @@ function validateBurnCapUsd(raw: string): string | null {
  * EDIT ONE KIT AT A TIME: clicking "Edit" on a row loads that kit's fresh
  * commercial via GET /admin/kits/{kit_id}/commercial (not the list row's
  * already-rendered values -- the whole point of a fresh read before editing
- * is that the list could be stale if another operator just saved), sets
- * `display` to `{}` in the input state (the route only ever roundtrips this
- * page's OWN previous write, and no console screen for `display` exists
- * yet in this bead), and one Save PUTs the WHOLE body (credit_cost,
- * burn_cap_usd, display) -- never a partial patch, matching the route's own
- * "a PUT replaces the whole commercial doc" contract.
+ * is that the list could be stale if another operator just saved), and one
+ * Save PUTs the WHOLE body (credit_cost, burn_cap_usd, display) -- never a
+ * partial patch, matching the route's own "a PUT replaces the whole
+ * commercial doc" contract.
+ *
+ * KNOWN GAP, NOT INTRODUCED HERE: this page always sends `display: {}` on
+ * Save (never omitted -- kit_routes.py treats a missing/null `display` the
+ * same way, defaulting it to `{}` server-side) because NEITHER GET route
+ * this page reads (`resolve_commercial`'s own docstring: "display: dict
+ * console label etc.; not read here") ever returns a kit's existing
+ * `display` value -- there is nothing here to preserve. CONCRETELY: a kit
+ * seeded with a `display.label` by `scripts/seed_kit_commercials.py` LOSES
+ * that label the first time ANY console operator edits its price through
+ * this page, PUT's own whole-doc-replace contract being what it is. This
+ * is a pre-existing gap in the read side of bead A3/B3's `kit_routes.py`
+ * (Surfaces here are `adminApi.ts` + this page + the shell tab only, not
+ * `kit_routes.py`) -- flagged rather than silently worked around; filed as
+ * bd `polyglot-pdf-zcbm1` (add `display` to
+ * `kit_commercials.resolve_commercial`'s return value so both GET routes
+ * surface it, then this page can preserve it on save).
  *
  * EXACTLY ONE PUT PER SAVE. Client-side validation (mirroring the route's
  * own rules: credit_cost a positive int, burn_cap_usd a positive finite

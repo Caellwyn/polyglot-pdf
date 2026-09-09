@@ -350,12 +350,15 @@ export async function setUserRole(
  * translating, mirroring the route module's own docstring on why the two
  * names coexist.
  *
- * NO `updated_by` HERE: kit_commercials.resolve_commercial's return value
- * does not carry it (only the raw Firestore doc does, which neither GET
- * route echoes) -- so this page cannot show who last edited a kit's
- * pricing without a wire change on the READ side, which is out of this
+ * NO `updated_by` AND NO `display` HERE: kit_commercials.resolve_commercial's
+ * return value carries neither (only the raw Firestore doc does, which
+ * neither GET route echoes) -- so a console page cannot show who last
+ * edited a kit's pricing, or preserve its existing `display` label on a
+ * save, without a wire change on the READ side. Both are out of this
  * bead's scope (Surfaces lists only adminApi.ts + the page + the tab, not
- * kit_routes.py).
+ * kit_routes.py); the `display` gap is filed as bd polyglot-pdf-zcbm1 since
+ * it is a real data-loss risk (KitCommercialsPage.tsx's PUT always sends
+ * display: {}, silently wiping any label a kit was seeded with).
  */
 export interface KitCommercial {
   kit_id: string;

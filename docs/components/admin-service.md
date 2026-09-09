@@ -76,7 +76,13 @@ gains `listKits` / `getKitCommercial` / `setKitCommercial`; `App.tsx` gains
 the "Kit commercials" tab. DOES NOT SHOW `updated_by`: neither GET route's
 response carries it (only the raw Firestore doc does) -- a discrepancy from
 the bead's own prose, left for a future bead if the console needs it, since
-adding it needs a `kit_routes.py` wire change outside this bead's Surfaces.)
+adding it needs a `kit_routes.py` wire change outside this bead's Surfaces.
+KNOWN DATA-LOSS GAP, FILED AS bd `polyglot-pdf-zcbm1`: neither GET route
+surfaces a kit's `display` value either (`resolve_commercial`'s own
+docstring: "not read here"), so this page always sends `display: {}` on
+save, silently erasing any label a kit was seeded with by
+`scripts/seed_kit_commercials.py` -- fixing this needs `display` added to
+`resolve_commercial`'s return value, out of this bead's own Surfaces.)
 (bd polyglot-pdf-jmiys: link listing and revoke,
 Track B bead B4 -- `GET /admin/firms/{firm_id}/links`
 (`?channel=` REQUIRED, `?status=`/`?employee_id=` optional filters) joins a

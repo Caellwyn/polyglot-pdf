@@ -83,6 +83,22 @@ bead's scope. Decided rather than escalated: low-consequence, reversible
 (a future bead can add the field), and the bead's Surfaces list itself
 settles which side gets to change.
 
+**A real data-loss gap found while building the page, filed rather than
+silently worked around: `display` cannot survive an edit through this
+console.** `kit_commercials.resolve_commercial` deliberately never returns
+a kit's `display` value (its own docstring: "not read here" -- it only
+resolves what the mint path needs), and both GET routes this page calls
+spread that same dict, so neither ever surfaces `display` either. Since
+PUT replaces the whole commercial doc by design, and this page has nothing
+to read the current `display` from, every save through this page sends
+`display: {}` -- silently erasing any label a kit was seeded with (`scripts/
+seed_kit_commercials.py` sets `display.label` on every kit it touches). This
+is a pre-existing gap in bead A3/B3's read side, not something this bead's
+own Surfaces (`adminApi.ts` + the page + the tab, not `kit_routes.py`) can
+fix directly -- filed as bd `polyglot-pdf-zcbm1` (add `display` to
+`resolve_commercial`'s return value) rather than silently shipping the data
+loss or expanding this bead's scope into a route it was not asked to touch.
+
 Test suite (`KitCommercialsPage.test.tsx`, 12 tests) pins the exit
 criterion verbatim: list shows credit cost/cap/source; Edit loads a fresh
 read, not the list row's stale values; the edit-save-reread round trip
