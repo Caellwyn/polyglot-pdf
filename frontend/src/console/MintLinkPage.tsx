@@ -22,8 +22,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-// Imported HERE, not at the entry point: this page is the only consumer, and
-// a stylesheet wired somewhere else can be mounted without it (bd
+// Imported HERE, not at the entry point: each console page imports this
+// stylesheet itself (LinkHistoryPage.tsx does the same), because a
+// stylesheet wired somewhere else can be mounted without it (bd
 // polyglot-pdf-41ay8 exists because the markup shipped with no CSS at all).
 import './styles/console.css';
 import { useAuth } from '../contexts/AuthContext';

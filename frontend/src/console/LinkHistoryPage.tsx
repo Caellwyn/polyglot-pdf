@@ -22,12 +22,13 @@
  * An employee's fetch call always OMITS employee_id (never sent, matching
  * the bead's own wording: "the page passes no employee_id for employees"),
  * and the revoke button and the employee/status filter controls are hidden
- * entirely for a non-manager (UX only -- exactly the same "the admin
- * service enforces" caveat EmployeesPage.tsx's manager-only visibility
- * carries, bd polyglot-pdf-krbol). Nothing about this split is itself a
- * security boundary on THIS page; the boundary is (and must be) the admin
- * service's own gate -- see polyglot-pdf-scaig for where that boundary is
- * still missing for the employee actor.
+ * entirely for a non-manager (UX only -- the same "the admin service
+ * enforces" caveat bd polyglot-pdf-krbol's manager-only visibility will
+ * carry once C4's EmployeesPage.tsx lands; that page does not exist on this
+ * branch). Nothing about this split is itself a security boundary on THIS
+ * page; the boundary is (and must be) the admin service's own gate -- see
+ * polyglot-pdf-scaig for where that boundary is still missing for the
+ * employee actor.
  *
  * ROLE COMES FROM THE VERIFIED TOKEN'S CUSTOM CLAIMS
  * (`user.getIdTokenResult()`'s `claims.firm_role` / `claims.firm_id`,
@@ -68,9 +69,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-// Same stylesheet MintLinkPage.tsx and EmployeesPage.tsx use -- imported
-// here too (not centrally) for the same reason MintLinkPage's own comment
-// gives: a page mounted elsewhere must not silently pull this CSS in.
+// Same stylesheet MintLinkPage.tsx uses -- imported here too (not
+// centrally) for the same reason MintLinkPage's own comment gives: a page
+// mounted elsewhere must not silently pull this CSS in.
 import './styles/console.css';
 import { useAuth } from '../contexts/AuthContext';
 import { adminFetch, errorDetail } from './adminApi';
@@ -265,8 +266,21 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
       // ONE call, then RE-READ (exit criterion 1) -- the server, not local
       // state, decides what the table shows after a revoke.
       await load();
-    } catch {
-      setMessage('Could not reach the server.');
+    } catch (err) {
+      // adminFetch THROWS AuthError/ForbiddenError on a 401/403 rather than
+      // returning them, so the !response.ok branch above never sees those
+      // two -- this catch is their only handler. Mirrors load()'s own
+      // handling a few lines up: an expired session or a permission refusal
+      // must not read as "the server is unreachable" (x22hm review finding
+      // 5), which would tell a manager to retry when they actually need to
+      // sign in again.
+      if (err instanceof AuthError) {
+        setMessage('Please sign in again.');
+      } else if (err instanceof ForbiddenError) {
+        setMessage(err.message);
+      } else {
+        setMessage('Could not reach the server.');
+      }
       setPhase('error');
     } finally {
       setRevokingJti(null);

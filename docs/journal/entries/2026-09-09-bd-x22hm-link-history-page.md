@@ -108,6 +108,71 @@ page needs no change once `scaig` closes -- an employee simply starts
 getting real rows back instead of the `ForbiddenError` message the 403
 already surfaces today.
 
+## Second fresh-eyes round: one blocker + four nits, all adopted and fixed inline
+
+A second Opus cross-surface review (STATUS: GAPS-FOUND (1)) traced every
+contract this page touches and found five things, all adopted:
+
+- **Blocker, fixed:** `docs/technical_guide.md`'s contract 23 still said (at
+  two separate sentences) that "neither of those routes exists yet" / "C5's
+  LinkHistoryPage.tsx" was one of two clients "not yet wired to a concrete
+  admin-service route" -- both falsified by this branch, which wires
+  `LinkHistoryPage.tsx` to both `GET /admin/firms/{firm_id}/links` and
+  `POST /admin/links/{jti}/revoke`. Contract 23's two stale sentences were
+  corrected to say C5 is now wired and C4 (`EmployeesPage.tsx`) is not yet.
+- **Nit, fixed:** `consoleStyles.test.ts` (bd `41ay8`'s guard) hand-named only
+  `MintLinkPage.tsx`, so `LinkHistoryPage.tsx`'s classes -- including a
+  typo'd one -- were unguarded. Rewritten to glob every `*.tsx` in
+  `src/console/` (excluding `*.test.tsx`) with `it.each`, so the NEXT page
+  is covered automatically. Mutation-verified: renaming
+  `link-history-table` to `link-history-tabel` reddens the new per-file
+  test.
+- **Comment-align, fixed:** `MintLinkPage.tsx`'s and the old
+  `consoleStyles.test.ts`'s "this page is the only consumer" comments on the
+  `console.css` import were both stale (there are now two consumers);
+  reworded.
+- **Comment-align, fixed:** two comments in `LinkHistoryPage.tsx` cited
+  `EmployeesPage.tsx` (bd `krbol`, C4) as an existing file with existing
+  manager-only-visibility behavior; it does not exist on this branch (C4 is
+  still in flight in a sibling worktree). Both reworded to say the file does
+  not exist yet.
+- **Nit, fixed:** the status `<select>` hand-lists all six
+  `links_store.STATUS_*` values with no test coupling it to the backend
+  constants -- correct today, but a renamed/added/removed status on either
+  side would silently drift (a working page returning zero rows, the
+  failure mode no behavioral test catches). Added a test that parses
+  `backend/services/links_store.py`'s `STATUS_*` assignments directly (same
+  idiom as `introScript.mirror.test.ts`) and asserts the dropdown's option
+  values equal that set exactly. Mutation-verified: renaming
+  `budget_exhausted` to `budget_exhaust` in either file reddens it.
+- **Nit, fixed:** `revoke()`'s bare `catch` collapsed `AuthError` (401) and
+  `ForbiddenError` (403) -- both of which `adminFetch` THROWS rather than
+  returns -- into "Could not reach the server," disagreeing with `load()`'s
+  own handling of the identical two error classes five lines up. `revoke()`
+  now mirrors `load()`: 401 says "Please sign in again," 403 surfaces the
+  server's detail message. Two new tests pin both cases, each mutation-
+  verified by reverting the fix and confirming the alert text falls back to
+  the generic network message.
+
+All five fixes landed on this branch with no deferred bead needed --
+`polyglot-pdf-x62iw` ("chore(nits): deferred review nits from
+polyglot-pdf-x22hm") was filed and then closed at creation, since by the
+time it existed every item it would have tracked was already fixed; it
+exists only so the round has an audit trail entry. `bd dolt push` could not
+push that bead's create/close (or anything else) to the remote in this
+environment -- `git.exe` fork/exec failed with "Not enough memory resources
+are available," reproduced on four separate retries over several minutes,
+the same symptom the review round itself hit (`bd ready`/`bd dolt pull`
+hanging). The bead exists locally, closed; someone with a working `bd`
+needs to push it (or re-create it) once this environment's `bd`/`git`
+resource issue clears.
+
+Full backend test suite: not re-run (no backend files touched this round).
+Full frontend suite: 2021/2022 passing; the one failure
+(`SchemaForm.previewEdit.test.tsx`) reproduces identically with this
+round's changes stashed, confirming it is pre-existing and unrelated
+(PDF-preview overlay, no relation to `src/console/`).
+
 ## Lessons
 
 A bead whose own exit criteria are entirely frontend-behavioral (pinned
@@ -132,12 +197,19 @@ neither") visible by grep rather than by inference.
 
 ## Files touched
 
-- `frontend/src/console/LinkHistoryPage.tsx` (new)
-- `frontend/src/console/LinkHistoryPage.test.tsx` (new)
+- `frontend/src/console/LinkHistoryPage.tsx` (new; second round: revoke's
+  catch fixed, two stale comments corrected)
+- `frontend/src/console/LinkHistoryPage.test.tsx` (new; second round: three
+  new tests -- 401/403 revoke error text, status-dropdown/backend coupling)
 - `frontend/src/schema-forms/AppRoutes.tsx` (edit: new route + path constant)
 - `frontend/src/schema-forms/AppRoutes.test.tsx` (new)
 - `frontend/src/console/styles/console.css` (edit: two new rule blocks)
-- `docs/technical_guide.md` (edit: new Surface contract 25)
+- `frontend/src/console/MintLinkPage.tsx` (second round: stale "only
+  consumer" comment corrected)
+- `frontend/src/console/consoleStyles.test.ts` (second round: rewritten to
+  glob every console page instead of hand-naming `MintLinkPage.tsx`)
+- `docs/technical_guide.md` (edit: new Surface contract 25; second round:
+  two stale contract-23 sentences corrected)
 - `docs/journal/entries/2026-09-09-bd-x22hm-link-history-page.md` (new, this file)
 
 Review outcomes recorded in the closeout ping.

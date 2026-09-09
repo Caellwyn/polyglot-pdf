@@ -12,8 +12,20 @@
 // adminApi.test.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { LinkHistoryPage } from './LinkHistoryPage';
+
+// Resolve from THIS TEST FILE, never process.cwd(): a worktree vitest run is
+// invoked from the MAIN checkout here (the node_modules junction workaround),
+// so a cwd-relative read would audit the wrong copy entirely. Same idiom as
+// frontend/src/shared/introScript.mirror.test.ts.
+function repoPath(...parts: string[]): string {
+  const here = expect.getState().testPath as string;
+  // <repo>/frontend/src/console/<file> -> up 4 to <repo>
+  return resolve(here, '../../../..', ...parts);
+}
 
 vi.mock('../firebase/config', () => ({
   auth: { __sentinel: 'auth' },
@@ -221,5 +233,91 @@ describe('LinkHistoryPage', () => {
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByText(/link store unavailable/i)).toBeTruthy();
+  });
+
+  it('revoke: a 401 (AuthError) says "sign in again", not "could not reach the server" (x22hm review finding 5)', async () => {
+    // adminFetch THROWS AuthError on a 401 rather than returning it, so the
+    // !response.ok branch never sees it -- the bare catch below it was the
+    // ONLY handler, and it reported a network failure for a sign-in problem.
+    // load() distinguishes this case five lines up; revoke() must too.
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'demo');
+    const { impl } = mockFetch((url) => {
+      if (url.includes('/revoke')) return jsonResponse({ detail: 'expired' }, 401);
+      return jsonResponse({ links: [SAMPLE_ROW] });
+    });
+
+    render(<LinkHistoryPage user={managerUser()} fetchImpl={impl} />);
+    const revokeButton = await screen.findByRole('button', { name: /^revoke$/i });
+
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.click(revokeButton);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/sign in again/i);
+    expect(alert.textContent).not.toMatch(/could not reach the server/i);
+  });
+
+  it('revoke: a 403 (ForbiddenError) surfaces the server detail, not "could not reach the server" (x22hm review finding 5)', async () => {
+    // Same asymmetry as the 401 case above: adminFetch throws ForbiddenError
+    // on a 403, so only the catch handles it.
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'demo');
+    const { impl } = mockFetch((url) => {
+      if (url.includes('/revoke')) {
+        return jsonResponse({ detail: 'not your firm' }, 403);
+      }
+      return jsonResponse({ links: [SAMPLE_ROW] });
+    });
+
+    render(<LinkHistoryPage user={managerUser()} fetchImpl={impl} />);
+    const revokeButton = await screen.findByRole('button', { name: /^revoke$/i });
+
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.click(revokeButton);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/not your firm/i);
+    expect(alert.textContent).not.toMatch(/could not reach the server/i);
+  });
+});
+
+describe('LinkHistoryPage status dropdown vs backend links_store (x22hm review finding 4)', () => {
+  // The dropdown hand-lists all six links_store status values. Correct
+  // today, but nothing reddened when a status was added, renamed, or
+  // removed on either side -- a drifted option silently sends a `status=`
+  // the backend equality-filters to zero rows: a working page returning an
+  // empty table, the failure mode no behavioral test sees. Parses the
+  // backend source directly (same idiom as
+  // frontend/src/shared/introScript.mirror.test.ts) so a rename on either
+  // side fails HERE instead of shipping silently.
+  it('lists exactly the STATUS_* values links_store.py defines', () => {
+    const source = readFileSync(
+      repoPath('backend', 'services', 'links_store.py'),
+      'utf-8',
+    );
+    const backendStatuses = new Set<string>();
+    for (const match of source.matchAll(/^STATUS_[A-Z_]+ = "([a-z_]+)"$/gm)) {
+      backendStatuses.add(match[1]);
+    }
+    // Guard the guard: if the pattern stops matching links_store.py's actual
+    // constant style, this must fail loudly rather than compare against an
+    // empty set.
+    expect(backendStatuses.size).toBeGreaterThan(0);
+
+    const pageSource = readFileSync(
+      repoPath('frontend', 'src', 'console', 'LinkHistoryPage.tsx'),
+      'utf-8',
+    );
+    // Only the <option value="..."> entries inside the status <select> --
+    // excludes the "All" option's value="", which is the page's own filter
+    // sentinel and not a links_store status.
+    const optionValues = new Set<string>();
+    for (const match of pageSource.matchAll(/<option value="([a-z_]+)">/g)) {
+      optionValues.add(match[1]);
+    }
+    expect(optionValues.size).toBeGreaterThan(0);
+
+    expect(optionValues).toEqual(backendStatuses);
   });
 });
