@@ -326,8 +326,13 @@
    * A group is many inputs sharing a name (`fieldId` for radios, `fieldId[]` for
    * checkbox groups). Since bd polyglot-pdf-96um6 its first option ALSO carries
    * id={field.id}, so getElementById no longer returns null for a group -- which
-   * silently re-routed both accessors below through option[0]. Length > 1 is the
-   * discriminator: a single control matches its own name and is left alone.
+   * silently re-routed both accessors below through option[0].
+   *
+   * Identified by NAME SHAPE, not by counting inputs: a "[]" suffix is a checkbox
+   * group at ANY option count (a one-option group is a real shape here --
+   * validation.ts's isSingleOptionCheckbox), and a shared plain name on
+   * type=radio is a radio group. A count-based test misclassified the one-option
+   * group and reopened both bugs this helper closes.
    */
   function groupInputs(fieldId) {
     try {

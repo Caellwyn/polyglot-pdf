@@ -32,6 +32,33 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	const aiUpdatingFields = new Set<string>() // Track fields currently being updated by AI
 	
 	/**
+	 * The inputs of a radio/checkbox GROUP, or [] for a single control.
+	 *
+	 * SHARED by every id-vs-name resolution in this file, deliberately. Since bd
+	 * polyglot-pdf-96um6 a group's FIRST option carries id={field.id}, so
+	 * getElementById no longer returns null for a group -- and any site that
+	 * resolves by id FIRST silently narrows the group to that one option. That
+	 * broke setupAllFieldListeners (non-first options stopped notifying) and then
+	 * applyUpdates 70 lines below it (a voice fill of a radio group selected
+	 * NOTHING). Two sites, the same mistake twice -- hence one helper rather than
+	 * two guards.
+	 *
+	 * Identified by NAME SHAPE, not by counting: a '[]' suffix is a checkbox group
+	 * at any option count (a ONE-option group is a real shape here, validation.ts's
+	 * isSingleOptionCheckbox), and a shared plain name on type=radio is a radio
+	 * group.
+	 */
+	function groupInputsFor(fieldId: string): HTMLInputElement[] {
+		const bracketed = document.querySelectorAll(`input[name="${fieldId}[]"]`)
+		if (bracketed.length) return Array.from(bracketed) as HTMLInputElement[]
+		const plain = Array.from(
+			document.querySelectorAll(`input[name="${fieldId}"]`)
+		) as HTMLInputElement[]
+		const radios = plain.filter(el => el.type === 'radio')
+		return radios.length ? radios : []
+	}
+
+	/**
 	 * Listen for manual edits to clear AI confirmation
 	 */
 	function setupEditListener(element: HTMLElement, fieldId: string): void {
@@ -88,21 +115,16 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// Try to find element by ID
 			let element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 			
-			// GROUPS ARE BOUND BY NAME EVEN WHEN THE ID RESOLVES (bd
-			// polyglot-pdf-96um6). A radio/checkbox group carries id={field.id} on
-			// its FIRST option only, so getElementById now succeeds where it used to
-			// fail -- and binding just that element would leave every OTHER option
-			// unlistened, so selecting any but the first would stop notifying the
-			// model. Measured before fixing: with the id, selecting the second
-			// option notified NOT AT ALL; without it, it did.
-			const groupInputs = document.querySelectorAll(
-				`input[name="${fieldId}"], input[name="${fieldId}[]"]`
-			)
-			if (groupInputs.length > 1) {
-				groupInputs.forEach(input => setupEditListener(input as HTMLElement, fieldId))
+			// Groups resolve by NAME even when the id now resolves (bd
+			// polyglot-pdf-96um6) -- see groupInputsFor. Binding only the id'd
+			// option would leave every OTHER option unlistened, so selecting any
+			// but the first would stop notifying the model.
+			const groupEls = groupInputsFor(fieldId)
+			if (groupEls.length) {
+				groupEls.forEach(input => setupEditListener(input as HTMLElement, fieldId))
 				continue
 			}
-			
+
 			// Try by name attribute (for table fields, radio groups, checkbox groups)
 			if (!element) {
 				const inputs = document.querySelectorAll(`input[name="${fieldId}"], textarea[name="${fieldId}"], select[name="${fieldId}"]`)
@@ -165,6 +187,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			
 			const newValue = update.value || ''
 			let element = document.getElementById(update.fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+
+			// Same rule as the listener site above: a group is resolved by NAME, not
+			// by the id its first option now carries. Without this, getElementById
+			// returns option[0] and the group falls into the SINGLE-control path --
+			// handleSingleRadio returns false and a voice fill selects NOTHING.
+			// Measured: filling 'Female' checked it TRUE before the id existed and
+			// FALSE after, on 14 radio fields in i-90_v2 alone.
+			if (groupInputsFor(update.fieldId).length) element = null
 
 		// Special handling for radio buttons, checkbox groups, and comboboxes which may not have IDs
 		if (!element) {

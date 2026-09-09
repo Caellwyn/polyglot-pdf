@@ -313,3 +313,48 @@ describe('a radio/checkbox GROUP notifies from EVERY option (bd polyglot-pdf-96u
     expect(onManualEdit).toHaveBeenCalled()
   })
 })
+
+describe('AI FILL still reaches a group after it gained an id (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const RADIO_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio',
+               options: [{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  // NOTE the fixture renders id={field.id} on option[0], exactly as RadioField
+  // does. The pre-existing fieldManager suites build groups WITHOUT an id, so
+  // they still encode the pre-bead DOM and could not have caught this.
+  function renderRadioGroup() {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    return Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+  }
+
+  it('a voice fill selects a NON-FIRST option', () => {
+    // Giving the group an id made getElementById succeed, so applyUpdates took
+    // the SINGLE-control path: handleSingleRadio returned false and the fill
+    // selected nothing, while the model believed it had filled the field.
+    // Measured before the fix: Female.checked was TRUE without the id, FALSE with.
+    const [, female] = renderRadioGroup()
+    const fm = createFieldManager({ schema: RADIO_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'Female' } as any])
+
+    expect(female.checked, 'a voice fill must still reach the group').toBe(true)
+  })
+
+  it('the case-insensitive fuzzy tier still reaches the FIRST option', () => {
+    const [male] = renderRadioGroup()
+    const fm = createFieldManager({ schema: RADIO_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'male' } as any])
+
+    expect(male.checked).toBe(true)
+  })
+})
