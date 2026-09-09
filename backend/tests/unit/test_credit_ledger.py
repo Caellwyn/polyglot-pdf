@@ -969,12 +969,15 @@ def test_the_export_line_carries_NO_field_values_or_free_text(
 
 def test_credit_ledger_is_the_only_module_that_writes_balance_credits():
     """Scar #8: pin the SET, not the instance. The invariant holds only
-    because ONE module writes balance_credits; a second writer breaks it
-    silently, since nothing recomputes the balance from the ledger.
+    because a small, known set of modules write balance_credits; an
+    unlisted writer breaks it silently, since nothing recomputes the
+    balance from the ledger.
 
-    The one legitimate other site is firms.upsert_firm(), which
-    0-initializes the field on FIRST CREATE and never touches it again.
-    Everything else that mentions the key must be a READER.
+    The two deliberate other sites are firms.upsert_firm() (the
+    operator-bootstrap path) and admin_backend/routes/firm_routes.py's
+    create route (bd polyglot-pdf-zopqq), both of which 0-initialize the
+    field on FIRST CREATE only, for a firm with no ledger yet, and never
+    touch it again. Everything else that mentions the key must be a READER.
 
     Detection is an AST walk, NOT a source grep, and that is the whole point
     of the test. A literal substring like '"balance_credits":' pins one
@@ -986,15 +989,34 @@ def test_credit_ledger_is_the_only_module_that_writes_balance_credits():
     match, so the grep version was already blind to the one legitimate second
     writer it named in this very docstring.
 
+    The walk covers BOTH backend/ and admin_backend/ -- they are sibling
+    packages at the repo root, and a walk rooted at backend/ alone (the
+    original shape of this guard) cannot see a write anywhere under
+    admin_backend/ no matter what that writer does. bd polyglot-pdf-t7zg7
+    is the record of that gap: it let firm_routes.py's write through with
+    no mechanical objection at all until this widening.
+
+    admin_backend/routes/credit_routes.py is ALSO allowlisted, but it is
+    not a fourth writer: `_writes_the_key`'s dict-literal check cannot tell
+    a payload write from a read, and credit_routes.py builds
+    before={"balance_credits": firm.get(...)} to audit the PRE-write value
+    -- a read, reported as a false positive by the same walk. It stays on
+    the allowlist (rather than teaching the predicate a read-context
+    exception, which would open its own blind spot) precisely because it
+    writes nothing; the "allowlist pinned in both direction" assertion below
+    still catches it going stale if that audit-dict shape is ever removed.
+
     A WRITE here means any of the four shapes below; a bare read
     (snap.get("balance_credits")) is deliberately not one, since readers are
     unlimited.
 
-    Mutation: add ANY of these to a backend service outside the allowlist and
-    this must go red -- ref.update({"balance_credits": n}),
+    Mutation: add ANY of these to a backend or admin_backend module outside
+    the allowlist and this must go red -- ref.update({"balance_credits": n}),
     ref.update({'balance_credits': n}), payload["balance_credits"] = n, or
     ref.update(balance_credits=n). Verified 2026-09-08 by adding each of the
-    four, one at a time, to backend/services/links_store.py."""
+    four, one at a time, to backend/services/links_store.py; re-verified
+    2026-09-09 by adding payload["balance_credits"] = n to
+    admin_backend/routes/audit_routes.py."""
     import ast
     import pathlib
 
@@ -1027,19 +1049,24 @@ def test_credit_ledger_is_the_only_module_that_writes_balance_credits():
         return False
 
     backend_dir = pathlib.Path(credit_ledger.__file__).resolve().parents[1]
-    allowed = {"credit_ledger.py", "firms.py"}
+    repo_root = backend_dir.parent
+    admin_backend_dir = repo_root / "admin_backend"
+    allowed = {"credit_ledger.py", "firms.py", "firm_routes.py",
+               "credit_routes.py"}
     offenders = []
     seen_allowed = set()
-    for path in sorted(backend_dir.rglob("*.py")):
-        if "tests" in path.parts or "scripts" in path.parts:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        if not _writes_the_key(tree):
-            continue
-        if path.name in allowed:
-            seen_allowed.add(path.name)
-        else:
-            offenders.append(str(path.relative_to(backend_dir)))
+    search_dirs = [backend_dir, admin_backend_dir]
+    for search_dir in search_dirs:
+        for path in sorted(search_dir.rglob("*.py")):
+            if "tests" in path.parts or "scripts" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            if not _writes_the_key(tree):
+                continue
+            if path.name in allowed:
+                seen_allowed.add(path.name)
+            else:
+                offenders.append(str(path.relative_to(repo_root)))
     assert offenders == [], (
         "balance_credits is written outside the ledger helper: {}".format(
             offenders)

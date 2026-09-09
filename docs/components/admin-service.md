@@ -1,8 +1,23 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-z4y91: the console's Users tab
+*Last updated: 2026-09-09 (bd polyglot-pdf-zopqq: firm CRUD
+(`admin_backend/routes/firm_routes.py`: `POST`/`GET /admin/firms`,
+`GET /admin/firms/{firm_id}`, `PATCH .../status`, `PATCH .../allowed_kits`,
+`PATCH .../kind`) and credit grant/adjust
+(`admin_backend/routes/credit_routes.py`: `POST .../credits/grant`,
+`POST .../credits/adjust`), all behind `require_app_admin` and all audited
+in-transaction -- firm writes open their OWN transaction (mirrors
+`config_routes.py`'s shape); credit writes join
+`credit_ledger.append_entry`'s transaction via its `extra_writes` hook
+instead of opening a second one, which is now a documented, mechanically-
+checked shape in `test_admin_audit_coverage.py`
+(`_EXTRA_WRITES_TRANSACTION_OPENERS`). `GET /admin/firms/{firm_id}` runs
+`credit_ledger.reconcile_expired_for_firm` once per known channel before
+reading the balance, so a dead sweep cannot leave the console's balance
+view stale. Neither surface checks `firm.kind` -- grants to mock firms are
+allowed by design.) (bd polyglot-pdf-z4y91: the console's Users tab
 (`admin-console/src/pages/UsersPage.tsx`) -- the first console page under a
 `pages/` directory rather than `components/`, since it is the console's
 first CRUD page rather than a read-mostly or single-write one; list a
@@ -87,6 +102,14 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/users/{uid}/disable` | PATCH | `require_app_admin_or_owning_manager` | Disable or re-enable a staff account (`{disabled, firm_id?}`). An explicit value, not a toggle, so a retry is idempotent. Claims are untouched -- disabling is not deleting, and the account keeps its audit history. 404 for a uid outside the resolved firm, the SAME 404 as a uid that does not exist. |
 | `/admin/users/{uid}/role` | PATCH | `require_app_admin_or_owning_manager` | Move an account between `manager` and `employee` (`{firm_role, firm_id?}`), merging over every other claim. Same 404 scoping rule as disable. |
 | `/admin/users` | GET | `require_app_admin_or_owning_manager` | The firm's staff pool (`?firm_id=` for an app admin; a manager sends none). `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth cannot query custom claims, which is affordable only because the pool is staff, editors and devs and clients never get accounts. Response rows are an explicit key allowlist. A read, so no audit row. |
+| `/admin/firms` | POST | `require_app_admin` | Create a firm (bd polyglot-pdf-zopqq). Body `{firm_id, name, contact_email, kind, allowed_kits?, status?}` -- `kind` is REQUIRED with no default (422 if missing or invalid). Writes the same field shape as `backend/services/firms.py::upsert_firm` but does not call it (that helper's read+write is not transactional, so this route's transactional create/audit body writes the doc itself). Audited in its own Firestore transaction. |
+| `/admin/firms` | GET | `require_app_admin` | Every firm, with `kind`/`balance_credits`/`status`, unfiltered. A read, so no audit row. |
+| `/admin/firms/{firm_id}` | GET | `require_app_admin` | One firm's profile, balance, and a page of ledger rows. **Reconciles expired unopened links across BOTH known channels (via `credit_ledger.reconcile_expired_for_firm`) before reading the balance** -- a lazy catch-up for what the hourly sweep (Track B bead B5, not yet built) has not reached. A read, so no audit row. |
+| `/admin/firms/{firm_id}/status` | PATCH | `require_app_admin` | Set `active`\|`suspended` (`{status}`). Audited in-transaction. |
+| `/admin/firms/{firm_id}/allowed_kits` | PATCH | `require_app_admin` | Replace the private-kit allowlist (`{allowed_kits}`, full replace). Audited in-transaction. |
+| `/admin/firms/{firm_id}/kind` | PATCH | `require_app_admin` | Reclassify `mock`<->`live` (`{kind, reason}`) -- `reason` REQUIRED; the confirm-twice UI control is the console's job, not this route's. Audited in-transaction. |
+| `/admin/firms/{firm_id}/credits/grant` | POST | `require_app_admin` | Grant credits (`{type, amount, usd_amount?, kit_id?}`; `type` in `subscription_grant`\|`purchase`\|`promo_grant`, `usd_amount` required for the first two and refused otherwise). Calls `backend/services/credit_ledger.py::append_entry` -- the ONE writer of a firm's balance. Grants to `kind=mock` firms are allowed. Audited via `append_entry`'s `extra_writes` hook, joined to its own transaction. |
+| `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED, `amount` may be either sign). Same writer and audit form as `grant`. |
 
 `channel` is always an explicit path parameter (validated against
 `("demo", "staging")`), never derived from the environment -- the admin
