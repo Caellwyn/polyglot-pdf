@@ -1,0 +1,148 @@
+---
+date: 2026-09-08
+bead: polyglot-pdf-1op3g
+title: "feat(credits): A5 refund on unopened expiry keyed on the redemption doc; lazy reconciliation on balance reads"
+sprint: 22
+tags: [security, testing]
+---
+
+## Trigger
+
+Epic 2 Track A bead A5 of the admin-console program
+([plan](../../sprint_22_admin-console_plan.md), "Refund on unopened
+expiry"). A firm's credit is debited at MINT time (the future A3), before
+any client opens the link -- so a link that expires unopened must give the
+credit back, or firms pay for links nobody ever touched. This bead is that
+refund path: one transactional helper plus the lazy per-firm catch-up a
+balance read runs before showing a number that might be stale because the
+hourly sweep (Track B bead B5) has not run yet.
+
+## What shipped
+
+**`credit_ledger.refund_expired_link(db, jti, *, actor, channel=None,
+now=None)`.** One transaction, reads-before-writes: first
+`link_redemptions[_<channel>]/{jti}` -- the AUTHORITATIVE record a client's
+first open writes -- and refuses on its existence ALONE, regardless of what
+the doc contains. This is the bead's central design point: `links/{jti}`
+also carries a `status` field that the open route best-effort-MIRRORS to
+`"opened"`, and that write can fail even though the real open succeeded. If
+the refund gate trusted the mirror, a failed mirror write would refund a
+link a client is actively filling out. So the gate reads the doc a client's
+open ACTUALLY writes, never the label that merely reflects it. Second read
+is `links[_<channel>]/{jti}`, proceeding only from `status == "minted"` --
+every other status (including `refunded`) refuses, which is what makes a
+second run, or a sweep and a lazy reconcile racing on the same jti, a no-op
+rather than a double credit.
+
+The write half is NOT a new implementation: `append_entry()`'s body was
+split into a new `_apply_entry_writes()` helper that both `append_entry`
+and `refund_expired_link` call, so a refund's ledger entry
+(`type=expiry_refund`, `amount=+credit_cost` reversing the exact snapshot
+taken at mint) is bit-for-bit the same shape as a grant, a purchase, or a
+debit. The links record's `status=refunded` flip joins the SAME
+transaction via the existing `extra_writes` hook, so a refund can never
+credit the firm while leaving `status=minted` for the next sweep pass to
+hit again.
+
+**`reconcile_expired_for_firm(firm_id, channel=None, now=None)`.** The lazy
+half: queries `links[_<channel>]` for one firm's `status == "minted"` and
+`open_deadline < now` (using `FieldFilter`, matching the one other query
+call site in this repo, `confirmation_logger.py`, rather than the
+deprecated positional `.where()`), and calls `refund_expired_link()` once
+per hit. A per-link `LinkNotRefundable` (a race the sweep already won) is
+logged and skipped, never raised past the loop -- a lazy pass riding a
+balance read must not turn "one link had a race" into a 500 on that
+balance page. Not wired into an admin-service route in this bead (Track B
+owns those routes); the plan is explicit that it must NEVER be called from
+the mint transaction, which does not exist as production code yet either
+(A3 is still open) -- so exit criterion 3 is pinned against `append_entry()`
+itself, the shared helper A3 will compose its mint transaction on: one test
+asserts its transaction's read set is exactly the firm doc, and a second,
+AST-walk test asserts neither `append_entry` nor `_apply_entry_writes` ever
+calls `reconcile_expired_for_firm`. Together these hold regardless of what
+shape A3's own mint route eventually takes.
+
+**Socket teardown mirror.** `LinkBudgetExhausted`'s except block in
+`websocket_routes.py` now writes a best-effort, never-raising
+`links[_<channel>]/{jti}.status = "budget_exhausted"` via
+`links_store._collection()`, off the event loop. Telemetry only -- no
+ledger entry -- because whether a budget-exhausted link earns a refund,
+and whether a replacement link (bd `polyglot-pdf-1uyof`) costs a fresh
+credit, are both maintainer pricing calls the plan lists as undecided.
+
+**Deliberately NOT in this bead:** the hourly sweep endpoint
+(`POST /admin/links/sweep-expired`, Track B bead B5) and its Cloud
+Scheduler wiring; wiring `reconcile_expired_for_firm` into an actual
+admin-service or firm-console route (also Track B/C); any decision on
+budget-exhausted or opened-but-abandoned refunds (both maintainer calls,
+assumed "no" per the plan).
+
+## Lessons
+
+**A criterion can name a transaction that does not exist yet as code.**
+Exit criterion 3 says "the mint transaction has no reconciliation read,"
+but the mint route (`link_routes.py`'s `mint_link`) does not call
+`credit_ledger` at all in this branch -- A3 is a sibling bead, still open,
+and not even a dependency of A5. Pinning the criterion against the literal
+mint route would have meant leaving it PENDING or inventing route code out
+of scope. Instead it is pinned against the shared helper (`append_entry`)
+both the future mint route and this bead's own refund path build on:
+proving THAT transaction's read set stays `{firm}` alone is the actual
+load-bearing property (a mint route composed on top of it will read
+`{firm, kit}`, never `{firm, kit, redemption, links}`), and it holds
+independent of when or how A3 lands. The general form: when a criterion is
+phrased against a future surface, look for the shared primitive the future
+surface will be built FROM, and pin the property there instead of blocking
+on code that has not shipped.
+
+**Reads-before-writes forces write-logic extraction, not just read
+composition.** `append_entry`'s `extra_writes` hook exists for a caller
+that wants to join a write to the SAME transaction, but it explicitly may
+not read (it runs after the firm write is already queued). A refund needs
+TWO extra reads (the redemption doc, the links record) before it can even
+look at the firm balance -- reads `append_entry` itself does not know
+about and cannot be handed through `extra_writes`. The fix was not a new
+parameter on `append_entry`; it was splitting its write half into
+`_apply_entry_writes(tx, firm_ref, entry_ref, firm, ...)`, callable once a
+caller has already done ALL of its own reads (including the firm read) in
+its own transaction body. Two transactional writers of one balance field
+sharing one write implementation, rather than one writer stretched to
+cover a shape it was not built for.
+
+## Doc freshness
+
+- `docs/components/auth.md` -- new "Expiry refund" section under the
+  credit ledger; stamp bumped to 2026-09-08 with this bead's entry.
+- `docs/technical_guide.md` -- Surface contract 18 (Credit ledger) gains a
+  bullet for `refund_expired_link`/`reconcile_expired_for_firm`; header
+  stamp gains this bead's entry.
+- `docs/freshness/components~auth.md.ack` -- acked (bd polyglot-pdf-1op3g):
+  the freshness checker's Last-updated stamp is date-only and cannot
+  express that `auth.md`'s edit landed AFTER `websocket_routes.py`'s
+  same-day commit within this session, so it flagged a same-day false
+  stale without the ack.
+- Several other tier-2 docs (`stateless-architecture.md`,
+  `terminology.md`, `validation-delegation.md`, `voice-and-vad.md`,
+  `ws-protocol.md`, and others) are flagged STALE by
+  `check_doc_freshness.py` because they also track `websocket_routes.py`.
+  None tracks the actual subject matter this branch touched (a telemetry
+  mirror write in one except block); reviewed and left alone.
+- No CLAUDE.md change. No `firestore.rules` change (the `links` and
+  `link_redemptions` deny blocks already exist from bead A1).
+
+## Files touched
+
+- `backend/services/credit_ledger.py` -- `_apply_entry_writes()` (the
+  write half extracted from `append_entry`), `refund_expired_link()`,
+  `reconcile_expired_for_firm()`, `LinkNotRefundable`.
+- `backend/routes/websocket_routes.py` -- `_mirror_budget_exhausted()` and
+  its call from the `LinkBudgetExhausted` except block.
+- `backend/tests/unit/test_credit_refunds.py` (new) -- the three exit
+  criteria, every-non-minted-status coverage, the sweep-vs-lazy race,
+  reconcile's firm-scoping and skip-don't-abort behavior, and the socket
+  mirror's write/never-raise/missing-jti behavior.
+- `docs/components/auth.md`, `docs/technical_guide.md` -- as above.
+- `docs/freshness/components~auth.md.ack` (new) -- the same-day freshness
+  ack.
+
+Review outcomes recorded in the closeout ping.
