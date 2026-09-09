@@ -1,6 +1,16 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new
+Surface contract 21, telemetry alert docs (`alerts/{id}`, new
+`backend/services/alerts.py`) with deterministic ids so a repeated trigger
+dedups onto the same document: `link_exhausted_{jti}` from
+`link_spend.check_budget()`'s refusal branch (which gains an optional
+`firm_id` kwarg purely to label the alert) and day-keyed
+`{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from
+`credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new
+runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like
+`CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller;
+`firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -1596,3 +1606,83 @@ that drops a key breaks a consumer query silently.
 - **PII:** ids, counts, costs and model names only. The envelope has no
   free-text slot, so the shape is HIPAA-safe by construction
   (`docs/standards/hipaa-pii-policy.md`, `backend/tests/test_no_pii_logging.py`).
+
+### 21. Telemetry alert docs: `alerts/{id}` (Epic 3 bead E3.5, bd polyglot-pdf-bo95a)
+
+Two hooks write into ONE collection with DETERMINISTIC ids, so a repeated
+trigger dedups by overwriting the same document rather than piling up a row
+per occurrence -- the load-bearing property this contract exists to pin.
+
+- **Producer:** `backend/services/alerts.py`, the ONLY writer of the `alerts`
+  collection. Two public entry points, both routed through one private
+  `_write(doc_id, ...)` so the merge/idempotency/failure-swallowing logic
+  lives in exactly one place:
+  - **`record_link_exhausted(jti, firm_id, spend_usd, ceiling_usd)`**, called
+    from `backend/services/link_spend.py`'s `check_budget()` in its
+    `LinkBudgetExhausted` refusal branch, ONCE per raise. Doc id
+    `link_exhausted_{jti}` -- a link that keeps attempting paid work after its
+    ceiling trips collapses onto the SAME doc rather than paging an operator
+    once per attempt. `check_budget` gained an OPTIONAL `firm_id` keyword
+    purely to label this doc; it is never consulted by the budget decision
+    itself. `firm_id` reaches the one call site
+    (`backend/routes/websocket_routes.py`'s `_resolve_ceiling_and_check_
+    budget`) from the verified token claims (`claims.get("firm_id")`).
+  - **`record_credit_threshold(firm_id, balance, threshold)`**, called from
+    `backend/services/credit_ledger.py`'s `append_entry()` AFTER a
+    `mint_debit` commits (never for any other entry type -- a grant,
+    adjustment or refund that happens to land while a firm is still low fires
+    nothing; only a DEBIT pushing the firm there counts). Two DAY-KEYED doc
+    ids, `{firm_id}_credit_low_{YYYY-MM-DD}` and
+    `{firm_id}_credit_exhausted_{YYYY-MM-DD}` (UTC calendar day) -- a firm
+    crossing the same boundary twice in one day still yields exactly one doc
+    per kind per day, and a new UTC day resets it. `balance <= 0` writes the
+    exhausted doc; `balance <= threshold` writes the low doc; both fire
+    together when the balance is exactly zero (zero is also at-or-below any
+    positive threshold). `threshold` comes from the new runtime-config key
+    `CREDIT_LOW_THRESHOLD` (`runtime_config.credit_low_threshold()`, compiled
+    default 10).
+- **Idempotent id, not a merge race.** `_write` calls
+  `ref.get()` then `ref.set(doc, merge=True)` as TWO separate, non-
+  transactional Firestore calls -- deliberately, unlike `credit_ledger.py`'s
+  `append_entry`, because this is best-effort telemetry, not money: a rare
+  lost update on a repeat trigger the same second degrades to "the doc's
+  `ts`/`context` reflect an earlier crossing instead of the latest one",
+  never a wrong balance or a missed alert kind. The `ref.get()` read decides
+  ONLY whether to seed `acknowledged_by`/`acknowledged_at`/`emailed_at` to
+  `None` on first creation; a re-trigger of an already-acknowledged or
+  already-emailed doc must not silently revive it, so those three keys are
+  simply OMITTED from the payload on every write after the first (an omitted
+  key survives a `merge=True` set untouched).
+- **Fields (`alerts.ALERT_FIELDS`):** `firm_id`, `kind`
+  (`link_exhausted`|`credit_low`|`credit_exhausted`), `level`
+  (`warning`|`critical`), `ts`, `context` (metadata only -- `jti`/
+  `spend_usd`/`ceiling_usd` for a link alert, `balance`/`threshold` for a
+  credit alert; NEVER a field value, per
+  `docs/standards/hipaa-pii-policy.md` and
+  `docs/standards/stateless-architecture.md`), `acknowledged_by`,
+  `acknowledged_at`, `emailed_at` (all three `None` until a later bead --
+  the admin console's acknowledge action and Epic 3's dispatcher,
+  respectively), `expire_at` (a datetime 90 days past the alert's own `ts`,
+  for the TTL policy `scripts/setup-firestore-ttl.sh` already declares on
+  this collection).
+- **Never raises into the paid path (exit criterion 2).** `_write`'s
+  Firestore calls are wrapped in one `try/except Exception`, including the
+  `_collection()` call itself -- `get_db()` can RAISE (a broken
+  `firebase_admin` app) rather than merely returning `None`, and that
+  exception must be swallowed exactly like a write failure; both public
+  entry points therefore never raise for any reason, so `check_budget` still
+  raises `LinkBudgetExhausted` for the REAL reason even when the alert store
+  is unreachable, and a debit already committed in `append_entry` is never
+  undone by a telemetry failure downstream of it.
+- **`CREDIT_LOW_THRESHOLD`** joins `RUNTIME_CONFIG_KEYS` (contract 14) as a
+  THIRD never-had-an-env-var key alongside `CREDITS_ENFORCED` -- no
+  `os.getenv` fallback exists or may exist for either; the coercion rejects
+  a `bool` (the same int-subclass trap `LINK_FIRM_CAP` guards) and any
+  negative value, but ACCEPTS zero (an operator who wants only the
+  zero-balance/exhausted alert, no separate low warning).
+- **`firestore.rules` denies `alerts/{alertId}` to all clients**, pinned by
+  the same set-derived test as every other Admin-SDK-only collection
+  (contract 15's neighbour, `test_firestore_rules_text.py`).
+- **Consumer:** none yet in this bead -- the admin console's alerts list
+  (acknowledge) and Epic 3's `POST /admin/alerts/dispatch` email sender are
+  later beads, both reading/writing the same doc shape this contract fixes.
