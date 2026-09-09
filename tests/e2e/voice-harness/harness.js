@@ -333,6 +333,12 @@
    * validation.ts's isSingleOptionCheckbox), and a shared plain name on
    * type=radio is a radio group. A count-based test misclassified the one-option
    * group and reopened both bugs this helper closes.
+   *
+   * DUPLICATED, deliberately and unavoidably: frontend/src/shared/fieldManager.ts
+   * carries the same rule as groupInputsFor(). This file is injected into a live
+   * page and cannot import that module. If you change the rule there, change it
+   * here -- two sites holding one rule is precisely the shape that cost bd
+   * polyglot-pdf-96um6 two regressions already.
    */
   function groupInputs(fieldId) {
     try {

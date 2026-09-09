@@ -47,6 +47,12 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * at any option count (a ONE-option group is a real shape here, validation.ts's
 	 * isSingleOptionCheckbox), and a shared plain name on type=radio is a radio
 	 * group.
+	 *
+	 * DUPLICATED, deliberately and unavoidably: tests/e2e/voice-harness/harness.js
+	 * carries the same rule as groupInputs(), because it is injected into a live
+	 * page and cannot import this module. If you change the rule here, change it
+	 * there -- two sites holding one rule is precisely the shape that cost this
+	 * bead two regressions already.
 	 */
 	function groupInputsFor(fieldId: string): HTMLInputElement[] {
 		const bracketed = document.querySelectorAll(`input[name="${fieldId}[]"]`)
