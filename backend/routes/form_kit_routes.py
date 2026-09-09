@@ -500,10 +500,13 @@ def _require_firm_owns_private_kit(
       1. The caller MANAGES a firm. Retirement is FIRM MANAGEMENT, not
          employee level -- an employee sends links and tracks status, and
          must not be able to take a form out of service. That rule now has
-         ONE home, backend.services.auth.manager_firm_id (bd
-         polyglot-pdf-dmjl5, CLAUDE.md scar #8): the admin service's user
-         routes need the same rule, and two hand-written copies of "firm_role
-         == manager and firm_id is a non-empty string" is how one of them
+         ONE home (bd polyglot-pdf-dmjl5, CLAUDE.md scar #8): the rule is
+         backend.services.firms.manager_firm_id, imported here through
+         backend.services.auth, which re-exports it. It lives in the
+         firm-identity module rather than in auth.py because the admin
+         service's user routes need the same rule and may not import
+         backend.services.auth. Two hand-written copies of "firm_role ==
+         manager and firm_id is a non-empty string" is how one of them
          drifts.
       2. owner_firm_id == the caller's firm. Visibility is not authorization:
          bd vccy lets a firm SEE and use a kit its allowlist names, which

@@ -173,6 +173,17 @@ module under `backend/`, `admin_backend/` and `scripts/` and fails on any
 site that compares against the literal `"manager"` outside a short
 allowlist, so the next hand-written copy fails CI rather than drifting.
 
+**No route declares `require_firm_manager` yet, deliberately.** The plan
+named the retire route as its first consumer, but that route cannot use it:
+its refusals must be 404s, so it takes the rule and raises its own error
+instead. The admin service's user routes need "app admin OR manager", a
+different gate. What ships proven is therefore the RULE -- exercised by
+both real callers -- with this dependency as the 403-shaped wrapper waiting
+for the first public-backend route that wants manager-only access with no
+existence to protect. It is unit-tested directly rather than left untested,
+and the route-auth set test keeps the name in its vocabulary of legal
+gates.
+
 ## Granting access: `scripts/bootstrap_admin_user.py`
 
 The ONLY way to grant (or revoke) `app_admin` -- there is no self-serve

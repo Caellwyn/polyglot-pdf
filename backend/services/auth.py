@@ -353,6 +353,23 @@ async def require_firm_manager(
     request. 403, not 404: unlike the kit routes there is no other firm's
     resource whose existence a refusal could leak, and a manager-only console
     page needs to tell an employee "not your role", not "no such page".
+
+    NO ROUTE DECLARES THIS YET, and that is deliberate rather than an
+    oversight -- read this before adding one. The plan named the retire route
+    as this gate's first consumer, but the retire path cannot use it: every
+    refusal there must be a 404 (a 403 would confirm another firm's kit
+    exists), so it consumes the RULE, manager_firm_id, and raises its own
+    FormKitNotFound. The admin service's user routes are the same shape --
+    they need "app admin OR manager", which is a different gate
+    (admin_auth.require_app_admin_or_owning_manager).
+
+    So what ships proven here is the rule, exercised by both real callers;
+    this dependency is the 403-shaped wrapper for the first PUBLIC-backend
+    route that wants manager-only access with no existence to protect. It is
+    unit-tested directly (backend/tests/unit/test_require_firm_manager.py)
+    rather than left untested, and the admin service's route-auth set test
+    keeps the NAME in its vocabulary of legal gates so a future route
+    carrying it is not mistaken for an ungated one.
     """
     claims = await require_auth(authorization)
     firm_id = manager_firm_id(claims)
