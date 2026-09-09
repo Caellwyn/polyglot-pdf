@@ -118,6 +118,67 @@ exactly the bug `bd polyglot-pdf-o4h98` already describes. Re-confirmed via
 `git stash` that it fails identically with none of this bead's changes
 present.
 
+**Cross-surface review round -- adopt/reject/defer.** The Opus outer
+reviewer traced every new contract into its consumers and returned
+GAPS-FOUND (2 blockers). One blocker adopted (fixed in this round); one
+blocker the reviewer itself filed as a bead rather than blocking on
+(explained below); four nits, all already filed as beads by the reviewer.
+
+- ADOPTED (blocker): `reconcile_expired_for_firm`'s Firestore query
+  (`firm_id ==`, `status ==`, `open_deadline <`) needs a composite index
+  that `firestore.indexes.json` did not ship. Unlike the all-equality
+  audit-log queries `confirmation_logger.py` and `audit_routes.py` run
+  (which Firestore serves via automatic single-field index merging, no
+  composite index needed), this query adds a RANGE filter on top of two
+  equality filters -- a shape Firestore serves ONLY from a composite index.
+  Without one, every call fails in production with `FAILED_PRECONDITION`
+  while the local suite (which fakes Firestore with an in-Python filter)
+  stays green -- CLAUDE.md scar #7's "a mock cannot tell you the real
+  dependency is forbidden" applied to indexes instead of IAM. Fixed by
+  adding `(firm_id ASC, status ASC, open_deadline ASC)` composite indexes
+  for both `links` (demo channel) and `links_staging` (staging channel) to
+  `firestore.indexes.json`, and extending
+  `admin_backend/tests/unit/test_firestore_indexes.py` with a new
+  AST-derived guard block (mirrors the existing audit-log guard's
+  read-the-real-query-from-source pattern, generalized to a second
+  collection family and a range-filter shape) that fails if either index
+  goes missing, has the wrong field order, or the range field is not last.
+  Mutation-verified: removing the two new indexes from
+  `firestore.indexes.json` reddens exactly the three new tests
+  (`test_reconcile_query_has_a_composite_index[links]`,
+  `[links_staging]`, `test_no_unused_links_indexes`) and nothing else.
+- NOT BLOCKED HERE (blocker, filed as `bd polyglot-pdf-cppkx`): the socket
+  teardown's `_mirror_budget_exhausted` uses `set(..., merge=True))`, which
+  CREATES an orphan `links/{jti}` doc (status-only, no `expire_at`) on any
+  jti with no prior mint record -- and since A3 (the mint route) has not
+  landed, every jti reaching this line today IS such a case, so the TTL
+  policy can never reap what accumulates. Money-path correctness is
+  unaffected (`refund_expired_link` refuses `not_pending`;
+  `reconcile_expired_for_firm` filters on `firm_id`, which an orphan
+  lacks) -- this is unbounded doc growth plus a schema violation, not a
+  mis-refund, and its own fix is a genuine two-way judgment call (`update()`
+  vs. `set(merge=True)` + `expire_at`) the reviewer deliberately left
+  unresolved rather than picking for the next bead. Filed with exit
+  criteria rather than fixed inline in this round.
+- DEFERRED (nit, filed as `bd polyglot-pdf-h9584`): the mirror write's
+  docstring and call-site comment both claim it "never blocks the close it
+  runs alongside," but `await asyncio.to_thread(...)` does block until the
+  thread returns -- the "never raises" half is true, "never blocks" is not.
+- DEFERRED (nit, filed as `bd polyglot-pdf-beq0n`): `refund_expired_link`
+  and `reconcile_expired_for_firm` default `channel=None` to
+  `os.getenv("LINK_CHANNEL", "") or "demo"`, but their documented callers
+  are the admin service, which sets no `LINK_CHANNEL` by design -- an
+  admin-side caller who omits `channel=` would silently act on the
+  protected demo collections. No caller exists yet (Track B/B5), so nothing
+  is broken today; flagged to settle before B5 wires it.
+- DEFERRED (nit, filed as `bd polyglot-pdf-jkeqk`): the reconcile query's
+  fallback comment cites `confirmation_logger.py`'s "no composite index
+  needed" reasoning as precedent for the SAME fallback-shape choice, but
+  that reasoning does not transfer (the cited query is all-equality; this
+  one adds a range filter) -- and separately restates a stale "two query
+  call sites" count (there are at least four). Comment-only, no behavior
+  change; left for a follow-up chore pass.
+
 ## Lessons
 
 **A criterion can name a transaction that does not exist yet as code.**
@@ -185,5 +246,10 @@ cover a shape it was not built for.
 - `docs/components/auth.md`, `docs/technical_guide.md` -- as above.
 - `docs/freshness/components~auth.md.ack` (new) -- the same-day freshness
   ack.
+- `firestore.indexes.json` -- two new composite indexes
+  (`firm_id ASC, status ASC, open_deadline ASC`) for `links` and
+  `links_staging`, added in the cross-surface review round above.
+- `admin_backend/tests/unit/test_firestore_indexes.py` -- new AST-derived
+  guard block for the links composite index (same round).
 
 Review outcomes recorded in the closeout ping.
