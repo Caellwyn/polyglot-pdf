@@ -41,13 +41,15 @@ client deny block for every links[_<channel>] collection as defense in
 depth, pinned by the set-derived test
 (backend/tests/unit/test_firestore_rules_text.py, bd polyglot-pdf-li9x0).
 
-SCHEMA ONLY IN THIS BEAD. record_mint() below performs a single
-non-transactional Firestore set(): the ATOMIC "reserve credit + write ledger
-entry + write this record" transaction is Epic 2 bead A2/A3's
-backend/services/credit_ledger.py, not this module. Nothing here is wired
-into a route yet -- that is A3 (mint_link route rewrite) and A5 (refund /
-revoke). This bead lays the collection, its document shape, and the reader/
-writer functions the later beads compose.
+WIRED INTO BOTH DOORS (Epic 2 bead A3). The MINT route reserves a credit
+and writes this record in ONE transaction -- it composes build_mint_record()
++ mint_record_ref() below inside credit_ledger.append_entry(), so the debit,
+the ledger entry and this record commit together or not at all. The OPEN
+gate (link_redemptions.enforce_link_redemption, which serves /api/links/open,
+the WebSocket and require_paid_client_work) reads this record through
+get_link() and REFUSES a link with no record at all. record_mint()'s plain
+non-transactional set() remains for callers with no credit to reserve (a
+migration backfill, a test fixture). A5 adds the refund/revoke writers.
 
 DOC SHAPE (links[_<channel>]/{jti}):
     firm_id: str            kit_id: str             employee_id: str
@@ -96,6 +98,25 @@ ALL_STATUSES = (
     STATUS_REVOKED,
     STATUS_BUDGET_EXHAUSTED,
 )
+
+# THE STATUSES THAT REFUSE AN OPEN (Epic 2 bead A3, read by
+# link_redemptions.enforce_link_redemption). Deliberately an ALLOW-LIST'S
+# COMPLEMENT stated as the small closed set of hard stops, because the
+# plan's rule runs that way: "refuses when the record is missing or its
+# status is revoked or refunded; EVERY OTHER STATUS falls through to the
+# existing redemption gate". `opened` and `completed` are best-effort
+# MIRRORS -- a failed mirror write must never lock a client out of a link
+# they are part-way through, and `completed` is already the redemption
+# ledger's call to make, not this cache's. `budget_exhausted` is telemetry
+# only pending a maintainer pricing call, and the socket's own spend
+# ceiling is what actually stops the spending.
+#
+# Both members are TERMINAL money states: `refunded` means the credit has
+# been given back (opening would buy a session nobody paid for) and
+# `revoked` means a human said stop. A new status must be added here only
+# if it, too, means the money is gone -- otherwise it belongs in the
+# fall-through.
+OPEN_BLOCKING_STATUSES = frozenset({STATUS_REFUNDED, STATUS_REVOKED})
 
 # The mint record's TTL retention margin: how much LONGER than the open
 # deadline a record is kept before Firestore's TTL policy reaps it. Wide
@@ -152,7 +173,26 @@ def expire_at_for(open_deadline: int) -> datetime:
     )
 
 
-def record_mint(
+def mint_record_ref(db, jti: str, channel: str):
+    """The DocumentReference for one mint record, on a CALLER-SUPPLIED
+    client (Epic 2 bead A3).
+
+    Exists so the MINT TRANSACTION can write this document. Everything else
+    in this module resolves its own client through _collection(), but a
+    Firestore transaction must write through refs built on the SAME client
+    the transaction belongs to -- the mint route holds that client
+    (credit_ledger.append_entry's `db`) and hands it here rather than
+    letting this module fetch a second one.
+
+    `channel` is REQUIRED here, not defaulted: the only caller is a
+    transaction that has already decided which channel it is acting on, and
+    silently defaulting would let a mis-wired caller write a demo record
+    from staging.
+    """
+    return db.collection(_collection_name(channel)).document(jti)
+
+
+def build_mint_record(
     jti: str,
     firm_id: str,
     kit_id: str,
@@ -161,21 +201,19 @@ def record_mint(
     cap_usd: float,
     open_deadline: int,
     now: Optional[float] = None,
-    channel: Optional[str] = None,
 ) -> dict:
-    """Write the mint record for a freshly-minted link. Returns the record.
+    """The mint record DOCUMENT, validated but NOT written (Epic 2 bead A3).
 
-    NON-TRANSACTIONAL in this bead: the atomic "debit credit + ledger entry
-    + this record" transaction is Epic 2 bead A2/A3's
-    backend/services/credit_ledger.py. This function is the plain write the
-    later transaction will call (or a caller drives directly, e.g. a test or
-    a migration backfill) -- it does not itself reserve a credit or touch
-    firms/{firm_id}.balance_credits.
+    THE ONE PLACE THE SHAPE IS DEFINED. record_mint() below writes what this
+    returns with a plain set(); the mint route's transaction
+    (backend/routes/link_routes.py:_reserve_mint) writes what this returns
+    with tx.set(). Two writers, one builder -- a transactional copy that
+    drifted from the plain one would produce records the sweep, the open
+    gate and the console each read differently.
 
-    Raises LinksStoreUnavailable when the store cannot be reached; raises
-    ValueError for a non-positive credit_cost or cap_usd (a link that costs
-    nothing or has no spend ceiling is a configuration bug, not a valid
-    mint) -- callers must not silently record a broken snapshot.
+    Raises ValueError for a non-positive credit_cost or cap_usd (a link that
+    costs nothing or has no spend ceiling is a configuration bug, not a
+    valid mint) -- callers must not silently record a broken snapshot.
     """
     if not all(isinstance(v, str) and v for v in (jti, firm_id, kit_id, employee_id)):
         raise ValueError("jti, firm_id, kit_id and employee_id are required")
@@ -185,7 +223,7 @@ def record_mint(
         raise ValueError(f"cap_usd must be a positive number, got {cap_usd!r}")
 
     stamp = int(now if now is not None else time.time())
-    record = {
+    return {
         "jti": jti,
         "firm_id": firm_id,
         "kit_id": kit_id,
@@ -199,6 +237,42 @@ def record_mint(
         "revoked_at": None,
         "expire_at": expire_at_for(int(open_deadline)),
     }
+
+
+def record_mint(
+    jti: str,
+    firm_id: str,
+    kit_id: str,
+    employee_id: str,
+    credit_cost: int,
+    cap_usd: float,
+    open_deadline: int,
+    now: Optional[float] = None,
+    channel: Optional[str] = None,
+) -> dict:
+    """Write the mint record for a freshly-minted link. Returns the record.
+
+    NON-TRANSACTIONAL: the atomic "debit credit + ledger entry + this
+    record" path is the MINT ROUTE's transaction (Epic 2 bead A3,
+    backend/routes/link_routes.py:_reserve_mint), which composes
+    build_mint_record() + mint_record_ref() above rather than calling this
+    function. This plain write remains for callers with no credit to
+    reserve -- a migration backfill, a test fixture -- and does not itself
+    touch firms/{firm_id}.balance_credits.
+
+    Raises LinksStoreUnavailable when the store cannot be reached; raises
+    ValueError (from build_mint_record) for a malformed snapshot.
+    """
+    record = build_mint_record(
+        jti=jti,
+        firm_id=firm_id,
+        kit_id=kit_id,
+        employee_id=employee_id,
+        credit_cost=credit_cost,
+        cap_usd=cap_usd,
+        open_deadline=open_deadline,
+        now=now,
+    )
     try:
         _collection(channel).document(jti).set(record)
     except LinksStoreUnavailable:
@@ -240,6 +314,41 @@ def get_link(jti: str, channel: Optional[str] = None) -> Optional[dict]:
     if not snap.exists:
         return None
     return snap.to_dict() or {}
+
+
+def mark_opened(jti: str, now: Optional[float] = None,
+                channel: Optional[str] = None) -> bool:
+    """BEST-EFFORT mirror: stamp this record `opened`. Returns whether it
+    stuck (Epic 2 bead A3).
+
+    NEVER RAISES, and its return value is advisory. `status` is a derived
+    cache for listing (see the module docstring): the AUTHORITATIVE record
+    of "was this link opened" is the redemption doc
+    link_redemptions[_<channel>]/{jti}, which the redemption gate has
+    already written by the time this is called, and which the A5 refund
+    transaction reads. A failed mirror write must therefore cost nothing --
+    swallowing the error here is what keeps a Firestore hiccup from turning
+    a successful client open into a refused one.
+
+    It only ever moves `minted` -> `opened`. A record already `opened`,
+    `completed`, `revoked` or `refunded` is left alone: this is a mirror of
+    the FIRST open, and re-stamping it on every reconnect would overwrite a
+    later, more meaningful status with an earlier one.
+    """
+    stamp = int(now if now is not None else time.time())
+    try:
+        ref = _collection(channel).document(jti)
+        snap = ref.get()
+        if not snap.exists:
+            return False
+        current = (snap.to_dict() or {}).get("status")
+        if current != STATUS_MINTED:
+            return False
+        ref.update({"status": STATUS_OPENED, "opened_at": stamp})
+        return True
+    except Exception as exc:  # noqa: BLE001 -- advisory mirror, never fatal
+        _log.warning("links_store_mark_opened_failed", jti=jti, error=str(exc))
+        return False
 
 
 def links_store_status(channel: Optional[str] = None) -> str:
