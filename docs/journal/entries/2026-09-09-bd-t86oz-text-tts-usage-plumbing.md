@@ -238,3 +238,54 @@ Cross-surface review round additions:
   falls back to `claims.get("sub")` (fixes `polyglot-pdf-9elp5`).
 - `backend/tests/unit/test_usage_event_text_tts.py` -- three new pinning
   tests for the `sub` fallback.
+
+**Second cross-surface review round -- one blocker fixed inline, three
+already-filed follow-ups left as-is.** A second Opus outer review traced
+every changed contract's callers (including root-level `tests/` and
+`scripts/`, which the first round's "grep the whole set" pass had not
+covered) and returned `GAPS-FOUND (1)`:
+
+- ADOPTED (fixed inline): `tests/test_stress_harness_units.py`'s
+  `_DryRunTextAI` / `_DryRunTextAIOneConflict` doubles -- used by the
+  stress-harness dry-run mode via `scripts/spikes/measure_form_session_costs.py`
+  -- still took the pre-bead `ask(self, query, context)` /
+  `validate(self, payload)` shapes with no `session_ctx` parameter. The
+  first round's grep covered `backend/` only and missed these root-level
+  doubles: exactly the scar-#8 shape (a set enumerated by grep, but the
+  grep's scope was too narrow). `handle_ask_secretary`'s
+  `self._text_ai.ask(query, context, self._text_ai_session_ctx())` passes
+  the context POSITIONALLY, so the double raised `TypeError` outright; the
+  nastier half was `validate` -- `ValidatorService`'s fail-open wrapper
+  swallows that same `TypeError` and returns `{"conflicts": []}`, so the
+  harness's dry-run mode would have silently reported zero conflicts
+  forever instead of crashing. Both guarding tests
+  (`test_dry_run_i90_full_emits_summary`,
+  `test_dry_run_i90_full_drain_round_trip`) are `@needs_i90`-skipped in
+  every checkout that lacks `form-kits/i-90/schema.json` (confirmed absent
+  here), which is why the gap was invisible to a normal test run. Fixed by
+  adding `session_ctx=None` to both methods on both doubles.
+  Mutation-verified on a scratch reproduction outside the repo (not the
+  guarding tests themselves, since they're skipped here): the pre-fix
+  shapes raise `TypeError: ask() takes 3 positional arguments but 4 were
+  given` and `TypeError: validate() got an unexpected keyword argument
+  'session_ctx'`; the post-fix shapes accept the call cleanly. Confirmed
+  `scripts/spikes/measure_form_session_costs.py`'s `ask_tagged`/
+  `validate_tagged` wrappers need no change -- they are `*a, **kw`
+  passthrough around the double's own bound methods, so widening the
+  double is sufficient.
+- DEFERRED, already filed by the reviewer: `polyglot-pdf-u6rt5` -- the
+  default fallback model `gemini-3.1-flash-lite` has no
+  `TEXT_GENERATION_PRICING` row, so a fallback-served call ships
+  `cost_estimate_usd=null` (pre-existing table gap; this bead is what
+  makes production code actually read the table for the first time, so
+  it now bites).
+- DEFERRED, already filed by the reviewer: `polyglot-pdf-78rgz` --
+  `option_translation.py`'s two `translate_items` call sites emit
+  `text_translation` events with every context key null including
+  `kit_id`; wiring it needs a signature change to
+  `bake_label_translations` plus its editor-route and authoring-CLI
+  callers, genuinely out of this bead's declared surfaces.
+- DEFERRED, already filed by the reviewer: `polyglot-pdf-czcdk` --
+  `intro_tts.py`/`notice_tts.py`'s `_resolve_and_synthesize` closures are
+  still annotated `-> bytes` but now return a tuple; no runtime effect
+  (nit).
