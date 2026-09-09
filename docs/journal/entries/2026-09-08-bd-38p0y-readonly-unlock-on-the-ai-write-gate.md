@@ -217,9 +217,9 @@ Nothing bumped.
   can be evaluated against sibling values.
 - `frontend/src/schema-forms/utils/readonlyUnlock.test.ts` -- new; 19 tests over
   synthetic fixtures shaped like the I-90's two named fields.
-- `frontend/src/webFormConnection.aivalidation.test.ts` -- three integration tests
-  driving a real `WebFormConnection` through `update_form_fields`, added after
-  fresh-eyes correctly scored criterion 1 a FAIL.
+- `frontend/src/webFormConnection.aivalidation.test.ts` -- five integration tests
+  driving a real `WebFormConnection` through `update_form_fields`, covering BOTH
+  fields the criterion names, added after fresh-eyes scored criterion 1 a FAIL.
 - `backend/services/schema_lint.py` -- the `readonly-conditional-no-unlock`
   remedy, which this branch itself had made false.
 - `backend/tests/test_schema_lint.py` -- a pin on what that remedy MEANS
@@ -271,6 +271,22 @@ test edit per intentional reword.
 Verified against ALL THREE historical defeats at once, not just the newest --
 round 2's "still refused", round 3's "usually harmless", and round 4's undercut
 clause each fail the equality pin.
+
+### Round 5: the second field, through the real connection
+
+Criterion 1 asks for a webFormConnection-driven test for BOTH named fields.
+Round 3 had given `accommodation_other_detail` unit coverage of the gate
+functions, which is not the same thing -- and this bead's own round-2 lesson is
+exactly that a test calling the helper cannot see the call site. So the second
+field now has its own integration tests too, through a real `WebFormConnection`.
+Reverting the gate reddens both named fields' integration tests.
+
+The reviewer also noticed something worth recording: `checkFieldAccess` has NO
+production caller (definition only). So the round-3 unit test's "the write gates
+agree with it" was partly asserting about a function nothing calls. That is
+pre-existing dead code, not this diff's to remove, but it is the reason the
+integration layer -- `isFieldReadOnly` reached through `webFormConnection`, which
+IS live -- is the one that carries the weight.
 
 ### Exit criterion 2 is not satisfied by this PR, deliberately
 

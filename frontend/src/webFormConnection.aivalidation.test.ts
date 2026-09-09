@@ -929,6 +929,73 @@ describe('WebFormConnection honors flip_readonly_bit (bd polyglot-pdf-38p0y)', (
     expect(applied).not.toContain('mail_unit_number')
   })
 
+  // The SECOND field exit criterion 1 names. Not a duplicate of the above: the
+  // trigger is a CHECKBOX read with is_checked (vs a text field read with
+  // is_not_empty) and the target is a textarea. Driven through the real
+  // connection because a unit test on the gate functions cannot see the call
+  // site -- which is the whole reason this block exists (fresh-eyes round 5).
+  const ACCOMMODATION_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'accommodation_other',
+        name: 'accommodationOther',
+        spoken_name: 'Other Accommodation',
+        type: 'checkbox',
+      },
+      {
+        id: 'accommodation_other_detail',
+        name: 'accommodationOtherDetail',
+        spoken_name: 'Accommodation Detail',
+        type: 'textarea',
+        read_only: true,
+        show_if: { field: 'accommodation_other', operator: 'is_checked' },
+        conditional_behavior: { unlock_method: 'flip_readonly_bit' },
+      },
+    ],
+    sections: [
+      {
+        id: 's1', label: 'S1', order: 1,
+        fields: ['accommodation_other', 'accommodation_other_detail'],
+      },
+    ],
+  } as unknown as FormSchema
+
+  it('accommodation_other_detail: the write LANDS once the box is checked', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(ACCOMMODATION_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOther: true } }) })
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOtherDetail: 'wheelchair access' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).toContain('accommodation_other_detail')
+    expect(sent(ws).map((m: any) => JSON.stringify(m)).join(' ')).not.toContain('system-managed')
+  })
+
+  it('accommodation_other_detail: still refused while the box is unchecked', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(ACCOMMODATION_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOtherDetail: 'wheelchair access' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('accommodation_other_detail')
+  })
+
   it('a read_only field with NO unlock is still refused however it is shown', async () => {
     // Guards the other direction: the fix must not have opened every read_only
     // field. Same schema shape, minus the unlock declaration.
