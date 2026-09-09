@@ -457,15 +457,27 @@ locked-reason wording names the first trigger, then counts the rest);
 A field with `unlock_method === "flip_readonly_bit"` becomes **editable even when
 `read_only`** — the same flag the PDF filler honors to unlock locked widgets
 (see [pdf-filling.md](pdf-filling.md)). **The surfaces read it differently, and
-that difference is deliberate.** `FieldRenderer` and `FieldEditPopover` key on
-the flag ALONE, because they only ever run on a field that is already being
-rendered. The three AI-write gates — `isFieldReadOnly` and its two callers in
-`conditionalFieldCheck.ts` — additionally require the field to be SHOWN
-(`shouldShowField`), because they are called on any field in the schema and an
-unlock whose condition has not fired must still read as locked
-(bd polyglot-pdf-38p0y). Before that bead the write gates ignored the flag
-entirely, so a shown, required, unlockable field was refused to the voice model
-while the UI and the PDF filler both unlocked it.
+the difference is in what each one can assume.**
+
+- `FieldRenderer` (`components/FieldRenderer.tsx`) keys on the flag ALONE — it
+  returns `null` for a not-shown field before the unlock expression is reached,
+  so visibility is already settled by the time it matters.
+- `FieldEditPopover` (`pdf-view/`) also keys on the flag alone, but it does NOT
+  get that guarantee: the PDF preview keeps a conditionally-hidden field on the
+  page (dimmed, because it exists on paper), and `PDFViewer` resolves the edited
+  field with a bare `find`. What actually keeps the popover off a hidden field is
+  elsewhere — `FieldOverlay` makes a dimmed field non-clickable, and
+  `PreviewPane` auto-closes the popover when the edited field's `show_if` flips
+  false. Do not remove either guard on the assumption the popover checks
+  visibility itself; it does not.
+- The AI-write path requires the field to be SHOWN as well as unlockable:
+  `isFieldReadOnly` (`utils/validation.ts`) folds `shouldShowField` into the
+  answer, and its three live call sites — two in `utils/conditionalFieldCheck.ts`
+  and the load-bearing one in `webFormConnection.ts` — inherit that. They are
+  called on any field in the schema, so an unlock whose condition has not fired
+  must still read as locked (bd polyglot-pdf-38p0y). Before that bead they
+  ignored the flag entirely, so a shown, required, unlockable field was refused
+  to the voice model while the UI and the PDF filler both unlocked it.
 `FieldRenderer` reads the unlock flag from **either** `conditional_behavior`
 (canonical) **or** `conditional_logic` (a legacy alias of the same
 `ConditionalBehavior` type, still emitted by some generated form-kit schemas,

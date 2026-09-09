@@ -187,6 +187,12 @@ that asserted an impossible enum value. Each was defeated by something that
 satisfied the letter. When pinning prose, assert the consequence, not the
 vocabulary -- and write the evasion yourself before a reviewer does.
 
+**Do not explain WHY something is safe until you have checked what makes it
+safe.** I replaced a wrong sentence with a confidently wrong one, having reasoned
+about `FieldEditPopover` from its neighbour rather than reading its callers. The
+tell is the shape of the claim: "because they only ever X" is an assertion about
+code I had not opened.
+
 **A fix can falsify prose elsewhere in its own branch.** The lint remedy was
 written four commits before the fix that made it wrong, in the same PR. The
 enumeration reflex (scar #8) is usually aimed at code; it applies just as well to
@@ -328,6 +334,31 @@ companion, and w7/f1040 have zero unlockable fields, so nothing shipped is
 affected. Filed as `polyglot-pdf-6out1` rather than fixed, because closing it
 means changing a lint severity or a publish gate -- a change to what the editor
 refuses to publish, which is not this bead's call to make.
+
+### The doc fix was itself wrong, in a new way
+
+The second outer pass caught that my replacement prose asserted something false.
+I had written that `FieldRenderer` and `FieldEditPopover` key on the unlock flag
+alone "because they only ever run on a field that is already being rendered".
+True of `FieldRenderer`, which returns `null` before reaching the expression.
+NOT true of `FieldEditPopover`: the PDF preview deliberately KEEPS a hidden field
+on the page (dimmed -- it exists on paper), and `PDFViewer` resolves the edited
+field with a bare `find`. What actually keeps the popover off a hidden field is
+two guards I had not looked at: `FieldOverlay` makes a dimmed field
+non-clickable, and `PreviewPane` auto-closes the popover when `show_if` flips
+false.
+
+The behaviour was safe; my explanation of WHY was invented. That is the exact
+failure mode recorded in `comments-explaining-safety-are-untested-claims`, and
+worse here than the vague sentence it replaced -- a future agent folding these
+surfaces together under `polyglot-pdf-6sfal` would have deleted `PreviewPane`'s
+auto-close as redundant on my say-so. The paragraph now names the real guards and
+warns against removing them.
+
+It also mis-located the write gates ("its two callers in `conditionalFieldCheck.ts`"
+counts two of three; the third, and the load-bearing one, is in
+`webFormConnection.ts`). Under-enumerating a set in prose is the same scar #8
+trap in doc form.
 
 ### Exit criterion 2 is not satisfied by this PR, deliberately
 
