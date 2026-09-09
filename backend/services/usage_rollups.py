@@ -57,7 +57,7 @@ sessions. That failure mode has NOTHING to do with hyphens -- it silently
 mis-nests EVERY map key, hyphenated or not, the moment a flat dotted string
 is handed to set(merge=True). Confirmed against the vendored SDK source
 (backend/.venv/Lib/site-packages/google/cloud/firestore_v1/_helpers.py,
-DocumentExtractorForMerge._get_document_iterator vs. …ForUpdate's, the
+DocumentExtractorForMerge._get_document_iterator vs. ...ForUpdate's, the
 latter passing expand_dots=True) before writing a line of this module.
 
 So every nested increment here is built as a REAL nested dict via

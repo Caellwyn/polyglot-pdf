@@ -92,6 +92,52 @@ subcollections (`firms/{firmId}/usage/{monthId}`,
 `kits/{kitId}/usage/{monthId}`), folded into the existing set-derived rules
 test (`test_firestore_rules_text.py`) rather than hand-added assertions.
 
+### Fresh-eyes round -- adopt/reject/defer
+
+The Opus cross-surface fresh-eyes pass on this bead's diff returned
+`GAPS-FOUND (2)`, both fixed inline (no rubric-fail; the rubric's three
+exit criteria were already PASS, independently re-verified by the reviewer
+including a from-scratch mutation of `_nest_increment`):
+
+- **ADOPTED -- finding 1 (ASCII):** `usage_rollups.py`'s module docstring
+  had a literal Unicode ellipsis (`U+2026`) in one sentence -- a correctness
+  issue per CLAUDE.md scar #6 (a cp1252 Windows console `print()`/stdout
+  path would `UnicodeEncodeError` on it), not just style, since this file
+  is wholly new in this diff. Replaced with `...`. Re-scanned every changed
+  source file in the diff (`rg -P '[^\x00-\x7F]'`) per scar #8
+  (enumerate-the-set) to confirm no sibling instance existed elsewhere in
+  the same PR.
+- **ADOPTED -- finding 2 (swallowed log line):** extracting the cost read
+  into the new shared `_session_cost_usd` helper (so the usage-rollup call
+  site and `_bank_link_spend` read the connection's cost identically)
+  accidentally moved a `try/except` boundary: a read failure that used to
+  propagate up into `_bank_link_spend`'s own `except Exception as e:
+  log.error("link_spend_record_failed", ...)` started getting swallowed
+  silently inside the new helper instead, on a path that feeds paid-session
+  cost banking. Fixed by giving `_session_cost_usd` optional `log`/`jti`
+  kwargs: `_bank_link_spend` passes its own logger through and gets the
+  exact pre-existing log line back, while the usage-rollup call site (which
+  already logs its own `usage_rollup_telemetry_failed` around the whole
+  `record_session_end()` call) omits them and stays silent, avoiding a
+  double-report of the same failure. Added
+  `test_a_broken_adapter_STILL_LOGS_link_spend_record_failed` in
+  `test_websocket_ephemeral.py`, mutation-verified red (reverting the
+  `log=log, jti=link_jti` kwargs on the call site reproduces exactly the
+  silent-drop the finding described) before restoring the fix.
+- **DEFERRED -- findings 3, 4, 5:** filed as one bead,
+  `polyglot-pdf-lp8fw` ("chore(nits): deferred review nits from
+  polyglot-pdf-w828m") per CLAUDE.md scar #8 -- none is a rubric-fail or a
+  bug in the current diff. Finding 3: `link_redemptions.open_link()`'s
+  `record_link_opened` call has no local `try/except`, relying entirely on
+  `usage_rollups._increment_firm_counter`'s blanket catch (verified this
+  holds today; brittle only against a hypothetical future narrowing of that
+  catch). Finding 4: `_rollup_language_key`'s `hasattr` guard has no test
+  exercising a service object that actually lacks the method (currently
+  inert -- `FormFillingService` always has it). Finding 5: a redundant
+  (non-buggy) double-guard between `firm_kind(firm_id) if firm_id else
+  "live"` at the call site and `record_session_end`'s own `if not firm_id`
+  check.
+
 ## Lessons
 
 The generalizable lesson: **when a bead's own description names a specific

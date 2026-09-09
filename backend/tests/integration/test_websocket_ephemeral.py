@@ -433,6 +433,51 @@ async def test_a_broken_adapter_does_not_break_the_TEARDOWN(monkeypatch):
     assert await wr._bank_link_spend("jti-a", _Svc(), wr._log) == 0.0
 
 
+@pytest.mark.asyncio
+async def test_a_broken_adapter_STILL_LOGS_link_spend_record_failed():
+    """fresh-eyes finding 2 on bd polyglot-pdf-w828m.
+
+    _session_cost_usd is now SHARED with the usage-rollup call site (bd
+    polyglot-pdf-w828m), so its own internal read failure is silent by
+    default -- the rollup caller already logs its own
+    "usage_rollup_telemetry_failed" around the whole record_session_end()
+    call and does not want a second line for the same failure. But
+    _bank_link_spend's pre-existing contract, unchanged since before this
+    bead, is to log "link_spend_record_failed" whenever THIS read fails --
+    that line degrading silently would be a real (if logging-only)
+    regression on a path that feeds paid-session cost banking.
+
+    Mutation: drop the `log=log, jti=link_jti` kwargs from
+    _bank_link_spend's `_session_cost_usd(service, log=log, jti=link_jti)`
+    call (i.e. revert to the bare `_session_cost_usd(service)`) -- red,
+    because the read failure then never reaches any logger at all.
+    """
+    from backend.routes import websocket_routes as wr
+
+    class _AI:
+        def session_cost_usd(self):
+            raise RuntimeError("adapter exploded")
+
+    class _Svc:
+        live_ai = _AI()
+
+    calls = []
+
+    class _FakeLog:
+        def error(self, event, **kw):
+            calls.append((event, kw))
+
+    got = await wr._bank_link_spend("jti-a", _Svc(), _FakeLog())
+
+    assert got == 0.0
+    assert any(event == "link_spend_record_failed" for event, _ in calls), (
+        "a broken adapter read must still log link_spend_record_failed -- "
+        "see _session_cost_usd's log/jti kwargs"
+    )
+    (_, kw), = [(e, kw) for e, kw in calls if e == "link_spend_record_failed"]
+    assert kw.get("jti") == "jti-a"
+
+
 def test_the_TEARDOWN_actually_calls_the_banking_helper():
     """Pins the WIRING, not just the helper.
 

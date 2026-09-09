@@ -1309,7 +1309,7 @@ def _rollup_language_key(service) -> str | None:
 	return codes[0] if codes else name
 
 
-def _session_cost_usd(service) -> float:
+def _session_cost_usd(service, *, log=None, jti=None) -> float:
 	"""This CONNECTION's AI spend so far, read from the live adapter.
 
 	Shared by _bank_link_spend (client-link sessions only) and the usage-
@@ -1319,13 +1319,23 @@ def _session_cost_usd(service) -> float:
 	called BEFORE end_session(): ending the session finalises the adapter,
 	and reading the cost after would race the teardown for the number.
 	Never raises -- any read failure resolves to 0.0.
+
+	`log`/`jti` are OPTIONAL and exist only so _bank_link_spend can recover
+	the exact "link_spend_record_failed" observability it had on origin/dev
+	before this read moved into a shared helper: pass a logger and the fix
+	logs the failure with that pre-existing event name before swallowing it.
+	Omitted (the usage-rollup call site's case), a read failure stays silent
+	here -- that caller already wraps its own record_session_end() call in a
+	try/except that logs "usage_rollup_telemetry_failed", so a second log
+	line from this helper would just double-report the same failure.
 	"""
 	try:
 		ai = getattr(service, "live_ai", None)
 		if ai is not None and hasattr(ai, "session_cost_usd"):
 			return float(ai.session_cost_usd() or 0.0)
-	except Exception:
-		pass
+	except Exception as exc:
+		if log is not None:
+			log.error("link_spend_record_failed", jti=jti, error=str(exc))
 	return 0.0
 
 
@@ -1346,12 +1356,17 @@ async def _bank_link_spend(link_jti, service, log) -> float:
 	and reading the cost after would race the teardown for the number.
 
 	Never raises. Accounting must not break a teardown -- record_spend is
-	already best-effort internally, and this catches the READ too.
+	already best-effort internally, and this catches the READ too: passing
+	`log`/`link_jti` through to _session_cost_usd is what keeps a read
+	failure logged as "link_spend_record_failed" here, exactly as it was
+	before that read was extracted into a helper shared with the usage
+	rollup (see _session_cost_usd's own docstring) -- fresh-eyes finding 2
+	on bd polyglot-pdf-w828m.
 	"""
 	if not link_jti:
 		return 0.0          # staff session: no link, nothing to bank
 	try:
-		cost = _session_cost_usd(service)
+		cost = _session_cost_usd(service, log=log, jti=link_jti)
 		if cost > 0:
 			await asyncio.to_thread(record_spend, link_jti, cost)
 			return cost
