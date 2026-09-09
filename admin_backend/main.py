@@ -26,6 +26,10 @@ here on must carry one of the four gates named in the plan
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
 manager; require_google_oidc), which admin_backend/tests/unit/
 test_admin_route_auth.py enforces by deriving the registered route set.
+bd polyglot-pdf-f0kuu adds kit commercial settings (GET /admin/kits, GET/PUT
+/admin/kits/{kit_id}/commercial), behind require_app_admin, reusing bead
+A3's backend/services/kit_commercials.py reader rather than adding a second
+one (admin_backend/routes/kit_routes.py).
 
 THE ADMIN SERVICE HAS NO CHANNEL. It serves BOTH staging's and the demo's
 data, so nothing here may derive a Firestore collection name from
@@ -64,8 +68,8 @@ from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
 from admin_backend.routes import (
-    audit_routes, config_routes, credit_routes, firm_routes, link_routes,
-    sweep_routes, user_routes,
+    audit_routes, config_routes, credit_routes, firm_routes, kit_routes,
+    link_routes, sweep_routes, user_routes,
 )
 from admin_backend.routes import whoami as whoami_routes
 
@@ -162,3 +166,4 @@ app.include_router(firm_routes.router)
 app.include_router(credit_routes.router)
 app.include_router(link_routes.router)
 app.include_router(sweep_routes.router)
+app.include_router(kit_routes.router)
