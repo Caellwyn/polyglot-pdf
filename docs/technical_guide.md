@@ -1776,8 +1776,8 @@ The main voice app's firm-console pages (`frontend/src/console/*`, alongside
 THIRD destination distinct from both the `/api/**` Hosting rewrite (which
 proxies only the public backend) and the WebSocket path (contract 9 /
 `config.ts`'s `getBackendUrl()`). This contract is the plumbing bead C4
-(employees) and C5 (link history) build their actual route calls on; neither
-of those routes exists yet.
+(employees) built its actual route calls on; C5 (link history) is not yet
+built and will use the same plumbing.
 
 - **Producer:** `deploy-all.sh`'s frontend stage. `ADMIN_SERVICE_NAME`
   (`${ADMIN_SERVICE_NAME:-polyglot-admin}`, matching `deploy-admin.sh`'s and
@@ -1839,9 +1839,10 @@ of those routes exists yet.
   mirroring `admin-console/src/utils/adminApi.ts`'s identical shape against
   the SAME admin service, deliberately duplicated rather than imported (no
   new cross-surface dependency between `frontend/` and `admin-console/`, the
-  same constraint `admin-console/src/utils/adminAuth.ts` documents). Neither
-  client is yet wired to a concrete admin-service route from this app;
-  C4/EmployeesPage.tsx and C5/LinkHistoryPage.tsx are the first real callers.
+  same constraint `admin-console/src/utils/adminAuth.ts` documents).
+  C4/EmployeesPage.tsx is wired to all four `/admin/users` routes (contract
+  22) and is this app's first real caller; C5/LinkHistoryPage.tsx does not
+  exist yet and will be the second.
 - **`MintLinkPage.tsx`'s A3 responses** (bd `polyglot-pdf-jecrl`, contract 9):
   the mint route's 402 (`credit_ledger.InsufficientCredits` ->
   `MintRefused(402, ...)`) and its SECOND 403 (a live firm on a non-demo

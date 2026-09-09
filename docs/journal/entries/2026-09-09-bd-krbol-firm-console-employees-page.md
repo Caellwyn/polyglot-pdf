@@ -61,6 +61,43 @@ same shape of pin the mint route already had: does NOT mount for a
 signed-out visitor, DOES mount (and not the staff catch-all) for a
 signed-in one, and the path constant is pinned literally.
 
+## Review round (cross-surface, GAPS-FOUND(1))
+
+Adopted (fixed inline, this round): `docs/technical_guide.md`'s contract 23
+carried two sentences made false by this diff -- "neither of those routes
+exists yet" (line ~1780) and "Neither client is yet wired to a concrete
+admin-service route from this app; C4/EmployeesPage.tsx and
+C5/LinkHistoryPage.tsx are the first real callers" (line ~1844). C4 now
+exists and is wired to all four `/admin/users` routes; C5 (link history)
+still does not exist. Both sentences rewritten to say so. This was the
+diff's own gap (the diff touched this file already, at line 851), not
+pre-existing, so it was fixed here rather than filed.
+
+Deferred (already filed as their own beads by the reviewer, left unfixed
+here per the fix-inline rule's pre-existing/nit carve-out):
+- `polyglot-pdf-n9wax` -- a firm manager can demote or disable their own
+  account via `/console/employees` with no in-app recovery. Classified by
+  the reviewer as a pre-existing backend gap in `user_routes.py`'s
+  `_require_account_in_firm` (no self-action or last-manager check) that
+  this diff is the first to expose to a manager actor, not a defect this
+  diff introduced; the bead scopes manager-only to UX and the server gate
+  is correct as specified.
+- `polyglot-pdf-1ciks` -- drop a rename-lineage parenthetical
+  ("renamed from `clientRoute.test.tsx` by bd polyglot-pdf-krbol...") from
+  `technical_guide.md:851-853`; history prose in a current-state-only
+  tier-2 doc, the underlying claim is correct. Nit.
+- `polyglot-pdf-2ld1r` -- `docs/components/admin-service.md:405` still
+  calls the main app's firm-console pages "future"; they are live as of
+  this bead. Nit.
+- `polyglot-pdf-w6jnx` -- the `FIRM_ROLES` set-pin test
+  (`test_require_firm_manager.py`) walks only `backend`/`admin_backend`/
+  `scripts` for hand-copies, so the two TypeScript restatements
+  (`admin-console/src/utils/adminApi.ts`, this bead's own
+  `EmployeesPage.tsx`) are unguarded. Cross-surface test-coverage gap,
+  not a behavioral defect.
+
+Rejected: none -- every finding was either fixed or already had a bead.
+
 ## Lessons
 
 `consoleStyles.test.ts` (bd polyglot-pdf-41ay8) hardcoded ONE page file
