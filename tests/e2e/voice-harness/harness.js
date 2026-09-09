@@ -331,9 +331,23 @@
    */
   function groupInputs(fieldId) {
     try {
-      var sel = 'input[name="' + fieldId + '"], input[name="' + fieldId + '[]"]';
-      var found = document.querySelectorAll(sel);
-      return found.length > 1 ? Array.prototype.slice.call(found) : [];
+      // A checkbox GROUP is identified by its "[]" name suffix, which the app
+      // renders for every group regardless of option count -- NOT by counting
+      // inputs. A one-option group is a real, named shape here (validation.ts's
+      // isSingleOptionCheckbox: "a standalone checkbox that carries a ONE-element
+      // options array describing its single PDF widget", bd polyglot-pdf-5jvn),
+      // and a length>1 test misclassifies it as a single control, silently
+      // reopening both bugs this helper exists to close.
+      var bracketed = document.querySelectorAll('input[name="' + fieldId + '[]"]');
+      if (bracketed.length) return Array.prototype.slice.call(bracketed);
+      // Radios: many inputs sharing the plain name. A single control also matches
+      // its own name, so require more than one to avoid capturing it.
+      var plain = document.querySelectorAll('input[name="' + fieldId + '"]');
+      var radios = [];
+      for (var i = 0; i < plain.length; i++) {
+        if (plain[i].type === 'radio') radios.push(plain[i]);
+      }
+      return radios.length ? radios : [];
     } catch (e) { return []; }
   }
 
