@@ -92,16 +92,29 @@ def test_bigquery_api_is_enabled():
         "scripts/setup-telemetry.sh does not enable bigquery.googleapis.com")
 
 
-def test_sink_covers_both_cloud_run_services():
-    """The sink's resource filter names BOTH backend services by name, per
-    the bead's own description. Mutation: drop
-    "polyglot-backend-staging" from the filter -- red."""
+def test_sink_covers_all_three_emitting_cloud_run_services():
+    """The sink's resource filter must name all THREE services that
+    actually emit a filtered event_type: the public backend, its staging
+    twin, AND the admin service. ledger_export (the event income_month
+    reads) is emitted ONLY by admin_backend/routes/credit_routes.py and
+    admin_backend/routes/sweep_routes.py -- both of which run on the admin
+    service (deploy-admin.sh's ADMIN_SERVICE_NAME, "polyglot-admin"), never
+    on the public backend. Omitting "polyglot-admin" here makes
+    income_month return zero rows forever with no error (bd
+    polyglot-pdf-rd3s8 review finding 1).
+
+    Mutation: drop "polyglot-backend-staging" OR "polyglot-admin" from the
+    filter -- red."""
     text = _script_text()
     filter_match = re.search(r"SINK_FILTER='([^']*)'", text)
     assert filter_match, "SINK_FILTER is not defined as a single-quoted string"
     sink_filter = filter_match.group(1)
     assert '"polyglot-backend"' in sink_filter
     assert '"polyglot-backend-staging"' in sink_filter
+    assert '"polyglot-admin"' in sink_filter, (
+        "the sink filter must include \"polyglot-admin\" -- ledger_export "
+        "(which income_month reads) is emitted only by the admin service's "
+        "credit_routes.py and sweep_routes.py, never by the public backend")
 
 
 def test_sink_filter_covers_all_three_actual_event_shapes():

@@ -18,9 +18,10 @@ project. Depends on bd `polyglot-pdf-wio6m` (usage event v2), already closed.
 ## What shipped
 
 `scripts/setup-telemetry.sh` creates the `polyglot_telemetry` dataset
-(`us-central1`), a Cloud Logging sink over both Cloud Run backend services
-(`polyglot-backend`, `polyglot-backend-staging`), grants the sink's own
-writer identity `roles/bigquery.dataEditor` on the dataset, grants
+(`us-central1`), a Cloud Logging sink over three Cloud Run services
+(`polyglot-backend`, `polyglot-backend-staging`, `polyglot-admin` -- see
+review round 2 below for why the admin service is in the filter), grants the
+sink's own writer identity `roles/bigquery.dataEditor` on the dataset, grants
 `admin-backend-sa` `roles/bigquery.jobUser` (project-level) and dataset-scoped
 `roles/bigquery.dataViewer`, and applies `sql/telemetry_views.sql`'s five
 `CREATE OR REPLACE VIEW` statements via `bq query`.
@@ -128,6 +129,50 @@ the reviewer classified it a nit (cosmetic usage-string gap, not a
 behavioral break) and the fix rules reserve inline fixes for
 rubric-fails/blockers.
 
+**Cross-surface review, round 2 (2026-09-09) -- 1 adopted (blocker), 1 noted
+but not actioned (medium, contingent), 2 deferred to filed beads.** The
+outer review traced the sink filter's `resource.labels.service_name` clause
+out to its real emitters instead of trusting the two-service framing the
+plan and this bead's own description both state. **Adopted (blocker):**
+`ledger_export` -- the ONLY event `income_month` reads -- is never emitted
+by the public backend at all. Its two non-test callers,
+`credit_ledger.append_entry()` and `refund_expired_link()`, are called
+exclusively from `admin_backend/routes/credit_routes.py` and
+`admin_backend/routes/sweep_routes.py`, both of which run on the admin
+service (`deploy-admin.sh`'s `ADMIN_SERVICE_NAME`, `polyglot-admin`) --
+`websocket_routes.py` explicitly documents that the public backend never
+calls `refund_expired_link()`. The original filter's `service_name` clause
+named only `polyglot-backend` and `polyglot-backend-staging`, so
+`income_month` would have returned zero rows forever with no error: the
+exact silent-zero-rows failure mode the sink filter's three-shape design
+was written to prevent, one level further out, at the service-scope clause
+nobody had re-checked. Fixed by adding `"polyglot-admin"` to the
+`service_name` OR-clause, rewriting the surrounding script comment to name
+the actual call sites, extending the sink-scope pin test in
+`tests/test_setup_telemetry_script.py` (renamed
+`test_sink_covers_all_three_emitting_cloud_run_services`) to require all
+three service names, and updating the two docs that restated the
+two-service framing (`docs/technical_guide.md`'s Surface contract 22,
+`docs/standards/logging-and-cost.md`'s BigQuery section). Mutation-verified:
+removing `"polyglot-admin"` from the filter reddened the extended pin test,
+then the fix was restored. **Noted, not actioned (medium, contingent on the
+finding above):** once the admin service is in scope, its `ledger_export`
+rows reach Cloud Logging through the SAME shared `configure_logging()` the
+public backend uses (`admin_backend/main.py` calls it too), so they should
+land on the same `run.googleapis.com/stderr` stream and therefore the same
+`${TELEMETRY_TABLE_STDERR}` table `income_month` already reads -- but this
+is inference, not a live-verified outcome, since no dataset exists yet in
+any project. No code changed for this one; it is a first-deploy
+verification step (confirm `bq ls polyglot_telemetry` shows one `_stderr`
+table with rows from both services), not a defect to fix now. **Deferred
+(nit, filed as its own bead):** `scripts/setup-telemetry.sh`'s sink-create
+failure handler narrates a genuine failure with the same soft yellow note
+as the benign already-exists case and continues to "Telemetry setup
+complete" -- filed as bd `polyglot-pdf-yaeaf`. **Deferred (nit, filed as its
+own bead):** `docs/standards/logging-and-cost.md`'s roadmap table parks a
+"should be closed as duplicate" to-do about bd `polyglot-pdf-0bs` inside a
+current-state tier-2 doc -- filed as bd `polyglot-pdf-ert7t`.
+
 ## Lessons
 
 A plan or bead description that names a single log field as a filter target
@@ -198,5 +243,25 @@ views); top-of-file changelog annotation extended.
   list into their own rows in the roles table.
 - `polyglot-pdf-un0es` filed (nit, not fixed here): the script's usage
   strings do not name the optional `BILLING_EXPORT_TABLE` argument.
+
+**Review round 2 fixes (blocker):**
+
+- `scripts/setup-telemetry.sh` -- adds `"polyglot-admin"` to the
+  `SINK_FILTER`'s `resource.labels.service_name` OR-clause; rewrites the
+  section-3 comment to name `credit_routes.py` / `sweep_routes.py` as the
+  only `ledger_export` call sites and `polyglot-admin` as the service they
+  run on.
+- `tests/test_setup_telemetry_script.py` -- renames
+  `test_sink_covers_both_cloud_run_services` to
+  `test_sink_covers_all_three_emitting_cloud_run_services` and adds the
+  `"polyglot-admin"` assertion; mutation-verified.
+- `docs/technical_guide.md`, `docs/standards/logging-and-cost.md` --
+  Surface contract 22 / the BigQuery telemetry section corrected from "both
+  Cloud Run backend services" to the three-service scope, with the
+  `ledger_export` call-site reasoning.
+- `polyglot-pdf-yaeaf` filed (nit, not fixed here): a genuine sink-create
+  failure is narrated the same as the benign already-exists case.
+- `polyglot-pdf-ert7t` filed (nit, not fixed here): a roadmap row in
+  `logging-and-cost.md` parks a to-do in a current-state doc.
 
 Review outcomes recorded in the closeout ping.

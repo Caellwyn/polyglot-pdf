@@ -1873,8 +1873,11 @@ operator-run infrastructure: nothing in this contract executes against GCP from
 a deploy script.
 
 - **Producer:** `scripts/setup-telemetry.sh` creates the `polyglot_telemetry`
-  BigQuery dataset (`us-central1`) and a Cloud Logging sink over both Cloud Run
-  backend services, then applies `sql/telemetry_views.sql`'s five
+  BigQuery dataset (`us-central1`) and a Cloud Logging sink over THREE Cloud Run
+  services -- the public backend, its staging twin, AND the admin service
+  (`polyglot-admin`, since `ledger_export` is emitted only from
+  `admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never from the
+  public backend) -- then applies `sql/telemetry_views.sql`'s five
   `CREATE OR REPLACE VIEW` statements via `bq query`, substituting `${DATASET}`,
   `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}` (read back from
   `bq ls` on the dataset, not hardcoded -- the sink writes TWO destination

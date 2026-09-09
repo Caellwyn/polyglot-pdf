@@ -234,11 +234,15 @@ bound per module — not through `StructuredLogger`.)
 ## BigQuery telemetry sink + cost/income views (bd polyglot-pdf-rd3s8, E3.6)
 
 Declarative, operator-run infrastructure -- `scripts/setup-telemetry.sh` creates
-the `polyglot_telemetry` dataset (`us-central1`), a Cloud Logging sink over both
-Cloud Run services, the IAM grants the sink and `admin-backend-sa` need, and
-applies `sql/telemetry_views.sql`'s view definitions via `bq query`. Nothing here
-runs from a deploy script; an operator runs it by hand, same as
-`setup-gcp-project.sh` and `setup-admin-service.sh`.
+the `polyglot_telemetry` dataset (`us-central1`), a Cloud Logging sink over
+THREE Cloud Run services -- the public backend, its staging twin, AND the admin
+service (`polyglot-admin`; `ledger_export` is emitted only by
+`admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never by the
+public backend, so leaving the admin service out of the sink filter makes
+`income_month` return zero rows forever) -- the IAM grants the sink and
+`admin-backend-sa` need, and applies `sql/telemetry_views.sql`'s view
+definitions via `bq query`. Nothing here runs from a deploy script; an operator
+runs it by hand, same as `setup-gcp-project.sh` and `setup-admin-service.sh`.
 
 **The sink filter is three shapes ORed together, not one.** The plan's prose
 ("filtered to `jsonPayload.event_type` in the usage / session / ledger_export /

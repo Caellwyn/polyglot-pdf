@@ -109,23 +109,34 @@ else
         "$DATASET"
 fi
 
-# 3. Create the Cloud Logging -> BigQuery sink, over BOTH Cloud Run
-#    services (the demo/production service and the staging service), with
-#    partitioned destination tables. See the module docstring above for why
-#    the filter ORs across three different jsonPayload shapes instead of
-#    checking one field.
+# 3. Create the Cloud Logging -> BigQuery sink, over THREE Cloud Run
+#    services (the public backend's demo/production service, its staging
+#    twin, AND the admin service), with partitioned destination tables. See
+#    the module docstring above for why the filter ORs across three
+#    different jsonPayload shapes instead of checking one field.
 #
 # resource.type="cloud_run_revision" scopes the sink to Cloud Run logs only
 # (excluding, e.g., Cloud Build or Cloud Scheduler noise landing in the same
-# project). resource.labels.service_name narrows to the two backend
-# services by name -- the admin service (polyglot-admin) and any future
-# service are deliberately excluded until they need telemetry of their own.
+# project). resource.labels.service_name narrows to the three services that
+# actually emit a filtered event_type today -- "polyglot-backend" and
+# "polyglot-backend-staging" (usage + session events) AND "polyglot-admin"
+# (ledger_export). ledger_export is NOT emitted by the public backend: its
+# only non-test callers, credit_ledger.append_entry() and
+# refund_expired_link(), are called exclusively from
+# admin_backend/routes/credit_routes.py and admin_backend/routes/
+# sweep_routes.py, both of which run on the admin service
+# (deploy-admin.sh's ADMIN_SERVICE_NAME, "polyglot-admin"; the public
+# backend's websocket_routes.py explicitly never calls
+# refund_expired_link()). Omitting "polyglot-admin" here would make
+# income_month return zero rows forever with no error -- the sink would
+# simply never see a ledger_export line to match. Any future service beyond
+# these three is deliberately excluded until it needs telemetry of its own.
 #
 # --use-partitioned-tables: partitioned by the LogEntry's own timestamp, so
 # a month-range query in the views above prunes partitions instead of
 # scanning the whole sink history.
 echo -e "${GREEN}[INFO]${NC} Creating Cloud Logging sink $SINK_NAME..."
-SINK_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name=("polyglot-backend" OR "polyglot-backend-staging") AND (jsonPayload.event_type="ledger_export" OR jsonPayload.message.event_type=("gemini_api_response" OR "text_ai_usage" OR "tts_usage") OR jsonPayload.event=("form_session_started" OR "form_session_ended"))'
+SINK_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name=("polyglot-backend" OR "polyglot-backend-staging" OR "polyglot-admin") AND (jsonPayload.event_type="ledger_export" OR jsonPayload.message.event_type=("gemini_api_response" OR "text_ai_usage" OR "tts_usage") OR jsonPayload.event=("form_session_started" OR "form_session_ended"))'
 
 SINK_CREATE_OUTPUT=$(gcloud logging sinks create "$SINK_NAME" \
     "bigquery.googleapis.com/projects/$PROJECT_ID/datasets/$DATASET" \
