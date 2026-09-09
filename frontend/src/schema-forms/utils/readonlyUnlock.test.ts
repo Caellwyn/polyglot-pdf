@@ -142,6 +142,45 @@ describe('isFieldReadOnly: unlock requires BEING SHOWN (bd polyglot-pdf-38p0y)',
   });
 });
 
+describe('the OTHER field the bead names: a checkbox-gated textarea', () => {
+  // accommodation_other_detail is the second field exit criterion 1 names, and
+  // it is a genuinely different shape from mail_unit_number: the trigger is a
+  // CHECKBOX read with is_checked (not a text field read with is_not_empty), and
+  // the target is a textarea. Testing only the text/is_not_empty pair would leave
+  // the operator this field depends on unexercised.
+  const detail = field({
+    id: 'accommodation_other_detail',
+    name: 'Accommodation Other Detail',
+    spoken_name: 'accommodation detail',
+    type: 'textarea',
+    read_only: true,
+    show_if: { field: 'accommodation_other', operator: 'is_checked' },
+    conditional_behavior: { unlock_method: 'flip_readonly_bit' },
+  } as Partial<FormField>);
+  const box = field({
+    id: 'accommodation_other',
+    name: 'Accommodation Other',
+    spoken_name: 'other accommodation',
+    type: 'checkbox',
+  });
+
+  it('is writable once the box is CHECKED', () => {
+    expect(isFieldReadOnly(detail, { accommodation_other: true }, [detail, box])).toBe(false);
+  });
+
+  it('stays read-only while the box is unchecked', () => {
+    expect(isFieldReadOnly(detail, { accommodation_other: false }, [detail, box])).toBe(true);
+    // ...and when the trigger has no value at all.
+    expect(isFieldReadOnly(detail, {}, [detail, box])).toBe(true);
+  });
+
+  it('the write gates agree with it', () => {
+    const schema = schemaOf(detail, box);
+    expect(checkFieldAccess('accommodation detail', schema, { accommodation_other: true }).accessible).toBe(true);
+    expect(checkFieldAccess('accommodation detail', schema, { accommodation_other: false }).accessible).toBe(false);
+  });
+});
+
 describe('the AI-write gates honor the unlock (bd polyglot-pdf-38p0y)', () => {
   it('checkFieldAccess ACCEPTS a shown unlockable field', () => {
     const f = unlockable();

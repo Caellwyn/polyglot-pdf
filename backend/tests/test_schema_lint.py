@@ -524,8 +524,18 @@ def test_readonly_conditional_remedy_describes_flip_readonly_bit_as_WORKING():
     # ...and the unlock path is named as one that WORKS for the voice assistant,
     # which is the half that went stale.
     assert "voice assistant may fill" in msg
-    # ...with the companion requirement, or the unlock never reaches the PDF.
+    # ...with the companion requirement stated as REQUIRED, not merely named.
+    # THE DEFEAT THIS CLOSES (fresh-eyes round 3): an earlier version asserted
+    # only that "pdf_field_flag_change" APPEARED, which a message saying
+    # "skipping pdf_field_flag_change is usually harmless" satisfies -- the
+    # opposite of the truth. apply_field_flag_changes (pdf_fill_routes.py)
+    # early-returns and never clears the bit when the descriptor is absent, so
+    # an unlock without it silently never reaches the printed form.
     assert "pdf_field_flag_change" in msg
+    consequence = msg.split("pdf_field_flag_change", 1)[1].lower()
+    assert "never reaches" in consequence, (
+        "the message names pdf_field_flag_change but does not say what happens "
+        "without it -- an author reading this must learn it is mandatory")
 
     # No residue of the superseded claim, in any of its plausible spellings.
     lowered = msg.lower()

@@ -178,6 +178,14 @@ When a bead's exit criterion names an integration point, satisfying it at a lowe
 layer is a narrowing -- and the honest move is to check whether the repo already
 has a harness for that layer before declaring the substitution necessary. It did.
 
+**Presence is not meaning.** Three separate checks in this bead asserted that a
+token appeared rather than that a claim held: the docstring that named
+`flip_readonly_bit` without saying it now works, the pin that named
+`pdf_field_flag_change` without saying it is mandatory, and the negative test
+that asserted an impossible enum value. Each was defeated by something that
+satisfied the letter. When pinning prose, assert the consequence, not the
+vocabulary -- and write the evasion yourself before a reviewer does.
+
 **A fix can falsify prose elsewhere in its own branch.** The lint remedy was
 written four commits before the fix that made it wrong, in the same PR. The
 enumeration reflex (scar #8) is usually aimed at code; it applies just as well to
@@ -217,6 +225,30 @@ Nothing bumped.
   (allowlist + no-residue), mutation-verified in both directions.
 - `backend/tests/test_form_models_v2.py` -- docstring only; states the current
   behavior and names the now-open carve-out question. No logic change.
+
+### Round 3: the other named field, and a pin I could defeat
+
+Two more, both correct.
+
+**Only one of the two fields the criterion names was tested.**
+`accommodation_other_detail` never appeared in any test. It is not a duplicate of
+`mail_unit_number`: its trigger is a CHECKBOX read with `is_checked`, against a
+text field read with `is_not_empty`, so the operator it depends on was
+unexercised. Three tests added; reverting the gate reddens two of them
+independently.
+
+**The lint pin I had just written could be walked past.** The reviewer
+constructed a message keeping every allowlisted phrase and avoiding every banned
+one, while telling authors that skipping `pdf_field_flag_change` "is usually
+harmless" -- the opposite of the truth, since `apply_field_flag_changes`
+early-returns without it and the unlock never reaches the printed form. My
+assertion only checked that the phrase APPEARED, not that it was framed as
+mandatory. The pin now checks the CONSEQUENCE clause after the phrase, and I ran
+the reviewer's exact attack against the hardened version to confirm it reddens.
+
+That is the third time in this bead a check verified something adjacent to what
+it claimed. The pattern is consistent enough to be worth naming: I keep asserting
+that the right WORDS are present rather than that the right THING is true.
 
 ### Exit criterion 2 is not satisfied by this PR, deliberately
 
