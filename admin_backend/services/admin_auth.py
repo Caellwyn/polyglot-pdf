@@ -24,11 +24,16 @@ machine-readable prefix on the "no access at all" 403), same reasons:
 
 This is the FIRST of the four gates the plan names
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
-manager; require_google_oidc). The other three ship with their first
-consuming routes (Epic 2 B-track / Epic 4), each proven against a real route
-rather than shipped untested -- see admin_backend/tests/unit/
-test_admin_route_auth.py, which derives the registered route set and asserts
-each carries exactly one of the four names.
+manager; require_google_oidc). THREE now exist: require_app_admin_or_owning_
+manager is the composite defined at the bottom of this module (bd
+polyglot-pdf-dmjl5), shipping with the four /admin/users routes;
+require_firm_manager lives on the PUBLIC backend (backend/services/auth.py)
+over the shared rule backend/services/firms.py::manager_firm_id, and no
+route declares it yet for the reason documented there. Only
+require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3). See
+admin_backend/tests/unit/test_admin_route_auth.py, which derives the
+registered route set and asserts each route carries exactly one of the four
+names.
 """
 from __future__ import annotations
 
@@ -332,7 +337,18 @@ def resolve_target_firm(actor: CompositeActor,
                 detail=("a firm manager may not name a firm; the firm is "
                         "taken from your sign-in"),
             )
-        assert actor.firm_id, "a manager actor always carries a firm_id"
+        if not actor.firm_id:
+            # Unreachable through the gate above, which never builds a
+            # manager actor without a firm_id. A real check rather than an
+            # assert because asserts vanish under python -O, and the
+            # failure mode if this ever became reachable is an empty
+            # firm_id used as a Firestore key -- a query that matches
+            # nothing while the caller looks authorized.
+            raise HTTPException(
+                status_code=403,
+                detail=(NO_ADMIN_ACCESS_PREFIX
+                        + " This account is not a manager of a firm"),
+            )
         return actor.firm_id
     if not body_firm_id:
         raise HTTPException(
