@@ -1178,6 +1178,41 @@ from ..services.link_budget import (
 	KIT_COST_CEILING_KEY,
 	cost_ceiling_usd_for_claims,
 )
+from ..services import links_store as _links_store
+
+
+def _mirror_budget_exhausted(jti) -> None:
+	"""Best-effort TELEMETRY mirror on links[_<channel>]/{jti}.status, written
+	when a socket tears down on LinkBudgetExhausted (Epic 2 bead A5, plan:
+	"Socket teardown on LinkBudgetExhausted writes the budget_exhausted
+	mirror").
+
+	NO LEDGER ENTRY here, on purpose: whether a budget-exhausted link earns a
+	refund, and whether a client's REPLACEMENT link (bd polyglot-pdf-1uyof)
+	costs a fresh credit, are both maintainer pricing calls the plan lists as
+	undecided (Epic 2's "Maintainer calls needed before the marked beads
+	ship" -- "recommendation: no refund, replacement costs a credit"). Until
+	that lands, this write only updates the `status` field the admin console
+	and a firm's link listing read; it never touches balance_credits or the
+	ledger, and credit_ledger.refund_expired_link() never runs from here.
+
+	NEVER RAISES, and never blocks the close it runs alongside. A failure to
+	write a status label used only for a listing must not affect the socket
+	teardown that is already in flight for a real reason (the client hit
+	their spend ceiling); the close proceeds either way.
+
+	Runs on the SAME sync Admin SDK write path links_store.py already uses --
+	callers on the event loop must wrap it in asyncio.to_thread, exactly like
+	every other Firestore call on this route.
+	"""
+	if not isinstance(jti, str) or not jti:
+		return
+	try:
+		_links_store._collection().document(jti).set(
+			{"status": _links_store.STATUS_BUDGET_EXHAUSTED}, merge=True)
+	except Exception as exc:  # noqa: BLE001 -- telemetry only, never raises
+		_log.error("link_budget_exhausted_mirror_failed", jti=jti,
+					error=str(exc))
 
 
 async def _bank_link_spend(link_jti, service, log) -> float:
@@ -1482,6 +1517,13 @@ async def fill_form_from_schema(
 		except LinkBudgetExhausted as exc:
 			log.warning("ws_link_budget_exhausted", jti=claims.get("jti"),
 						firm_id=claims.get("firm_id"), error=str(exc))
+			# Best-effort TELEMETRY mirror only (bd polyglot-pdf-1op3g / A5) --
+			# no ledger entry, no refund. Off the event loop for the same
+			# reason every other Firestore call on this route is: a sync
+			# Admin SDK write on the shared Cloud Run loop would stall every
+			# concurrent connection. Never awaited for success -- a failed
+			# mirror write must not delay or block the close below.
+			await asyncio.to_thread(_mirror_budget_exhausted, claims.get("jti"))
 			await websocket.close(code=1013, reason="budget_exhausted")
 			return
 		except RedemptionUnavailable as exc:
