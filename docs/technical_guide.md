@@ -2059,3 +2059,47 @@ a deploy script.
   `setup-admin-service.sh`'s `PROJECT_ROLES` array, is what actually grants
   them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
   that constant out before comparing against `setup-admin-service.sh` alone.
+
+### 26. Link history: the first real caller of contract 23's admin-service wiring (Epic 2 Track C bead C5, bd polyglot-pdf-x22hm)
+
+`frontend/src/console/LinkHistoryPage.tsx`, mounted at `/console/links/history`
+(`frontend/src/schema-forms/AppRoutes.tsx`'s `LINK_HISTORY_PATH`, behind
+`ProtectedRoute` -- pinned by `AppRoutes.test.tsx`, a NEW file alongside
+`clientRoute.test.tsx` rather than appended to it), is the first page to call
+a concrete admin-service route through contract 23's `adminFetch` -- contract
+23 named this page and C4's `EmployeesPage.tsx` as "the first real callers"
+before either existed.
+
+- **Role comes from the verified token's OWN custom claims**, read via
+  `user.getIdTokenResult()` -- `claims.firm_id` and `claims.firm_role`, the
+  SAME two claims `backend/services/firms.py`'s `manager_firm_id` reads
+  server-side. This is a NEW client-side read (no prior page in this repo
+  called `getIdTokenResult()`); it decides only which UI controls render
+  (the manager's filter row and Revoke column) and is never trusted as a
+  security boundary -- the admin service re-verifies the bearer token on
+  every request regardless of what this page shows.
+- **The fetch path is built from the claimed `firm_id`**:
+  `GET /admin/firms/{firm_id}/links`, with `?status=`/`?employee_id=` added
+  ONLY for a manager (an employee's request always omits `employee_id`,
+  matching the bead's own wording). `POST /admin/links/{jti}/revoke` is
+  manager-only, fires once per click (disabled while in flight), and on
+  success RE-FETCHES the list rather than patching the clicked row locally
+  -- the server, not local state, decides what the table shows after a
+  write (a 409 means the write did NOT land).
+- **Renders only bead B4's allowlisted columns** (`_public_link_view`'s
+  `jti, kit_id, employee_id, status, minted_at, open_deadline, opened_at,
+  completed_at, spend_usd, turns, cap_usd, credit_cost`), built by hand from
+  named fields -- never `{...row}` -- so a row is never spread onto the DOM.
+
+**A KNOWN GAP, found while building this page, NOT fixed here:**
+`require_app_admin_or_owning_manager` (contract 22) has exactly two actor
+kinds -- app admin, or firm MANAGER. An EMPLOYEE-role account is refused
+with a flat 403 before `GET /admin/firms/{firm_id}/links` ever reaches its
+own `employee_id` filtering logic, so an employee cannot see even their own
+link history against the real deployed admin service today. The plan named
+two tests for this (`test_employee_link_listing_response_is_allowlisted`,
+`test_employee_history_scoped_to_token`) that bead B4 (`polyglot-pdf-jmiys`)
+never implemented. Filed as `polyglot-pdf-scaig` (admin_backend surfaces,
+not this bead's) rather than fixed inline -- this page's own exit criteria
+are frontend-only and are pinned against a mocked API regardless, so the
+page needs no change once `scaig` closes.
