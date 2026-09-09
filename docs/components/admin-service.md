@@ -1,8 +1,32 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/sweep_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-8vgfh: the hourly expired-link
+*Last updated: 2026-09-09 (bd polyglot-pdf-jmiys: link listing and revoke,
+Track B bead B4 -- `GET /admin/firms/{firm_id}/links`
+(`?channel=` REQUIRED, `?status=`/`?employee_id=` optional filters) joins a
+firm's `links[_<channel>]` mint records (bead A1) with their
+`link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, and bead
+ik7e's `spend_usd`/`turns`) by hand into an explicit key ALLOWLIST -- never
+`**doc`, so a future internal field on either stored document cannot leak.
+`POST /admin/links/{jti}/revoke` (`?channel=` REQUIRED) sets
+`status=revoked` with `revoked_by`/`revoked_at`, in ONE
+`@firestore.transactional` body with an in-transaction audit row (mirrors
+`firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance
+mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke
+touches only the link's own status). Only a `STATUS_MINTED` record may be
+revoked; any other status is a 409 naming the current status. Both routes
+carry `require_app_admin_or_owning_manager`; unlike the body-field firm
+rule `resolve_target_firm` enforces for `/admin/users`, `firm_id` here is a
+URL PATH segment a manager must be able to name (their own firm) to reach a
+GET at all -- so this bead's own small `_require_owning_firm` helper
+refuses a manager acting on ANY OTHER firm's `firm_id` (or a jti belonging
+to one) with the SAME 404 an unknown firm_id/jti would get, never 403,
+which would confirm the other firm exists. Revoking a link does not itself
+change what `POST /api/links/open` does on the PUBLIC backend -- that check
+is Epic 2 Track A bead A3's job (`backend/routes/link_routes.py`,
+`links_store.get_link`), landing separately.)
+(bd polyglot-pdf-8vgfh: the hourly expired-link
 refund sweep, `POST /admin/links/sweep-expired`
 (`admin_backend/routes/sweep_routes.py`) -- the fourth and last gate,
 `require_google_oidc(audience, allowed_caller_emails)`
@@ -130,6 +154,8 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/firms/{firm_id}/kind` | PATCH | `require_app_admin` | Reclassify `mock`<->`live` (`{kind, reason}`) -- `reason` REQUIRED; the confirm-twice UI control is the console's job, not this route's. Audited in-transaction. |
 | `/admin/firms/{firm_id}/credits/grant` | POST | `require_app_admin` | Grant credits (`{type, amount, usd_amount?, kit_id?}`; `type` in `subscription_grant`\|`purchase`\|`promo_grant`, `usd_amount` required for the first two and refused otherwise). Calls `backend/services/credit_ledger.py::append_entry` -- the ONE writer of a firm's balance. Grants to `kind=mock` firms are allowed. Audited via `append_entry`'s `extra_writes` hook, joined to its own transaction. |
 | `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED, `amount` may be either sign). Same writer and audit form as `grant`. |
+| `/admin/firms/{firm_id}/links` | GET | `require_app_admin_or_owning_manager` | The firm's links (bd polyglot-pdf-jmiys, Track B bead B4), joining `links[_<channel>]` mint records with `link_redemptions[_<channel>]` detail. `?channel=` REQUIRED (422 if missing/unknown); `?status=`/`?employee_id=` optional equality filters. A manager reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Response rows are an explicit key allowlist. A read, so no audit row. |
+| `/admin/links/{jti}/revoke` | POST | `require_app_admin_or_owning_manager` | Revoke a minted link (bd polyglot-pdf-jmiys). `?channel=` REQUIRED. Sets `status=revoked` with `revoked_by`/`revoked_at` in one transaction with an in-transaction audit row; only a `minted` link may be revoked (409 otherwise, naming the current status). A manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti). |
 | `/admin/links/sweep-expired` | POST | `require_google_oidc` | The hourly expired-link refund sweep (bd polyglot-pdf-8vgfh). Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every `KNOWN_CHANNELS` channel. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit -- see Surface contract 18 in [technical_guide.md](../technical_guide.md) for that helper. Returns counts only (`{results, total_refunded, total_skipped}`); the ledger entry and the extra_writes-delegated audit row (joined via the same `_EXTRA_WRITES_TRANSACTION_OPENERS` shape as the credit routes above) are the durable record. |
 
 `channel` is always an explicit path parameter or query parameter
@@ -515,7 +541,16 @@ transactional write), `test_firestore_indexes.py` (the audit route's
 filter/index pin), `test_google_oidc_gate.py` (`require_google_oidc`'s own
 contract: lazy config resolution, the 401/403/503 split, the closure
 rename), `test_sweep_routes.py` (the sweep route end to end through a fake
-Firestore, including the forced-audit-failure atomicity pin). The sibling
+Firestore, including the forced-audit-failure atomicity pin),
+`test_admin_link_routes.py` (bd polyglot-pdf-jmiys: link listing's allowlist
+and firm-scoping, and revoke's atomicity and 409/404 refusals, over the
+same fake-Firestore shape `test_sweep_routes.py` uses). The PUBLIC backend's
+`backend/tests/integration/test_revoked_link_open.py` pins the OTHER half
+of B4's exit criterion 3 -- a revoked link's subsequent open is refused with
+the uniform 404 -- over the real `POST /api/links/open` route; that
+assertion depends on Epic 2 Track A bead A3's open-side gate
+(`backend/routes/link_routes.py` reading `links_store.get_link`), landing
+separately from this bead. The sibling
 root-level `tests/test_setup_admin_service_scheduler.py` pins
 `setup-admin-service.sh`'s Cloud Scheduler declaration by its shipped
 script TEXT, the same operator-script pattern as
