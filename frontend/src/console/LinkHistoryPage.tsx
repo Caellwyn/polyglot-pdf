@@ -157,6 +157,15 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
   // getIdTokenResult() the same way backend/services/firms.py's
   // manager_firm_id reads them server-side. Resolved once per user, not
   // trusted from any editable page state.
+  //
+  // Every path out of this effect that leaves firmId null (no claim, or the
+  // catch below) ALSO flips `phase` to 'error' with a message -- otherwise
+  // the page is stuck on the initial 'loading' phase forever, because
+  // nothing downstream (buildPath/load/the fetch effect) ever runs to move
+  // it off that phase when there is no firmId to fetch with. A signed-in
+  // account with no firm claim (a dev/app-admin account, or a claims
+  // propagation race right after a role change) is reachable here via the
+  // generic ProtectedRoute, so this is not a hypothetical.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -170,10 +179,16 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
         const claimedFirmId = typeof claims.firm_id === 'string' ? claims.firm_id : null;
         setFirmId(claimedFirmId);
         setIsManager(claims.firm_role === 'manager');
+        if (!claimedFirmId) {
+          setPhase('error');
+          setMessage('Your account is not linked to a firm. Contact your firm administrator.');
+        }
       } catch {
         if (!cancelled) {
           setFirmId(null);
           setIsManager(false);
+          setPhase('error');
+          setMessage('Could not verify your account. Please sign in again.');
         }
       }
     })();

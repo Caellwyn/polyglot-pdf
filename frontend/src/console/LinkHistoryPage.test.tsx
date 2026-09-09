@@ -177,6 +177,41 @@ describe('LinkHistoryPage', () => {
     expect(screen.queryByRole('button', { name: /^revoke$/i })).toBeNull();
   });
 
+  it('a signed-in user with no firm_id claim gets an error, not a stuck spinner', async () => {
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'demo');
+    const { impl, calls } = mockFetch(() => jsonResponse({ links: [] }));
+    const noFirmUser = {
+      uid: 'dev-1',
+      getIdToken: async () => 'dev-token',
+      getIdTokenResult: async () => ({ claims: {} }),
+    };
+
+    render(<LinkHistoryPage user={noFirmUser} fetchImpl={impl} />);
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText(/loading/i)).toBeNull();
+    // No firmId means no fetch is ever attempted -- nothing to load.
+    expect(calls).toHaveLength(0);
+  });
+
+  it('a getIdTokenResult() failure gets a distinct error, not a stuck spinner', async () => {
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'demo');
+    const { impl } = mockFetch(() => jsonResponse({ links: [] }));
+    const brokenUser = {
+      uid: 'flaky-1',
+      getIdToken: async () => 'flaky-token',
+      getIdTokenResult: async () => { throw new Error('network blip'); },
+    };
+
+    render(<LinkHistoryPage user={brokenUser} fetchImpl={impl} />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/sign in again/i);
+    expect(screen.queryByText(/loading/i)).toBeNull();
+  });
+
   it('shows the server error message on a failed load', async () => {
     vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
     vi.stubEnv('VITE_APP_CHANNEL', 'demo');

@@ -53,6 +53,33 @@ themselves.
   avoid repeating bd polyglot-pdf-41ay8's exact bug -- a page shipping
   classes with no stylesheet definition).
 
+## Fresh-eyes review round: one blocker found, adopted
+
+The Opus cross-surface review (STATUS: GAPS-FOUND (1)) found one real
+blocker: a signed-in user whose token carries no `firm_id` claim (a
+dev/app-admin account, or a claims-propagation race right after a role
+change) landed on the "Loading..." message forever, with no error and no
+way out -- `phase` started at `'loading'` and nothing in the claims-
+resolution effect, `buildPath()`, `load()`, or the fetch-triggering effect
+ever moved it off that phase when `firmId` stayed `null`. The reviewer
+contrasted this with `MintLinkPage.tsx`'s deliberately-chosen "start at
+`'idle'`, never claims work is in flight" pattern, which this page did not
+replicate for its own new claims-fetch. A related non-blocking sub-point
+covered by the same fix: the claims-fetch `catch` block silently swallowed
+the actual error, giving no way to tell "you have no firm" from "a request
+failed."
+
+**Adopted, fixed inline:** the claims-resolution effect now sets `phase` to
+`'error'` with a distinct message on both paths that leave `firmId` null --
+a missing/non-string `firm_id` claim gets "Your account is not linked to a
+firm," and a `getIdTokenResult()` rejection gets "Could not verify your
+account. Please sign in again." Two new tests pin both paths
+(`LinkHistoryPage.test.tsx`), mutation-verified by reverting the fix and
+confirming both go red (the page hangs on "Loading..." with no alert) before
+restoring it. No other findings from the round -- the second exit criterion
+(route table test) and every other rubric sub-claim in exit criterion 1
+passed as originally shipped; no defer/reject items.
+
 ## A gap found while building this, filed rather than fixed here
 
 `admin_backend/routes/link_routes.py`'s `require_app_admin_or_owning_manager`
