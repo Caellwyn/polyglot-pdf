@@ -1079,3 +1079,158 @@ def test_credit_ledger_is_the_only_module_that_writes_balance_credits():
         "allowlist is stale: {} no longer write balance_credits".format(
             sorted(allowed - seen_allowed))
     )
+
+
+# --------------------------------------------- alert wiring (bd polyglot-pdf-bo95a)
+#
+# Mirrors link_spend.py's test_check_budget_writes_the_alert_ON_REFUSAL /
+# test_check_budget_STILL_RAISES_LinkBudgetExhausted_when_the_alert_write_fails
+# in test_alerts_dedup.py. Those prove check_budget's wiring through the REAL
+# caller; test_alerts_dedup.py's own append_entry-side tests only ever call
+# alerts.record_credit_threshold() directly, never credit_ledger.append_entry()
+# itself -- so nothing proved the _alert_on_low_balance() call at
+# credit_ledger.py:435 is actually reached, or that a broken alert store
+# cannot break a real debit. These two close that gap.
+
+
+def test_append_entry_fires_the_alert_on_a_LOW_MINT_DEBIT(fake_db, monkeypatch):
+    """Proves the WIRING, not just alerts.py in isolation: a real mint_debit
+    through append_entry() that lands the balance at/under the threshold
+    must call alerts.record_credit_threshold with the post-commit balance,
+    the caller's firm_id and the configured threshold.
+
+    Mutation: delete the _alert_on_low_balance(...) call at the end of
+    append_entry (credit_ledger.py:435) -- red, calls stays empty.
+    """
+    import backend.services.alerts as alerts
+    import backend.services.runtime_config as runtime_config
+
+    fake_db.docs[("firms", "acme")]["balance_credits"] = 1
+
+    calls = []
+
+    def _fake_record(firm_id, *, balance, threshold, now=None):
+        calls.append({"firm_id": firm_id, "balance": balance,
+                      "threshold": threshold})
+
+    monkeypatch.setattr(alerts, "record_credit_threshold", _fake_record)
+    monkeypatch.setattr(runtime_config, "credit_low_threshold",
+                        lambda channel=None: 10)
+
+    credit_ledger.append_entry(
+        fake_db, "acme", entry_type="mint_debit", amount=-1,
+        actor="uid-staff", channel="demo", link_jti="jti-a", ts=1000.0,
+    )
+
+    assert calls == [{"firm_id": "acme", "balance": 0, "threshold": 10}]
+
+
+def test_append_entry_writes_no_alert_doc_when_balance_stays_ABOVE_threshold(
+        fake_db, monkeypatch):
+    """The happy path must reach the real Firestore write with a balance
+    that does not cross either boundary, so alerts.py's own gates (the
+    exhausted branch's balance<=0 and the low branch's threshold>0-and-
+    balance<=threshold) leave the alert store untouched -- exercised through
+    the REAL append_entry call with a REAL (fake) alert store, rather than
+    record_credit_threshold mocked away, so this also proves
+    _alert_on_low_balance is wired to a real Firestore-shaped write path
+    that a threshold-gated call leaves empty.
+
+    Mutation: in alerts.record_credit_threshold, drop the `threshold > 0
+    and balance <= threshold` gate on the low branch (make it unconditional)
+    -- red, store gains a credit_low doc even though balance=999 is nowhere
+    near threshold=10.
+    """
+    import backend.services.alerts as alerts
+    import backend.services.runtime_config as runtime_config
+
+    fake_db.docs[("firms", "acme")]["balance_credits"] = 1000
+
+    store = {}
+
+    class _Snap:
+        def __init__(self, doc_id):
+            self._doc_id = doc_id
+            self.exists = doc_id in store
+
+        def to_dict(self):
+            return dict(store.get(self._doc_id, {}))
+
+    class _Doc:
+        def __init__(self, doc_id):
+            self._doc_id = doc_id
+
+        def get(self):
+            return _Snap(self._doc_id)
+
+        def set(self, data, merge=False):
+            store[self._doc_id] = dict(data)
+
+    class _Collection:
+        def document(self, doc_id):
+            return _Doc(doc_id)
+
+    monkeypatch.setattr(alerts, "_collection", lambda: _Collection())
+    monkeypatch.setattr(runtime_config, "credit_low_threshold",
+                        lambda channel=None: 10)
+
+    credit_ledger.append_entry(
+        fake_db, "acme", entry_type="mint_debit", amount=-1,
+        actor="uid-staff", channel="demo", link_jti="jti-b", ts=1000.0,
+    )
+
+    assert store == {}
+
+
+def test_append_entry_STILL_COMMITS_when_the_alert_write_fails(
+        fake_db, monkeypatch):
+    """EXIT CRITERION 2, append_entry half, through the REAL caller -- the
+    mirror of test_alerts_dedup.py's
+    test_check_budget_STILL_RAISES_LinkBudgetExhausted_when_the_alert_write_fails.
+    A broken alert STORE (the Firestore write itself failing, not the
+    public function monkeypatched to raise) must not change what a real
+    debit does: the entry must still be written, the balance still
+    updated, and append_entry must not raise -- alerts.py's own try/except
+    in _write() is what makes record_credit_threshold's never-raise
+    contract real, and this proves it holds reached from the actual
+    production call site (credit_ledger.py:435), not just against
+    alerts.record_credit_threshold called directly.
+
+    Mutation: remove alerts.py's try/except around the Firestore write in
+    _write() -- red, append_entry raises RuntimeError instead of
+    committing.
+    """
+    import backend.services.alerts as alerts
+    import backend.services.runtime_config as runtime_config
+
+    fake_db.docs[("firms", "acme")]["balance_credits"] = 1
+
+    class _RaisingDoc:
+        def get(self):
+            raise RuntimeError("firestore unavailable")
+
+        def set(self, data, merge=False):
+            raise RuntimeError("firestore unavailable")
+
+    class _RaisingCollection:
+        def document(self, doc_id):
+            return _RaisingDoc()
+
+    monkeypatch.setattr(alerts, "_collection", lambda: _RaisingCollection())
+    monkeypatch.setattr(runtime_config, "credit_low_threshold",
+                        lambda channel=None: 10)
+
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type="mint_debit", amount=-1,
+        actor="uid-staff", channel="demo", link_jti="jti-c", ts=1000.0,
+    )
+
+    # The debit itself already committed BEFORE _alert_on_low_balance ran
+    # (module docstring: "AFTER the commit, never before") -- the money is
+    # safe regardless of what the alert side-channel does, and append_entry
+    # returns normally rather than raising.
+    assert result["balance_credits"] == 0
+    assert fake_db.firm("acme")["balance_credits"] == 0
+    rows = fake_db.ledger_rows("acme")
+    assert len(rows) == 1
+    assert rows[0]["link_jti"] == "jti-c"

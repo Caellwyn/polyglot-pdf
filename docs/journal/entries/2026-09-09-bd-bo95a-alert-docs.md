@@ -105,6 +105,46 @@ low-severity doc miscount; both fixed, no other findings changed code:
   matching the bead's stated scope ("after a `mint_debit` commits"); the
   reviewer explicitly declined to file it as a gap, and it is left as-is.
 
+## Outer cross-surface review (post-review fix)
+
+The Opus cross-surface reviewer found one rubric-fail, both halves rooted in
+the same gap; two other findings were informational (not adopted as code
+changes) and are recorded here for the audit trail:
+
+- **Adopted -- `append_entry`'s alert wiring (`credit_ledger.py:435`) was
+  completely unexercised through its real call site.** Every test proving
+  the dedup/never-raises properties for the credit-threshold side
+  (`test_alerts_dedup.py`) called `alerts.record_credit_threshold(...)`
+  directly; `test_credit_ledger.py` had zero references to alerts at all.
+  This was the mirror-image gap of the link-budget side, which already had
+  three wiring tests through the real `check_budget` caller. Deleting the
+  `_alert_on_low_balance(...)` call at `credit_ledger.py:435` left every
+  test in the diff green. Fixed by adding three tests to
+  `test_credit_ledger.py`, calling the REAL `credit_ledger.append_entry()`
+  (not `alerts.record_credit_threshold` in isolation):
+  `test_append_entry_fires_the_alert_on_a_LOW_MINT_DEBIT` (a low mint_debit
+  through append_entry calls record_credit_threshold with the post-commit
+  balance and the configured threshold), `test_append_entry_writes_no_alert_
+  doc_when_balance_stays_ABOVE_threshold` (a real fake Firestore store stays
+  empty on a debit that stays comfortably above threshold), and
+  `test_append_entry_STILL_COMMITS_when_the_alert_write_fails` (the
+  check_budget-side "STILL_RAISES" test's mirror -- a broken alert STORE,
+  not the public function mocked to raise, must not stop the debit from
+  committing or make append_entry raise). All three mutation-verified: the
+  first two redden against the two mutations above (dropping the call;
+  making the low branch unconditional), the third reddens when alerts.py's
+  own `try/except` around the Firestore write in `_write()` is removed.
+- **Not adopted -- `credit_low_threshold()` is channel-scoped, but
+  `CREDIT_LOW_THRESHOLD` gates a firm-scoped value.** An operator setting
+  the threshold for "demo" does not affect "staging". This exactly mirrors
+  the pre-existing `credits_enforced(channel=None)` shape this diff did not
+  introduce, and is flagged for a later admin-console UI bead to make the
+  channel-scoping visible (or reconsider it), not a bug in this diff.
+- **Not adopted (same root cause as the first finding, not separate) --
+  `alerts.py`'s "safe by construction" claim for `append_entry`'s side was
+  asserted-by-inspection rather than integration-tested.** Resolved by the
+  same three tests above; no additional code change needed.
+
 ## Lessons
 
 A best-effort helper's "never raises" contract must wrap the ENTIRE call
@@ -148,6 +188,9 @@ value misbehaves.
 - `firestore.rules` -- deny block for `alerts/{alertId}`.
 - `backend/tests/unit/test_alerts_dedup.py` -- new, 18 tests (17 initial +
   1 added in the fresh-eyes fix round, `threshold=0` gating).
+- `backend/tests/unit/test_credit_ledger.py` -- 3 new tests added in the
+  outer-review fix round, proving `append_entry`'s alert wiring through the
+  real call site (see "Outer cross-surface review" above).
 - `backend/tests/unit/test_firestore_rules_text.py` -- `alerts` added to
   `ADMIN_SDK_ONLY_COLLECTIONS`.
 - `backend/tests/unit/test_runtime_config.py` -- `CREDIT_LOW_THRESHOLD`
