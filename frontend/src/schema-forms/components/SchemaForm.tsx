@@ -658,7 +658,21 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const handleFormKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
     if (e.key !== 'Enter') return;
     const target = e.target as HTMLElement | null;
-    const fieldId = target?.id;
+    // Resolve the field from the id OR the name (bd polyglot-pdf-96um6).
+    //
+    // Keying on id alone was wrong for GROUPS: only option[0] carries
+    // id={field.id}, and the browser focuses the CHECKED option on tab-in -- so
+    // on any already-answered radio whose answer is not the first choice
+    // ("Female" on w7 sex), Enter landed on an element with no id and returned
+    // early. That is the same "no keyboard verify path" defect this bead exists
+    // to close, surviving the fix meant to close it.
+    //
+    // NAME is the reliable handle: every option of a group carries it, and the
+    // single controls carry it too (name={field.id}). The `[]` suffix is the
+    // checkbox-group convention.
+    const rawName = (target as HTMLInputElement | null)?.name;
+    const fieldId =
+      target?.id || (rawName ? rawName.replace(/\[\]$/, '') : '');
     if (!fieldId) return;
     // A textarea's Enter is a newline, not a submit -- leave it alone.
     if (target?.tagName === 'TEXTAREA') return;

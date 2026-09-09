@@ -325,4 +325,48 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
       'Preview must have the same keyboard verify path as Simplified'
     ).toBeTruthy();
   });
+
+  it('ENTER on a NON-FIRST radio option opens the modal (bd polyglot-pdf-96um6)', () => {
+    // The test that was missing twice. Only option[0] carries id={field.id}, and
+    // the browser focuses the CHECKED option on tab-in -- so on an already-
+    // answered radio whose answer is not the first choice ("Female" on w7 sex),
+    // Enter landed on an element with no id and the handler returned early. The
+    // handler now resolves by id OR name, and every option carries the name.
+    const schema = {
+      ...VERIFY_SCHEMA,
+      fields: [{
+        id: 'sex', name: 'Sex', spoken_name: 'sex', section_id: 's1', type: 'radio',
+        options: [{ value: 'm', label: 'Male' }, { value: 'f', label: 'Female' }],
+      }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+    } as unknown as FormSchema;
+    render(<SchemaForm schema={schema} kitId="test" />);
+
+    const options = Array.from(document.querySelectorAll('input[name="sex"]')) as HTMLInputElement[];
+    expect(options[1].id, 'the second option has no id -- that is the whole point').toBe('');
+    fireEvent.click(options[1]);                       // pick "Female"
+    fireEvent.keyDown(options[1], { key: 'Enter' });    // Enter where focus actually is
+
+    expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
+  });
+
+  it('ENTER on a non-first CHECKBOX-GROUP option opens the modal too', () => {
+    // Same shape, and the group's name carries a "[]" suffix the handler strips.
+    const schema = {
+      ...VERIFY_SCHEMA,
+      fields: [{
+        id: 'reason', name: 'Reason', spoken_name: 'reason', section_id: 's1',
+        type: 'checkbox_group',
+        options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+      }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['reason'] }],
+    } as unknown as FormSchema;
+    render(<SchemaForm schema={schema} kitId="test" />);
+
+    const options = Array.from(document.querySelectorAll('input[name="reason[]"]')) as HTMLInputElement[];
+    fireEvent.click(options[1]);
+    fireEvent.keyDown(options[1], { key: 'Enter' });
+
+    expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
+  });
 });

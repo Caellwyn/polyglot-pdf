@@ -18,7 +18,7 @@
 
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { FormSchema } from '../types/schema';
+import type { FormSchema, FieldType } from '../types/schema';
 
 // --- Mocks for SchemaForm's heavy dependencies -----------------------------
 
@@ -161,17 +161,38 @@ function setWidth(width: number) {
 describe('every field type is reachable by id (bd polyglot-pdf-96um6)', () => {
   afterEach(() => cleanup());
 
-  const CASES: Array<{ type: string; extra?: Record<string, unknown> }> = [
-    { type: 'text' },
-    { type: 'textarea' },
-    { type: 'date' },
-    { type: 'select', extra: { options: [{ value: 'a', label: 'A' }] } },
-    { type: 'radio', extra: { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } },
-    { type: 'checkbox' },
-    { type: 'checkbox_group', extra: { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } },
-  ];
+  // EXHAUSTIVE BY CONSTRUCTION, not by hand-listing. Keying the record on
+  // FieldType makes tsc fail if a new type is added to the union and not given a
+  // case here -- which is the difference between pinning the SET and pinning
+  // seven instances. My first version typed this `Array<{type: string}>` and
+  // covered 7 of 13; fresh-eyes caught that the docstring claimed otherwise.
+  //
+  // The three UNIMPLEMENTED types render a placeholder with no input at all
+  // (FieldRenderer's "not yet implemented" branch), so they are listed with
+  // rendersInput:false -- present in the record, exempt from the id assertion,
+  // and they start failing the moment someone implements one without an id.
+  const CASES: Record<FieldType, { extra?: Record<string, unknown>; rendersInput: boolean }> = {
+    number: { rendersInput: true },
+    tel: { rendersInput: true },
+    email: { rendersInput: true },
+    signature: { rendersInput: false },
+    address_group: { rendersInput: false },
+    table: { rendersInput: false },
 
-  it.each(CASES)('$type renders an element with id=field.id', ({ type, extra }) => {
+    text: { rendersInput: true },
+    textarea: { rendersInput: true },
+    date: { rendersInput: true },
+    select: { rendersInput: true, extra: { options: [{ value: 'a', label: 'A' }] } },
+    radio: { rendersInput: true, extra: { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } },
+    checkbox: { rendersInput: true },
+    checkbox_group: { rendersInput: true, extra: { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } },
+  };
+
+  const RENDERING = (Object.entries(CASES) as Array<[FieldType, typeof CASES[FieldType]]>)
+    .filter(([, c]) => c.rendersInput)
+    .map(([type, c]) => ({ type, extra: c.extra }));
+
+  it.each(RENDERING)('$type renders an element with id=field.id', ({ type, extra }) => {
     const schema = {
       source: 'web',
       form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },

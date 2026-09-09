@@ -378,14 +378,25 @@ now comes only from an explicit act -- the verbal confirm, the skip control, or
 value and stays in the next-field search (`computeNextField`), so it is re-offered
 rather than stranded.
 
-The Enter->verify gesture reaches **every** field type, and that is a real
-constraint rather than a happy accident: the handler keys on `target.id`, so a
-field type whose control does not render `id={field.id}` has NO keyboard verify
-path at all. Radio and checkbox GROUPS rendered only `name` and so were
-unreachable -- 30 of 323 fields across the shipped kits. Both now put the id on
-their FIRST option (one id per field, never per option), and
-`SchemaForm.fieldIds.test.tsx` pins the whole set, so a new field type that
-forgets it fails CI instead of silently losing verification.
+The Enter->verify gesture reaches every field type that renders an input, and
+that took two goes to get right. The handler resolves the field from the focused
+element's `id` **or its `name`**, and the name is the load-bearing half: a
+radio/checkbox GROUP carries `id={field.id}` on its FIRST option only (duplicate
+ids are invalid HTML), but the browser focuses the CHECKED option -- so an
+id-only lookup missed every already-answered group whose answer was not the first
+choice. Every option carries the name, which is why the handler prefers it as the
+fallback.
+
+`SchemaForm.fieldIds.test.tsx` pins the set by keying its cases on the `FieldType`
+union itself, so adding a type without a case is a TYPE error, not a silent gap.
+The three unimplemented types (`signature`, `address_group`, `table`) render a
+placeholder with no input and are marked exempt there -- they start failing the
+moment one is implemented without an id.
+
+Note the id and the name do different jobs: the **id** is for REACHING a field
+(`getElementById`, the verify gesture, scroll-and-highlight), the **name** is for
+BINDING a whole group's inputs (`fieldManager`'s change listeners). Conflating
+them silently unbound every non-first option once the groups gained ids.
 
 `field.copy_to` auto-copies the value to listed target
 fields at the **write chokepoint** -- `SchemaFormStateManager.updateField` --
