@@ -21,6 +21,7 @@ import { Route, Routes } from "react-router-dom";
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { ClientLinkEntry } from "./ClientLinkEntry";
 import { MintLinkPage } from "../console/MintLinkPage";
+import { LinkHistoryPage } from "../console/LinkHistoryPage";
 import { AuthProvider } from "../contexts/AuthContext";
 import { ProtectedRoute } from "../components/layout/ProtectedRoute";
 
@@ -36,6 +37,12 @@ export const CLIENT_LINK_PATH = "/f";
 
 /** Where staff mint a client link (bd polyglot-pdf-gob8l, first console slice). */
 export const MINT_PATH = "/console/links";
+
+/** Where staff see a firm's (or their own) client link history (bd
+ * polyglot-pdf-x22hm, Epic 2 Track C bead C5). Deliberately nested under
+ * /console/links/ rather than beside it -- MINT_PATH is the CREATE action,
+ * this is the READ/manage view of the same resource. */
+export const LINK_HISTORY_PATH = "/console/links/history";
 
 export function AppRoutes() {
   return (
@@ -62,6 +69,20 @@ export function AppRoutes() {
           <AuthProvider>
             <ProtectedRoute>
               <MintLinkPage />
+            </ProtectedRoute>
+          </AuthProvider>
+        }
+      />
+      {/* Link history: a manager sees the firm's links, an employee only
+          their own -- see LinkHistoryPage.tsx's own docstring. Same
+          auth-gate shape as the mint route above; the admin service scopes
+          by actor independently. */}
+      <Route
+        path={LINK_HISTORY_PATH}
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <LinkHistoryPage />
             </ProtectedRoute>
           </AuthProvider>
         }
