@@ -243,7 +243,17 @@ async def _handle_fill_session(
 	# The staff member who SENT the link (bd polyglot-pdf-ugm6). Rides the
 	# session records so a CLIENT session satisfies the telemetry requirement
 	# -- firm, form, AND originating employee -- with no account anywhere.
+	# Contractually None for a staff session -- see log_form_session_start's
+	# docstring ("they are their own originator"). Do NOT widen this one for
+	# usage-event attribution; use usage_employee_id below instead.
 	link_employee_id: str | None = None,
+	# Usage-event employee attribution ONLY (bd polyglot-pdf-cjifh, E3.2
+	# live-voice plumbing) -- DISTINCT from link_employee_id above. A client
+	# session carries the same value as link_employee_id (the link's
+	# employee_id); a STAFF session carries the staff uid here instead of
+	# None, so a live-voice usage event always attributes to a person. See the
+	# caller (fill_form_from_schema) for the derivation.
+	usage_employee_id: str | None = None,
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
@@ -334,6 +344,17 @@ async def _handle_fill_session(
 			kit_id=kit_id,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
 			firm_id=firm_id,  # Firm identity for per-firm telemetry (bd polyglot-pdf-xwlt)
 			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
+			# Usage-event attribution (bd polyglot-pdf-cjifh, E3.2 live-voice
+			# plumbing). link_jti already existed on THIS function's own
+			# signature (see the module comment above it) but was never
+			# threaded past this call. employee_id here is usage_employee_id,
+			# NOT link_employee_id -- the usage event needs a person for BOTH
+			# session shapes (staff uid when there is no link), while
+			# link_employee_id stays reserved for the confirmation-audit
+			# "who sent the link" meaning (None for staff; see that param's
+			# docstring above).
+			link_jti=link_jti,
+			employee_id=usage_employee_id,
 		)
 
 	# DTI field-1 opener (epic polyglot-pdf-13w7, bd polyglot-pdf-j748): the static
@@ -1770,4 +1791,19 @@ async def fill_form_from_schema(
 						  if isinstance(claims, dict)
 						  and claims.get("is_client_link")
 						  else None),
+		# Usage-event employee attribution ONLY (bd polyglot-pdf-cjifh) --
+		# DISTINCT from link_employee_id above, which is the confirmation-audit
+		# "who SENT the link" field and is contractually None for a staff
+		# session (log_form_session_start's docstring: "they are their own
+		# originator"). The usage event has a different requirement: BOTH
+		# session shapes must attribute to a person, so a staff session's usage
+		# events carry the STAFF UID here while the audit trail's
+		# link_employee_id stays None for that same session. A client-link
+		# session carries the same value on both (its employee_id IS the
+		# link's employee_id either way).
+		usage_employee_id=(claims.get("employee_id")
+						   if isinstance(claims, dict) and claims.get("is_client_link")
+						   else (claims.get("uid") or claims.get("sub"))
+						   if isinstance(claims, dict)
+						   else None),
 	)
