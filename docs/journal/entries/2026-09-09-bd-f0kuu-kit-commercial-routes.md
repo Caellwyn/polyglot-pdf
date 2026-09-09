@@ -72,6 +72,41 @@ to serialize a Python `float("nan")`/`float("inf")` at all -- a raw body is
 the faithful equivalent of a caller that put those literal (non-standard,
 but Python-`json`-parseable) tokens on the wire directly.
 
+### Fresh-eyes round 1 (post-review fixes)
+
+The outer cross-surface review returned `GAPS-FOUND (2)`. Breakdown:
+
+- **Adopted (blocker) -- `GET /admin/kits` did not catch `FormKitStoreError`
+  from `store.list_kit_ids()`,** unlike every other `FormKitStore` call site
+  in the repo (`backend/routes/form_kit_routes.py`'s six sites all wrap the
+  call and return a 502). Fixed: `list_kits` now catches `FormKitStoreError`
+  and raises the same 502-with-logged-error shape. New test
+  `test_list_kits_on_a_store_outage_returns_a_clean_502` (mutation-verified:
+  removing the try/except reddens it with an unhandled
+  `FormKitStoreError` propagating through the route instead of a clean 502).
+- **Adopted (blocker) -- GET and PUT used different field names
+  (`cap_usd` vs `burn_cap_usd`) for the identical stored value,** with no
+  shared constant and no test tying them together, so a console reading
+  both responses for the same kit would need a per-route translation for
+  one number. Fixed on the PUT side only (the shared A3 reader,
+  `kit_commercials.resolve_commercial`, is unchanged per the plan's "do not
+  write a second reader"): `PUT`'s response now carries the value under
+  both `burn_cap_usd` (matching its own request body / the storage key) and
+  `cap_usd` (matching what GET returns for the same kit) -- the identical
+  float just validated and written, so the two cannot drift. New test
+  `test_put_response_cap_usd_matches_get_response_cap_usd` (mutation-
+  verified: dropping the `cap_usd` key reddens it with a `KeyError`).
+- **Deferred (nits, filed as bead `polyglot-pdf-y2hht`,
+  "chore(nits): deferred review nits from polyglot-pdf-f0kuu") --** the
+  empty-`kit_id` test comment's inaccurate "falls through to GET
+  /admin/kits" claim; `GET /admin/kits`'s sequential, unbounded,
+  unparalleled per-kit Firestore fan-out; and the pre-existing (unchanged on
+  `origin/dev`) chronological `bd <id>:` stamp-chain preamble style in
+  `docs/components/admin-service.md` / `docs/technical_guide.md` (the
+  reviewer could not file this themselves -- `bd dolt pull` timed out twice
+  in their environment -- so it is filed here instead). None of the three
+  change behavior or trace to an exit criterion.
+
 ## Lessons
 
 **A parametrized "malformed shape" list needs to be checked against what the
@@ -111,9 +146,12 @@ bead. Review outcomes recorded in the closeout ping.
 
 ## Files touched
 
-- `admin_backend/routes/kit_routes.py` -- new: the three routes.
+- `admin_backend/routes/kit_routes.py` -- new: the three routes; fresh-eyes
+  round 1 added the `FormKitStoreError` -> 502 catch in `list_kits` and the
+  `cap_usd` echo in `put_kit_commercial`'s response.
 - `admin_backend/main.py` -- registers the router, docstring note.
-- `admin_backend/tests/unit/test_kit_routes.py` -- new: 44 tests.
+- `admin_backend/tests/unit/test_kit_routes.py` -- 46 tests (44 at initial
+  ship, +2 in fresh-eyes round 1).
 - `admin_backend/tests/unit/test_admin_route_auth.py` -- route-set pin.
 - `admin_backend/tests/unit/test_admin_audit_coverage.py` -- MUTATION_KINDS
   entry + tie-back test.

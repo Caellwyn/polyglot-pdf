@@ -32,6 +32,15 @@ overrides. Mirrors link_budget.py's polarity (zero/negative/NaN/inf/bool
 all refused) without importing its module-private helpers, which are typed
 for str input read from an env var, not a JSON request body.
 
+FIELD NAME: the request body and the stored doc both spell the ceiling
+"burn_cap_usd" (the storage key); resolve_commercial's own vocabulary
+spells the resolved value "cap_usd" (bead A3, unchanged here -- the plan
+says not to write a second reader, so this module does not rename it).
+The PUT response therefore echoes the value under BOTH "burn_cap_usd"
+(matching its own request body) and "cap_usd" (matching what GET returns
+for the same kit) so a console reading either route's response after a
+write does not need a per-route translation for one number.
+
 AUDITED IN-TRANSACTION (exit criterion 1): the write and its audit row
 share one Firestore transaction, mirroring config_routes.py's
 _apply_config_write / firm_routes.py's _apply_firm_patch shape -- read
@@ -317,6 +326,16 @@ async def put_kit_commercial(
         "kit_id": kit_id,
         "credit_cost": credit_cost,
         "burn_cap_usd": burn_cap_usd,
+        # Also under resolve_commercial's own key: GET's response (and
+        # GET /admin/kits) spreads resolve_commercial's dict, which spells
+        # this value "cap_usd" (bead A3's vocabulary, unchanged here). A
+        # console screen that both displays a kit's price (GET) and edits
+        # it (PUT) needs one key to read for "what did I just set", not a
+        # per-route translation for what is the identical stored number --
+        # so PUT echoes it under both names rather than only the request
+        # body's own field name. Literally the same float just validated
+        # and written, not a second read: no way for the two to drift.
+        "cap_usd": burn_cap_usd,
         "display": display,
         "before": result["before"],
         "request_id": request_id,
@@ -338,12 +357,20 @@ async def list_kits(
     read stays under asyncio.to_thread like every other admin-service call
     into a synchronous Firestore helper.
 
-    A read, so no audit row.
+    A read, so no audit row. A store outage (FormKitStoreError -- the exact
+    condition that type exists for) is a 502, matching every other
+    FormKitStore call site in the repo (see form_kit_routes.py's own
+    handling of the same exception), not a bare unhandled 500.
     """
-    from backend.services.form_kits import get_form_kit_store
+    from backend.services.form_kits import FormKitStoreError, get_form_kit_store
 
     store = get_form_kit_store()
-    kit_ids = await store.list_kit_ids()
+    try:
+        kit_ids = await store.list_kit_ids()
+    except FormKitStoreError as exc:
+        _log.error("admin_list_kits_failed", error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to load form kit list") from exc
 
     kits = []
     for kit_id in kit_ids:

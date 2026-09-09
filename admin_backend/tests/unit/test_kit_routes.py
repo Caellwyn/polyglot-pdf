@@ -31,6 +31,7 @@ from admin_backend.routes import kit_routes
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from backend.services import kit_commercials
+from backend.services.form_kits import FormKitStoreError
 
 
 # --------------------------------------------------------------------------
@@ -155,10 +156,13 @@ class _FakeFormKitStore:
     """Stands in for backend.services.form_kits's FormKitStore -- only the
     one async method this route calls."""
 
-    def __init__(self, kit_ids):
+    def __init__(self, kit_ids, list_error=None):
         self._kit_ids = list(kit_ids)
+        self._list_error = list_error
 
     async def list_kit_ids(self):
+        if self._list_error is not None:
+            raise self._list_error
         return list(self._kit_ids)
 
 
@@ -212,6 +216,30 @@ def test_put_writes_the_doc_and_exactly_one_committed_audit_row(
     assert isinstance(row["ts"], float) and row["ts"] > 0
     assert row["request_id"] == resp.json()["request_id"]
     assert audit_log.ROW_FIELDS <= set(row)
+
+
+def test_put_response_cap_usd_matches_get_response_cap_usd(client, fake_db):
+    """The PUT request/response spell the ceiling "burn_cap_usd" (matching
+    the request body and the storage key); GET spells the identical value
+    "cap_usd" (resolve_commercial's own vocabulary, bead A3, unchanged
+    here). A console reading either response after a write must not need a
+    per-route translation for one number -- so PUT's response also carries
+    "cap_usd", and it must equal both PUT's own "burn_cap_usd" and what a
+    follow-up GET for the same kit returns.
+
+    Mutation: drop the "cap_usd" key from put_kit_commercial's return dict
+    -- this goes red with a KeyError."""
+    put_resp = client.put(
+        "/admin/kits/w-7/commercial",
+        json={"credit_cost": 2, "burn_cap_usd": 5.5, "display": {}},
+    )
+    assert put_resp.status_code == 200, put_resp.text
+    put_body = put_resp.json()
+    assert put_body["cap_usd"] == put_body["burn_cap_usd"] == 5.5
+
+    get_resp = client.get("/admin/kits/w-7/commercial")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["cap_usd"] == put_body["cap_usd"]
 
 
 def test_a_forced_audit_failure_leaves_the_kit_doc_unchanged(client, fake_db):
@@ -471,6 +499,25 @@ def test_list_kits_writes_no_audit_row(client, fake_db, monkeypatch):
         "backend.services.form_kits.get_form_kit_store", lambda: store)
     client.get("/admin/kits")
     assert fake_db.audit_rows() == []
+
+
+def test_list_kits_on_a_store_outage_returns_a_clean_502(
+        client, fake_db, monkeypatch):
+    """Every other FormKitStore call site in the repo (form_kit_routes.py's
+    six of them) catches FormKitStoreError and turns it into a 502 with a
+    logged error line -- this route must do the same rather than let a GCS
+    outage surface as a bare unhandled 500.
+
+    Mutation: remove the try/except FormKitStoreError around
+    store.list_kit_ids() in list_kits -- this goes red (500 instead of 502,
+    or the assertion on the logged error line fails)."""
+    store = _FakeFormKitStore(
+        [], list_error=FormKitStoreError("store unreachable"))
+    monkeypatch.setattr(
+        "backend.services.form_kits.get_form_kit_store", lambda: store)
+
+    resp = client.get("/admin/kits")
+    assert resp.status_code == 502, resp.text
 
 
 # --------------------------------------------------------------------------
