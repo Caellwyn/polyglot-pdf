@@ -101,9 +101,10 @@ async def test_a_token_WITH_cap_usd_overrides_the_global_at_the_socket(
 
     captured = {}
 
-    def _spy_check_budget(jti, kit_metadata=None):
+    def _spy_check_budget(jti, kit_metadata=None, firm_id=None):
         captured["jti"] = jti
         captured["kit_metadata"] = kit_metadata
+        captured["firm_id"] = firm_id
         return 3.0
 
     monkeypatch.setattr(
@@ -119,6 +120,9 @@ async def test_a_token_WITH_cap_usd_overrides_the_global_at_the_socket(
     from backend.services.link_budget import KIT_COST_CEILING_KEY
 
     assert captured["kit_metadata"] == {KIT_COST_CEILING_KEY: 3.0}
+    # bd polyglot-pdf-bo95a: the claim's firm_id must reach check_budget so
+    # a refusal's telemetry alert doc can be labelled with the right firm.
+    assert captured["firm_id"] == "firm-a"
     mock_fill_session.assert_awaited()
 
 
@@ -141,8 +145,9 @@ async def test_a_token_WITHOUT_cap_usd_uses_the_global_at_the_socket(
 
     captured = {}
 
-    def _spy_check_budget(jti, kit_metadata=None):
+    def _spy_check_budget(jti, kit_metadata=None, firm_id=None):
         captured["kit_metadata"] = kit_metadata
+        captured["firm_id"] = firm_id
         return 10.0
 
     monkeypatch.setattr(
@@ -155,6 +160,7 @@ async def test_a_token_WITHOUT_cap_usd_uses_the_global_at_the_socket(
     from backend.services.link_budget import KIT_COST_CEILING_KEY
 
     assert captured["kit_metadata"] == {KIT_COST_CEILING_KEY: 10.0}
+    assert captured["firm_id"] == "firm-a"
     mock_fill_session.assert_awaited()
 
 

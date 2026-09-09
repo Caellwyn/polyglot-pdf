@@ -306,8 +306,20 @@ def test_no_shipped_source_reads_this_key_from_env_outside_runtime_config(key):
     )
 
 
+# The two keys that have NEVER had a pre-bg313 env reader, and must never
+# gain one -- CREDITS_ENFORCED (Epic 2 bead A3) and CREDIT_LOW_THRESHOLD
+# (Epic 3 bead E3.5, bd polyglot-pdf-bo95a). A frozenset, not a growing
+# hand-typed exclusion list of individual `- {...}` subtractions, so the NEXT
+# no-env-fallback key added here extends ONE set rather than risking a test
+# that still iterates the legacy assertion over a key that was never meant
+# to satisfy it (CLAUDE.md scar #8: enumerate the set).
+_NO_ENV_FALLBACK_KEYS = frozenset({
+    runtime_config.KEY_CREDITS_ENFORCED,
+    runtime_config.KEY_CREDIT_LOW_THRESHOLD,
+})
+
 _LEGACY_ENV_KEYS = sorted(
-    runtime_config.RUNTIME_CONFIG_KEYS - {runtime_config.KEY_CREDITS_ENFORCED}
+    runtime_config.RUNTIME_CONFIG_KEYS - _NO_ENV_FALLBACK_KEYS
 )
 
 
@@ -336,25 +348,31 @@ def test_runtime_config_itself_still_reads_the_legacy_env_var(key):
     )
 
 
-def test_credits_enforced_has_no_env_read_anywhere():
-    """CREDITS_ENFORCED is NEW and was never an env var -- it must never gain
-    one. Same grep, but over EVERY file including runtime_config.py itself:
-    the point is that no os.getenv/os.environ call anywhere resolves this
-    key, not merely that call sites outside this module are clean.
+@pytest.mark.parametrize("key", sorted(_NO_ENV_FALLBACK_KEYS))
+def test_a_no_env_fallback_key_has_no_env_read_anywhere(key):
+    """CREDITS_ENFORCED and CREDIT_LOW_THRESHOLD are NEW and were never env
+    vars -- neither must ever gain one. Same grep as the offender test above,
+    but over EVERY file including runtime_config.py itself: the point is
+    that no os.getenv/os.environ call anywhere resolves either key, not
+    merely that call sites outside this module are clean.
 
-    Mutation: add `os.getenv("CREDITS_ENFORCED", "false")` inside
-    runtime_config.py -- red.
+    Parametrized over the whole set (CLAUDE.md scar #8), not one hand-typed
+    case per key: a THIRD no-env-fallback key added later and forgotten here
+    would otherwise go unpinned by this test even though it is exactly the
+    shape this test exists to catch.
+
+    Mutation: add `os.getenv(key, "false")` inside runtime_config.py -- red.
     """
     offenders = []
     for path in _iter_source_files():
         text = path.read_text(encoding="utf-8")
         for m in _ENV_READ_RE.finditer(text):
             found = next(g for g in m.groups() if g)
-            if found == "CREDITS_ENFORCED":
+            if found == key:
                 offenders.append(str(path.relative_to(REPO_ROOT)))
     assert offenders == [], (
-        f"CREDITS_ENFORCED must never be read from the environment (it has "
-        f"no env fallback by design), but found a read in: {offenders}"
+        f"{key} must never be read from the environment (it has no env "
+        f"fallback by design), but found a read in: {offenders}"
     )
 
 
@@ -366,6 +384,38 @@ def test_credits_enforced_defaults_false_and_is_settable(monkeypatch):
     db.docs["staging"] = {"CREDITS_ENFORCED": True}
     runtime_config.clear_cache()
     assert runtime_config.credits_enforced("staging") is True
+
+
+def test_credit_low_threshold_defaults_10_and_is_settable(monkeypatch):
+    db = _FakeDb({})
+    _patch_db(monkeypatch, db)
+    assert runtime_config.credit_low_threshold("staging") == 10
+
+    db.docs["staging"] = {"CREDIT_LOW_THRESHOLD": 25}
+    runtime_config.clear_cache()
+    assert runtime_config.credit_low_threshold("staging") == 25
+
+
+def test_credit_low_threshold_rejects_bool_and_negative(monkeypatch):
+    """Same bool-is-an-int-subclass trap LINK_FIRM_CAP already guards, plus
+    the sign check -- both fall back to the compiled default (10) rather
+    than applying a nonsensical stored value.
+    """
+    db = _FakeDb({"staging": {"CREDIT_LOW_THRESHOLD": True}})
+    _patch_db(monkeypatch, db)
+    assert runtime_config.credit_low_threshold("staging") == 10
+
+    db.docs["staging"] = {"CREDIT_LOW_THRESHOLD": -5}
+    runtime_config.clear_cache()
+    assert runtime_config.credit_low_threshold("staging") == 10
+
+
+def test_credit_low_threshold_accepts_zero():
+    """Zero IS a legitimate threshold (only the exhausted/zero-balance alert
+    fires, never the low warning) -- unlike LINK_FIRM_CAP, this is not a
+    reject case."""
+    assert runtime_config.coerce_value(
+        runtime_config.KEY_CREDIT_LOW_THRESHOLD, 0) == 0
 
 
 # ---------------------------------------------------------------------------
