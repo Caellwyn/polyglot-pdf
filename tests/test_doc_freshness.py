@@ -1548,38 +1548,121 @@ class TestFreshnessAcks:
             "docs/freshness/renamed-old.md.ack",
         }, "status prefixes must be stripped, not carried into the path"
 
-    def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
-        """The anti-ack-spam hint must not die of its own alarm fatigue.
+    def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus_first_acks(
+        self, monkeypatch,
+    ):
+        """A branch that adds the FIRST acks to an ack-less base must report
+        branch == corpus (bd polyglot-pdf-sisvg).
+
+        The earlier version of this test derived "committed on base" from
+        `git_commit_time(p) is not None` -- i.e. "has ANY commit, anywhere
+        reachable from HEAD". That is true for a file committed ON THIS
+        BRANCH too (it's still a commit), so on a branch adding the first N
+        acks to an ack-less base, `committed_on_base` came out non-empty and
+        the test asserted `branch < corpus or branch == 0` against
+        `branch == corpus == N` -- failing for any N > 0 (seen on PR #754,
+        bd polyglot-pdf-1op3g, with N=2). "This branch adds no acks" was an
+        assumption about the working tree, not a property of the code under
+        test.
+
+        The fix: derive "present at the base" from a fake merge-base TREE
+        (what `git ls-tree <merge-base>` would show), not from whether the
+        file has ever been committed at all. This fixture fakes the base tree
+        as empty and the branch's own `git diff` as adding two acks --
+        exactly PR #754's shape -- and pins branch == corpus == 2.
+
+        Mutation: reverting `branch_ack_count` to count via
+        `ack_dir.glob(...)` (the pre-fytzi corpus-wide count) makes this
+        fixture still return 2 for `branch` (since the fake `git diff` +
+        `git status` in this test do not feed a real corpus glob), so this
+        specific fixture cannot itself catch that regression -- that
+        regression is covered by `test_branch_ack_count_actually_reads_uncommitted_acks`
+        and the corpus/subset assertion below instead. This test's own job is
+        narrower: prove the merge-base scoping doesn't misfire on an
+        ack-less base.
+        """
+        base_tree: set[str] = set()  # merge-base has NO acks at all
+        branch_adds = {
+            "docs/freshness/standards~x.md.ack",
+            "docs/freshness/standards~y.md.ack",
+        }
+        branch = self._fake_branch_ack_count(
+            monkeypatch, base_tree=base_tree, branch_committed=branch_adds,
+        )
+        corpus = len(base_tree | branch_adds)
+        assert branch == corpus == 2, (
+            f"branch adding the first acks to an ack-less base must report "
+            f"branch == corpus (got branch={branch}, corpus={corpus})"
+        )
+
+    def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus_incremental(
+        self, monkeypatch,
+    ):
+        """A branch adding ONE ack over a base that already holds M acks must
+        still report only its own -- the property the old (buggy) test meant
+        to pin, kept and mutation-verified here (bd polyglot-pdf-sisvg).
 
         An earlier version counted every .ack file in the repo, so the moment
         the corpus audit lands its ~20 acks the hint would fire on EVERY
         future one-doc ack, forever -- turning the one signal that catches
         ack-spam into background noise. That is exactly how the stale-doc flag
         died, and it would have been self-inflicted. Scoped to the branch, a
-        mature corpus is invisible: only what THIS branch adds counts."""
-        # This branch adds no acks, so the count is 0 even though the repo may
-        # hold many. A corpus-wide count would return len(all acks) instead.
-        # Pin the PROPERTY (branch-scoped, not corpus-scoped) rather than a
-        # bare `== 0`, which silently depends on the working tree being clean:
-        # a stray .ack from any other process fails the assertion for a reason
-        # unrelated to the behavior -- which is exactly what happened when a
-        # concurrent reviewer's experiment left two behind mid-run.
-        ack_dir = freshness.REPO_ROOT / freshness.ACK_DIR
-        corpus = len(list(ack_dir.glob("*" + freshness.ACK_SUFFIX))) if ack_dir.is_dir() else 0
-        branch = freshness.branch_ack_count()
-        assert branch <= corpus, (
-            "branch ack count must never exceed the corpus count -- it is a "
-            "subset by construction"
+        mature corpus is invisible: only what THIS branch adds counts.
+
+        Mutation: swap `branch_ack_count`'s `git diff merge_base HEAD` for a
+        corpus-wide `ack_dir.glob(...)` count and this goes from asserting
+        `branch == 1` to `branch == 3` -- red. (Reverting to verify.)
+        """
+        base_tree = {
+            "docs/freshness/standards~base1.md.ack",
+            "docs/freshness/standards~base2.md.ack",
+        }
+        branch_adds = {"docs/freshness/standards~branch1.md.ack"}
+        branch = self._fake_branch_ack_count(
+            monkeypatch, base_tree=base_tree, branch_committed=branch_adds,
         )
-        committed_on_base = [
-            p for p in (ack_dir.glob("*" + freshness.ACK_SUFFIX) if ack_dir.is_dir() else [])
-            if freshness.git_commit_time(p) is not None
-        ]
-        if committed_on_base:
-            assert branch < corpus or branch == 0, (
-                "acks already committed on the base must not be counted as "
-                "this branch's work"
-            )
+        corpus = len(base_tree | branch_adds)
+        assert branch == 1, (
+            f"branch adding one ack over a base that already holds acks "
+            f"must report only its own addition (got branch={branch})"
+        )
+        assert branch < corpus, (
+            "sanity: the branch's own count must be strictly less than the "
+            "full corpus once the base already holds acks"
+        )
+
+    @staticmethod
+    def _fake_branch_ack_count(
+        monkeypatch, *, base_tree: set[str], branch_committed: set[str],
+    ) -> int:
+        """Fake `subprocess.run` so `branch_ack_count()` runs hermetically
+        against a scripted merge-base tree and a scripted branch diff, then
+        return its result.
+
+        `base_tree` is unused by `branch_ack_count` itself (it never calls
+        `git ls-tree`) -- it exists here purely as the fixture's own source
+        of truth for what "the base already had" means, so each test's
+        `corpus` computation (`base_tree | branch_committed`) matches the
+        scenario it scripted rather than reading the real repo's acks.
+        `branch_committed` feeds the faked `git diff --name-only merge_base
+        HEAD -- docs/freshness` call, which is the real mechanism
+        `branch_ack_count` uses to scope to this branch's own additions.
+        """
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 0
+                stdout = ""
+            if "merge-base" in cmd:
+                R.stdout = "deadbeef\n"
+            elif "diff" in cmd:
+                R.stdout = "\n".join(sorted(branch_committed)) + "\n" if branch_committed else ""
+            elif "status" in cmd:
+                assert "-z" in cmd, "branch_ack_count must request -z output"
+                R.stdout = ""  # no uncommitted acks in this scenario
+            return R
+
+        monkeypatch.setattr(freshness.subprocess, "run", fake_run)
+        return freshness.branch_ack_count()
 
     def test_ack_path_is_unique_per_doc_and_flattened(self):
         """One ack file per doc is what makes acks conflict-free: two sessions

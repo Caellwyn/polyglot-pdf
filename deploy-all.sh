@@ -293,6 +293,15 @@ FORM_KITS_DIR="$SCRIPT_DIR/form-kits"
 # historical warn-and-continue behavior.
 BACKEND_SERVICE_NAME_EXPLICIT="${BACKEND_SERVICE_NAME:-}"
 BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"
+# The admin service's Cloud Run name (bd polyglot-pdf-z4ljj, C0). ONE admin
+# service serves both channels (see docs/doctrine/promotion-tiers.md), so --
+# unlike BACKEND_SERVICE_NAME -- neither channel wrapper overrides this: both
+# deploy-staging.sh and deploy-demo.sh want the SAME admin service, matching
+# deploy-admin.sh's and deploy-admin-console.sh's own `polyglot-admin` default.
+# ${VAR:-default}, never a bare assignment, for the same clobber reason as
+# BACKEND_SERVICE_NAME above: a bare assignment would silently override a
+# caller's export.
+ADMIN_SERVICE_NAME="${ADMIN_SERVICE_NAME:-polyglot-admin}"
 REGION="us-central1"
 # Demo bucket by default (bd polyglot-pdf-d7hy, enumerated the set after the
 # outer cross-surface review caught this 4th caller), matching every other
@@ -840,6 +849,53 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         exit 1
     else
         log_warn "Could not resolve live backend URL; build will fall back to VITE_WS_URL in .env.<mode> (may be stale -- bd polyglot-pdf-emm7)"
+    fi
+
+    # Resolve the LIVE admin service URL the SAME way, and inject it as
+    # VITE_ADMIN_API_BASE_URL (bd polyglot-pdf-z4ljj, C0). The main app's
+    # firm-console pages (/console/*) call the admin service over plain HTTP,
+    # which DOES go through this build -- unlike VITE_WS_URL there is no
+    # Hosting-rewrite alternative here either, because the admin service is a
+    # SEPARATE Cloud Run service from the voice backend (`polyglot-admin`, not
+    # `$BACKEND_SERVICE_NAME`) and firebase.json's /api/** rewrite points only
+    # at the voice backend. Mirrors deploy-admin-console.sh's own
+    # VITE_ADMIN_API_BASE_URL resolution for the standalone admin console
+    # (docs/technical_guide.md Surface contract 17) -- same env var name, a
+    # DIFFERENT Vite app/build consuming it, so there is no collision.
+    ADMIN_URL=$(gcloud run services describe "$ADMIN_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)' 2>/dev/null || true)
+    if [ -n "$ADMIN_URL" ]; then
+        export VITE_ADMIN_API_BASE_URL="$ADMIN_URL"
+        log_info "🔌 Injecting live admin service URL into build: VITE_ADMIN_API_BASE_URL=$VITE_ADMIN_API_BASE_URL"
+
+        # REACHABILITY WARNING, always warn severity here: the admin service is
+        # PRE-EXISTING from this script's point of view (deploy-admin.sh's job,
+        # not this one's) -- same reasoning as deploy-admin-console.sh's and
+        # deploy-editor.sh's identical warn-mode calls for the same service /
+        # for the public backend respectively. This holds even on the BACKEND
+        # stage of a bare `deploy-all.sh --all` run: that stage creates the
+        # VOICE backend, never the admin service, so the admin service is
+        # never "this run's own doing" the way the backend-stage VITE_WS_URL
+        # call is.
+        verify_service_publicly_reachable \
+            "$ADMIN_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME" warn
+    elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then
+        # An explicit channel was selected (same signal the VITE_WS_URL block
+        # above uses) and the admin service could not be resolved -- abort for
+        # the same reason: the fallback VITE_ADMIN_API_BASE_URL in
+        # frontend/.env.demo (committed for the demo/staging build; there is
+        # no separate .env.staging, see docs/components/config-deployment.md)
+        # would silently point a staging build's firm-console pages at
+        # whichever admin URL happens to be committed there, which is not
+        # necessarily even wrong-channel (the admin service has none of its
+        # own) but IS an unresolved-at-deploy-time value the operator has no
+        # way to know is stale.
+        log_error "Could not resolve the Cloud Run URL for service '$ADMIN_SERVICE_NAME' in project '$POLYGLOT_PROJECT_NAME'."
+        log_error "Refusing to build: the fallback VITE_ADMIN_API_BASE_URL may be stale,"
+        log_error "so this build would send firm-console traffic to a wrong or dead admin service."
+        log_error "Deploy that service first (e.g. ./deploy-admin.sh), then retry."
+        exit 1
+    else
+        log_warn "Could not resolve live admin service URL; build will fall back to VITE_ADMIN_API_BASE_URL in .env.<mode> (may be stale)"
     fi
 
     # Build frontend (channel-aware; see FRONTEND_BUILD_CMD above)
