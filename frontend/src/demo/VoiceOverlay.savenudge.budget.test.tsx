@@ -21,7 +21,7 @@ import { resolve } from 'node:path';
 // The gate is one expression inside a large overlay component that drags in
 // audio, WS and PDF workers to render. What is under test is the STATUS ->
 // voiceEnding mapping, so this asserts on that expression directly rather than
-// standing up the whole surface -- the same reason clientRoute.test.tsx reads
+// standing up the whole surface -- the same reason AppRoutes.test.tsx reads
 // the route table instead of booting the app.
 const SOURCE = readFileSync(
   resolve(process.cwd(), 'src/demo/VoiceOverlay.tsx'),

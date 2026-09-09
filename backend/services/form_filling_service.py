@@ -270,6 +270,15 @@ class FormFillingService:
         """
         return self._confirmed_count
 
+    def spoken_language(self) -> str:
+        """This session's current spoken-conversation language name (e.g.
+        "Spanish"), for the usage-rollup by_language attribution (Epic 3 bead
+        E3.4, bd polyglot-pdf-w828m). Read-only accessor for the otherwise
+        private _spoken_language -- the teardown block in
+        websocket_routes.py needs it and lives outside this class.
+        """
+        return self._spoken_language
+
     def _note_field_confirmed(self) -> None:
         """Callback the callback handler fires on each RECORDED confirmation."""
         self._confirmed_count += 1

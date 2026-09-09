@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new Surface contract 25, the BigQuery telemetry sink + cost/income views (`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that ORs across three genuinely different `jsonPayload` shapes (contract 20's nested `message.event_type` for usage events, contract 18's flat `event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed `jsonPayload.event` for the two wired session events) rather than the single field name the plan's prose implied; five views whose referenced columns are pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and `LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind = 'live'` filter hard-coded in the view; and `admin-backend-sa`'s two BigQuery roles moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than `setup-admin-service.sh`.) (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-x22hm: Epic 2 Track C bead C5 -- new Surface contract 27, link history (`frontend/src/console/LinkHistoryPage.tsx` at `/console/links/history`), the first real caller of contract 23's admin-service wiring alongside C4's `EmployeesPage.tsx`; a known gap in `require_app_admin_or_owning_manager` (contract 22) that refuses an employee-role account before its own scoping logic runs is filed separately as bd polyglot-pdf-scaig, not fixed in this bead.) (bd polyglot-pdf-w828m outer Opus cross-surface review: Surface contract 26's usage-rollup teardown call site now dispatches `firm_kind()` + `record_session_end()` through ONE `asyncio.to_thread` call, matching every sibling Firestore call already on that route -- both were previously called directly on the shared event loop; and the rollup month-document id is now channel-suffixed (`YYYY-MM` for demo, `YYYY-MM_{channel}` for every other channel, mirroring bd polyglot-pdf-3q9qn's collection-suffix convention), since staging and demo share one Firestore project and the prior bare `YYYY-MM` id let a staging test-drive increment the same document the demo's billing view reads.) (bd polyglot-pdf-w828m: Epic 3 bead E3.4 -- new Surface contract 26, session-end usage rollups (`firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}`, new `backend/services/usage_rollups.py`): `record_session_end()` writes ONE BATCHED `db.batch()` set of `firestore.Increment` updates from the SAME websocket teardown block as `log_form_session_end`/`_bank_link_spend`; `record_link_opened`/`record_link_completed` hook `link_redemptions.py`'s open/complete paths for the two counters the teardown call cannot itself produce. HYPHENATED MAP KEYS (`i-90`, `zh-CN`) are handled by building every nested increment as a REAL nested dict via a `FieldPath(*parts).parts` walk, never a dotted string -- `set(merge=True)`, the write API this module uses so a new month document's first write CREATES it, does NOT dot-expand a flat string key the way `update()` does (confirmed against the vendored SDK before writing the module). `firestore.rules` gains deny blocks for both new nested `usage` subcollections.) (bd polyglot-pdf-f0kuu: Epic 2 Track B bead B3 -- kit commercial settings on the admin service, `GET /admin/kits`, GET/PUT `/admin/kits/{kit_id}/commercial`, extending Surface contract 24 with the write side of the mechanism that contract already documents the read side of: `resolve_commercial` reused as-is (no second reader), and a strictly validated PUT -- credit_cost a positive int, burn_cap_usd a positive finite float, bool/NaN/+-inf all refused explicitly -- audited in the same `@firestore.transactional` body as the write.) (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new Surface contract 25, the BigQuery telemetry sink + cost/income views (`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that ORs across three genuinely different `jsonPayload` shapes (contract 20's nested `message.event_type` for usage events, contract 18's flat `event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed `jsonPayload.event` for the two wired session events) rather than the single field name the plan's prose implied; five views whose referenced columns are pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and `LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind = 'live'` filter hard-coded in the view; and `admin-backend-sa`'s two BigQuery roles moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than `setup-admin-service.sh`.) (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -172,6 +172,9 @@ its own table).
 | PATCH | `/admin/firms/{firm_id}/kind` | Reclassify a firm `mock`<->`live` (bd `polyglot-pdf-zopqq`). Body `{kind, reason}` -- `reason` is REQUIRED (422 if blank); the UI's confirm-twice is a console-side control this route cannot see or enforce. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=`/`?employee_id=` optional equality filters. Gate: `require_app_admin_or_owning_manager` -- a manager reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/status` | Set a firm `active`\|`suspended` (bd `polyglot-pdf-zopqq`). Body `{status}`. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
+| GET | `/admin/kits` | Every kit in the form-kit store (bd `polyglot-pdf-f0kuu`, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the SAME reader `GET /admin/kits/{kit_id}/commercial` and the mint transaction use (Surface contract 24) -- so this list can never disagree with what a mint actually charges. `list_kit_ids()` is ASYNC (the store may be GCS-backed), awaited directly rather than run under `asyncio.to_thread`. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
+| GET | `/admin/kits/{kit_id}/commercial` | One kit's resolved credit price and USD spend ceiling (bd `polyglot-pdf-f0kuu`, Track B bead B3), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24). `source` is `"kit"` when a commercial doc exists, `"default"` when it does not. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
+| PUT | `/admin/kits/{kit_id}/commercial` | Set a kit's `credit_cost`, `burn_cap_usd` and `display` (bd `polyglot-pdf-f0kuu`, Track B bead B3). Refuses BEFORE any write on a malformed `credit_cost` (must be a positive int; bool refused), `burn_cap_usd` (must be a positive finite float; bool/NaN/+-inf refused) or `display` (a small string map) -- 422, so a bad edit can never reach the store as a "successful" write the read side's fallback would then paper over. Audited in the SAME `@firestore.transactional` body as the write (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). `admin_backend/routes/kit_routes.py` |
 | POST | `/admin/links/sweep-expired` | The hourly expired-link refund sweep (bd `polyglot-pdf-8vgfh`, plan: "Refund on unopened expiry"). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the FOURTH and last admin-service gate, its first consumer. Cloud Scheduler presents a Google-signed OIDC token; the gate checks the token's `aud` against this route's own URL -- the bare `ADMIN_SERVICE_URL` env var (service root) with the route's own path appended -- AND its `email` claim against the scheduler job's service account (`SWEEP_SCHEDULER_SA_EMAIL` env var); both env vars are set automatically by `deploy-admin.sh` on every run -- on a public (`--allow-unauthenticated`) service, a matching audience alone is forgeable by anyone with a GCP project, so it is not by itself proof of caller identity. Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every channel in `KNOWN_CHANNELS`. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit, which itself re-reads `link_redemptions` first and refuses an opened link -- this route adds no refund logic of its own. Each committed refund's audit row is written IN THE SAME Firestore transaction as the refund via `refund_expired_link`'s `extra_writes` parameter (bd `polyglot-pdf-8vgfh`'s extension to that A5 helper) -- the SAME extra_writes-delegated shape of Surface contract 15's `MUTATION_KIND_FIRESTORE` the credit routes above use (see `_EXTRA_WRITES_TRANSACTION_OPENERS`). A per-link failure is logged and skipped rather than aborting the whole pass. Returns `{results: [{channel, refunded, skipped}], total_refunded, total_skipped}` -- counts only; the ledger entry and the audit row are the durable record. `admin_backend/routes/sweep_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/credit_ledger.py` |
 | POST | `/admin/links/{jti}/revoke` | Revoke a minted link (bd `polyglot-pdf-jmiys`, Track B bead B4). `?channel=` REQUIRED. One `@firestore.transactional` body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke touches only the link's own `status`) sets `status=revoked` with `revoked_by`/`revoked_at`, audited in the SAME transaction. Only a `minted` record may transition (409, naming the current status, otherwise). Gate: `require_app_admin_or_owning_manager` -- a manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti); an app admin may revoke any. This status flip is what Epic 2 Track A bead A3's open gate (`backend/routes/link_routes.py`) must refuse on once it lands -- see Surface contract 22. `admin_backend/routes/link_routes.py` |
 | GET | `/admin/users` | The firm's staff pool (bd `polyglot-pdf-dmjl5`). `?firm_id=` for an app admin; a firm manager sends none and gets their own. `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth has no server-side query over custom claims -- which is affordable only because the pool is firm staff, editors and devs: clients never get accounts, so this list does not grow with a firm's caseload and no members mirror is needed. Response is `{firm_id, users, truncated}`; each row is an EXPLICIT key allowlist, so a future internal claim does not reach the console the day it appears. A read, so no audit row. `admin_backend/routes/user_routes.py` |
@@ -848,8 +851,10 @@ test could import it, which is itself the fix for a defect: while the table
 lived beside `createRoot`, wrapping the client route in `ProtectedRoute` or
 renaming its path both passed the entire frontend suite). Moving it inside
 bounces every client to a sign-in they can never pass. The path is the
-exported `CLIENT_LINK_PATH`; `clientRoute.test.tsx` pins it against the same
-`/f` literal `link_routes.py` builds links from -- each side independently
+exported `CLIENT_LINK_PATH`; `AppRoutes.test.tsx` (renamed from
+`clientRoute.test.tsx` by bd polyglot-pdf-krbol once the file grew to cover
+every console route, not just the client one) pins it against the same `/f`
+literal `link_routes.py` builds links from -- each side independently
 pinned, so a unilateral change on either reddens. The gate pins the form id via
 `saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
 choice, the language is the client's.
@@ -1774,9 +1779,9 @@ The main voice app's firm-console pages (`frontend/src/console/*`, alongside
 THIRD destination distinct from both the `/api/**` Hosting rewrite (which
 proxies only the public backend) and the WebSocket path (contract 9 /
 `config.ts`'s `getBackendUrl()`). This contract is the plumbing bead C4
-(employees) and C5 (link history) build their actual route calls on; C5
-(`LinkHistoryPage.tsx`, contract 26) now calls it, C4's route does not exist
-yet.
+(employees) and C5 (link history) build their actual route calls on; BOTH
+now call it -- C4's `EmployeesPage.tsx` (contract 19's four `/admin/users`
+routes) and C5's `LinkHistoryPage.tsx` (contract 22's listing + revoke).
 
 - **Producer:** `deploy-all.sh`'s frontend stage. `ADMIN_SERVICE_NAME`
   (`${ADMIN_SERVICE_NAME:-polyglot-admin}`, matching `deploy-admin.sh`'s and
@@ -1839,9 +1844,9 @@ yet.
   the SAME admin service, deliberately duplicated rather than imported (no
   new cross-surface dependency between `frontend/` and `admin-console/`, the
   same constraint `admin-console/src/utils/adminAuth.ts` documents).
-  C5/LinkHistoryPage.tsx (contract 26) is now wired to a concrete
-  admin-service route from this app -- the first real caller; C4's
-  EmployeesPage.tsx is not yet wired.
+  Both C4/EmployeesPage.tsx (wired to all four `/admin/users` routes,
+  contract 19) and C5/LinkHistoryPage.tsx (wired to contract 22's listing +
+  revoke routes) are now real callers of this app's `adminFetch`.
 - **`MintLinkPage.tsx`'s A3 responses** (bd `polyglot-pdf-jecrl`, contract 9):
   the mint route's 402 (`credit_ledger.InsufficientCredits` ->
   `MintRefused(402, ...)`) and its SECOND 403 (a live firm on a non-demo
@@ -1962,6 +1967,24 @@ buffer-and-retry Firestore fake, used by both `test_credit_ledger.py` and
 second copy would drift, and a drifted copy lets one caller's tests pass
 against semantics the other does not have.
 
+**Write side (Epic 2 Track B bead B3, bd polyglot-pdf-f0kuu):**
+`admin_backend/routes/kit_routes.py` adds GET `/admin/kits`, GET/PUT
+`/admin/kits/{kit_id}/commercial`, all behind `require_app_admin`. GET
+calls `kit_commercials.resolve_commercial(kit_id)` -- the SAME reader the
+mint transaction above uses, so the console can never show a number the
+mint path would not also charge; `GET /admin/kits` lists every kit id the
+form-kit store knows (`backend/services/form_kits.py`'s async
+`list_kit_ids()`) joined with that same resolved commercial. PUT is
+STRICTER than the read-side fallback on purpose: `credit_cost` must be a
+positive int, `burn_cap_usd` a positive finite float (bool, NaN and +-inf
+all refused explicitly -- bool is an int subclass, so an unguarded check
+would price a form at 1 credit on a stray `true`), `display` a small string
+map -- a malformed value here must be REFUSED (422) before it ever reaches
+the store, never silently written and left for the read side's fallback to
+paper over. The write and its audit row share ONE `@firestore.transactional`
+body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape), so a forced
+audit failure leaves `kits/{kit_id}` unchanged.
+
 ### 25. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
 
 The consumer half of contract 20's usage-event shape, plus a second, genuinely
@@ -2062,15 +2085,152 @@ a deploy script.
   them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
   that constant out before comparing against `setup-admin-service.sh` alone.
 
-### 26. Link history: the first real caller of contract 23's admin-service wiring (Epic 2 Track C bead C5, bd polyglot-pdf-x22hm)
+### 26. Session-end usage rollups: `firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (Epic 3 bead E3.4, bd polyglot-pdf-w828m)
+
+**Two entry points, new `backend/services/usage_rollups.py`, write into the
+SAME per-month rollup documents from three call sites.**
+
+- **`record_session_end(firm_id, kit_id, employee_id, language, channel,
+  kind, completion_status, cost_usd, now=None)`** -- called from the SAME
+  teardown block in `backend/routes/websocket_routes.py` that already runs
+  `log_form_session_end` and `_bank_link_spend`, on EVERY connection
+  teardown (gated on `should_log_session_end`, the same gate the audit row
+  uses). Writes ONE BATCHED `db.batch()` set of `firestore.Increment`
+  updates -- `firms/{firm_id}/usage/{YYYY-MM[_channel]}` (`connections_ended`,
+  `sessions_completed`, `cost_usd_total`, `by_kit.{kit_id}.{sessions,
+  cost_usd}`, `by_employee.{uid}.{...}`, `by_language.{code}.{...}`, `kind`,
+  `channel`) and `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (`connections_ended`,
+  `sessions_completed`, `cost_usd_total`, `by_firm.{firm_id}.{...}`, `kind`,
+  `channel`) -- committed TOGETHER so a mid-write failure cannot leave one
+  side bumped with no matching entry on the other. A firm-less session
+  (`firm_id` falsy) returns `False` and writes NOTHING before ever calling
+  `_get_db()` -- both target documents are firm/kit-keyed, so there is no
+  unattributed bucket to write into. `connections_ended` is the HONEST name
+  (this fires per CONNECTION, same distinction `log_form_session_end`
+  already documents); `sessions_completed` increments only when
+  `completion_status == "completed"`.
+- **`record_link_opened(firm_id)` / `record_link_completed(firm_id)`** --
+  single-doc `firms/{firm_id}/usage/{YYYY-MM[_channel]}` increments
+  (`links_opened`/`links_completed`), called from
+  `backend/services/link_redemptions.py`'s `open_link()` (ONLY on the
+  genuine first-open branch -- the idempotent re-open of an already-open
+  link inside its completion window must NOT inflate the counter on every
+  reconnect) and `complete_link()` (which reads `firm_id` back off the
+  just-updated redemption record, since its only caller has no other reason
+  to thread it through). `record_session_end` does not produce these two
+  counters itself: open/complete are redemption-record events, not
+  connection-teardown events, and a link can be opened without a session
+  ever completing. Neither takes a `channel` argument -- both callers run
+  only on the public backend, which has exactly one channel of its own, so
+  the month id resolves through `link_channel()`, same as
+  `record_session_end`'s default-resolution sibling.
+- **The month DOCUMENT ID is channel-suffixed, not the collection.** Staging
+  and demo share one Firestore project (see "Deployment / promotion" in
+  CLAUDE.md), and these rollup docs are shared AGGREGATE counters each
+  write overwrites in place -- unlike `credit_ledger.py`'s append-only
+  entries, where `channel` is honestly just a record of where a debit
+  happened. A bare `YYYY-MM` id would let a staging test-drive increment
+  the SAME document the demo's billing view reads, with no way to filter
+  it back out at read time. `_month_key(stamp, channel)` follows the
+  established channel-suffix convention from bd polyglot-pdf-3q9qn
+  (`link_redemptions._collection_name` / `links_store._collection_name`,
+  which suffix a COLLECTION name): the demo channel keeps the bare
+  `YYYY-MM` id (nothing already written is orphaned), every other channel
+  gets `YYYY-MM_{channel}`. Pinned by
+  `backend/tests/unit/test_usage_rollups.py`'s channel-partitioning cases
+  (a staging session's totals do not land on the demo firm/kit docs; the
+  demo channel keeps the bare id; the link-opened/completed counters are
+  also partitioned).
+- **Cost is read from the SAME live adapter `_bank_link_spend` reads,**
+  through a new shared helper `websocket_routes._session_cost_usd(service)`
+  (`getattr(service, "live_ai", None)` then `.session_cost_usd()`, never
+  raising) -- extracted so the two call sites cannot drift on the hasattr
+  guard or the None-coalescing. Both MUST run before `service.end_session()`
+  finalises the adapter.
+- **`by_language` keys on the session's BCP-47 code, with a raw-name
+  fallback.** New `websocket_routes._rollup_language_key(service)` calls
+  `FormFillingService.spoken_language()` (a new public accessor for the
+  otherwise-private `_spoken_language`) through
+  `backend.utils.language_codes.bcp47_codes_for_spoken_language`; a spoken
+  language not yet in that map (the "17 languages growing to ~90" doctrine
+  -- see CLAUDE.md scar tissue) still gets counted, under its plain name,
+  rather than silently dropped from `by_language`. (The raw-name fallback
+  is an unbounded, client-influenced map key -- tracked separately as bd
+  polyglot-pdf-u9gtj, not a gap in this contract's own shape.)
+- **`by_employee` keys on `usage_employee_id`** (Epic 3 bead E3.2's existing
+  parameter: the link's `employee_id` for a client-link session, the staff
+  uid for a staff session) -- NOT `link_employee_id`, which is
+  contractually `None` for a staff session (the confirmation-audit "who
+  SENT the link" field). `record_session_end` itself is attribution-source
+  agnostic; the caller resolves which id applies.
+- **`kind` comes from `backend/services/firms.py`'s existing
+  `firm_kind(firm_id)`** (fail-closed to `"live"`); `channel` from
+  `link_tokens.link_channel()`. Neither is new plumbing.
+- **Both `firm_kind()` and `record_session_end()` run OFF the event loop,**
+  dispatched through ONE `asyncio.to_thread` call in the teardown block
+  (`firm_kind`'s result feeds `record_session_end`'s `kind` argument, so
+  both resolve inside the same thread dispatch -- mirrors the
+  `_resolve_ceiling_and_check_budget` pattern already on this route).
+  `firm_kind` is an uncached sync Admin-SDK `.get()` and
+  `record_session_end` does its own db lookup plus a `batch.commit()` --
+  both blocking network calls that, called directly on the shared Cloud Run
+  loop, would stall every other concurrent connection (in-flight audio
+  included) on the highest-frequency teardown path in the app. Pinned by
+  `test_TEARDOWN_dispatches_the_usage_rollup_OFF_the_event_loop` in
+  `backend/tests/integration/test_websocket_ephemeral.py`, which spies on
+  `asyncio.to_thread` directly (a fake Firestore's instant return makes a
+  missing wrapper invisible to every other test in this suite).
+- **HYPHENATED MAP KEYS BREAK ONE FIRESTORE WRITE API BUT NOT THE OTHER --
+  the load-bearing subtlety this bead exists to get right.** A kit id like
+  `i-90` or a language code like `zh-CN` cannot be a flat dotted STRING
+  key handed to `set(merge=True)` (the write API this module uses, chosen
+  over `update()` so the FIRST write of a new month document CREATES it
+  rather than raising on `update()`'s default `exists=True` precondition):
+  confirmed against the vendored SDK
+  (`backend/.venv/Lib/site-packages/google/cloud/firestore_v1/_helpers.py`)
+  that `DocumentExtractorForMerge._get_document_iterator` calls
+  `extract_fields(..., expand_dots=False)`, so a string key --
+  hand-joined OR a properly-escaped `FieldPath(...).to_api_repr()`, the
+  string form `update()`'s DIFFERENT extractor needs -- is stored as ONE
+  literal top-level field, not the intended nested path. So every nested
+  increment is built by `_nest_increment()` as a REAL nested Python dict,
+  walking a `FieldPath(*parts).parts` tuple (the raw, unescaped segment
+  strings) rather than ever serializing through a dotted string. Pinned by
+  `backend/tests/unit/test_usage_rollups.py`'s hyphenated-kit-id and
+  hyphenated-language-code cases, which assert on the actual nested-dict
+  shape a faithful fake Firestore merge receives.
+- **No sharding** -- the documented escape hatch, matching
+  `link_spend.py`/`credit_ledger.py`'s own unsharded `Increment` precedent;
+  shard the doc id (`YYYY-MM-{n}`) and sum on read if contention becomes
+  real.
+- **No IAM change.** Writes through the same `get_db()` (`firebase_admin`'s
+  Firestore client) every other backend Firestore write in this codebase
+  uses -- the public backend's runtime service account already writes
+  `firms/{firm_id}` ledger entries, links, link_redemptions and alerts
+  through this identical client.
+- **Best-effort, never raises**, matching `alerts.py`'s contract exactly
+  (including a broken `firebase_admin` app -- `get_db()` RAISING, not just
+  returning `None`): this runs inside `websocket_routes.py`'s teardown
+  `finally` block, so a Firestore hiccup here must not stop the other
+  teardown steps or crash the connection close.
+- **`firestore.rules` denies both `firms/{firmId}/usage/{monthId}` and
+  `kits/{kitId}/usage/{monthId}` to every client**, pinned by the same
+  set-derived test as every other Admin-SDK-only collection (contract 15's
+  neighbour, `test_firestore_rules_text.py`) -- TWO entries, since neither
+  parent's deny block cascades to a nested subcollection.
+- **Consumer:** none yet in this bead -- the admin console's per-firm usage
+  view (Epic 1 shell) and the future per-kit view are later beads reading
+  this exact document shape.
+
+### 27. Link history: the first real caller of contract 23's admin-service wiring (Epic 2 Track C bead C5, bd polyglot-pdf-x22hm)
 
 `frontend/src/console/LinkHistoryPage.tsx`, mounted at `/console/links/history`
 (`frontend/src/schema-forms/AppRoutes.tsx`'s `LINK_HISTORY_PATH`, behind
-`ProtectedRoute` -- pinned by `AppRoutes.test.tsx`, a NEW file alongside
-`clientRoute.test.tsx` rather than appended to it), is the first page to call
-a concrete admin-service route through contract 23's `adminFetch` -- contract
-23 named this page and C4's `EmployeesPage.tsx` as "the first real callers"
-before either existed.
+`ProtectedRoute` -- pinned by `AppRoutes.test.tsx`, extended to cover this
+route alongside C4's employees-route coverage rather than a separate file),
+is the first page to call a concrete admin-service route through contract
+23's `adminFetch` -- contract 23 named this page and C4's `EmployeesPage.tsx`
+as "the first real callers" before either existed.
 
 - **Role comes from the verified token's OWN custom claims**, read via
   `user.getIdTokenResult()` -- `claims.firm_id` and `claims.firm_role`, the

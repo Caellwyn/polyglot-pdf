@@ -1,5 +1,6 @@
 // Every class a console page emits must be defined, and the stylesheet must
-// be reachable from the page (bd polyglot-pdf-41ay8).
+// be reachable from that page (bd polyglot-pdf-41ay8; extended to every
+// console page, not just MintLinkPage, by bd polyglot-pdf-krbol).
 //
 // The bug this pins: MintLinkPage shipped emitting `mint-page`,
 // `mint-result` and `mint-note` with NO stylesheet defining any of them, so
@@ -12,7 +13,8 @@
 // MintLinkPage.tsx until LinkHistoryPage.tsx shipped a second consumer of
 // console.css with no guard covering it (x22hm cross-surface review finding
 // 2). Glob src/console/*.tsx instead of hand-listing so the NEXT page is
-// covered the moment it exists, with no edit to this file required.
+// covered the moment it exists, with no edit to this file required
+// (bd polyglot-pdf-x22hm).
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';

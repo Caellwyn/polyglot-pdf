@@ -142,6 +142,9 @@ def test_the_registered_route_set_is_pinned():
         (("POST",), "/admin/links/sweep-expired"),
         (("GET",), "/admin/firms/{firm_id}/links"),
         (("POST",), "/admin/links/{jti}/revoke"),
+        (("GET",), "/admin/kits"),
+        (("GET",), "/admin/kits/{kit_id}/commercial"),
+        (("PUT",), "/admin/kits/{kit_id}/commercial"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "

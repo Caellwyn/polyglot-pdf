@@ -206,6 +206,14 @@ def open_link(jti: str, firm_id: str, kit_id: str,
         }
         doc_ref.set(rec)
         _log.info("link_opened", jti=jti, firm_id=firm_id, kit_id=kit_id)
+        # Usage rollup (Epic 3 bead E3.4, bd polyglot-pdf-w828m): ONLY on the
+        # genuine first open (this branch), never on the idempotent re-open
+        # above (snap.exists) -- a client who refreshes mid-form must not
+        # inflate links_opened on every reconnect. Best-effort by the
+        # helper's own contract; no try/except needed here.
+        from backend.services.usage_rollups import record_link_opened
+
+        record_link_opened(firm_id, now=stamp)
         return rec
     except (LinkAlreadyUsed, RedemptionUnavailable):
         raise
@@ -223,11 +231,29 @@ def complete_link(jti: str, now: Optional[float] = None) -> None:
     finished; failing to BLOCK an open costs a second paid session. Refuse
     the risky direction, absorb the cheap one.
     """
+    stamp = int(now if now is not None else time.time())
     try:
-        _collection().document(jti).update(
-            {"completed_at": int(now if now is not None else time.time())}
-        )
+        doc_ref = _collection().document(jti)
+        doc_ref.update({"completed_at": stamp})
         _log.info("link_completed", jti=jti)
+        # Usage rollup (Epic 3 bead E3.4, bd polyglot-pdf-w828m). Reads the
+        # firm_id back off the just-updated record rather than taking a new
+        # parameter: complete_link's only caller (websocket_routes.py's
+        # teardown) does not otherwise have a reason to thread firm_id
+        # through this call, and the record already carries it from
+        # open_link. Best-effort, so a read failure here degrades to "no
+        # rollup counter", never to a failed completion (the completed_at
+        # write above already succeeded).
+        try:
+            snap = doc_ref.get()
+            rec = snap.to_dict() if snap.exists else None
+            firm_id = rec.get("firm_id") if isinstance(rec, dict) else None
+        except Exception:  # noqa: BLE001 -- best-effort read for telemetry only
+            firm_id = None
+
+        from backend.services.usage_rollups import record_link_completed
+
+        record_link_completed(firm_id, now=stamp)
     except Exception as exc:  # noqa: BLE001
         _log.error("link_complete_failed", jti=jti, error=str(exc))
 
