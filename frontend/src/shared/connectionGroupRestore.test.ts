@@ -75,3 +75,64 @@ describe('checkbox group restore/capture (bd polyglot-pdf-96um6)', () => {
     expect(capture('race')).toBeNull()
   })
 })
+
+
+describe('the mirrors above cannot drift from the real functions', () => {
+  // restoreDOMFromSessionStorage and capturePreFilledValues are module-private,
+  // so the tests above necessarily MIRROR their logic. A mirror nothing pins is
+  // worse than no test: it keeps passing while production regresses.
+  //
+  // The sibling guard in manualEditDoesNotVerify.test.ts exists for exactly this
+  // reason. I wrote that one, then shipped this mirror without it -- the omission
+  // scar #8 warns about: pin the SET, not the instance.
+  const readSource = (): string => {
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    return fs.readFileSync(path.join(__dirname, 'connection.ts'), 'utf8')
+  }
+
+  // Body of a named top-level function, without matching its own declaration.
+  const bodyOf = (src: string, name: string): string => {
+    const at = src.indexOf('function ' + name)
+    expect(at, 'expected ' + name + ' to still exist in connection.ts').toBeGreaterThan(-1)
+    const rest = src.slice(at + 'function '.length)
+    const end = rest.indexOf('\nfunction ')
+    return end === -1 ? rest : rest.slice(0, end)
+  }
+
+  it('BOTH group branches still resolve by the bracketed name', () => {
+    // One in restore, one in capture. Requiring exactly two means deleting
+    // either -- or adding a third unreviewed site -- fails here.
+    const matches = readSource().match(/input\[name="\$\{fieldId\}\[\]"\]/g) || []
+    expect(
+      matches.length,
+      'restore AND capture must each resolve a group by its "[]" name shape'
+    ).toBe(2)
+  })
+
+  it('restore selects the MATCHING option rather than coercing to a boolean', () => {
+    const body = bodyOf(readSource(), 'restoreDOMFromSessionStorage')
+    expect(
+      /picked\.includes\(el\.value\)/.test(body),
+      'a group restore must match on the option value, not Boolean(value)'
+    ).toBe(true)
+    expect(
+      /el\.value === String\(value\)/.test(body),
+      'a radio restore must check the matching option, not overwrite option[0].value'
+    ).toBe(true)
+  })
+
+  it('capture tests the GROUP branch before the single-checkbox branch', () => {
+    // Order is the whole fix: reversed, a group falls into `value = inputEl.checked`
+    // and stores the boolean `true` again.
+    const body = bodyOf(readSource(), 'capturePreFilledValues')
+    const groupAt = body.indexOf('groupEls.length')
+    const singleAt = body.indexOf("inputEl.type === 'checkbox'")
+    expect(groupAt, 'the group branch must exist in capture').toBeGreaterThan(-1)
+    expect(singleAt, 'the single-checkbox branch must still exist').toBeGreaterThan(-1)
+    expect(
+      groupAt < singleAt,
+      'the group branch must be tested BEFORE the single-checkbox branch'
+    ).toBe(true)
+  })
+})
