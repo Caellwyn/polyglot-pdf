@@ -25,16 +25,16 @@ TWO LAYERS, because they fail differently:
   2. EMIT PROOF -- each site actually reaches the usage emitter. Catches a
      registered site whose instrumentation was removed or never added.
 
-Layer 2 is where this bead stops short on purpose. bd polyglot-pdf-wio6m wires
-the emitter CONTRACT; the per-path plumbing that carries the ids into each
-adapter is beads polyglot-pdf-cjifh (live -- done) and polyglot-pdf-t86oz
-(text + TTS -- open). The live site was never xfail here (it already reached
-the emitter); what bd cjifh added was making that call's context ids real
-end to end, proven in backend/tests/unit/test_usage_event_live_plumbing.py
-rather than in this file's source-level check. The remaining two sites are
-marked xfail(strict=True) below: strict, so when bd t86oz wires one, this
-test goes RED ("unexpectedly passing") and forces the marker to be removed
-rather than letting a stale xfail hide a later regression.
+Layer 2's plumbing landed across three beads. bd polyglot-pdf-wio6m ships the
+emitter CONTRACT; the per-path ids are carried by polyglot-pdf-cjifh (live)
+and polyglot-pdf-t86oz (text + TTS) -- both DONE, so every ALLOWED_SITES
+entry now has emit_wired=True and none of the parametrized cases below is
+xfail any more. The live site was never xfail here (it already reached the
+emitter); what bd cjifh added was making that call's context ids real end to
+end, proven in backend/tests/unit/test_usage_event_live_plumbing.py rather
+than in this file's source-level check. The text and TTS sites' equivalent
+real-call-path proof (SDK client mocked, ids/cost asserted per usage_kind)
+lives in backend/tests/unit/test_usage_event_text_tts.py.
 """
 
 import ast
@@ -136,15 +136,21 @@ ALLOWED_SITES = {
     },
     ("backend/adapters/text_ai_gemini.py", "self._client.aio.models.generate_content"): {
         # One site serves secretary, validator and translation; the kind is
-        # chosen per call by the caller. bd polyglot-pdf-t86oz wires it.
+        # chosen per call by the caller (bd polyglot-pdf-t86oz): validate()
+        # passes usage_kind="text_validator", ask() "text_secretary",
+        # translate_labels/translate_items "text_translation" -- all through
+        # _generate -> _log_usage -> log_text_ai_usage.
         "usage_kind": "text_secretary",
-        "emit_wired": False,
+        "emit_wired": True,
     },
     ("backend/services/spellback_tts.py", "synthesize_speech"): {
         # One site serves spell-back, notice and intro (intro_tts and
-        # notice_tts both call _synthesize_sync). bd polyglot-pdf-t86oz wires it.
+        # notice_tts both call _synthesize_sync). bd polyglot-pdf-t86oz wires
+        # it: each of the three callers (synthesize_spellback here,
+        # synthesize_notice, synthesize_intro) calls the shared
+        # _log_tts_usage_event with its own usage_kind after synthesis.
         "usage_kind": "tts_spellback",
-        "emit_wired": False,
+        "emit_wired": True,
     },
 }
 
@@ -254,19 +260,20 @@ def _emits_usage(module_path: str) -> bool:
 def test_paid_site_emits_a_usage_event(site, request):
     """Each allowlisted paid call site emits a usage event.
 
-    Sites whose plumbing lands in beads polyglot-pdf-cjifh / polyglot-pdf-t86oz
-    are xfail(strict) until then: strict so that wiring one turns this RED and
-    forces the marker's removal, instead of a stale xfail masking a regression
-    later.
+    Every ALLOWED_SITES entry now has emit_wired=True (beads
+    polyglot-pdf-cjifh and polyglot-pdf-t86oz finished the live and
+    text/TTS plumbing respectively), so this simply asserts the emit. A
+    future site added with emit_wired=False would xfail(strict) here again --
+    strict, so wiring it turns this RED and forces the marker's removal
+    rather than letting a stale xfail hide a later regression.
     """
     module_path, _call = site
     if not ALLOWED_SITES[site]["emit_wired"]:
         request.node.add_marker(pytest.mark.xfail(
             strict=True,
             reason=(
-                f"{module_path}: usage emit is wired by bd polyglot-pdf-t86oz "
-                "(text + TTS plumbing); bd polyglot-pdf-wio6m ships the emitter "
-                "contract only"
+                f"{module_path}: usage emit not yet wired for this site "
+                "(see the ALLOWED_SITES entry for the tracking bead)"
             ),
         ))
     assert _emits_usage(module_path), (
