@@ -429,10 +429,9 @@ class TextAIGemini(ITextAI):
         empty result.
 
         session_ctx (bd polyglot-pdf-t86oz): the caller's own session state,
-        forwarded to the usage_kind="text_translation" event. The
-        authoring-time translation bake legitimately has only a kit_id (no
-        live session), so most keys are None there -- the emitter writes
-        every key regardless.
+        forwarded to the usage_kind="text_translation" event -- every key
+        None for a caller with none (this method has no production callers
+        today; translate_items below is its context-carrying successor).
 
         Determinism levers (maintainer 2026-07-16): the text-generation config
         has no output-language field (unlike the Live API's transcription
@@ -1108,8 +1107,9 @@ class TextAIGemini(ITextAI):
         form_session_id}, any/all keys may be absent or None); usage_kind
         names which of the closed UsageKind set (backend/utils/log_schemas.py)
         this call bills as. Both default to None so a caller that has not been
-        updated (an authoring-time translation bake passing kit_id only, or a
-        pre-bead test) still gets a usage event with those keys null.
+        updated to pass session_ctx (e.g. option_translation.py's
+        authoring-time bake, or a pre-bead test) still gets a usage event,
+        just with those keys null.
 
         Raises on API error; callers wrap in try/except for fail-open.
         """
