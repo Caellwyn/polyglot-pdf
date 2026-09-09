@@ -1841,7 +1841,7 @@ built and will use the same plumbing.
   new cross-surface dependency between `frontend/` and `admin-console/`, the
   same constraint `admin-console/src/utils/adminAuth.ts` documents).
   C4/EmployeesPage.tsx is wired to all four `/admin/users` routes (contract
-  22) and is this app's first real caller; C5/LinkHistoryPage.tsx does not
+  19) and is this app's first real caller; C5/LinkHistoryPage.tsx does not
   exist yet and will be the second.
 - **`MintLinkPage.tsx`'s A3 responses** (bd `polyglot-pdf-jecrl`, contract 9):
   the mint route's 402 (`credit_ledger.InsufficientCredits` ->

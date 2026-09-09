@@ -132,6 +132,45 @@ observable).
 
 Rejected: none.
 
+## Review round 3 (cross-surface, GAPS-FOUND(1))
+
+Adopted (fixed inline, this round): the same contract-number citation flagged
+as a nit in round 2 (there filed as `polyglot-pdf-g0bjk`) was reclassified
+this round as the blocker -- `docs/technical_guide.md:1843-1844` said
+"`/admin/users` routes (contract 22)"; contract 22 is link listing/revoke
+(`polyglot-pdf-jmiys`), and the `/admin/users` routes are contract 19 (the
+firm-manager rule + admin claims allowlist, `polyglot-pdf-dmjl5`), which is
+also what this same file's own contract-19 heading and line 1761 say. Changed
+"(contract 22)" to "(contract 19)" on that line. Closed `polyglot-pdf-g0bjk`
+as fixed here rather than left open for a separate pass.
+
+While reconciling this round's three newly-filed nit beads against beads
+filed in earlier rounds, found two straight duplicates and closed the older
+copy to keep one bead per finding:
+- `polyglot-pdf-1ciks` (round 1's rename-lineage nit) duplicated
+  `polyglot-pdf-fce86` (this round's bundle of the same rename-lineage fix
+  plus the `PAGE_FILES` enumeration nit) -- closed `1ciks`, kept `fce86` as
+  the bead of record.
+- Left `polyglot-pdf-9q1qw` (an earlier filing of the same getIdToken-guard
+  regex gap, but attributed to `LinkHistoryPage.tsx`/bd `x22hm`, a different
+  consumer) and this round's `polyglot-pdf-ydpva` (attributed to this bead's
+  `EmployeesPage.tsx`) both open -- same root-cause regex hole, two distinct
+  call sites/beads; consolidating bead history across unrelated beads is
+  beyond this fix's scope.
+
+Deferred (already filed as their own beads by the reviewer, left open, not
+touched here): `polyglot-pdf-nrdfz` (a dual-claim app_admin+manager account
+gets a fully-rendered page whose every request 422s -- predicate mismatch
+between the client's UX gate and the server's actor-resolution precedence;
+no security/data consequence, server refuses correctly), `polyglot-pdf-ydpva`
+(the token-source guard's regex misses `getIdTokenResult`, so this page's
+claims-only read of it goes unguarded -- a hole in the guard's SET, not a
+defect in this page), `polyglot-pdf-fce86` (rename-history prose + the
+`PAGE_FILES` hand-typed list, bundled).
+
+Rejected: none -- every finding was either fixed here or already had a bead
+(after the duplicate cleanup above).
+
 ## Lessons
 
 `consoleStyles.test.ts` (bd polyglot-pdf-41ay8) hardcoded ONE page file
