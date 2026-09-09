@@ -1879,3 +1879,20 @@ def test_a_code_two_options_claim_is_NOT_an_alias():
     dep = next(f for f in repaired["fields"] if f["id"] == "dep")
     assert dep.get("show_if") is None            # dropped, not guessed
     assert any(r["action"] == "drop-condition" for r in repairs)
+
+
+def test_slug_shaped_legacy_codes_are_still_CONVERTED_by_repair():
+    """Cross-surface (g2fpr.4, bd kch40): the i-90 height dropdowns' legacy
+    values ('2'..'8') are already slug-shaped, so nothing triggered minting
+    and repair no-op-ed while lint (select-on-value-missing) blocked them. A
+    legal code with no slot is itself a reason to repair; the value is kept
+    (a slug-shaped code IS the value) and the code lands in pdf_on_value."""
+    dump = {"fields": [{"name": "form1[0].P1_Line6e_State[0]",
+                        "widgets": [{"choices": [{"value": str(n)} for n in range(2, 9)]}]}]}
+    opts = [{"value": str(n), "label": str(n)} for n in range(2, 9)]
+    repaired, repairs = repair(_schema(_combo(opts)), dump)
+    assert _pairs(repaired) == [(str(n), str(n)) for n in range(2, 9)]
+    assert not has_errors(lint_schema(repaired, dump))
+    # Idempotent: the converted field is not repaired again.
+    again, repairs2 = repair(repaired, dump)
+    assert again == repaired

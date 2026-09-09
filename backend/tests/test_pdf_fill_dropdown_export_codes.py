@@ -308,3 +308,27 @@ def test_height_dropdowns_print_their_codes():
                 f"{field_id}={opt['value']!r} printed as {printed!r}, "
                 f"expected the export code {opt['pdf_on_value']!r}"
             )
+
+
+def test_one_repair_on_the_pre_migration_archive_reproduces_the_migrated_kit():
+    """The editor's Repair and scripts/migrate_select_on_values must agree on
+    the real kit (bd kch40): repairing the pre-migration archive with the
+    kit's dump yields exactly the migrated schema's select options -- values
+    AND codes -- for all six dropdowns, live and quarantined alike."""
+    from backend.services.schema_repair import repair
+    archive = _KIT_ROOT / "_schema_pre_select_migration.json"
+    if not archive.exists():
+        pytest.skip("no pre-migration archive beside the kit")
+    legacy = json.loads(archive.read_text(encoding="utf-8"))
+    dump = json.loads(_dump_path().read_text(encoding="utf-8"))
+    repaired, _ = repair(legacy, dump)
+    migrated = _schema()
+
+    def selects(schema):
+        out = {}
+        for f in schema.get("fields", []):
+            if isinstance(f, dict) and f.get("type") == "select":
+                out[f["id"]] = [(o.get("value"), o.get("pdf_on_value")) for o in f["options"]]
+        return out
+    assert selects(repaired) == selects(migrated)
+    assert len(selects(migrated)) == 4

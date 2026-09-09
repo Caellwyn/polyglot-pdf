@@ -82,6 +82,18 @@ its retirement. The assertion now checks the emission shape for the live
 rules and its absence for the retired one, and a mutant that re-emits the
 retired rule reddens it.
 
+**When lint starts blocking a shape, repair must be able to fix that
+shape -- test the pair on the real kit.** The cross-surface pass ran the
+maintainer's pre-migration archive through the gates: lint blocked the
+height dropdowns (19 `select-on-value-missing`) and repair did nothing to
+them, because their legacy codes (`2`..`8`) already pass the slug test and
+nothing else in `needs_mint` fired. The migration tool handled exactly this
+case (`kept_as_slug`); repair did not, so the two producers disagreed on the
+one kit that mattered, and the editor's Repair button promised 19 fixes it
+could not deliver. A legal code with no slot is now itself a reason to
+repair. The pin that matters is the round trip on the real archive: one
+Repair must reproduce the migrated kit's selects exactly.
+
 ## Files touched
 
 - `backend/services/schema_lint.py`, `backend/services/schema_repair.py`,

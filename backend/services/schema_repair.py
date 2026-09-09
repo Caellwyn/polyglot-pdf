@@ -293,7 +293,17 @@ def _mint_slugs(
             # are still repaired while it stays empty (bd polyglot-pdf-ot284).
             missing = any(o.get("value") in (None, "") for o in dict_opts)
             dupes = len(set(values)) != len(values)
-            needs_mint = invalid or missing or dupes
+            # A dropdown choice whose value is a real /Opt code with no (or a
+            # stale) pdf_on_value needs the CONVERSION even when the code is
+            # slug-shaped ("5"): the cross-surface pass found the height
+            # dropdowns un-repairable -- lint blocked them, repair no-op-ed --
+            # because nothing below triggered on a value that passes the
+            # slug test (bd polyglot-pdf-kch40).
+            unconverted = f.get("type") == "select" and any(
+                str(o.get("value")) in pdf_choices
+                and (not _has_on_value(o) or o["pdf_on_value"] not in pdf_choices)
+                for o in dict_opts if o.get("value") is not None)
+            needs_mint = invalid or missing or dupes or unconverted
 
         if needs_mint:
             # Since g2fpr.4 nothing in a select is PRESERVED for being a PDF
