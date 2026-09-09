@@ -1,0 +1,203 @@
+---
+date: 2026-09-09
+bead: polyglot-pdf-8vgfh
+title: "feat(admin): B5 expired-link sweep endpoint + require_google_oidc + Cloud Scheduler declaration"
+sprint: 22
+tags: [security, testing]
+---
+
+## Trigger
+
+Epic 2 Track B bead B5 of the admin-console program
+([plan](../../sprint_22_admin-console_plan.md), "Refund on unopened
+expiry"). Bead A5 (bd `polyglot-pdf-1op3g`, closed) built the transactional
+refund helper but deliberately left its scheduled caller out of scope --
+"the hourly sweep, Track B bead B5, NOT this bead." Without a caller,
+`credit_ledger.refund_expired_link()` would never run outside a firm's own
+lazy balance read, and an unopened link would sit un-refunded until
+something touched that firm's balance page. This bead is that caller: the
+route, its machine-caller gate, and the Cloud Scheduler job that invokes it
+hourly.
+
+## What shipped
+
+**`POST /admin/links/sweep-expired`** (`admin_backend/routes/
+sweep_routes.py`). Optional `?channel=` sweeps one channel (404 on an
+unknown value); omitted, sweeps every channel in `KNOWN_CHANNELS`. Per
+channel, queries `links[_<channel>]` for `status == minted AND open_deadline
+< now` (no `firm_id` filter -- unlike A5's firm-scoped
+`reconcile_expired_for_firm`, this sweep is cross-firm by design) and calls
+`credit_ledger.refund_expired_link()` once per hit. A per-link
+`LinkNotRefundable` or store hiccup is logged and skipped, never aborting
+the whole hourly pass. Returns counts only
+(`{results, total_refunded, total_skipped}`) -- per-link detail already has
+a durable home in the ledger entry and the audit row, so returning it a
+third time in the response would just be a copy that can drift.
+
+**`require_google_oidc(audience, allowed_caller_emails)`**
+(`admin_backend/services/admin_auth.py`), the fourth and last gate the plan
+named. A FACTORY, not a plain dependency -- both arguments vary per route
+and per deployment, and both accept a zero-arg callable resolved fresh on
+every request rather than once at import time (the real values come from
+`ADMIN_SERVICE_URL`/`SWEEP_SCHEDULER_SA_EMAIL`, deploy-time env vars that
+do not exist when the route module imports at process start). The gate
+checks BOTH the token's `aud` claim (via `google.oauth2.id_token.
+verify_oauth2_token`) and its `email` claim against an explicit allowlist
+-- audience alone is forgeable by anyone with a GCP project on a public
+(`--allow-unauthenticated`) service, so a matching audience proves only
+"Google vouches this token was minted for this URL," never "this is the
+caller I expect." 401 for a token that fails verification outright; 403
+for one that verifies but names an unlisted caller; 503 when verification
+itself could not run, or when the route's own configuration (an empty
+audience or empty allowlist) is incomplete -- fail CLOSED, never read
+"nothing to check" as "allow it."
+
+One mechanical wrinkle worth naming: `require_google_oidc`'s returned
+closure is explicitly renamed to `"require_google_oidc"`
+(`_dependency.__name__ = "require_google_oidc"`) before being returned.
+`test_admin_route_auth.py`'s route/gate set pin reads a dependency's bare
+`__name__` to learn which of the four known gates a route carries; left as
+Python's default inner-function name, a route wired through this factory
+would look ungated to that test. Every other gate in this module IS its
+own name; this is the one exception, and both `test_google_oidc_gate.py`
+and `test_admin_route_auth.py` pin the rename directly (mutation-verified:
+deleting the rename line reddens both, plus the set pin itself, which
+starts reporting the sweep route as carrying zero known gates).
+
+**`credit_ledger.refund_expired_link()` gains an optional `extra_writes`
+parameter**, mirroring `append_entry`'s own. Epic 2 criterion 5 requires
+every mutating admin route to audit in the required form, and the sweep's
+refund IS a mutation on this service -- but the transaction it needs to
+join lives in `backend/services/credit_ledger.py`, outside
+`admin_backend/`. `extra_writes` is the seam: `sweep_routes.py` builds a
+closure that calls `audit_log.record_in_transaction`, and
+`refund_expired_link` composes it after its own internal
+`_mark_refunded` write so both land in the SAME Firestore transaction as
+the balance/entry writes. `credit_ledger.py` is not in this bead's declared
+surfaces, but the extension is additive-only (new optional kwarg, `None`
+default, zero behavior change for existing callers) and directly required
+by the plan's own audit criterion -- a small, obvious change in service of
+the bead, not a new commitment.
+
+**`test_admin_audit_coverage.py` gains `MUTATION_KIND_DELEGATED_
+FIRESTORE`.** The existing coverage test's "is this call inside a
+`@firestore.transactional` body" check assumes the transaction and the
+audit call live in the SAME module -- true for every existing route, false
+here. The new kind's static proxy: does this module define a closure
+calling `record_in_transaction`, AND pass that closure BY NAME as
+`extra_writes=` at some call site in the same module. Backed by a genuine
+runtime proof rather than resting on the AST alone:
+`test_sweep_routes.py::test_a_forced_audit_failure_leaves_the_refund_
+uncommitted` forces the audit write to raise and asserts NEITHER the
+balance nor the links status changes -- mirroring `test_config_routes.py`'s
+own forced-audit-failure pin for the plain in-module form.
+
+**`scripts/setup-admin-service.sh`** gains the `cloudscheduler.
+googleapis.com` API enable (with its first consumer, this bead's job) and
+a NEW, separate `admin-sweep-scheduler-sa` service account -- deliberately
+NOT `admin-backend-sa`, since `require_google_oidc`'s whole point is
+pinning a caller identity distinct from the service's own callee identity;
+reusing one account for both directions would let a single compromised
+credential both act as the admin service and trigger it. The
+`gcloud scheduler jobs create http admin-sweep-expired-links` command
+(hourly, `--oidc-service-account-email` + `--oidc-token-audience` both
+pinned to this bead's identities) is printed as an operator NOTE, not run
+-- it needs the admin service's own Cloud Run URL, which does not exist
+until after that service's first deploy. Pinned by the new root-level
+`tests/test_setup_admin_service_scheduler.py`, the sibling of
+`tests/test_setup_firestore_ttl_script.py`'s shipped-script-text pattern
+for an operator script nothing in CI ever executes.
+
+**Deliberately NOT in this bead:** actually creating the Cloud Scheduler
+job or running `setup-admin-service.sh` against a real project (both
+operator actions, PENDING-DEPLOY); Epic 4 4.3's Pub/Sub push route, the
+gate's second consumer.
+
+## Lessons
+
+**A shared helper's `extra_writes` hook is the load-bearing seam for
+cross-package audit requirements, not a workaround.** The plan's audit
+criterion (every mutating admin route audits in-transaction) reads as a
+same-package concern, but the mutation this route performs is owned by a
+DIFFERENT package's transactional helper. Extending that helper's own
+extension point (rather than duplicating its transaction locally, or
+weakening the audit form to fire-and-forget) keeps the atomicity guarantee
+real and keeps the transaction in ONE place. The general form: when a
+route's mutation is delegated to a shared helper, look for that helper's
+existing composition seam before inventing a parallel one.
+
+**A same-module AST assumption in a coverage test is itself a contract
+that needs updating, not worked around.** `test_admin_audit_coverage.py`'s
+`_calls_inside_transactional_bodies` walks ONE module's AST on the
+assumption that a route's transaction is always its own -- true until a
+route's mutation is delegated elsewhere. Rather than contort the sweep
+route to fake a local transactional wrapper (dishonest -- there is no
+second transaction), the test's own vocabulary was extended with a new,
+honestly-named mutation kind and a real runtime proof to back the weaker
+static check. The alternative (skip the coverage test for this one route)
+would have left Epic 2 criterion 5 unpinned for its first exception.
+
+**A factory-returned FastAPI dependency needs its `__name__` set
+deliberately when other tests key on bare function identity.** Three of
+the four admin-service gates are plain functions FastAPI wires directly
+(`sub.call is require_app_admin` works); `require_google_oidc` is a
+factory, so the object FastAPI actually wires is an anonymous inner
+closure. A test asserting gate identity by name silently degrades to "this
+route carries some dependency" the moment a factory is introduced, unless
+the closure is explicitly named to match its factory -- worth flagging
+generally: any future factory-shaped gate in this vocabulary needs the
+same rename, and the two tests here (one at the gate level, one at the
+route level) are the pattern to copy.
+
+## Doc freshness
+
+- `docs/components/admin-service.md` -- Tracks line gains
+  `admin_backend/routes/sweep_routes.py`; new dated entry; routes table
+  row; new `require_google_oidc` section (mirroring the `require_app_
+  admin` section's shape); Service account section gains the dedicated
+  scheduler SA; Testing section lists the two new test files. Stamp
+  bumped to 2026-09-09.
+- `docs/technical_guide.md` -- Admin service routes table gains the sweep
+  route's row (sorted correctly between `/admin/config/{channel}` and
+  `/admin/users`); Surface contract 15 (admin audit log) gains the
+  `MUTATION_KIND_DELEGATED_FIRESTORE` explanation. No header stamp by
+  design (this doc carries none).
+- Every OTHER doc `check_doc_freshness.py` flagged STALE (`auth.md`,
+  `config-deployment.md`, `websocket-routing.md`, `voice-ai.md`, and
+  roughly twenty more) tracks files this branch never touched
+  (`backend/routes/websocket_routes.py`, `backend/adapters/
+  live_ai_gemini.py`, the deploy scripts, `backend/config.py`) -- all
+  modified 2026-09-02/03 by unrelated prior commits on `dev`. Reviewed and
+  left alone.
+- No CLAUDE.md change. No `firestore.rules` change (no new collection;
+  `links[_<channel>]` and `admin_audit_log` already carry their deny
+  blocks).
+
+## Files touched
+
+- `admin_backend/routes/sweep_routes.py` (new) -- the sweep route, its
+  per-channel query, and the audit closure.
+- `admin_backend/services/admin_auth.py` -- `require_google_oidc`,
+  `GoogleServiceActor`, `OidcVerificationUnavailable`,
+  `_verify_google_id_token`.
+- `admin_backend/main.py` -- registers `sweep_routes.router`.
+- `admin_backend/tests/unit/test_google_oidc_gate.py` (new) -- the gate's
+  own contract in isolation.
+- `admin_backend/tests/unit/test_sweep_routes.py` (new) -- the route end
+  to end through a fake Firestore, including the race and forced-failure
+  atomicity pins.
+- `admin_backend/tests/unit/test_admin_route_auth.py`,
+  `admin_backend/tests/unit/test_admin_audit_coverage.py` -- extended for
+  the new route and the new delegated-transaction mutation kind.
+- `backend/services/credit_ledger.py` -- `refund_expired_link`'s new
+  `extra_writes` parameter.
+- `backend/requirements.txt` -- `google-auth==2.53.0` pinned explicitly
+  (previously only a transitive dependency of `firebase-admin`).
+- `scripts/setup-admin-service.sh` -- `cloudscheduler.googleapis.com`,
+  `admin-sweep-scheduler-sa`, the printed job-create command.
+- `tests/test_setup_admin_service_scheduler.py` (new) -- the script-text
+  pins for the scheduler declaration.
+- `docs/components/admin-service.md`, `docs/technical_guide.md` -- as
+  above.
+
+Review outcomes recorded in the closeout ping.
