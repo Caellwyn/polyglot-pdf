@@ -88,6 +88,21 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// Try to find element by ID
 			let element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 			
+			// GROUPS ARE BOUND BY NAME EVEN WHEN THE ID RESOLVES (bd
+			// polyglot-pdf-96um6). A radio/checkbox group carries id={field.id} on
+			// its FIRST option only, so getElementById now succeeds where it used to
+			// fail -- and binding just that element would leave every OTHER option
+			// unlistened, so selecting any but the first would stop notifying the
+			// model. Measured before fixing: with the id, selecting the second
+			// option notified NOT AT ALL; without it, it did.
+			const groupInputs = document.querySelectorAll(
+				`input[name="${fieldId}"], input[name="${fieldId}[]"]`
+			)
+			if (groupInputs.length > 1) {
+				groupInputs.forEach(input => setupEditListener(input as HTMLElement, fieldId))
+				continue
+			}
+			
 			// Try by name attribute (for table fields, radio groups, checkbox groups)
 			if (!element) {
 				const inputs = document.querySelectorAll(`input[name="${fieldId}"], textarea[name="${fieldId}"], select[name="${fieldId}"]`)

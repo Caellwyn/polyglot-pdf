@@ -267,3 +267,49 @@ describe('CHANGING a verified field drops its verification (bd polyglot-pdf-96um
     expect(computeNextField(st, { skipConfirmed: true })?.id).toBe('f1')
   })
 })
+
+describe('a radio/checkbox GROUP notifies from EVERY option (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GROUP_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio' }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('selecting a NON-FIRST option still notifies', () => {
+    // Giving groups id={field.id} on their first option (so the Enter->verify
+    // gesture can reach them) made getElementById SUCCEED where it used to fail,
+    // which silently narrowed fieldManager to that one element. Measured: with
+    // the id, selecting the second option notified NOT AT ALL. A user picking
+    // "Female" would have left the model believing the field was never answered.
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="m" />
+      <input name="sex" type="radio" value="f" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    const second = document.querySelectorAll('input')[1] as HTMLInputElement
+    second.checked = true
+    second.value = 'f'
+    second.dispatchEvent(new Event('change'))
+
+    expect(onManualEdit, 'every option in a group must notify, not just the first').toHaveBeenCalled()
+  })
+
+  it('the FIRST option still notifies too', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="m" />
+      <input name="sex" type="radio" value="f" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    const first = document.querySelectorAll('input')[0] as HTMLInputElement
+    first.checked = true
+    first.dispatchEvent(new Event('change'))
+
+    expect(onManualEdit).toHaveBeenCalled()
+  })
+})
