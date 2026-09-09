@@ -20,6 +20,28 @@ counterpart. PUT audits in ONE `@firestore.transactional` body (mirrors
 `firm_routes.py`'s `_apply_firm_patch` shape); there is no other writer's
 transaction to join via `extra_writes`, since this route is the only
 writer of `kits/{kit_id}`.)
+(bd polyglot-pdf-mzblw: kit commercials console page, Epic 2 Track C bead
+C1 -- `admin-console/src/pages/KitCommercialsPage.tsx`, the first mutating
+console page over `kit_routes.py`'s three routes. Lists every kit
+(`GET /admin/kits`) with its `credit_cost`, `cap_usd` and `source`; "Edit"
+on a row does a FRESH `GET /admin/kits/{kit_id}/commercial` read (never the
+list row's already-rendered values, which can be stale if another operator
+just saved the same kit) and one Save PUTs the WHOLE commercial body,
+mirroring the route's own "a PUT replaces the whole doc" contract -- never a
+partial patch. Client-side validation mirrors the route's own rules
+(`credit_cost` a positive int, `burn_cap_usd` a positive finite number)
+ahead of the network call, but the route's own 422 detail is still what
+this page trusts for anything its check does not catch: `fieldFromDetail`
+classifies a 422 onto the `credit_cost`/`burn_cap_usd` field it names (an
+ALLOWLIST prefix match against `kit_routes.py`'s own detail strings, never
+a blacklist) so the console shows a field-level error instead of a generic
+banner. A successful save re-reads the kit (GET) and reloads the list,
+mirroring `ConfigEditorPage`/`UsersPage`'s round-trip pattern. `adminApi.ts`
+gains `listKits` / `getKitCommercial` / `setKitCommercial`; `App.tsx` gains
+the "Kit commercials" tab. DOES NOT SHOW `updated_by`: neither GET route's
+response carries it (only the raw Firestore doc does) -- a discrepancy from
+the bead's own prose, left for a future bead if the console needs it, since
+adding it needs a `kit_routes.py` wire change outside this bead's Surfaces.)
 (bd polyglot-pdf-jmiys: link listing and revoke,
 Track B bead B4 -- `GET /admin/firms/{firm_id}/links`
 (`?channel=` REQUIRED, `?status=`/`?employee_id=` optional filters) joins a

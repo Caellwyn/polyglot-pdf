@@ -1988,6 +1988,19 @@ paper over. The write and its audit row share ONE `@firestore.transactional`
 body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape), so a forced
 audit failure leaves `kits/{kit_id}` unchanged.
 
+**Console consumer (Epic 2 Track C bead C1, bd polyglot-pdf-mzblw):**
+`admin-console/src/pages/KitCommercialsPage.tsx` is the first console page
+over these three routes, via `admin-console/src/utils/adminApi.ts`'s
+`listKits` / `getKitCommercial` / `setKitCommercial`. It lists every kit
+(`GET /admin/kits`), edits one at a time with a fresh GET before editing
+(never the list row's already-rendered values) and one whole-body PUT per
+save (never a partial patch, matching PUT's own "replaces the whole doc"
+contract), then re-reads (GET) and reloads the list after a successful
+save. A 422 is classified onto the `credit_cost`/`burn_cap_usd` field it
+names (an allowlist prefix match against the route's own detail strings)
+and shown as a field-level error rather than a generic banner. The console
+does not surface `updated_by`: neither GET route's response carries it.
+
 ### 25. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
 
 The consumer half of contract 20's usage-event shape, plus a second, genuinely
