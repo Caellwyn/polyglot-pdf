@@ -228,7 +228,113 @@ def _claims(cw=7 * 24 * 3600, jti="jti-1"):
             "employee_id": "u-emp-7", "cw": cw, "is_client_link": True}
 
 
-def test_the_gate_admits_a_fresh_unburned_link(store):
+@pytest.fixture
+def minted(store, monkeypatch):
+    """The gate ALSO requires a mint record now (Epic 2 bead A3), so every
+    redemption-logic test below needs one to exist.
+
+    Returns the dict of records, keyed by jti, so a test can revoke one or
+    take it away. It stands in for links_store.get_link rather than for the
+    gate helper: the tests in this file exist because monkeypatching
+    open_link at its call site meant the real function never ran (the r4
+    scar in this module's docstring), and stubbing _require_mint_record
+    would reintroduce exactly that shape one layer up.
+    """
+    from backend.services import links_store
+
+    records = {jti: {"jti": jti, "status": links_store.STATUS_MINTED}
+               for jti in ("jti-1", "jti-2")}
+    monkeypatch.setattr(links_store, "get_link",
+                        lambda jti, channel=None: records.get(jti))
+    return records
+
+
+def test_the_gate_refuses_a_link_with_NO_MINT_RECORD(store, minted):
+    """Epic 2 bead A3, at the gate itself rather than through a route: no
+    reservation, no session. This is the enforcement half of the mint
+    route's reserve-before-sign order, and it is checked HERE so all three
+    doors (the /open route, the WebSocket, require_paid_client_work) inherit
+    it from one place.
+
+    Mutation: delete the _require_mint_record call in
+    enforce_link_redemption -- red.
+    """
+    from backend.services.link_redemptions import (
+        LinkNotMinted,
+        enforce_link_redemption,
+    )
+
+    minted.pop("jti-1")
+
+    with pytest.raises(LinkNotMinted):
+        enforce_link_redemption(_claims(), now=1_000)
+
+
+@pytest.mark.parametrize("status", ["revoked", "refunded"])
+def test_the_gate_refuses_a_REVOKED_or_REFUNDED_record(store, minted, status):
+    """Both terminal money states, pinned together because they are one rule
+    (links_store.OPEN_BLOCKING_STATUSES): a revoked link is one a human
+    stopped, a refunded one is one whose credit has already been given back,
+    and either opening would buy a session nobody is paying for.
+
+    Mutation: check only STATUS_REVOKED -- the refunded row goes red.
+    """
+    from backend.services.link_redemptions import (
+        LinkNotMinted,
+        enforce_link_redemption,
+    )
+
+    minted["jti-1"]["status"] = status
+
+    with pytest.raises(LinkNotMinted):
+        enforce_link_redemption(_claims(), now=1_000)
+
+
+def test_a_MINT_RECORD_REFUSAL_fails_closed_at_every_door(store, minted):
+    """LinkNotMinted is a SUBCLASS of RedemptionUnavailable so that a door
+    catching only the base class -- the WebSocket gate and
+    require_paid_client_work both catch a TUPLE that includes it -- still
+    refuses. A brand-new exception type would have sailed past those
+    handlers as an unhandled error.
+
+    Pinned as an isinstance relationship rather than by driving each door,
+    because the property IS the inheritance: this is what makes a door
+    someone adds LATER safe by default.
+
+    Mutation: make LinkNotMinted subclass Exception directly -- red.
+    """
+    from backend.services.link_redemptions import (
+        LinkNotMinted,
+        RedemptionUnavailable,
+    )
+
+    assert issubclass(LinkNotMinted, RedemptionUnavailable)
+
+
+def test_an_UNREACHABLE_links_store_refuses_rather_than_admitting(store,
+                                                                  monkeypatch):
+    """FAIL CLOSED, same polarity as the redemption store itself: unable to
+    confirm a credit was reserved must not admit a paid session.
+
+    Mutation: swallow LinksStoreUnavailable in _require_mint_record and
+    return -- red.
+    """
+    from backend.services import links_store
+    from backend.services.link_redemptions import (
+        RedemptionUnavailable,
+        enforce_link_redemption,
+    )
+
+    def _boom(jti, channel=None):
+        raise links_store.LinksStoreUnavailable("simulated outage")
+
+    monkeypatch.setattr(links_store, "get_link", _boom)
+
+    with pytest.raises(RedemptionUnavailable):
+        enforce_link_redemption(_claims(), now=1_000)
+
+
+def test_the_gate_admits_a_fresh_unburned_link(store, minted):
     from backend.services.link_redemptions import enforce_link_redemption
 
     rec = enforce_link_redemption(_claims(), now=1_000)
@@ -237,7 +343,7 @@ def test_the_gate_admits_a_fresh_unburned_link(store):
     assert rec["completed_at"] is None
 
 
-def test_the_gate_refuses_a_link_past_its_completion_window(store):
+def test_the_gate_refuses_a_link_past_its_completion_window(store, minted):
     """Mutation: drop the `stamp >= opened_at + window` check -- red."""
     from backend.services.link_redemptions import (
         LinkWindowElapsed,
@@ -254,7 +360,7 @@ def test_the_gate_refuses_a_link_past_its_completion_window(store):
     "bad_cw", [None, 0, -1, "week", True, 1.5],
     ids=["missing", "zero", "negative", "string", "bool", "float"],
 )
-def test_a_credential_with_NO_USABLE_WINDOW_is_refused(store, bad_cw):
+def test_a_credential_with_NO_USABLE_WINDOW_is_refused(store, minted, bad_cw):
     """FAIL CLOSED on an uncheckable credential.
 
     Found by mutation: returning the record instead of raising here left the
@@ -274,7 +380,7 @@ def test_a_credential_with_NO_USABLE_WINDOW_is_refused(store, bad_cw):
         enforce_link_redemption(_claims(cw=bad_cw), now=1_000)
 
 
-def test_the_gate_refuses_a_COMPLETED_link(store):
+def test_the_gate_refuses_a_COMPLETED_link(store, minted):
     from backend.services.link_redemptions import (
         LinkAlreadyUsed,
         complete_link,
@@ -301,7 +407,7 @@ def test_the_gate_refuses_a_COMPLETED_link(store):
     ids=["epoch", "negative", "far-future"],
 )
 def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(
-    store, monkeypatch, stored_at, why
+    store, minted, monkeypatch, stored_at, why
 ):
     """A corrupt stamp must not lock out a client who just opened their link,
     NOR extend the window forever.

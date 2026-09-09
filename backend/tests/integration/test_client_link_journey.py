@@ -28,10 +28,17 @@ claimed "a real gated route" and "complete", and both were false):
 
   COVERED -- mint_link_token, the require_auth DEPENDENCY FUNCTION (called
   directly, not through a route), enforce_link_redemption including its real
-  window/validation logic, and kit_gates.firm_allowed_kits.
+  window/validation logic, and kit_gates.firm_allowed_kits. AND, since Epic 2
+  bead A3, the MONEY journey over the real routes:
+  test_the_whole_MONEY_journey_works_over_real_HTTP drives POST
+  /api/links/mint -> POST /api/links/open against one Firestore, which is
+  the only test that proves the record the mint WRITES is the record the
+  open gate READS (a channel mismatch or a collection-name drift passes
+  every other test in the repo).
 
   NOT COVERED, and each needs its own test elsewhere:
-    - POST /api/links/mint and POST /api/links/open (the routes themselves)
+    - the routes' own refusal matrix -- the 402/403 mint refusals, the
+      uniform-404 open refusals, the eight channel-vs-kind cases
       -> test_link_routes.py
     - the /ws/fill handshake and the claims -> telemetry wiring
       -> test_websocket_ephemeral.py (r5 found that wiring UNPINNED: severing
@@ -233,3 +240,89 @@ def test_a_STAFF_journey_is_untouched_by_any_of_this(journey, monkeypatch):
     assert asyncio.run(kit_gates.firm_allowed_kits(claims)) == frozenset(
         {_KIT, "firm-a-other"}
     )
+
+
+def test_the_whole_MONEY_journey_works_over_real_HTTP(journey, monkeypatch):
+    """MINT -> OPEN, over the real routes, with the money path live (Epic 2
+    bead A3).
+
+    THIS IS THE ONE THAT WOULD HAVE CAUGHT THE ORDERING BUG. Every other
+    test in this file drives require_auth or a helper directly, and the tests
+    in test_link_routes.py drive the routes with a redemption stub -- so a
+    version where the mint wrote a record the OPEN GATE then could not find
+    (a channel mismatch, a collection-name drift, a jti that differed between
+    the record and the token) would pass all of them. Only walking mint's
+    output into open's input, through both routes, over one Firestore, proves
+    the two halves of the reserve-before-sign contract actually meet.
+
+    The four assertions are the contract stated end to end:
+      1. the mint debits the firm's balance,
+      2. it writes a ledger entry and a mint record,
+      3. the token it returns OPENS -- so the record it wrote is the record
+         the gate reads,
+      4. and the SAME token stops opening the moment that record is revoked.
+
+    Mutation: pass a literal "demo" as _reserve_mint's channel while
+    LINK_CHANNEL is staging -- red at step 3 (the record is written where the
+    gate does not look). Mutation: drop the _require_mint_record call -- red
+    at step 4.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import backend.routes.link_routes as lr
+    from backend.services import links_store
+    from backend.tests.unit._fake_firestore import (
+        _FakeDb,
+        _FakeFirestoreModule,
+    )
+
+    monkeypatch.setenv("LINK_BASE_URL", "https://forms.example.com")
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: True)
+    monkeypatch.setattr(lr, "_rc_credits_enforced", lambda: True)
+    monkeypatch.setattr(
+        "backend.services.auth.verify_token",
+        lambda tok: {"uid": _EMPLOYEE, "firm_id": _FIRM,
+                     "firm_role": "employee"},
+    )
+    monkeypatch.setattr(lr, "get_allowed_kits", lambda firm_id: [_KIT])
+
+    db = _FakeDb({("firms", _FIRM): {"name": "Firm A", "status": "active",
+                                     "kind": "mock", "balance_credits": 5}})
+    monkeypatch.setattr(lr, "get_db", lambda: db)
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: db)
+    import firebase_admin
+    monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
+                        raising=False)
+    # The redemption store stays the journey fixture's in-memory one -- this
+    # test is about the MINT RECORD reaching the open gate, and a second
+    # fake store would only add noise.
+
+    app = FastAPI()
+    app.include_router(lr.router)
+    http = TestClient(app)
+
+    # 1 + 2. MINT over HTTP: the balance moves, and both documents exist.
+    minted = http.post("/api/links/mint", json={"kit_id": _KIT},
+                       headers={"Authorization": "Bearer staff-token"})
+    assert minted.status_code == 200, minted.text
+    jti = minted.json()["jti"]
+    assert db.firm(_FIRM)["balance_credits"] == 4
+    assert [e["link_jti"] for e in db.ledger_rows(_FIRM)] == [jti]
+    # The STAGING collection, because that is the running channel.
+    assert set(db.link_rows("links_staging")) == {jti}
+    assert db.link_rows("links") == {}
+
+    # 3. OPEN over HTTP with the token the mint just handed back.
+    token = minted.json()["url"].split("#t=", 1)[1]
+    opened = http.post("/api/links/open", json={"token": token})
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["jti"] == jti
+    assert opened.json()["kit_id"] == _KIT
+
+    # 4. REVOKE the record, and the very same token stops working.
+    db.docs[("links_staging", jti)]["status"] = links_store.STATUS_REVOKED
+    revoked = http.post("/api/links/open", json={"token": token})
+    assert revoked.status_code == 404
+    assert revoked.json()["detail"] == "This link is not valid."
