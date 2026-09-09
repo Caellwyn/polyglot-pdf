@@ -145,6 +145,39 @@ changes) and are recorded here for the audit trail:
   asserted-by-inspection rather than integration-tested.** Resolved by the
   same three tests above; no additional code change needed.
 
+## Outer cross-surface review, round 2 (post-review fix)
+
+The Opus cross-surface reviewer found one blocker; one nit was already filed
+as its own bead (`polyglot-pdf-e3it8`, alert docs carry no `channel`) and is
+not fixed here:
+
+- **Adopted -- Surface contract 14 (`docs/technical_guide.md`) still said
+  "Four" backend settings and omitted `CREDIT_LOW_THRESHOLD` from its own
+  enumeration and its no-env-fallback count, contradicting the new contract
+  21 this bead added in the same file.** Round 1 above fixed contract 21's
+  own miscount ("THIRD" -> "SECOND"); it missed that contract 14 -- the
+  surface-authoritative home for "which runtime-config keys exist" -- was a
+  second, independent restatement of the same set that the diff had also
+  left stale (CLAUDE.md scar #8 shape: one restatement of a set updated,
+  the other missed). Fixed three sentences in contract 14: "Four backend
+  settings" -> "Five"; the `RUNTIME_CONFIG_KEYS` enumeration now lists
+  `CREDIT_LOW_THRESHOLD` alongside the other four; "`CREDITS_ENFORCED` is
+  the one key with no env fallback" -> "`CREDITS_ENFORCED` and
+  `CREDIT_LOW_THRESHOLD` are the two keys with no env fallback", with a
+  pointer to `test_runtime_config.py`'s `_NO_ENV_FALLBACK_KEYS`. Verified
+  against source (`RUNTIME_CONFIG_KEYS` in `runtime_config.py` is a
+  five-element frozenset; `_NO_ENV_FALLBACK_KEYS` in
+  `test_runtime_config.py` is a two-element frozenset) before editing.
+  Docs-only change -- no code touched, no test to mutation-verify; full
+  backend (`backend/tests`, `admin_backend/tests`) and root (`tests`) suites
+  re-run green (3973 + 1445 = 5418 passed, 113 skipped, 3 xfailed), matching
+  the pre-fix count exactly.
+- **Deferred (already filed, not re-filed) -- alert docs carry no `channel`
+  field.** The reviewer filed this as `polyglot-pdf-e3it8` in the same
+  round; nit-severity, not a defect against this bead's own scope (see that
+  bead's body for the full trace). No action taken here beyond confirming
+  the bead exists.
+
 ## Lessons
 
 A best-effort helper's "never raises" contract must wrap the ENTIRE call

@@ -990,7 +990,7 @@ between their packages is one-directional and partial.
 
 ### 14. Runtime config: `app_config/{channel}` (bd polyglot-pdf-bg313)
 
-Four backend settings moved off deploy-time env to a per-channel Firestore
+Five backend settings moved off deploy-time env to a per-channel Firestore
 doc, so an operator retunes them with no redeploy.
 
 - **Producers -- TWO, and only one of them audits.** The admin service's
@@ -1007,10 +1007,12 @@ doc, so an operator retunes them with no redeploy.
 - **Consumer:** `backend/services/runtime_config.py` -- the ONLY reader.
   `RUNTIME_CONFIG_KEYS` = `LINK_MINTING_ENABLED` (bool),
   `LINK_COST_CEILING_USD` (float), `LINK_FIRM_CAP` (int), `CREDITS_ENFORCED`
-  (bool, new -- Epic 2 bead A3 gates a zero-balance mint on it). A key
-  present in the doc but outside this set is logged and ignored, never
-  applied. TTL-cached per channel (`TTL_SECONDS`, 30-60s) -- explicitly NOT
-  `get_settings()` (`backend/config.py`), which is `lru_cached` for the whole
+  (bool -- Epic 2 bead A3 gates a zero-balance mint on it),
+  `CREDIT_LOW_THRESHOLD` (int, new -- Epic 3 bead E3.5 gates the low-balance
+  alert on it; see contract 21). A key present in the doc but outside this
+  set is logged and ignored, never applied. TTL-cached per channel
+  (`TTL_SECONDS`, 30-60s) -- explicitly NOT `get_settings()`
+  (`backend/config.py`), which is `lru_cached` for the whole
   process lifetime and would never pick up a change.
 - **Fallback order** on a Firestore miss (unreachable store, missing doc, or
   a key absent/malformed in it): the LAST-KNOWN-GOOD value from this
@@ -1047,8 +1049,10 @@ doc, so an operator retunes them with no redeploy.
   `app_config/{channel}` via `scripts/set_runtime_config.py` or the console
   route lets an operator override the deploy-time value per channel with no
   redeploy; it is not required just to keep the deploy scripts' setting
-  working. `CREDITS_ENFORCED` is the one key with no env fallback (it is
-  brand new); it stays compiled `false` until a channel's doc sets it.
+  working. `CREDITS_ENFORCED` and `CREDIT_LOW_THRESHOLD` are the two keys
+  with no env fallback (both are brand new); each stays at its compiled
+  default (`false`, `10`) until a channel's doc sets it -- see
+  `test_runtime_config.py`'s `_NO_ENV_FALLBACK_KEYS`.
 - **`firestore.rules` carries a full client deny for `app_config/{channel}`**
   (bd polyglot-pdf-li9x0), alongside `admin_audit_log` and `firms`. The set
   of Admin-SDK-only collections lives in ONE constant,
