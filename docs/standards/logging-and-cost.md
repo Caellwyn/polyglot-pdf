@@ -2,10 +2,9 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the MEASURED COST INVARIANT is
-rewritten -- AUDIO-IN now leads where text-in was said to be 95-98%, recovered
-from the unshipped bd polyglot-pdf-89mt measurement and re-weighted for today's
-shipped SI).*
+*Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
+shape for every paid call, the `usage_kind` closed set, and the text +
+TTS pricing tables).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -39,6 +38,34 @@ offline analysis. Counts and costs only — no field values, no transcript text.
   back to `DEFAULT_PRICING_FAMILY` (`"2.5"`) for unknown names. A legacy flat
   `GEMINI_PRICING` alias still resolves to the default family's rates for older
   importers.
+
+  Two **further** tables live beside it, because they bill as different products
+  and the Live rates do **not** transfer to them:
+
+  `TEXT_GENERATION_PRICING` prices the plain `generate_content` endpoint (the
+  secretary / validator / translation paths), per 1M tokens, verified against
+  ai.google.dev/gemini-api/docs/pricing on 2026-09-09:
+
+  | Model | text-in | cached-in | out |
+  |-------|--------:|----------:|----:|
+  | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 |
+  | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 |
+
+  `get_text_generation_pricing(model_name)` matches on the id with any
+  date/preview suffix stripped, **longest key first** so a `-lite` id is not
+  billed at flash rates. Unlike the Live lookup it returns `None` for an unknown
+  model rather than a fallback row: for a cost dashboard an explicit gap beats a
+  confident wrong number, and callers emit `cost_estimate_usd: None`.
+
+  `TTS_PRICING_USD_PER_CHAR` prices Cloud Text-to-Speech per **character**, keyed
+  by voice tier (`tts_voice_tier(voice_name)` resolves
+  `{locale}-Chirp3-HD-{persona}` → `Chirp3-HD`). The Chirp3-HD rate is currently
+  **`None` — unverified**: cloud.google.com/text-to-speech/pricing could not be
+  fetched on 2026-09-09. Per the standing rule, an unfetchable page leaves an
+  explicit `None` rather than a number written from memory, and
+  `backend/tests/unit/test_pricing_tables.py::test_tts_pricing_is_filled_in` is
+  `xfail(strict=True)` on it — so filling the rate in turns that test red and
+  forces the marker off. Do not fill it from memory.
 
 - **Cost calc + accumulation** — `backend/adapters/live_ai_gemini.py` reads
   `usage_metadata` off each Gemini response, splits tokens by modality, calls
@@ -123,7 +150,7 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
 > and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
 
-## Structured event schemas (defined, not yet emitting)
+## Structured event schemas
 
 `backend/utils/log_schemas.py` defines `TypedDict` shapes for a structured event
 stream (`BaseLogEvent`, `TokenUsageMetadata`, `SessionEventMetadata`,
@@ -142,6 +169,55 @@ Cloud Logging — queryable/exportable off a deployed run without scraping the
 `print()` block (bd `polyglot-pdf-5c2h`). The remaining event types (session
 lifecycle, field, error) are still scaffolding — the contract is defined, the wiring
 lands in Phases 2–4 below.
+
+### Usage event v2 — one shape for every paid call
+
+Every paid model or TTS call emits the **same** event shape, so the Cloud Logging
+→ BigQuery sink sees one column shape instead of one per call path. The private
+`StructuredLogger._emit_usage(...)` is the single emitter; three thin wrappers sit
+on top of it:
+
+| Wrapper | `event_type` | Covers |
+|---------|--------------|--------|
+| `log_gemini_api_response` | `gemini_api_response` | the Gemini Live voice session |
+| `log_text_ai_usage` | `text_ai_usage` | secretary / validator / translation `generate_content` |
+| `log_tts_usage` | `tts_usage` | spell-back / notice / intro `synthesize_speech` |
+
+`log_gemini_api_response` keeps its v1 name and positional signature, so the live
+adapter's existing call site is untouched; the new ids arrive as optional keywords.
+
+The kind of paid call is carried in a **`usage_kind`** field, not in the key set.
+`backend/utils/log_schemas.py` defines it as a closed `Literal`: `live_voice`,
+`text_secretary`, `text_validator`, `text_translation`, `tts_spellback`,
+`tts_notice`, `tts_intro`. The envelope's optional context keys are listed once in
+`USAGE_CONTEXT_KEYS` (`firm_id`, `employee_id`, `link_jti`, `kit_id`, `channel`,
+`model`), and `_emit_usage` writes **all** of them on **every** call, `None`
+included.
+
+That unconditional write is the point of v2. At the BigQuery sink a *missing* key
+and a *null* are different things: a row that simply omits `firm_id` drops out of a
+`GROUP BY firm_id` silently, so a per-firm cost total under-reports with no error
+anywhere. A null is queryable. `backend/tests/test_usage_event_schema.py` pins this
+per `usage_kind`, deriving the key list from `USAGE_CONTEXT_KEYS` rather than
+repeating it.
+
+**PII:** ids, counts, costs and model names only. The envelope has no slot for a
+field value or transcript, so the shape is HIPAA-safe by construction — see
+[hipaa-pii-policy.md](hipaa-pii-policy.md) and
+`backend/tests/test_no_pii_logging.py`.
+
+**Call-site coverage.** `backend/tests/test_usage_event_coverage.py` AST-walks
+everything under `backend/` that Cloud Run executes (exclusion-derived, like
+`backend/tests/unit/test_deployed_iam_envelope.py`) and enumerates every
+`generate_content`, `aio.live.connect` and `synthesize_speech` call. The set must
+equal a pinned allowlist, so a new paid call anywhere fails the test the day it is
+added rather than billing silently. `backend/scripts/` is deliberately out of
+scope: those probes run on an operator's own budget. Today the allowlist holds
+three sites — the Live adapter, the text adapter, and `spellback_tts._synthesize_sync`
+(which `intro_tts` and `notice_tts` both call, so the three TTS paths share one
+site). The text and TTS emit proofs are `xfail(strict=True)` until beads
+`polyglot-pdf-cjifh` and `polyglot-pdf-t86oz` plumb the ids through; strict, so
+wiring one turns the test red and forces the marker off.
 
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)

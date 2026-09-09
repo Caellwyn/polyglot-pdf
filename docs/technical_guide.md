@@ -1527,3 +1527,72 @@ object.
   `test_admin_sa_iam_envelope.py` pins by name. This contract adds NO new
   permission (CLAUDE.md scar #7). The PUBLIC backend still makes zero
   privileged Auth calls -- these live only under `admin_backend/`.
+
+
+### 20. Usage event v2: the emitter -> Cloud Logging -> BigQuery shape (Epic 3 bead E3.1)
+
+ONE structured event shape for every paid model or TTS call, so the logging sink
+sees one column shape instead of one per call path. This is a WIRE contract in
+the same sense as the WS legs: nothing type-checks it end to end, and a producer
+that drops a key breaks a consumer query silently.
+
+- **Producer:** `StructuredLogger._emit_usage`
+  (`backend/utils/structured_logger.py`), reached only through three wrappers on
+  the same class -- `log_gemini_api_response` (`event_type`
+  `gemini_api_response`, `usage_kind` `live_voice`), `log_text_ai_usage`
+  (`text_ai_usage`), `log_tts_usage` (`tts_usage`). Nothing else may emit a
+  usage event; the wrappers exist so the key set has exactly one writer.
+- **Consumers:** the Cloud Logging -> BigQuery sink and the cost views built on
+  it (Epic 3 bead `polyglot-pdf-rd3s8`), plus the session-end Firestore rollups
+  (`polyglot-pdf-*` E3.4) which read the same cost figures.
+- **The shape.** `usage_kind` is a closed `Literal` in
+  `backend/utils/log_schemas.py`: `live_voice`, `text_secretary`,
+  `text_validator`, `text_translation`, `tts_spellback`, `tts_notice`,
+  `tts_intro`. The optional context keys are declared ONCE as
+  `USAGE_CONTEXT_KEYS` (`firm_id`, `employee_id`, `link_jti`, `kit_id`,
+  `channel`, `model`), and `_emit_usage` iterates THAT tuple -- a key added to
+  the schema without a matching emitter parameter raises `KeyError` on the first
+  emit rather than silently never being written.
+- **Every key on every call, `None` included.** *Breaks if drifted:* at the
+  BigQuery sink a MISSING key and a NULL are not the same thing. A wrapper that
+  omits `firm_id` when it has no value produces rows that vanish from a
+  `GROUP BY firm_id`, so a per-firm cost total under-reports with no error
+  anywhere -- the invoice and the dashboard just disagree. Pinned per
+  `usage_kind` by `backend/tests/test_usage_event_schema.py`.
+- **Ordering guarantee:** caller `metadata` is written FIRST and the envelope
+  keys on top, so a caller whose metadata happens to contain `model` or
+  `usage_kind` cannot mislabel its own row.
+- **`log_gemini_api_response` keeps its v1 name and positional signature.** The
+  live adapter's existing call site
+  (`backend/adapters/live_ai_gemini.py`, in the per-turn `usage_metadata` block)
+  compiles unchanged; the six context ids are optional keywords that bead
+  `polyglot-pdf-cjifh` plumbs through. *Breaks if renamed:* that one call site,
+  and any Cloud Logging query or dashboard keyed on the `gemini_api_response`
+  event name.
+- **Call-site coverage is enumerated, not remembered.**
+  `backend/tests/test_usage_event_coverage.py` AST-walks everything under
+  `backend/` that Cloud Run executes (exclusion-derived, like
+  `backend/tests/unit/test_deployed_iam_envelope.py`) for `generate_content`,
+  `aio.live.connect` and `synthesize_speech`, and requires the found set to
+  EQUAL a pinned allowlist -- in both directions, so a new paid call fails the
+  test and a stale entry does too. `backend/scripts/` is deliberately out of
+  scope (operator budget, not product cost). Three sites today: the Live
+  adapter, the text adapter, and `spellback_tts._synthesize_sync` -- which
+  `intro_tts` and `notice_tts` both call, so all three TTS kinds share ONE call
+  site. The text and TTS emit proofs are `xfail(strict=True)` pending beads
+  `polyglot-pdf-cjifh` / `polyglot-pdf-t86oz`; strict, so wiring one turns the
+  test red and forces the marker off rather than letting a stale xfail mask a
+  later regression.
+- **Pricing is a separate table per product** (`backend/config.py`).
+  `GEMINI_PRICING_BY_FAMILY` prices the Live endpoint and does NOT transfer:
+  `TEXT_GENERATION_PRICING` prices plain `generate_content`, and
+  `TTS_PRICING_USD_PER_CHAR` prices Cloud TTS per CHARACTER, not per token.
+  `get_text_generation_pricing` matches longest-key-first (so a `-lite` id is
+  not billed at flash rates) and returns `None` for an unknown model instead of
+  a fallback row -- deliberately unlike the Live lookup's
+  `DEFAULT_PRICING_FAMILY`, because a confident wrong number in a cost report is
+  worse than a visible gap. The Chirp3-HD rate is an unverified `None` today;
+  see `docs/standards/logging-and-cost.md`.
+- **PII:** ids, counts, costs and model names only. The envelope has no
+  free-text slot, so the shape is HIPAA-safe by construction
+  (`docs/standards/hipaa-pii-policy.md`, `backend/tests/test_no_pii_logging.py`).
