@@ -54,6 +54,15 @@ offline analysis. Counts and costs only — no field values, no transcript text.
   |-------|--------:|----------:|----:|
   | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 |
   | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 |
+  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 |
+
+  The `gemini-2.5-pro` row is the `<=200k`-token-prompt tier (this app's
+  validator/translation prompts never approach 200k); the page's `>200k` tier
+  is not carried here. It bills `VALIDATOR_PRO_MODEL`'s default-on whole-form
+  pass and `OPTION_TRANSLATION_MODEL`'s authoring-time bake -- both
+  `gemini-2.5-pro` by default (`backend/config.py`) -- so a missing row here
+  would leave the product's single most expensive text call reporting a null
+  cost.
 
   `get_text_generation_pricing(model_name)` matches on the id with any
   date/preview suffix stripped, **longest key first** so a `-lite` id is not

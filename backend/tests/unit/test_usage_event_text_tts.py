@@ -547,3 +547,43 @@ def test_tts_cost_is_null_for_an_unrecognized_voice_tier():
     cost, tier = _tts_cost_estimate_usd(10, "")
     assert cost is None
     assert tier is None
+
+
+def test_usage_session_ctx_staff_employee_id_falls_back_to_sub():
+    """A staff caller's employee_id must fall back to "sub" when "uid" is
+    absent, mirroring websocket_routes.py's usage_employee_id derivation
+    (`claims.get("uid") or claims.get("sub")`) -- the same defensive pattern
+    used at auth.py and editor_auth.py. Found in cross-surface review of bd
+    polyglot-pdf-t86oz: the tts_routes.py helper's docstring already claimed
+    to mirror the WS derivation but only read "uid", silently dropping any
+    credential shape that carries "sub" instead."""
+    from backend.routes.tts_routes import _usage_session_ctx
+
+    ctx = _usage_session_ctx({"sub": "user-123", "firm_id": "firm-1"})
+    assert ctx["employee_id"] == "user-123"
+
+
+def test_usage_session_ctx_staff_employee_id_prefers_uid_over_sub():
+    """When both are present (the live verify_id_token shape), "uid" wins --
+    this pins the ordering, not just that a fallback exists."""
+    from backend.routes.tts_routes import _usage_session_ctx
+
+    ctx = _usage_session_ctx({"uid": "uid-1", "sub": "sub-1", "firm_id": "f"})
+    assert ctx["employee_id"] == "uid-1"
+
+
+def test_usage_session_ctx_client_link_ignores_sub():
+    """A client-link claims dict derives employee_id from "employee_id", not
+    from "uid"/"sub" at all -- the sub fallback must not leak into the link
+    branch."""
+    from backend.routes.tts_routes import _usage_session_ctx
+
+    ctx = _usage_session_ctx({
+        "is_client_link": True,
+        "employee_id": "link-emp-1",
+        "sub": "should-not-be-used",
+        "firm_id": "f",
+        "jti": "jti-1",
+        "link_kit_id": "kit-1",
+    })
+    assert ctx["employee_id"] == "link-emp-1"

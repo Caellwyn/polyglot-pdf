@@ -39,6 +39,9 @@ REQUIRED_TEXT_COLUMNS = {"text_input", "cached_input", "text_output"}
 EXPECTED_PER_1M = {
     "gemini-2.5-flash": {"text_input": 0.30, "cached_input": 0.03, "text_output": 2.50},
     "gemini-2.5-flash-lite": {"text_input": 0.10, "cached_input": 0.01, "text_output": 0.40},
+    # <=200k-token prompt tier (this app's validator/translation prompts never
+    # approach 200k); the page's >200k tier is not carried here.
+    "gemini-2.5-pro": {"text_input": 1.25, "cached_input": 0.125, "text_output": 10.00},
 }
 
 _PER_1M = 1_000_000

@@ -91,6 +91,42 @@ caller supplied `session_ctx` -- but with every context key null, because
 unmigrated caller, not a bug: unfinished attribution the bead's Surfaces
 list did not ask for.
 
+**Cross-surface review round -- two GAPS fixed inline, two deferred as
+already-filed follow-ups.** The Opus outer review (`origin/dev...HEAD`)
+returned `GAPS-FOUND (2)` plus two nit/out-of-scope findings, and filed one
+bead per finding before reporting:
+
+- ADOPTED (fixed inline, bead closed same-session): `polyglot-pdf-bl0zj` --
+  the default-on whole-form pro validator (`FORM_COMPLETE_PRO_VALIDATOR=true`,
+  `VALIDATOR_PRO_MODEL=gemini-2.5-pro`) and the `OPTION_TRANSLATION_MODEL`
+  bake both newly emit `session_ctx`-bearing usage events whose
+  `cost_estimate_usd` came back `None`, because `TEXT_GENERATION_PRICING`
+  (`backend/config.py`) had rows for the two flash-tier models only. Added a
+  `gemini-2.5-pro` row (verified against ai.google.dev/gemini-api/docs/pricing
+  on 2026-09-09, <=200k-token prompt tier) and updated
+  `test_pricing_tables.py`'s `EXPECTED_PER_1M` to match. Mutation-verified:
+  removing the row reddens six of the table's existing parametrized tests.
+- ADOPTED (fixed inline, bead closed same-session): `polyglot-pdf-9elp5` --
+  `tts_routes.py`'s `_usage_session_ctx` derived a staff caller's
+  `employee_id` as `claims.get("uid")` only, while its own docstring (and
+  `technical_guide.md`) claimed it mirrors `websocket_routes.py`'s
+  `claims.get("uid") or claims.get("sub")` expression. Fixed the derivation
+  to match what the docstring already said; added three pinning tests to
+  `test_usage_event_text_tts.py` (sub-fallback, uid-preferred-over-sub, the
+  client-link branch does not read `sub` at all). Mutation-verified.
+- DEFERRED, bead left open: `polyglot-pdf-f4r1i` -- `option_translation.py`'s
+  runtime in-session translation build (`form_filling_service.py:790`) fires
+  the null-context caller identified in the Scope call above from inside a
+  live session, and there is a genuine design question underneath
+  (`get_translation_overrides` caches one build per (form, language) per
+  PROCESS and shares it across sessions, so attributing it to the triggering
+  session would bill one firm for work several consume) -- not this bead's
+  to decide.
+- DEFERRED, bead left open: `polyglot-pdf-js6qj` -- `UsageEventMetadata`
+  (`log_schemas.py`) has zero consumers and is already ~12 keys behind the
+  emitters; harmless at runtime, relevant to the E3.6 sink bead, filed as a
+  nit rather than fixed here.
+
 ## Lessons
 
 **A synchronous/instant async mock does not prove a concurrency guarantee.**
@@ -191,3 +227,14 @@ Review outcomes recorded in the closeout ping.
 - `docs/technical_guide.md`, `docs/standards/logging-and-cost.md`,
   `docs/standards/validation-delegation.md` -- current-state prose updates
   (see Doc freshness).
+
+Cross-surface review round additions:
+
+- `backend/config.py` -- `gemini-2.5-pro` row added to
+  `TEXT_GENERATION_PRICING` (fixes `polyglot-pdf-bl0zj`).
+- `backend/tests/unit/test_pricing_tables.py` -- `EXPECTED_PER_1M` gains the
+  matching `gemini-2.5-pro` entry.
+- `backend/routes/tts_routes.py` -- `_usage_session_ctx`'s staff branch now
+  falls back to `claims.get("sub")` (fixes `polyglot-pdf-9elp5`).
+- `backend/tests/unit/test_usage_event_text_tts.py` -- three new pinning
+  tests for the `sub` fallback.

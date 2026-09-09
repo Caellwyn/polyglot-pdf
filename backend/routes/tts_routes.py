@@ -71,7 +71,7 @@ def _usage_session_ctx(claims: dict) -> dict:
     return {
         "firm_id": claims.get("firm_id"),
         "employee_id": (claims.get("employee_id") if is_link
-                        else claims.get("uid")),
+                        else claims.get("uid") or claims.get("sub")),
         "link_jti": claims.get("jti") if is_link else None,
         "kit_id": claims.get("link_kit_id") if is_link else None,
         "channel": link_channel(),
