@@ -13,8 +13,9 @@ exist (bd polyglot-pdf-8vgfh lands the last one):
   - require_app_admin -- shipped with GET /admin/whoami (bd
     polyglot-pdf-7w17m).
   - require_app_admin_or_owning_manager -- the composite, shipped with the
-    four /admin/users routes; also the gate Epic 2 B4's link listing and
-    revoke will carry.
+    four /admin/users routes; also the gate Epic 2 B4's link listing (GET
+    /admin/firms/{firm_id}/links) and revoke (POST /admin/links/{jti}/
+    revoke) carry (bd polyglot-pdf-jmiys).
   - require_firm_manager -- exists in backend/services/auth.py over the
     shared rule backend/services/firms.py::manager_firm_id. NO ROUTE
     declares it yet, deliberately: the retire route consumes the RULE
@@ -139,6 +140,8 @@ def test_the_registered_route_set_is_pinned():
         (("POST",), "/admin/firms/{firm_id}/credits/grant"),
         (("POST",), "/admin/firms/{firm_id}/credits/adjust"),
         (("POST",), "/admin/links/sweep-expired"),
+        (("GET",), "/admin/firms/{firm_id}/links"),
+        (("POST",), "/admin/links/{jti}/revoke"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
