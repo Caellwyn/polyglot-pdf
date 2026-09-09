@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -85,13 +85,26 @@ kit editing lock) is deliberately shared because sharing is the correct design:
    one key silently invalidates links minted by the other. A shared key with a
    per-channel audience is the smaller surface.
 
-   **What is still shared: the BILLING counter, via the firm.** `record_mint`
-   increments `firms/{id}/link_usage/{YYYY-MM}`, which is firm-scoped, not
-   channel-scoped -- so minting from staging against a REAL firm's id still
-   bills that firm. The isolation here rests on staging using its own mock firm
-   (create one with `scripts/bootstrap_firm.py` and stamp the dev account with
-   it), not on code. Never sign into staging with an account carrying a real
-   firm's `firm_id`.
+   **What is still shared: the FIRM's money, and firm-billing isolation is now
+   ENFORCED IN CODE** (bd `polyglot-pdf-jecrl`). A firm carries one
+   `balance_credits` and one ledger, not one per channel, and `record_mint`'s
+   monthly counter `firms/{id}/link_usage/{YYYY-MM}` is likewise firm-scoped.
+   What stops a staging mint from spending a paying firm's money is the mint
+   route's gate: a firm whose `kind` is `live` -- or which has no `kind` at all
+   -- can only be minted against when the process's **raw `LINK_CHANNEL` env var
+   is exactly `demo`**. Staging sets `LINK_CHANNEL=staging`, so it refuses with
+   a `403` before any credit is reserved.
+
+   The gate deliberately reads the raw env var rather than
+   `link_tokens.link_channel()`, whose default is `demo`: an UNSET channel (a
+   laptop, a one-off container, a misconfigured revision) must not look like the
+   demo. So an unset channel still mints `aud=demo` tokens for **mock** firms --
+   today's behaviour, kept on purpose -- while refusing live ones.
+
+   Create staging's firm with `scripts/bootstrap_firm.py --kind mock` and stamp
+   the dev account with it. That is now about being able to mint AT ALL on
+   staging, not about damage control: signing into staging with a real firm's
+   `firm_id` no longer bills anyone, it simply fails.
 
 6. **The form-kit EDITING LOCK is shared, and that is correct as designed**
    (bd `polyglot-pdf-t7drr`). The lock lives in each kit's `metadata.json`
