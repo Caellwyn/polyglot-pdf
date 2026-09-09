@@ -35,8 +35,13 @@ interface VerifyFieldModalProps {
   isOpen: boolean;
   /** The field's human-readable name, from the form kit (never translated). */
   fieldName: string;
-  /** The value being verified, shown back so the user checks the real thing. */
-  value: string;
+  /**
+   * The value being verified, shown back so the user checks the real thing.
+   * A single checkbox passes a BOOLEAN, which renders as a translated Yes/No --
+   * "true"/"false" is meaningless to a user, and excluding checkboxes instead
+   * would leave them with no keyboard verify path at all.
+   */
+  value: string | boolean;
   selectedLanguage: string;
   /** Called when the user asserts the answer is correct. */
   onVerify: () => void;
@@ -130,7 +135,7 @@ export function VerifyFieldModal({
           {/* The value is shown back so the user verifies the REAL answer rather
               than a remembered one. */}
           <span className="verify-field-modal-value" data-testid="verify-field-value">
-            {value}
+            {typeof value === 'boolean' ? (value ? copy.booleanYes : copy.booleanNo) : value}
           </span>
         </div>
 

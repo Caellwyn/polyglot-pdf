@@ -26,6 +26,11 @@
  * - fieldLabelPrefix: precedes the field's own name, so the modal says WHICH
  *                 field is being verified. The field name itself is not
  *                 translated -- it comes from the form kit.
+ * - booleanYes / booleanNo: how a single CHECKBOX's value reads back. A raw
+ *                 boolean rendered as "true"/"false" is meaningless to a user,
+ *                 but EXCLUDING checkboxes from the gesture would leave them with
+ *                 no keyboard verify path at all -- the same defect, one field
+ *                 type over. So they are shown in words instead.
  *
  * TRANSLATION STATUS: as with the sibling maps, the non-English strings are a
  * machine-generated first draft pending native-speaker review. ENGLISH IS
@@ -42,6 +47,8 @@ export interface VerifyFieldCopy {
   confirmButton: string;
   cancelButton: string;
   fieldLabelPrefix: string;
+  booleanYes: string;
+  booleanNo: string;
 }
 
 export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
@@ -51,6 +58,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Verify',
     cancelButton: 'Not yet',
     fieldLabelPrefix: 'Field',
+    booleanYes: 'Yes',
+    booleanNo: 'No',
   },
   'Spanish': {
     title: 'Verifique esta respuesta',
@@ -58,6 +67,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Verificar',
     cancelButton: 'Todavía no',
     fieldLabelPrefix: 'Campo',
+    booleanYes: 'Sí',
+    booleanNo: 'No',
   },
   'Chinese': {
     title: '核对此答案',
@@ -65,6 +76,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: '确认',
     cancelButton: '暂不',
     fieldLabelPrefix: '字段',
+    booleanYes: '是',
+    booleanNo: '否',
   },
   'Tagalog': {
     title: 'Tiyakin ang sagot na ito',
@@ -72,6 +85,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Tiyakin',
     cancelButton: 'Hindi pa',
     fieldLabelPrefix: 'Patlang',
+    booleanYes: 'Oo',
+    booleanNo: 'Hindi',
   },
   'Arabic': {
     title: 'تحقق من هذه الإجابة',
@@ -79,6 +94,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'تحقق',
     cancelButton: 'ليس بعد',
     fieldLabelPrefix: 'الحقل',
+    booleanYes: 'نعم',
+    booleanNo: 'لا',
   },
   'French': {
     title: 'Vérifiez cette réponse',
@@ -86,6 +103,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Vérifier',
     cancelButton: 'Pas encore',
     fieldLabelPrefix: 'Champ',
+    booleanYes: 'Oui',
+    booleanNo: 'Non',
   },
   'Korean': {
     title: '이 답변 확인',
@@ -93,6 +112,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: '확인',
     cancelButton: '나중에',
     fieldLabelPrefix: '항목',
+    booleanYes: '예',
+    booleanNo: '아니오',
   },
   'German': {
     title: 'Diese Antwort bestätigen',
@@ -100,6 +121,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Bestätigen',
     cancelButton: 'Noch nicht',
     fieldLabelPrefix: 'Feld',
+    booleanYes: 'Ja',
+    booleanNo: 'Nein',
   },
   'Portuguese': {
     title: 'Verifique esta resposta',
@@ -107,6 +130,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Verificar',
     cancelButton: 'Ainda não',
     fieldLabelPrefix: 'Campo',
+    booleanYes: 'Sim',
+    booleanNo: 'Não',
   },
   'Hindi': {
     title: 'इस उत्तर की पुष्टि करें',
@@ -114,6 +139,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'पुष्टि करें',
     cancelButton: 'अभी नहीं',
     fieldLabelPrefix: 'फ़ील्ड',
+    booleanYes: 'हाँ',
+    booleanNo: 'नहीं',
   },
   'Italian': {
     title: 'Verifica questa risposta',
@@ -121,6 +148,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Verifica',
     cancelButton: 'Non ancora',
     fieldLabelPrefix: 'Campo',
+    booleanYes: 'Sì',
+    booleanNo: 'No',
   },
   'Urdu': {
     title: 'اس جواب کی تصدیق کریں',
@@ -128,6 +157,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'تصدیق کریں',
     cancelButton: 'ابھی نہیں',
     fieldLabelPrefix: 'خانہ',
+    booleanYes: 'جی ہاں',
+    booleanNo: 'نہیں',
   },
   'Persian': {
     title: 'این پاسخ را تأیید کنید',
@@ -135,6 +166,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'تأیید',
     cancelButton: 'هنوز نه',
     fieldLabelPrefix: 'فیلد',
+    booleanYes: 'بله',
+    booleanNo: 'خیر',
   },
   'Dutch': {
     title: 'Controleer dit antwoord',
@@ -142,6 +175,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Bevestigen',
     cancelButton: 'Nog niet',
     fieldLabelPrefix: 'Veld',
+    booleanYes: 'Ja',
+    booleanNo: 'Nee',
   },
   'Ukrainian': {
     title: 'Підтвердьте цю відповідь',
@@ -149,6 +184,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Підтвердити',
     cancelButton: 'Ще ні',
     fieldLabelPrefix: 'Поле',
+    booleanYes: 'Так',
+    booleanNo: 'Ні',
   },
   'Russian': {
     title: 'Подтвердите этот ответ',
@@ -156,6 +193,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Подтвердить',
     cancelButton: 'Ещё нет',
     fieldLabelPrefix: 'Поле',
+    booleanYes: 'Да',
+    booleanNo: 'Нет',
   },
   'Swedish': {
     title: 'Bekräfta detta svar',
@@ -163,6 +202,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Bekräfta',
     cancelButton: 'Inte än',
     fieldLabelPrefix: 'Fält',
+    booleanYes: 'Ja',
+    booleanNo: 'Nej',
   },
   'Afrikaans': {
     title: 'Bevestig hierdie antwoord',
@@ -170,6 +211,8 @@ export const VERIFY_FIELD_TRANSLATIONS: Record<string, VerifyFieldCopy> = {
     confirmButton: 'Bevestig',
     cancelButton: 'Nog nie',
     fieldLabelPrefix: 'Veld',
+    booleanYes: 'Ja',
+    booleanNo: 'Nee',
   },
 };
 

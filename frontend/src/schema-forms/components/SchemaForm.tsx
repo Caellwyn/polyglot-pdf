@@ -667,12 +667,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
     const value = unwrapFieldValue(state.fieldValues[fieldId]);
     if (isBlankFieldValue(value)) return;
-    // An UNCHECKED checkbox stores boolean false, which isBlankFieldValue counts
-    // as non-blank (correctly -- false is a real answer, bd polyglot-pdf-vtdx).
-    // But opening the modal on it showed the literal string "false" as the value
-    // to verify, which is nonsense to a user. A checkbox is toggled, not typed,
-    // so Enter there keeps its existing meaning (fresh-eyes finding).
-    if (typeof value === 'boolean') return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -906,7 +900,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           <VerifyFieldModal
             isOpen
             fieldName={vField?.name || verifyingFieldId}
-            value={vValue == null ? '' : String(vValue)}
+            value={
+              typeof vValue === 'boolean' ? vValue : vValue == null ? '' : String(vValue)
+            }
             selectedLanguage={initialLanguage || 'English'}
             onVerify={handleVerifyConfirmed}
             onCancel={() => setVerifyingFieldId(null)}

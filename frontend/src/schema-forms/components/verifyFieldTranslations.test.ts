@@ -49,7 +49,8 @@ describe('VERIFY_FIELD_TRANSLATIONS coverage (bd polyglot-pdf-96um6)', () => {
     // value forces a deliberate entry here, and the entry is where you say WHY.
     const english = VERIFY_FIELD_TRANSLATIONS['English'] as unknown as Record<string, string>;
     const SAME_AS_ENGLISH_BY_DESIGN: Record<string, string> = {
-      // (none today -- every language differs from English on every key)
+      'Spanish.booleanNo': "'No' is the ordinary Spanish word, not a missed translation",
+      'Italian.booleanNo': "'No' is the ordinary Italian word, not a missed translation",
     };
 
     const unexpected: string[] = [];

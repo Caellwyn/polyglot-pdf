@@ -261,11 +261,13 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
     expect(evt.defaultPrevented, 'the native submit must be suppressed').toBe(true);
   });
 
-  it('a CHECKBOX field does not open the modal -- it would show "false"', () => {
-    // An unchecked checkbox stores boolean false, which isBlankFieldValue counts
-    // as non-blank (correctly -- false is a real answer). Opening the modal on it
-    // showed the literal string "false" as the value to verify, which is nonsense
-    // to a user. A checkbox is toggled, not typed. Fresh-eyes finding.
+  it('a CHECKBOX opens the modal and reads back as YES/NO, not true/false', () => {
+    // My first fix EXCLUDED checkboxes, because the modal showed the literal
+    // string "false". That traded a cosmetic bug for a functional one: a
+    // checkbox's only other verify paths are the VERBAL confirm (not a keyboard
+    // path) and the skip control (empty+required only), so excluding it left a
+    // keyboard user unable to verify one -- the same defect as the Preview gap,
+    // one field type over. Shown in words instead.
     const schema = {
       ...VERIFY_SCHEMA,
       fields: [
@@ -276,11 +278,14 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
     render(<SchemaForm schema={schema} kitId="test" />);
 
     const box = document.getElementById('agree') as HTMLInputElement;
-    fireEvent.click(box);   // check
-    fireEvent.click(box);   // uncheck -> stores false
+    fireEvent.click(box);   // check it -> stores boolean true
     fireEvent.keyDown(box, { key: 'Enter' });
 
-    expect(screen.queryByTestId('verify-field-modal')).toBeNull();
+    expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
+    expect(
+      screen.getByTestId('verify-field-value').textContent,
+      'a raw "true" is meaningless to a user'
+    ).toBe('Yes');
   });
 
   it('verifying writes ONCE -- no double state-change event', () => {
