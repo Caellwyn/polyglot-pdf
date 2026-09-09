@@ -12,6 +12,7 @@ from ..utils.confirmation_logger import (
 	log_form_session_start,
 	log_form_session_end,
 )
+from ..utils.language_codes import bcp47_codes_for_spoken_language
 import structlog
 
 # Structured logger for websocket routes
@@ -1148,6 +1149,56 @@ async def _handle_fill_session(
 			except Exception as e:
 				log.error("session_end_telemetry_failed", error=str(e))
 
+			# Usage rollup (Epic 3 bead E3.4, bd polyglot-pdf-w828m): one
+			# batched firm+kit increment per connection teardown, same gate
+			# as the audit row above (should_log_session_end already reduces
+			# this to "there IS a form_session_id"). Cost is read from the
+			# SAME live adapter _bank_link_spend reads below, and MUST happen
+			# before service.end_session() finalises it -- reading here,
+			# ahead of that call, is what guarantees the ordering regardless
+			# of how the two call sites are edited later.
+			# usage_employee_id (not link_employee_id) is the by_employee
+			# key: the link's employee_id for a client session, the staff
+			# uid for a staff session -- see this function's own parameter
+			# docstring for why the two names are NOT interchangeable.
+			#
+			# OFF THE EVENT LOOP (Opus cross-surface, bd polyglot-pdf-w828m
+			# finding 1). firm_kind() is an uncached sync Admin-SDK .get(),
+			# and record_session_end() does its own db lookup plus a
+			# batch.commit() -- both blocking network calls. Every sibling
+			# Firestore call in this same teardown block is already
+			# to_thread-dispatched (complete_link, _bank_link_spend's
+			# record_spend, enforce_link_redemption, _mirror_budget_exhausted
+			# -- whose own docstring states the rule by name); calling these
+			# two directly here would stall every OTHER concurrent
+			# connection on this Cloud Run instance, in-flight audio
+			# included, on what is now the highest-frequency teardown path
+			# in the app. BOTH resolved inside the SAME to_thread call
+			# (mirrors the ceiling+check_budget pattern above in this same
+			# file), since firm_kind's result feeds directly into
+			# record_session_end's `kind` argument.
+			try:
+				from ..services.link_tokens import link_channel
+
+				def _resolve_kind_and_record_rollup() -> None:
+					from ..services.firms import firm_kind
+					from ..services.usage_rollups import record_session_end
+
+					record_session_end(
+						firm_id=firm_id,
+						kit_id=kit_id,
+						employee_id=usage_employee_id,
+						language=_rollup_language_key(service),
+						channel=link_channel(),
+						kind=firm_kind(firm_id) if firm_id else "live",
+						completion_status="completed" if session_completed else "abandoned",
+						cost_usd=_session_cost_usd(service),
+					)
+
+				await asyncio.to_thread(_resolve_kind_and_record_rollup)
+			except Exception as e:
+				log.error("usage_rollup_telemetry_failed", error=str(e))
+
 		# BURN THE LINK -- but only on a real completion (bd polyglot-pdf-ugm6,
 		# fresh-eyes r1 finding 2). Nothing called complete_link before this,
 		# so a link could never actually become "used" and the one-time
@@ -1256,6 +1307,58 @@ def _mirror_budget_exhausted(jti) -> None:
 					error=str(exc))
 
 
+def _rollup_language_key(service) -> str | None:
+	"""The by_language map key for this session's usage rollup (bd
+	polyglot-pdf-w828m): the BCP-47 code for the session's spoken language,
+	falling back to the raw spoken-language name (e.g. "Spanish") when the
+	name has no code-backed entry.
+
+	NEVER PINS A LANGUAGE (see backend/utils/language_codes.py's own
+	module docstring and the "17 languages growing to ~90" scar tissue): the
+	fallback to the raw name means a language added to the frontend's
+	SPOKEN_LANGUAGES list before language_codes.py's map catches up still
+	gets counted in the rollup, under its plain name instead of a code --
+	better than silently dropping it from by_language entirely.
+	"""
+	if not hasattr(service, "spoken_language"):
+		return None
+	name = service.spoken_language()
+	if not name:
+		return None
+	codes = bcp47_codes_for_spoken_language(name)
+	return codes[0] if codes else name
+
+
+def _session_cost_usd(service, *, log=None, jti=None) -> float:
+	"""This CONNECTION's AI spend so far, read from the live adapter.
+
+	Shared by _bank_link_spend (client-link sessions only) and the usage-
+	rollup call (bd polyglot-pdf-w828m, staff AND client-link sessions) --
+	both need the identical read, and a second hand-written copy would be
+	free to drift on the hasattr guard or the None-coalescing. MUST be
+	called BEFORE end_session(): ending the session finalises the adapter,
+	and reading the cost after would race the teardown for the number.
+	Never raises -- any read failure resolves to 0.0.
+
+	`log`/`jti` are OPTIONAL and exist only so _bank_link_spend can recover
+	the exact "link_spend_record_failed" observability it had on origin/dev
+	before this read moved into a shared helper: pass a logger and the fix
+	logs the failure with that pre-existing event name before swallowing it.
+	Omitted (the usage-rollup call site's case), a read failure stays silent
+	here -- that caller already wraps its own record_session_end() call in a
+	try/except that logs "usage_rollup_telemetry_failed", so a second log
+	line from this helper would just double-report the same failure.
+	"""
+	try:
+		ai = getattr(service, "live_ai", None)
+		if ai is not None and hasattr(ai, "session_cost_usd"):
+			return float(ai.session_cost_usd() or 0.0)
+	except Exception as exc:
+		if log is not None:
+			log.error("link_spend_record_failed", jti=jti, error=str(exc))
+	return 0.0
+
+
 async def _bank_link_spend(link_jti, service, log) -> float:
 	"""Add this CONNECTION's AI spend to the link's running total.
 
@@ -1273,15 +1376,17 @@ async def _bank_link_spend(link_jti, service, log) -> float:
 	and reading the cost after would race the teardown for the number.
 
 	Never raises. Accounting must not break a teardown -- record_spend is
-	already best-effort internally, and this catches the READ too.
+	already best-effort internally, and this catches the READ too: passing
+	`log`/`link_jti` through to _session_cost_usd is what keeps a read
+	failure logged as "link_spend_record_failed" here, exactly as it was
+	before that read was extracted into a helper shared with the usage
+	rollup (see _session_cost_usd's own docstring) -- fresh-eyes finding 2
+	on bd polyglot-pdf-w828m.
 	"""
 	if not link_jti:
 		return 0.0          # staff session: no link, nothing to bank
 	try:
-		ai = getattr(service, "live_ai", None)
-		cost = 0.0
-		if ai is not None and hasattr(ai, "session_cost_usd"):
-			cost = float(ai.session_cost_usd() or 0.0)
+		cost = _session_cost_usd(service, log=log, jti=link_jti)
 		if cost > 0:
 			await asyncio.to_thread(record_spend, link_jti, cost)
 			return cost

@@ -73,6 +73,13 @@ ADMIN_SDK_ONLY_COLLECTIONS = (
     # (backend/services/alerts.py): the link-budget-exhausted and
     # credit-low/exhausted alert hooks.
     ("alerts", "alertId"),
+    # Epic 3 bead E3.4 (bd polyglot-pdf-w828m) -- session-end usage rollups
+    # (backend/services/usage_rollups.py). TWO nested subcollections, one
+    # under firms/{firmId} and one under kits/{kitId} -- neither parent's
+    # deny cascades, so both need their own entry (same reasoning as the
+    # ledger entry above).
+    ("firms/{firmId}/usage", "monthId"),
+    ("kits/{kitId}/usage", "monthId"),
 )
 
 

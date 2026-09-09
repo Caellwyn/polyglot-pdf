@@ -124,5 +124,24 @@ service cloud.firestore {
     match /alerts/{alertId} {
       allow read, write: if false;
     }
+
+    // Session-end usage rollups (firms/{firm_id}/usage/{YYYY-MM} and
+    // kits/{kit_id}/usage/{YYYY-MM}): Admin-SDK-only (Epic 3 bead E3.4, bd
+    // polyglot-pdf-w828m, backend/services/usage_rollups.py). Per-month
+    // Increment counters (connections_ended, sessions_completed,
+    // cost_usd_total, links_opened/completed, and the by_kit/by_employee/
+    // by_language/by_firm nested breakdowns) written from the WebSocket
+    // teardown block and from link_redemptions.py's open/complete hooks. A
+    // client-SDK write could forge cost or session counts a firm's billing
+    // depends on; a client-SDK read would leak another firm's usage volume,
+    // employee activity, and per-language breakdown. NESTED subcollections
+    // under firms/{firmId} and kits/{kitId} -- a parent's deny does not
+    // cascade, so both need their OWN block, same as the ledger above.
+    match /firms/{firmId}/usage/{monthId} {
+      allow read, write: if false;
+    }
+    match /kits/{kitId}/usage/{monthId} {
+      allow read, write: if false;
+    }
   }
 }
