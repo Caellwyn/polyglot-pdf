@@ -8,8 +8,13 @@ first consumers (GET/PUT /admin/config/{channel}, GET /admin/audit); bd
 polyglot-pdf-dmjl5 adds the four staff-account routes (POST + GET
 /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the
 composite gate require_app_admin_or_owning_manager, and with them the first
-consumers of the audit log's pending-then-committed form. Every route added
-to this service from
+consumers of the audit log's pending-then-committed form; bd polyglot-pdf-
+zopqq adds firm CRUD (admin_backend/routes/firm_routes.py) and credit
+grant/adjust (admin_backend/routes/credit_routes.py), both behind
+require_app_admin and both auditing in-transaction, reusing
+backend/services/firms.py::upsert_firm and
+backend/services/credit_ledger.py::append_entry rather than adding a second
+writer of either. Every route added to this service from
 here on must carry one of the four gates named in the plan
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
 manager; require_google_oidc), which admin_backend/tests/unit/
@@ -51,7 +56,9 @@ load_dotenv()
 from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
-from admin_backend.routes import audit_routes, config_routes, user_routes
+from admin_backend.routes import (
+    audit_routes, config_routes, credit_routes, firm_routes, user_routes,
+)
 from admin_backend.routes import whoami as whoami_routes
 
 # The ASGI target the container actually launched, and the default the
@@ -143,3 +150,5 @@ app.include_router(whoami_routes.router)
 app.include_router(config_routes.router)
 app.include_router(audit_routes.router)
 app.include_router(user_routes.router)
+app.include_router(firm_routes.router)
+app.include_router(credit_routes.router)
