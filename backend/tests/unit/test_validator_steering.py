@@ -226,7 +226,7 @@ async def test_validator_timeout_fails_open(monkeypatch):
     # Codex PR #275.
     import asyncio as _asyncio
 
-    async def _hang(_payload):
+    async def _hang(_payload, session_ctx=None):
         await _asyncio.sleep(10)
 
     text_ai = MagicMock()
