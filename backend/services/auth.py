@@ -307,3 +307,84 @@ async def require_paid_client_work(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     return claims
+
+
+# ---------------------------------------------------------------------------
+# The firm MANAGER gate (bd polyglot-pdf-dmjl5)
+# ---------------------------------------------------------------------------
+#
+# ONE HOME for "who is a firm manager, and which firm are they a manager of"
+# (CLAUDE.md scar #8). Before this bead the rule was written inline in
+# backend/routes/form_kit_routes.py's _require_firm_owns_private_kit and was
+# about to be written a second time on the admin service's user routes; two
+# copies of an authorization rule is how one of them drifts.
+#
+# THE FIRM ID COMES FROM THE VERIFIED TOKEN, NEVER THE REQUEST. That is the
+# whole security property: a manager acting on their own firm needs to name
+# no firm at all, so there is no parameter for them to point at somebody
+# else's. The admin service's routes enforce the other half -- a manager
+# whose BODY names a firm is refused outright rather than quietly ignored
+# (see admin_backend/services/admin_auth.py).
+
+# RE-EXPORTED, not redefined. The rule itself lives in
+# backend/services/firms.py, the firm-identity module, because the admin
+# service needs it too and admin_backend/services/admin_auth.py may not
+# import THIS module (it is deliberately liftable; see that module and its
+# isolation test). Imported here so the voice app's own callers -- the retire
+# route, the dependency below -- read the manager rule from their own auth
+# module, which is where a reader looks for it.
+#
+# Local, not module-scope: firms.py is import-safe, but backend.services.auth
+# runs firebase_admin.initialize_app() at import, and keeping the edge one-way
+# is what lets firms.py stay the shared home.
+from backend.services.firms import (  # noqa: E402
+    FIRM_ROLE_MANAGER,
+    manager_firm_id,
+)
+
+
+async def require_firm_manager(
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """FastAPI dependency: the caller, as a MANAGER of their own firm.
+
+    Layered on require_auth so the credential rules (bearer parsing, the
+    VFF_DISABLE_AUTH bypass, the link-token shape dispatch, the voice
+    enrolment check) stay in ONE place rather than being restated here.
+
+    Returns the verified claims dict with the manager's firm_id guaranteed
+    present -- routes read claims["firm_id"] and never accept one from the
+    request. 403, not 404: unlike the kit routes there is no other firm's
+    resource whose existence a refusal could leak, and a manager-only console
+    page needs to tell an employee "not your role", not "no such page".
+
+    NO ROUTE DECLARES THIS YET, and that is deliberate rather than an
+    oversight -- read this before adding one. The plan named the retire route
+    as this gate's first consumer, but the retire path cannot use it: every
+    refusal there must be a 404 (a 403 would confirm another firm's kit
+    exists), so it consumes the RULE, manager_firm_id, and raises its own
+    FormKitNotFound. The admin service's user routes are the same shape --
+    they need "app admin OR manager", which is a different gate
+    (admin_auth.require_app_admin_or_owning_manager).
+
+    So what ships proven here is the rule, exercised by both real callers;
+    this dependency is the 403-shaped wrapper for the first PUBLIC-backend
+    route that wants manager-only access with no existence to protect. It is
+    unit-tested directly (backend/tests/unit/test_require_firm_manager.py)
+    rather than left untested, and the admin service's route-auth set test
+    keeps the NAME in its vocabulary of legal gates so a future route
+    carrying it is not mistaken for an ungated one.
+    """
+    claims = await require_auth(authorization)
+    firm_id = manager_firm_id(claims)
+    if not firm_id:
+        logger.warning(
+            "firm_manager_access_refused",
+            uid=(claims or {}).get("uid") or (claims or {}).get("sub"),
+            firm_role=(claims or {}).get("firm_role"),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is not a manager of a firm",
+        )
+    return claims

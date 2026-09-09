@@ -24,11 +24,16 @@ machine-readable prefix on the "no access at all" 403), same reasons:
 
 This is the FIRST of the four gates the plan names
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
-manager; require_google_oidc). The other three ship with their first
-consuming routes (Epic 2 B-track / Epic 4), each proven against a real route
-rather than shipped untested -- see admin_backend/tests/unit/
-test_admin_route_auth.py, which derives the registered route set and asserts
-each carries exactly one of the four names.
+manager; require_google_oidc). THREE now exist: require_app_admin_or_owning_
+manager is the composite defined at the bottom of this module (bd
+polyglot-pdf-dmjl5), shipping with the four /admin/users routes;
+require_firm_manager lives on the PUBLIC backend (backend/services/auth.py)
+over the shared rule backend/services/firms.py::manager_firm_id, and no
+route declares it yet for the reason documented there. Only
+require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3). See
+admin_backend/tests/unit/test_admin_route_auth.py, which derives the
+registered route set and asserts each route carries exactly one of the four
+names.
 """
 from __future__ import annotations
 
@@ -163,3 +168,191 @@ async def require_app_admin(
     if not token:
         raise HTTPException(status_code=401, detail="Sign-in required")
     return verify_admin_token(token)
+
+
+# ---------------------------------------------------------------------------
+# The COMPOSITE gate: app admin OR the owning firm's manager
+# (bd polyglot-pdf-dmjl5)
+# ---------------------------------------------------------------------------
+#
+# The plan's third gate. Two very different people reach the same routes:
+#
+#   * an APP ADMIN, who serves every firm and therefore must NAME the firm
+#     they are acting on -- there is no other way to know which one;
+#   * a FIRM MANAGER, whose firm comes from their VERIFIED TOKEN and who may
+#     therefore not name one at all.
+#
+# THE REFUSAL IS THE POINT. A manager whose request body names a firm is
+# refused with 403 rather than having the body quietly ignored. Silently
+# overriding a caller-supplied firm_id with the token's would be SAFE (the
+# token still wins) but it would be dishonest: a console bug that sent the
+# wrong firm would look like it worked, and the operator would believe they
+# had acted on a firm they had not. Refusing makes the disagreement visible
+# at the one moment it is cheap to fix.
+
+# The two shapes an actor can have on a composite route, as a machine-readable
+# discriminator rather than "did email come back None" inference.
+ACTOR_KIND_APP_ADMIN = "app_admin"
+ACTOR_KIND_FIRM_MANAGER = "firm_manager"
+
+
+class CompositeActor(BaseModel):
+    """WHO is acting on a route both actors can reach.
+
+    firm_id is the manager's own firm, taken from the token, and is None for
+    an app admin -- an admin's target firm arrives in the request and is
+    resolved by the ROUTE (which is also where the "a manager may not name
+    one" refusal lives, since only the route can see its own body).
+    """
+
+    uid: str
+    email: Optional[str] = None
+    kind: str
+    firm_id: Optional[str] = None
+
+    @property
+    def is_app_admin(self) -> bool:
+        return self.kind == ACTOR_KIND_APP_ADMIN
+
+    def label(self) -> str:
+        """Human-facing name for audit rows and log lines. Never empty."""
+        return self.email or self.uid
+
+
+async def require_app_admin_or_owning_manager(
+    authorization: Annotated[Optional[str], Header()] = None,
+) -> CompositeActor:
+    """FastAPI dependency: an app admin, OR a manager of some firm.
+
+    ORDER MATTERS AND IS DELIBERATE. The app_admin claim is checked FIRST, so
+    an account holding both app_admin and a firm manager claim acts as an app
+    admin -- the strictly wider role. The reverse order would silently
+    downgrade such an account to its own firm, which is the surprising
+    outcome (and the one an operator would debug for an hour).
+
+    Both branches verify the SAME token through the SAME call --
+    firebase_admin.auth.verify_id_token, made by THIS module in both cases.
+    Neither branch reaches into another surface's verifier, and neither
+    invents a second credential path. What the manager branch borrows is the
+    manager RULE (backend.services.firms.manager_firm_id), a pure predicate
+    over the claims this module already verified.
+
+    401 when the token does not verify at all; 403 when it verifies and the
+    account is neither an app admin nor any firm's manager.
+    """
+    if _dev_bypass_allowed():
+        return CompositeActor(
+            uid="dev_admin",
+            email="dev@example.com",
+            kind=ACTOR_KIND_APP_ADMIN,
+        )
+
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Sign-in required")
+
+    # Branch 1: app admin. verify_admin_token raises 403 for a VALID account
+    # with no app_admin claim -- which is not a refusal here, it is the
+    # signal to try the manager branch. A 401 IS terminal: an unverifiable
+    # token will not verify differently for the second reader.
+    try:
+        admin = verify_admin_token(token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise
+        admin = None
+    if admin is not None:
+        return CompositeActor(
+            uid=admin.uid, email=admin.email, kind=ACTOR_KIND_APP_ADMIN)
+
+    # Branch 2: firm manager. THIS MODULE VERIFIES THE TOKEN ITSELF, with
+    # the same fb_auth.verify_id_token the admin branch used -- it does not
+    # call backend.services.auth.verify_token. That module is the VOICE
+    # app's verifier: importing it would make the admin service depend on
+    # the voice surface's enrolment rules (which have nothing to do with
+    # managing staff) and would break this module's liftability, pinned by
+    # test_admin_auth.py::test_admin_auth_does_not_import_the_other_two_
+    # auth_modules.
+    #
+    # What IS shared is the manager RULE, and only the rule:
+    # backend.services.firms.manager_firm_id is a pure, side-effect-free
+    # predicate over an already-verified claims dict, living in the module
+    # that owns what a firm IS. Sharing it is what keeps that rule in ONE
+    # home (CLAUDE.md scar #8) without sharing a verifier.
+    from backend.services.firms import manager_firm_id
+
+    import firebase_admin
+    from firebase_admin import auth as fb_auth
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+    try:
+        claims = fb_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401,
+                            detail="Invalid or expired sign-in")
+
+    firm_id = manager_firm_id(claims)
+    if not firm_id:
+        raise HTTPException(
+            status_code=403,
+            detail=(NO_ADMIN_ACCESS_PREFIX
+                    + " This account is neither an admin nor a firm manager"),
+        )
+    uid = claims.get("uid") or claims.get("sub")
+    if not uid:
+        raise HTTPException(status_code=401,
+                            detail="Invalid or expired sign-in")
+    return CompositeActor(
+        uid=uid,
+        email=claims.get("email"),
+        kind=ACTOR_KIND_FIRM_MANAGER,
+        firm_id=firm_id,
+    )
+
+
+def resolve_target_firm(actor: CompositeActor,
+                        body_firm_id: Optional[str]) -> str:
+    """The firm this request acts on, or the refusal that ends it.
+
+    THE ONE HOME for the two-actor firm rule (CLAUDE.md scar #8), so every
+    composite route resolves it identically instead of each restating it:
+
+      * a MANAGER's firm comes from the token; a body that names ANY firm is
+        403, including one naming their own -- "the same value" is not the
+        test, "did you try to choose" is. Accepting a matching value would
+        make the refusal depend on what the caller happened to send, and the
+        next console version that sends it for every request would silently
+        stop being refused.
+      * an APP ADMIN must name one; omitting it is 422, since there is no
+        firm to fall back to and defaulting to any particular firm would be
+        a guess with a write behind it.
+    """
+    if not actor.is_app_admin:
+        if body_firm_id is not None:
+            raise HTTPException(
+                status_code=403,
+                detail=("a firm manager may not name a firm; the firm is "
+                        "taken from your sign-in"),
+            )
+        if not actor.firm_id:
+            # Unreachable through the gate above, which never builds a
+            # manager actor without a firm_id. A real check rather than an
+            # assert because asserts vanish under python -O, and the
+            # failure mode if this ever became reachable is an empty
+            # firm_id used as a Firestore key -- a query that matches
+            # nothing while the caller looks authorized.
+            raise HTTPException(
+                status_code=403,
+                detail=(NO_ADMIN_ACCESS_PREFIX
+                        + " This account is not a manager of a firm"),
+            )
+        return actor.firm_id
+    if not body_firm_id:
+        raise HTTPException(
+            status_code=422,
+            detail="firm_id is required when acting as an app admin",
+        )
+    return body_firm_id

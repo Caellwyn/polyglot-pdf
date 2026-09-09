@@ -1,11 +1,25 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: doc created -- the admin
-tier as current state, covering `admin_backend/` (bd polyglot-pdf-pnoik,
-polyglot-pdf-7w17m, polyglot-pdf-li9x0) and `admin-console/` (bd
-polyglot-pdf-b6943). No code changed in this bead.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-z4y91: the console's Users tab
+(`admin-console/src/pages/UsersPage.tsx`) -- the first console page under a
+`pages/` directory rather than `components/`, since it is the console's
+first CRUD page rather than a read-mostly or single-write one; list a
+firm's staff, create one with the reset link shown exactly once, disable/
+re-enable, change role. `adminApi.ts` gains `listUsers`, `createUser`,
+`setUserDisabled`, `setUserRole`. The firm-ID field is REQUIRED and always
+shown -- the console's sign-in gate only supports the strict app-admin path
+today, so every caller of this page is an app admin who must name a firm.)
+(bd polyglot-pdf-dmjl5: the four staff-account routes (`POST /admin/users`,
+`PATCH /admin/users/{uid}/disable`, `PATCH .../role`, `GET /admin/users`)
+behind the new composite gate `require_app_admin_or_owning_manager`; the
+claims allowlist in `admin_backend/services/user_admin.py`; and
+`require_firm_manager` in `backend/services/auth.py`, whose rule the retire
+route now consumes -- so three of the four gates now exist.) (bd
+polyglot-pdf-2cwja: doc created -- the admin tier as current state, covering
+`admin_backend/` (bd polyglot-pdf-pnoik, polyglot-pdf-7w17m,
+polyglot-pdf-li9x0) and `admin-console/` (bd polyglot-pdf-b6943).)*
 
 The privileged control plane: a second FastAPI service (`admin_backend/`,
 Cloud Run `polyglot-admin`) and a second Vite app (`admin-console/`,
@@ -69,6 +83,10 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/config/{channel}` | GET | `require_app_admin` | The channel's stored `app_config/{channel}` doc, raw (uncoerced), plus `known_keys`/`unknown_keys`. A read; writes no audit row. |
 | `/admin/config/{channel}` | PUT | `require_app_admin` | Set ONE runtime-config key for one channel (`{key, value}` body), validated against `runtime_config.RUNTIME_CONFIG_KEYS` and `coerce_value` before any write, then written and audited in ONE Firestore transaction. See [config-deployment.md](config-deployment.md). |
 | `/admin/audit` | GET | `require_app_admin` | One page of `admin_audit_log` rows, newest first, cursor-paginated (`{rows, next_cursor}`); filterable by `action`/`actor_uid`/`channel`/`state`. |
+| `/admin/users` | POST | `require_app_admin_or_owning_manager` | Create a staff account (bd polyglot-pdf-dmjl5). Body `{email, firm_role, firm_id?, display_name?}`. Creates the Firebase account with an unguessable random password nobody sees, stamps ONLY `firm_id` + `firm_role` (merged over existing claims), and returns a password-**reset link** for the console to display -- no outbound email in this epic. 409 on a duplicate address, 422 on a bad role or firm slug. Audited pending-then-committed. |
+| `/admin/users/{uid}/disable` | PATCH | `require_app_admin_or_owning_manager` | Disable or re-enable a staff account (`{disabled, firm_id?}`). An explicit value, not a toggle, so a retry is idempotent. Claims are untouched -- disabling is not deleting, and the account keeps its audit history. 404 for a uid outside the resolved firm, the SAME 404 as a uid that does not exist. |
+| `/admin/users/{uid}/role` | PATCH | `require_app_admin_or_owning_manager` | Move an account between `manager` and `employee` (`{firm_role, firm_id?}`), merging over every other claim. Same 404 scoping rule as disable. |
+| `/admin/users` | GET | `require_app_admin_or_owning_manager` | The firm's staff pool (`?firm_id=` for an app admin; a manager sends none). `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth cannot query custom claims, which is affordable only because the pool is staff, editors and devs and clients never get accounts. Response rows are an explicit key allowlist. A read, so no audit row. |
 
 `channel` is always an explicit path parameter (validated against
 `("demo", "staging")`), never derived from the environment -- the admin
@@ -79,11 +97,11 @@ This is the COMPLETE route set as of this doc's stamp, and it is pinned
 mechanically: `admin_backend/tests/unit/test_admin_route_auth.py` derives
 the live route set off `admin_backend.main.app` and fails if a route is
 added without exactly one of four gate names
-(`require_app_admin`; `require_firm_manager`,
-`require_app_admin_or_owning_manager`, `require_google_oidc` -- the latter
-three do not exist yet and ship with their first consuming route in Epic 2 /
-Epic 4). Read that test, not this table, for the authoritative set the day
-a new route lands.
+(`require_app_admin`; `require_firm_manager`;
+`require_app_admin_or_owning_manager`; `require_google_oidc` -- only the
+last does not exist yet, and it ships with its first consuming route in
+Epic 2 B5 / Epic 4 4.3). Read that test, not this table, for the
+authoritative set the day a new route lands.
 
 ## `require_app_admin` (`admin_backend/services/admin_auth.py`)
 
@@ -103,10 +121,84 @@ This is the fourth credential system in this repo -- see
 [auth.md](auth.md)'s credential table, which this bead extends from three
 rows to four.
 
+## `require_app_admin_or_owning_manager` (the composite gate)
+
+The gate on all four user routes. **Two very different people reach them**,
+and the difference is where the firm comes from:
+
+- an **app admin** serves every firm, so they must **name** the firm they
+  are acting on -- there is no other way to know which one, and omitting it
+  is a 422 rather than a guess with a write behind it;
+- a **firm manager**'s firm comes from their **verified token**, and a
+  request that names a firm at all is refused **403** -- including one that
+  names their own firm. "The same value" is not the test; "did you try to
+  choose" is. Accepting a matching value would make the refusal depend on
+  what the caller happened to send, so the next console version that sent it
+  on every request would silently stop being refused.
+
+The app-admin branch is checked **first**, deliberately: an account holding
+both `app_admin` and a firm manager claim acts as an app admin, the strictly
+wider role. Both branches verify the same token with the same
+`verify_id_token` call, made by `admin_auth.py` itself -- the admin service
+never reaches into the voice app's verifier, which is what keeps that module
+liftable (pinned by
+`test_admin_auth.py::test_admin_auth_does_not_import_the_other_two_auth_modules`).
+`resolve_target_firm(actor, body_firm_id)` is the ONE home for the two-actor
+rule; every route calls it rather than restating it.
+
+The two by-uid routes additionally prove the target account is **in the
+resolved firm** before touching it -- a uid is a bearer of nothing, so
+without that check a manager could disable any account in the project by
+pasting its uid. That refusal is a 404 identical to the one for a uid that
+does not exist, so the status code is not an existence oracle.
+
+The **claims allowlist** is `admin_backend/services/user_admin.py`: these
+routes write **only** `firm_id` and `firm_role`, never `app_admin`,
+`schema_editor_role` or `vff_dev`. That is a property, not a promise --
+`merge_firm_claims()` builds its output from `WRITABLE_CLAIMS` plus the
+account's existing claims, so no request value can reach any other key, and
+every pre-existing claim survives (`set_custom_user_claims` **replaces** the
+whole claims object, the same trap `scripts/bootstrap_firm.py` documents).
+`app_admin` is still granted only by `scripts/bootstrap_admin_user.py`.
+
+## `require_firm_manager` (`backend/services/auth.py`)
+
+Lives on the **public** backend, not here: its first consumer is the firm
+retire route. The rule itself -- which firm does this caller manage -- is
+`backend/services/firms.py`'s `manager_firm_id(claims)`, a pure predicate
+over an already-verified claims dict, so **both** surfaces share one home
+(CLAUDE.md scar #8) without the admin service depending on the voice app's
+verifier. `backend/services/auth.py` re-exports the name for its own
+callers.
+
+`require_firm_manager` is the FastAPI form and raises **403**.
+`form_kit_routes._require_firm_owns_private_kit` uses the **predicate**
+instead, because every refusal there must stay a **404** -- a 403 would
+confirm to a firm that another firm's kit exists. The rule is shared; the
+refusal shape is each caller's own.
+`backend/tests/unit/test_require_firm_manager.py` enumerates every non-test
+module under `backend/`, `admin_backend/` and `scripts/` and fails on any
+site that compares against the literal `"manager"` outside a short
+allowlist, so the next hand-written copy fails CI rather than drifting.
+
+**No route declares `require_firm_manager` yet, deliberately.** The plan
+named the retire route as its first consumer, but that route cannot use it:
+its refusals must be 404s, so it takes the rule and raises its own error
+instead. The admin service's user routes need "app admin OR manager", a
+different gate. What ships proven is therefore the RULE -- exercised by
+both real callers -- with this dependency as the 403-shaped wrapper waiting
+for the first public-backend route that wants manager-only access with no
+existence to protect. It is unit-tested directly rather than left untested,
+and the route-auth set test keeps the name in its vocabulary of legal
+gates.
+
 ## Granting access: `scripts/bootstrap_admin_user.py`
 
 The ONLY way to grant (or revoke) `app_admin` -- there is no self-serve
-signup and no in-console user management yet. Mirrors
+signup, and the console's own `/admin/users` routes (bd
+`polyglot-pdf-dmjl5`) deliberately CANNOT write this claim: they are
+allowlisted to `firm_id` and `firm_role`, so a compromised console could not
+mint its own admins. Mirrors
 `scripts/bootstrap_editor_user.py`'s shape (`--email`, `--revoke`, `--list`,
 merges claims rather than replacing them) plus `scripts/bootstrap_firm.py`'s
 `--project` machinery (a REQUIRED flag; the script asserts the resolved
@@ -215,22 +307,45 @@ A separate Vite + React app, mirroring `schema-editor/`'s shape: Firebase
 sign-in (`admin-console/src/components/SignInGate.tsx`) followed by a
 server-side authorization probe (`GET /admin/whoami`) -- an authenticated
 but non-admin account sees an explicit not-authorized screen, not a blank
-or broken page. No router: three tabs (`admin-console/src/App.tsx`) behind
-a boolean signed-in state, since the page count does not yet justify one.
+or broken page. No router: a handful of tabs (`admin-console/src/App.tsx`)
+behind a boolean signed-in state, since the page count does not yet justify
+one.
 
-- **Pages:** Who-am-I (`WhoAmIPage.tsx` -- identity plus the console's own
-  build SHA), Audit log (`AuditLogPage.tsx` -- lists/filters `GET
-  /admin/audit`), Runtime config (`ConfigEditorPage.tsx` -- reads/writes
-  `GET`/`PUT /admin/config/{channel}`).
+- **Pages:** Who-am-I (`components/WhoAmIPage.tsx` -- identity plus the
+  console's own build SHA), Audit log (`components/AuditLogPage.tsx` --
+  lists/filters `GET /admin/audit`), Runtime config
+  (`components/ConfigEditorPage.tsx` -- reads/writes `GET`/`PUT
+  /admin/config/{channel}`), Users (`pages/UsersPage.tsx`, bd
+  polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
+  `components/`: it drives four routes and two mutations with a re-read
+  each, past the point a single-file "page" component was the more natural
+  location).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
   `handleAuthExpired`.
+- **Users page** (`pages/UsersPage.tsx`): the firm-ID field is a REQUIRED
+  text input, always shown -- there is no firm-picker dropdown, because no
+  `GET /admin/firms` list route exists yet (Epic 2 Track C's firms page, C2,
+  has not shipped) and because the console's sign-in gate calls only `GET
+  /admin/whoami` (`require_app_admin`, the STRICT gate), never the composite
+  `require_app_admin_or_owning_manager` the user routes accept -- so every
+  signed-in caller of this page is necessarily an app admin, who must name a
+  firm (`admin_auth.resolve_target_firm` 422s an app admin who omits one). A
+  firm-manager sign-in mode with the selector hidden is a later bead's
+  concern, once the console itself supports signing in as one. Create shows
+  the returned password-RESET LINK exactly once, with a copy button, and
+  clears it on the next create or firm switch; NO password ever reaches this
+  page (`create_staff_user` never returns one). Disable and role-change each
+  call their route once and then RE-READ the firm's list, the same
+  round-trip pattern `ConfigEditorPage` uses, so the screen always reflects
+  what the server actually stored.
 - **API client:** `admin-console/src/utils/adminApi.ts` (`probeWhoAmI`,
-  `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`), each call
-  carrying `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST
-  from `admin-console/src/utils/adminAuth.ts` (never cached client-side, so
-  a mid-session token refresh cannot leave a stale credential in memory). A
+  `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`, `listUsers`,
+  `createUser`, `setUserDisabled`, `setUserRole`), each call carrying
+  `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST from
+  `admin-console/src/utils/adminAuth.ts` (never cached client-side, so a
+  mid-session token refresh cannot leave a stale credential in memory). A
   403 is classified into `ForbiddenError.noAdminAccess` by the
   `NO_ADMIN_ACCESS:` wire prefix, the same idiom the schema editor's
   `NO_EDITOR_ACCESS_PREFIX` uses.
@@ -284,5 +399,6 @@ route/gate set pin above), `test_admin_health.py` (`/health`/`/version`),
 contract 13), `test_audit_log.py` + `test_admin_audit_coverage.py` (the
 audit forms and coverage pin), `test_config_routes.py` (the config route's
 validation and transactional write), `test_firestore_indexes.py` (the audit
-route's filter/index pin). `admin-console/src/components/*.test.tsx` covers
-the console pages (Vitest, same harness as `schema-editor/`).
+route's filter/index pin). `admin-console/src/components/*.test.tsx` and
+`admin-console/src/pages/*.test.tsx` cover the console pages (Vitest, same
+harness as `schema-editor/`).

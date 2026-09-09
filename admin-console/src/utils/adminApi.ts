@@ -201,3 +201,130 @@ export async function setChannelConfigKey(
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not save the config change'));
   return (await res.json()) as ConfigSetResult;
 }
+
+/** One row from GET /admin/users' `users` array (admin_backend/services/
+ * user_admin.py's `_user_row` -- an explicit key allowlist, not a claims
+ * dump). `firm_role`/`schema_editor_role`/`vff_dev` ride along READ-ONLY:
+ * this console can only ever WRITE firm_id + firm_role (the allowlist lives
+ * server-side in user_admin.WRITABLE_CLAIMS), so nothing here implies those
+ * other fields are editable. */
+export interface AdminUserRow {
+  uid: string;
+  email: string | null;
+  display_name: string | null;
+  disabled: boolean;
+  firm_id: string | null;
+  firm_role: string | null;
+  schema_editor_role?: string | null;
+  vff_dev?: boolean;
+}
+
+/** GET /admin/users' response shape. */
+export interface UsersPage {
+  firm_id: string;
+  users: AdminUserRow[];
+  truncated: boolean;
+}
+
+/** The valid `firm_role` values (admin_backend/services/user_admin.py's
+ * FIRM_ROLES) -- mirrored here as a wire contract, not re-derived, since the
+ * console sends these strings on create and on a role change. */
+export const FIRM_ROLES = ['manager', 'employee'] as const;
+export type FirmRole = (typeof FIRM_ROLES)[number];
+
+/** The firm's staff pool. `firmId` is required by THIS client -- the console
+ * currently only supports the app-admin sign-in path (whoami's gate is
+ * strict require_app_admin, not the composite gate), and an app admin must
+ * always name a firm (admin_auth.resolve_target_firm: omitting it is a 422,
+ * never a guessed default). A firm-manager mode with no selector is a later
+ * bead's concern once the console itself supports signing in as one. */
+export async function listUsers(firmId: string): Promise<UsersPage> {
+  const res = await adminFetch(`/admin/users?firm_id=${encodeURIComponent(firmId)}`);
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the user list'));
+  return (await res.json()) as UsersPage;
+}
+
+/** POST /admin/users' response shape. NO password field exists anywhere on
+ * this type -- create_staff_user never returns one (an unguessable random
+ * password that nobody, including this console, ever sees), so there is
+ * nothing here for a careless render to leak. */
+export interface CreateUserResult {
+  uid: string;
+  email: string;
+  firm_id: string;
+  firm_role: string;
+  reset_link: string | null;
+  request_id: string;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  firmRole: FirmRole;
+  firmId: string;
+  displayName?: string;
+}
+
+/** Create a staff account. Returns the password-RESET LINK for the console
+ * to display (with a copy button) -- no outbound email in this epic, and no
+ * password is ever transmitted (see user_admin.create_staff_user's
+ * docstring: the account's real password is an unguessable random value
+ * nobody, including this console, ever learns). */
+export async function createUser(req: CreateUserRequest): Promise<CreateUserResult> {
+  const res = await adminFetch('/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: req.email,
+      firm_role: req.firmRole,
+      firm_id: req.firmId,
+      display_name: req.displayName || undefined,
+    }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not create the account'));
+  return (await res.json()) as CreateUserResult;
+}
+
+/** PATCH /admin/users/{uid}/disable's response shape. */
+export interface SetUserDisabledResult {
+  uid: string;
+  disabled: boolean;
+  firm_id: string;
+  request_id: string;
+}
+
+/** Disable or re-enable a staff account. `disabled` is explicit (never a
+ * toggle) so a retried call is idempotent -- see user_routes.py's
+ * DisableUserRequest docstring. */
+export async function setUserDisabled(
+  uid: string, firmId: string, disabled: boolean,
+): Promise<SetUserDisabledResult> {
+  const res = await adminFetch(`/admin/users/${encodeURIComponent(uid)}/disable`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled, firm_id: firmId }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the account'));
+  return (await res.json()) as SetUserDisabledResult;
+}
+
+/** PATCH /admin/users/{uid}/role's response shape. */
+export interface SetUserRoleResult {
+  uid: string;
+  firm_id: string;
+  firm_role: string;
+  before_role: string | null;
+  request_id: string;
+}
+
+/** Move a staff account between manager and employee. */
+export async function setUserRole(
+  uid: string, firmId: string, firmRole: FirmRole,
+): Promise<SetUserRoleResult> {
+  const res = await adminFetch(`/admin/users/${encodeURIComponent(uid)}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ firm_role: firmRole, firm_id: firmId }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the account'));
+  return (await res.json()) as SetUserRoleResult;
+}

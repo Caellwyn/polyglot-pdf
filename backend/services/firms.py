@@ -59,6 +59,7 @@ Staff membership lives ONLY as firm_id/firm_role custom claims on the staff
 Firebase accounts -- no roster on this doc (one source of truth).
 """
 import os
+from typing import Optional
 
 import structlog
 
@@ -71,6 +72,53 @@ FIRM_STATUS_SUSPENDED = "suspended"
 
 FIRM_KIND_MOCK = "mock"
 FIRM_KIND_LIVE = "live"
+
+# The two firm ROLES a staff account can hold (docs/components/auth.md, the
+# four-level access model). A manager manages the firm -- its staff, its
+# forms; an employee sends links and tracks status.
+FIRM_ROLE_MANAGER = "manager"
+FIRM_ROLE_EMPLOYEE = "employee"
+
+
+def manager_firm_id(claims: Optional[dict]) -> Optional[str]:
+    """The firm this caller MANAGES, or None if they manage none.
+
+    THE ONE HOME for "who is a firm manager, and which firm are they a
+    manager of" (bd polyglot-pdf-dmjl5, CLAUDE.md scar #8). Before this it
+    was written inline in backend/routes/form_kit_routes.py's
+    _require_firm_owns_private_kit and was about to be written a second time
+    on the admin service's user routes; two hand-written copies of an
+    authorization rule is how one of them drifts.
+
+    IT LIVES HERE, in the firm-identity module, rather than in
+    backend/services/auth.py, so BOTH surfaces can reach it. The admin
+    service's admin_auth.py is deliberately liftable -- it must not import
+    backend.services.auth or backend.services.editor_auth, pinned by
+    admin_backend/tests/unit/test_admin_auth.py::test_admin_auth_does_not_
+    import_the_other_two_auth_modules -- and that constraint is about not
+    depending on another surface's VERIFIER. This module is neither
+    surface's verifier: it is a pure, side-effect-free function over an
+    already-verified claims dict, in the module that already owns what a
+    firm IS. backend.services.auth re-exports the name so the voice app's
+    callers keep reading it from their own auth module.
+
+    THE CALLER MUST HAVE VERIFIED THE TOKEN. This decides authorization, not
+    authentication: handed an unverified dict it will happily report a
+    manager, because deciding whether the claims are real is the verifier's
+    job and doing it twice in two places is how the two disagree.
+
+    Returns the firm_id only when BOTH hold: firm_role is exactly "manager",
+    and firm_id is a non-empty string. An employee, a dev with no firm, and a
+    client link (which carries no firm claims at all) each get None.
+    """
+    if not isinstance(claims, dict):
+        return None
+    firm_id = claims.get("firm_id")
+    if not isinstance(firm_id, str) or not firm_id:
+        return None
+    if claims.get("firm_role") != FIRM_ROLE_MANAGER:
+        return None
+    return firm_id
 
 
 def _firms_enabled() -> bool:
