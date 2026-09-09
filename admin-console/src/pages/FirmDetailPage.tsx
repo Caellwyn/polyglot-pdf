@@ -519,8 +519,12 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {firm.ledger.map((entry) => (
-                  <tr key={entry.doc_id} className="border-b border-gray-100">
+                {firm.ledger.map((entry, index) => (
+                  // doc_id is not sent by GET /admin/firms/{firm_id} (see
+                  // LedgerEntry's comment in adminApi.ts) -- key on the
+                  // fields the route does send instead of a value the
+                  // producer omits.
+                  <tr key={`${entry.ts}-${index}`} className="border-b border-gray-100">
                     <td className="py-1 pr-4">{entry.type}</td>
                     <td className="py-1 pr-4">{entry.amount}</td>
                     <td className="py-1 pr-4">{entry.usd_amount ?? ''}</td>

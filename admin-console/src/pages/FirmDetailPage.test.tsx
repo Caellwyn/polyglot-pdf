@@ -39,9 +39,14 @@ const FIRM_DETAIL = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 120,
+  // No doc_id: GET /admin/firms/{firm_id}'s ledger rows are the persisted
+  // credit_ledger document verbatim (backend/services/credit_ledger.py's
+  // read_entries()), which does NOT include doc_id -- unlike the grant/
+  // adjust routes' responses. See adminApi.ts's LedgerEntry comment and
+  // bd polyglot-pdf-migp9.
   ledger: [
     {
-      doc_id: 'l1', type: 'subscription_grant', amount: 100,
+      type: 'subscription_grant', amount: 100,
       usd_amount: 49.99, firm_kind: 'live' as const, channel: null,
       balance_after: 100, actor: 'admin-1', reason: null,
       link_jti: null, kit_id: null, ts: 1700000000,
@@ -82,6 +87,22 @@ describe('FirmDetailPage', () => {
     // form's type <select>, so this scopes the lookup to the ledger table.
     expect(within(screen.getByTestId('ledger-table')).getByText('subscription_grant')).toBeInTheDocument();
     expect(screen.getByText('emp-1')).toBeInTheDocument();
+  });
+
+  it('renders the ledger table without a React key warning when rows carry no doc_id', async () => {
+    // The route (GET /admin/firms/{firm_id}) never sends doc_id -- see
+    // LedgerEntry's comment in adminApi.ts and bd polyglot-pdf-migp9. Rows
+    // must key on fields the route actually sends (ts+index), not on the
+    // absent doc_id; a `key={entry.doc_id}` regression makes every row's
+    // key `undefined` and React logs "Each child in a list should have a
+    // unique key prop."
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await renderLoaded();
+    const keyWarning = errorSpy.mock.calls.some(
+      (args) => typeof args[0] === 'string' && args[0].includes('unique "key" prop'),
+    );
+    expect(keyWarning).toBe(false);
+    errorSpy.mockRestore();
   });
 
   describe('grant credits: usd_amount only for the two income types', () => {

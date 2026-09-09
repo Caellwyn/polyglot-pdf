@@ -85,6 +85,44 @@ description names status as a LIST column, not a detail-page control, and no
 exit criterion calls for one; a future bead can wire it against the same
 client function without touching `adminApi.ts` again).
 
+**Cross-surface review round (fix pass).** The Opus outer review traced
+every producer/consumer contract this bead's diff touches and returned
+`GAPS-FOUND (1)`. Breakdown:
+
+- **Adopted (blocker, fixed inline).** `adminApi.ts`'s `LedgerEntry`
+  interface declared `doc_id: string` (non-optional) and
+  `FirmDetailPage.tsx`'s ledger table keyed its rows on it, but
+  `GET /admin/firms/{firm_id}` never sends `doc_id` -- `credit_ledger.py`'s
+  `read_entries()` returns the persisted document verbatim, and `doc_id` is
+  attached only to `append_entry`'s/`refund_expired_link`'s *return* values
+  (which is why the grant/adjust routes' result types correctly include it).
+  Every ledger row was rendering with `key={undefined}`, so a new grant or
+  adjust re-read would re-key every row by array position instead of
+  identity. Fixed in-diff rather than by touching the backend: `doc_id` is
+  now `doc_id?: string` with a comment explaining the omission, the table
+  keys on `` `${entry.ts}-${index}` `` (fields the route actually sends)
+  instead, and `FirmDetailPage.test.tsx`'s ledger fixture dropped the
+  fabricated `doc_id: 'l1'` it had been mocking (it was masking exactly this
+  gap) to match what the route really returns. A new test asserts no React
+  "unique key" console warning renders; mutation-verified by reverting the
+  key expression back to `entry.doc_id` and confirming the test catches it.
+  The cheaper long-term fix -- having the backend attach `doc_id` like the
+  sibling `audit_routes.py` list route already does -- is filed separately
+  (`polyglot-pdf-migp9`) rather than done here, since it touches a backend
+  surface (`credit_ledger.py`) this bead's diff does not otherwise reach.
+- **Deferred (nit, filed as a bead, not fixed in this pass).** The doc-stamp
+  edit to `docs/components/admin-service.md` appended a second
+  *Last updated:* stamp instead of replacing the existing one (violates
+  `docs/doc-architecture.md`'s prune-on-bump rule; `check_doc_freshness.py`
+  does not catch this exact shape). Filed as `polyglot-pdf-fcxek`.
+- **Confirmed OK, no action.** Every other producer/consumer pair the
+  reviewer traced -- `listFirms`/`createFirm`/`setFirmStatus`/
+  `setFirmAllowedKits`/`setFirmKind`/`grantCredits`/`adjustCredits`/
+  `listFirmLinks`/`revokeLink` against their routes, the `FIRM_KINDS`/
+  `FIRM_STATUSES`/`GRANT_TYPES`/`LINK_CHANNELS` constant mirrors, and the
+  `Tab`/`openFirmId`/`FirmsPageProps`/`FirmDetailPageProps` additions --
+  matched their producers exactly and needed no change.
+
 ## Lessons
 
 **A React effect split across two hooks on overlapping dependencies can

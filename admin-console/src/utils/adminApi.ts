@@ -405,9 +405,13 @@ export async function createFirm(req: CreateFirmRequest): Promise<CreateFirmResu
 }
 
 /** One row from GET /admin/firms/{firm_id}'s `ledger` array
- * (backend/services/credit_ledger.py's stored entry shape, plus doc_id). */
+ * (backend/services/credit_ledger.py's stored entry shape -- read_entries()
+ * returns the persisted document verbatim and does NOT attach doc_id, unlike
+ * the grant/adjust routes' GrantCreditsResult/AdjustCreditsResult or the
+ * sibling audit_routes.py list route, so doc_id is optional here and MUST
+ * NOT be relied on as a stable identity; see polyglot-pdf-migp9). */
 export interface LedgerEntry {
-  doc_id: string;
+  doc_id?: string;
   type: string;
   amount: number;
   usd_amount: number | null;
