@@ -320,12 +320,44 @@
    * fall back to the direct DOM + storage clear (still correct for the documented
    * reload-between-attempts path, and for an app build predating the hook).
    */
+  /**
+   * The inputs of a radio/checkbox GROUP, or [] for a single control.
+   *
+   * A group is many inputs sharing a name (`fieldId` for radios, `fieldId[]` for
+   * checkbox groups). Since bd polyglot-pdf-96um6 its first option ALSO carries
+   * id={field.id}, so getElementById no longer returns null for a group -- which
+   * silently re-routed both accessors below through option[0]. Length > 1 is the
+   * discriminator: a single control matches its own name and is left alone.
+   */
+  function groupInputs(fieldId) {
+    try {
+      var sel = 'input[name="' + fieldId + '"], input[name="' + fieldId + '[]"]';
+      var found = document.querySelectorAll(sel);
+      return found.length > 1 ? Array.prototype.slice.call(found) : [];
+    } catch (e) { return []; }
+  }
+
   function clearFieldState(fieldId) {
     try {
-      var el = document.getElementById(fieldId);
-      if (el && 'value' in el) {
-        el.value = '';
-        el.removeAttribute('data-vff-confirmed');
+      // A radio/checkbox GROUP is many inputs sharing a name, and since bd
+      // polyglot-pdf-96um6 its FIRST option also carries id={field.id} -- so a
+      // bare getElementById now returns that option where it used to return
+      // null. Clearing it as if it were a single control does `el.value = ''`,
+      // which WIPES that option's value attribute; handleRadioGroup's fuzzy tier
+      // then matches the empty string for ANY value and selects the wrong option.
+      // Uncheck the group instead, and never touch value attributes.
+      var group = groupInputs(fieldId);
+      if (group.length) {
+        for (var i = 0; i < group.length; i++) {
+          group[i].checked = false;
+          group[i].removeAttribute('data-vff-confirmed');
+        }
+      } else {
+        var el = document.getElementById(fieldId);
+        if (el && 'value' in el) {
+          el.value = '';
+          el.removeAttribute('data-vff-confirmed');
+        }
       }
     } catch (e) { /* ignore */ }
     var h = window.__VFF_TEST_INJECT;
@@ -395,9 +427,25 @@
    * robustly against an LLM-produced value (strips spaces, commas, punctuation).
    */
   function readField(fieldId) {
-    var el = document.getElementById(fieldId);
-    var domValue = el ? (el.value !== undefined ? el.value : null) : null;
-    var domConfirmed = el ? el.getAttribute('data-vff-confirmed') === 'true' : false;
+    // Groups first (bd polyglot-pdf-96um6): a radio's .value is its own value
+    // attribute whatever its checked state, so reading option[0] returns the
+    // FIRST option no matter what the user picked -- and waitForFieldValue, the
+    // "did Gemini fill it" gate, would go truthy from first render.
+    var group = groupInputs(fieldId);
+    var el = group.length ? null : document.getElementById(fieldId);
+    var domValue = null;
+    var domConfirmed = false;
+    if (group.length) {
+      var picked = [];
+      for (var gi = 0; gi < group.length; gi++) {
+        if (group[gi].checked) picked.push(group[gi].value);
+        if (group[gi].getAttribute('data-vff-confirmed') === 'true') domConfirmed = true;
+      }
+      domValue = picked.length ? picked.join(',') : null;
+    } else {
+      domValue = el ? (el.value !== undefined ? el.value : null) : null;
+      domConfirmed = el ? el.getAttribute('data-vff-confirmed') === 'true' : false;
+    }
 
     var ssValue = null;
     var ssConfirmed = null;

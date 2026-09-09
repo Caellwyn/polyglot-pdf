@@ -379,4 +379,40 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
 
     expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
   });
+
+  it('a group whose value sits under the ALIAS key still opens the modal', () => {
+    // The repo-wide []-alias convention (bd polyglot-pdf-5k52 and its scar
+    // tissue): Gemini drops and adds the bracket, so a group's entry may sit
+    // under EITHER key. My handler used a bare fieldValues[fieldId], which misses
+    // the real entry -- isBlankFieldValue(undefined) is true, Enter does nothing,
+    // and this bead's own defect returns for exactly the field class the group
+    // fixes were written to rescue. Cross-surface finding.
+    const schema = {
+      ...VERIFY_SCHEMA,
+      fields: [{
+        id: 'reason', name: 'Reason', spoken_name: 'reason', section_id: 's1',
+        type: 'checkbox_group',
+        options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+      }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['reason'] }],
+    } as unknown as FormSchema;
+
+    // Seed the DIVERGENT key: the schema says `reason`, the value is under
+    // `reason[]`, which is the state Gemini actually produces.
+    const seeded = SchemaFormStateManager.init(schema);
+    (seeded.fieldValues as any)['reason[]'] = { value: ['a'], confirmed: false };
+    SchemaFormStateManager.save(seeded);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+
+    const options = Array.from(document.querySelectorAll('input[name="reason[]"]')) as HTMLInputElement[];
+    fireEvent.keyDown(options[0], { key: 'Enter' });
+
+    expect(
+      screen.getByTestId('verify-field-modal'),
+      'a group filled under the alias key must still be verifiable'
+    ).toBeTruthy();
+    // ...and the modal must show the REAL answer, not a blank.
+    expect(screen.getByTestId('verify-field-value').textContent).toContain('a');
+  });
 });

@@ -22,7 +22,7 @@ import { PdfViewErrorBoundary } from "./PdfViewErrorBoundary";
 import { PdfPreviewFallback } from "./PdfPreviewFallback";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
-import { unwrapFieldValue } from "../utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias } from "../utils/fieldValue";
 import { isBlankFieldValue } from "../utils/fieldValue";
 import { VerifyFieldModal } from "./VerifyFieldModal";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
@@ -679,7 +679,14 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     const field = state.schema.fields.find(f => f.id === fieldId);
     if (!field) return;
 
-    const value = unwrapFieldValue(state.fieldValues[fieldId]);
+    // readFieldEntryWithAlias, NOT a bare fieldValues[fieldId] (bd
+    // polyglot-pdf-5k52 and its scar tissue): a GROUP's entry may sit under the
+    // bracketed OR unbracketed key, because Gemini drops and adds the bracket. A
+    // bare read misses the real entry, isBlankFieldValue(undefined) is true, and
+    // Enter does nothing -- reproducing this bead's own defect for exactly the
+    // field class the group fixes were written to rescue. fieldValue.ts says it
+    // outright: use this wherever a miss would change behavior.
+    const value = unwrapFieldValue(readFieldEntryWithAlias(state.fieldValues, fieldId));
     if (isBlankFieldValue(value)) return;
 
     e.preventDefault();
@@ -909,7 +916,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       {verifyingFieldId && (() => {
         const vField = state.schema.fields.find(f => f.id === verifyingFieldId);
-        const vValue = unwrapFieldValue(state.fieldValues[verifyingFieldId]);
+        const vValue = unwrapFieldValue(readFieldEntryWithAlias(state.fieldValues, verifyingFieldId));
         return (
           <VerifyFieldModal
             isOpen
