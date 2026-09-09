@@ -462,13 +462,14 @@ the difference is in what each one can assume.**
 - `FieldRenderer` (`components/FieldRenderer.tsx`) keys on the flag ALONE — it
   returns `null` for a not-shown field before the unlock expression is reached,
   so visibility is already settled by the time it matters.
-- `FieldEditPopover` (`pdf-view/`) also keys on the flag alone, but it does NOT
+- `FieldEditPopover` (in `frontend/src/pdf-view/`, a SIBLING of `schema-forms/`)
+  also keys on the flag alone, but it does NOT
   get that guarantee: the PDF preview keeps a conditionally-hidden field on the
-  page (dimmed, because it exists on paper), and `PDFViewer` resolves the edited
-  field with a bare `find`. What actually keeps the popover off a hidden field is
-  elsewhere — `FieldOverlay` makes a dimmed field non-clickable, and
-  `PreviewPane` auto-closes the popover when the edited field's `show_if` flips
-  false. Do not remove either guard on the assumption the popover checks
+  page (dimmed, because it exists on paper), and `pdf-view/PDFViewer` resolves the
+  edited field with a bare `find`. What actually keeps the popover off a hidden
+  field is elsewhere — `pdf-view/FieldOverlay` makes a dimmed field
+  non-clickable, and `pdf-view/PreviewPane` auto-closes the popover when the
+  edited field's `show_if` flips false. Do not remove either guard on the assumption the popover checks
   visibility itself; it does not.
 - The AI-write path requires the field to be SHOWN as well as unlockable:
   `isFieldReadOnly` (`utils/validation.ts`) folds `shouldShowField` into the
