@@ -77,6 +77,63 @@ describe('checkbox group restore/capture (bd polyglot-pdf-96um6)', () => {
 })
 
 
+describe('an id/name COLLISION must not hijack restore or capture', () => {
+  // I assumed the "[]" suffix made the group lookup unambiguous. It does not:
+  // the query is keyed on the field's OWN id, so a text field id="race" beside a
+  // checkbox group name="race[]" took the group branch and restored NOTHING.
+  // Measured before fixing. Same root cause as the fieldManager collision, in
+  // code I had written two commits earlier.
+  beforeEach(() => { document.body.innerHTML = '' })
+
+  function restoreGated(fieldId: string, value: unknown) {
+    const el = document.getElementById(fieldId) as HTMLInputElement | null
+    if (!el) return
+    const isGroupMember = el.type === 'radio' || el.type === 'checkbox'
+    const groupEls = isGroupMember
+      ? Array.from(document.querySelectorAll(`input[name="${fieldId}[]"]`) as NodeListOf<HTMLInputElement>)
+      : []
+    if (groupEls.length) {
+      const picked = Array.isArray(value) ? value.map(String) : [String(value)]
+      groupEls.forEach(e => { e.checked = picked.includes(e.value) })
+    } else if (el.type === 'radio') {
+      const radios = document.querySelectorAll(`input[name="${fieldId}"]`) as NodeListOf<HTMLInputElement>
+      radios.forEach(e => { e.checked = e.value === String(value) })
+    } else if (el.type === 'checkbox') {
+      el.checked = Boolean(value)
+    } else {
+      el.value = String(value)
+    }
+  }
+
+  it('a text field colliding with a CHECKBOX groups bracketed name still restores', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race_text" type="text" value="" />
+      <input name="race[]" type="checkbox" value="Asian" />`
+    restoreGated('race', 'typed answer')
+    expect((document.getElementById('race') as HTMLInputElement).value).toBe('typed answer')
+  })
+
+  it('a text field colliding with a RADIO groups name restores, touching no radio', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex_text" type="text" value="" />
+      <input name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    restoreGated('sex', 'Maria')
+    expect((document.getElementById('sex') as HTMLInputElement).value).toBe('Maria')
+    const radios = Array.from(document.querySelectorAll('input[type=radio]')) as HTMLInputElement[]
+    expect(radios.some(r => r.checked), 'no radio must be touched').toBe(false)
+  })
+
+  it('a REAL group still restores -- so the gate did not break the thing it guards', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    restoreGated('race', ['White'])
+    const [asian, white] = Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+    expect([asian.checked, white.checked]).toEqual([false, true])
+  })
+})
+
 describe('the mirrors above cannot drift from the real functions', () => {
   // restoreDOMFromSessionStorage and capturePreFilledValues are module-private,
   // so the tests above necessarily MIRROR their logic. A mirror nothing pins is
@@ -126,8 +183,12 @@ describe('the mirrors above cannot drift from the real functions', () => {
     // Order is the whole fix: reversed, a group falls into `value = inputEl.checked`
     // and stores the boolean `true` again.
     const body = bodyOf(readSource(), 'capturePreFilledValues')
-    const groupAt = body.indexOf('groupEls.length')
-    const singleAt = body.indexOf("inputEl.type === 'checkbox'")
+    // Anchor on the BRANCH KEYWORDS, not a bare type test -- the gate that
+    // guards the group lookup legitimately mentions inputEl.type === 'checkbox'
+    // ABOVE the branches, and a bare indexOf matched that instead, reddening on
+    // correct code. A guard that cries wolf gets deleted, so it has to be exact.
+    const groupAt = body.indexOf('if (groupEls.length) {')
+    const singleAt = body.indexOf("} else if (inputEl.type === 'checkbox') {")
     expect(groupAt, 'the group branch must exist in capture').toBeGreaterThan(-1)
     expect(singleAt, 'the single-checkbox branch must still exist').toBeGreaterThan(-1)
     expect(

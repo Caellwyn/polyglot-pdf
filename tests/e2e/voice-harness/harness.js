@@ -349,8 +349,17 @@
       // options array describing its single PDF widget", bd polyglot-pdf-5jvn),
       // and a length>1 test misclassifies it as a single control, silently
       // reopening both bugs this helper exists to close.
-      var bracketed = document.querySelectorAll('input[name="' + fieldId + '[]"]');
-      if (bracketed.length) return Array.prototype.slice.call(bracketed);
+      // FILTER BY TYPE, as the app's groupInputsFor does: a TEXT field whose own
+      // id is literally 'race[]' matches this query too, and binding it as a
+      // group member misreports its edits under the GROUP's id.
+      var bracketedAll = document.querySelectorAll('input[name="' + fieldId + '[]"]');
+      var bracketed = [];
+      for (var b = 0; b < bracketedAll.length; b++) {
+        if (bracketedAll[b].type === 'checkbox' || bracketedAll[b].type === 'radio') {
+          bracketed.push(bracketedAll[b]);
+        }
+      }
+      if (bracketed.length) return bracketed;
       // Radios: many inputs sharing the plain name. A single control also matches
       // its own name, so require more than one to avoid capturing it.
       var plain = document.querySelectorAll('input[name="' + fieldId + '"]');

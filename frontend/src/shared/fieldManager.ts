@@ -67,6 +67,15 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 *
 	 * Shared by all three consumers deliberately. Gating them one at a time is
 	 * how this bug survived two rounds of fixing.
+	 *
+	 * NOT redundant with groupInputsFor's own type filter -- they catch DIFFERENT
+	 * collisions, and removing either reddens its own tests:
+	 *   this predicate : a text field whose ID collides with a group's NAME
+	 *                    (id="sex" vs name="sex"). The lookup finds real group
+	 *                    members; the wrong FIELD is asking.
+	 *   the type filter: a text field whose own NAME matches the bracketed query
+	 *                    (id="race[]"). The right field is asking; the lookup
+	 *                    returns a non-member.
 	 */
 	function idResolvesToNonGroup(
 		element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
@@ -79,8 +88,23 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	}
 
 	function groupInputsFor(fieldId: string): HTMLInputElement[] {
-		const bracketed = document.querySelectorAll(`input[name="${fieldId}[]"]`)
-		if (bracketed.length) return Array.from(bracketed) as HTMLInputElement[]
+		// FILTER BY TYPE, exactly as the plain branch below does. Without it a
+		// TEXT field whose own id is literally `race[]` matched this query and was
+		// bound as a member of the `race` group -- so typing a note into it
+		// reported under the GROUP's id and overwrote the group's answer. A schema
+		// declaring both `race` and `race[]` is a documented shape here
+		// (bd polyglot-pdf-ii6g), not a hypothetical.
+		//
+		// Fixed HERE rather than at each caller: four sites consult this rule, and
+		// gating them one at a time is how the id/name collision survived three
+		// rounds of my own fixing (CLAUDE.md scar #8 -- fix the SET, not the
+		// instance). tests/e2e/voice-harness/harness.js carries the twin.
+		const bracketed = (
+			Array.from(
+				document.querySelectorAll(`input[name="${fieldId}[]"]`)
+			) as HTMLInputElement[]
+		).filter(el => el.type === 'checkbox' || el.type === 'radio')
+		if (bracketed.length) return bracketed
 		const plain = Array.from(
 			document.querySelectorAll(`input[name="${fieldId}"]`)
 		) as HTMLInputElement[]

@@ -594,3 +594,56 @@ describe('an id/name COLLISION must not redirect the notify (bd polyglot-pdf-96u
     expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
   })
 })
+
+describe('a BRACKETED-ID text field is not swallowed by its groups query', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // A schema declaring BOTH `race` (checkbox_group) and `race[]` (text) is a
+  // documented shape here (bd polyglot-pdf-ii6g), not a hypothetical. The
+  // bracketed lookup matched the TEXT field too, so its edits were reported
+  // under the GROUP's id -- overwriting the group's answer with a typed note.
+  // Regression against origin/dev, introduced by this bead.
+  const BOTH = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [
+      { id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+        options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] },
+      { id: 'race[]', name: 'Race note', spoken_name: 'race note', type: 'text' },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race', 'race[]'] }],
+  } as unknown as FormSchema
+
+  function render() {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />
+      <input id="race[]" name="race[]" type="text" value="note" />`
+  }
+
+  it('the text fields edit reports under ITS OWN id', () => {
+    render()
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: BOTH, onManualEdit })
+
+    ;(document.getElementById('race[]') as HTMLInputElement)
+      .dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race[]')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('note')
+  })
+
+  it('and the GROUP still reports its checked options -- the gate did not break it', () => {
+    render()
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: BOTH, onManualEdit })
+
+    const white = document.querySelectorAll('input[type=checkbox]')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
+  })
+})

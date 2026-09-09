@@ -185,9 +185,15 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 			// return null -- so without this branch a checkbox group restored as
 			// Boolean(['White']) === true, checking OPTION[0] regardless of what the
 			// user actually picked. A silently wrong race or reason answer.
-			const groupEls = document.querySelectorAll(
-				`input[name="${fieldId}[]"]`
-			) as NodeListOf<HTMLInputElement>
+			// Gated on the RESOLVED element, not the name alone. Ids and names share
+			// no namespace, so a text field id="race" can coexist with a checkbox
+			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
+			// is keyed on the field's OWN id. Ungated, that text field restored/captured
+			// nothing at all (measured).
+			const isGroupMember = inputEl.type === 'radio' || inputEl.type === 'checkbox'
+			const groupEls = isGroupMember
+				? Array.from(document.querySelectorAll(`input[name="${fieldId}[]"]`) as NodeListOf<HTMLInputElement>)
+				: []
 			if (groupEls.length) {
 				const picked = Array.isArray(value) ? value.map(String) : [String(value)]
 				groupEls.forEach(el => { el.checked = picked.includes(el.value) })
@@ -253,9 +259,15 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 			// the string[] selection -- and this path marks what it captures
 			// {confirmed: true}, which would have contradicted this bead's whole
 			// thesis that only an explicit act verifies a field.
-			const groupEls = document.querySelectorAll(
-				`input[name="${fieldId}[]"]`
-			) as NodeListOf<HTMLInputElement>
+			// Gated on the RESOLVED element, not the name alone. Ids and names share
+			// no namespace, so a text field id="race" can coexist with a checkbox
+			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
+			// is keyed on the field's OWN id. Ungated, that text field restored/captured
+			// nothing at all (measured).
+			const isGroupMember = inputEl.type === 'radio' || inputEl.type === 'checkbox'
+			const groupEls = isGroupMember
+				? Array.from(document.querySelectorAll(`input[name="${fieldId}[]"]`) as NodeListOf<HTMLInputElement>)
+				: []
 			if (groupEls.length) {
 				const picked = Array.from(groupEls).filter(el => el.checked).map(el => el.value)
 				value = picked.length ? picked : null
