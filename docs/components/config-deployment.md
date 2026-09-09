@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-8vgfh: the admin service's gate inventory -- ALL FOUR gates now exist, `require_google_oidc` having shipped with `POST /admin/links/sweep-expired`.) (bd polyglot-pdf-dmjl5: the admin service's gate inventory -- three of the four now exist (`require_app_admin_or_owning_manager` ships with the four `/admin/users` routes; `require_firm_manager` lives on the public backend over the shared `manager_firm_id` rule), so the earlier "require_app_admin is the only one that exists yet" no longer holds. No env var, deploy step or config key changed.) (bd polyglot-pdf-b6943: the admin console app -- `admin-console/`, mirroring `schema-editor/`'s sign-in gate and delivery-mode split; two new Hosting sites `polyglot-admin-demo`/`polyglot-admin-candidate` with NO `/api` rewrite; `deploy-admin-console.sh` deploys candidate first, then `--live`, resolving the admin service's URL into `VITE_ADMIN_API_BASE_URL` the same way `deploy-editor.sh` resolves the public backend's -- see `technical_guide.md`'s Surface contracts.) (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the ceiling actually in force at a client connect is the link token's own `cap_usd` claim over the global `LINK_COST_CEILING_USD`, not the global alone.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-09 (bd polyglot-pdf-z4ljj: Epic 2 Track C bead C0, main-app admin wiring -- `deploy-all.sh`'s frontend stage now resolves a SECOND live Cloud Run URL, `VITE_ADMIN_API_BASE_URL` (from `polyglot-admin`), the same way it resolves `VITE_WS_URL`, reusing the same explicit-channel abort signal; both channel wrappers also export `VITE_APP_CHANNEL` so the built frontend's firm-console pages know their own channel for the admin service's required `?channel=` param; `frontend/src/shared/config.ts` gains `getAdminApiBaseUrl()`/`getAppChannel()`, and `frontend/src/console/adminApi.ts` is the new generic authenticated-fetch client C4/C5 build on.) (bd polyglot-pdf-8vgfh: the admin service's gate inventory -- ALL FOUR gates now exist, `require_google_oidc` having shipped with `POST /admin/links/sweep-expired`.) (bd polyglot-pdf-dmjl5: the admin service's gate inventory -- three of the four now exist (`require_app_admin_or_owning_manager` ships with the four `/admin/users` routes; `require_firm_manager` lives on the public backend over the shared `manager_firm_id` rule), so the earlier "require_app_admin is the only one that exists yet" no longer holds. No env var, deploy step or config key changed.) (bd polyglot-pdf-b6943: the admin console app -- `admin-console/`, mirroring `schema-editor/`'s sign-in gate and delivery-mode split; two new Hosting sites `polyglot-admin-demo`/`polyglot-admin-candidate` with NO `/api` rewrite; `deploy-admin-console.sh` deploys candidate first, then `--live`, resolving the admin service's URL into `VITE_ADMIN_API_BASE_URL` the same way `deploy-editor.sh` resolves the public backend's -- see `technical_guide.md`'s Surface contracts.) (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the ceiling actually in force at a client connect is the link token's own `cap_usd` claim over the global `LINK_COST_CEILING_USD`, not the global alone.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -414,7 +414,48 @@ the gate crying wolf. The counts are pinned per script.
   standard Vite precedence). The `VITE_WS_URL` values committed in `.env.demo` /
   `.env.production` are now documented FALLBACK-ONLY, because the Cloud Run auto-URL
   hash is not stable (it drifted on a service recreate and 404'd the deployed
-  frontend).
+  frontend). **`VITE_ADMIN_API_BASE_URL` is resolved the SAME way**
+  (bd `polyglot-pdf-z4ljj`, C0): `deploy-all.sh`'s frontend stage also resolves
+  the live `polyglot-admin` Cloud Run URL (`ADMIN_SERVICE_NAME`, defaulted
+  `${ADMIN_SERVICE_NAME:-polyglot-admin}`, never overridden by either channel
+  wrapper — there is ONE admin service backing both channels) and exports it,
+  binding the main app's firm-console pages (`frontend/src/console/*`) to the
+  admin service. Both `gcloud run services describe` calls run in the SAME
+  frontend stage and each is followed by its own
+  `verify_service_publicly_reachable(..., warn)` call — see
+  `tests/test_deploy_reachability_gate.py`'s `URL_BAKING_SEVERITY["deploy-
+  all.sh"] = (2, 1)`. An explicitly-selected channel whose admin URL cannot be
+  resolved aborts the build (`exit 1`), reusing the SAME
+  `BACKEND_SERVICE_NAME_EXPLICIT` signal `VITE_WS_URL`'s abort branch uses —
+  there is one "was a channel explicitly selected" flag in `deploy-all.sh`,
+  not two. Pinned by `tests/test_deploy_admin_url_injection.py`. **This is a
+  SECOND producer of the `VITE_ADMIN_API_BASE_URL` name** — the admin
+  console's own `deploy-admin-console.sh` (see "Admin console" below) also
+  resolves and exports it, for a DIFFERENT Vite app/build; the two builds
+  never run together, so there is no collision, only a shared name for the
+  same kind of value.
+
+  **`VITE_APP_CHANNEL`** (bd `polyglot-pdf-z4ljj`) tells the built frontend
+  which channel it IS — required because every firm-scoped admin-service
+  route takes an explicit `?channel=` (the admin service has no channel
+  identity of its own; it is one Cloud Run service serving both channels'
+  Firestore data). This can NOT be derived from Vite's own `MODE`:
+  `deploy-staging.sh` and `deploy-demo.sh` both build with
+  `npm run build:schema:demo` (mode `demo`) because the two channels share one
+  Firebase project and therefore one set of client-side Firebase keys — so
+  `import.meta.env.MODE` reads `demo` for a staging build too.
+  `deploy-staging.sh` exports `VITE_APP_CHANNEL="staging"` and `deploy-demo.sh`
+  exports `VITE_APP_CHANNEL="demo"` on their own `FRONTEND_BUILD_CMD=...`
+  invocation lines (a `VAR=value` environment prefix, inherited by
+  `deploy-all.sh`'s own `$FRONTEND_BUILD_CMD` child process — no `export`
+  needed inside `deploy-all.sh` itself, unlike the two `gcloud`-resolved URLs
+  above, which are computed there rather than supplied by the caller).
+  `frontend/src/shared/config.ts`'s `getAppChannel()` reads it, falling back
+  to `'demo'` on an unset OR unrecognized value — the same "unset means demo"
+  convention as `link_channel()` and every bucket default in this repo — so a
+  local dev build or a bare `vite build` never silently claims to be
+  `staging`, and a typo'd value never mints a `channel` the admin service's
+  own `KNOWN_CHANNELS` check would 404.
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
   **`deploy-demo.sh` wrapper**, not `deploy-all.sh`, runs
@@ -654,6 +695,20 @@ The `__VFF_*` dev overrides are read from `window` OR `localStorage` (so they
 survive a reload). `config.ts` also exposes `isTestHarnessEnabled()` (true only
 when both `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` are set) — a dev/test-only
 gate used by the E2E voice harness; never true in production.
+
+**The admin service is a THIRD, separate destination** (bd `polyglot-pdf-z4ljj`,
+C0) — neither the `/api/**` Hosting rewrite (which points only at the voice
+backend) nor the WS path reach it. `config.ts`'s `getAdminApiBaseUrl()` reads
+`VITE_ADMIN_API_BASE_URL` directly with NO fallback chain (an empty string when
+unset, meaning "no admin backend configured" — there is no runtime-detection
+equivalent to `getBackendUrl()`'s production-URL guess, because a wrong guess
+here would point firm-console pages at a plausible-looking but wrong Cloud Run
+URL rather than failing visibly). `getAppChannel()` reads `VITE_APP_CHANNEL`
+(falling back to `'demo'`), giving `frontend/src/console/adminApi.ts` the two
+things every firm-scoped admin-service call needs: the resolved base URL and
+the `?channel=` query param the admin service's routes require. See "Frontend"
+above for how both env vars are injected at deploy time, and Surface contract
+22 in `technical_guide.md` for the producer/consumer wiring.
 
 > **Promotion path** is worktree → local test server → `dev` → demo remote
 > (`deploy-demo.sh`); deploys stay manual (local shell scripts, not CI) and there
