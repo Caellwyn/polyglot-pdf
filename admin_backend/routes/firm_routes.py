@@ -79,7 +79,7 @@ ASCII only.
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -111,6 +111,12 @@ _FIRM_STATUSES = (firms.FIRM_STATUS_ACTIVE, firms.FIRM_STATUS_SUSPENDED)
 _FIRM_KINDS = (firms.FIRM_KIND_MOCK, firms.FIRM_KIND_LIVE)
 
 _FIRMS_COLLECTION = "firms"
+
+# Sentinel for "the stored firm doc never had this key" -- distinct from any
+# real stored value (None included), so _apply_firm_patch can drop a field
+# from its re-write rather than inventing a default for it (cross-surface
+# review finding 1/2 on bd polyglot-pdf-zopqq).
+_ABSENT = object()
 
 
 class CreateFirmRequest(BaseModel):
@@ -202,7 +208,7 @@ def _validated_firm_id(firm_id: str) -> str:
 
 
 def _apply_firm_patch(
-    *, db, firm_id: str, doc: dict, patch: dict, actor: AdminActor,
+    *, db, firm_id: str, patch: dict, actor: AdminActor,
     action: str, before: dict, after: dict, request_id: str,
 ) -> None:
     """Re-write the firm doc through upsert_firm with ONE field changed,
@@ -222,6 +228,21 @@ def _apply_firm_patch(
     branch writes (name, contact_email, allowed_kits, status, kind,
     updated_at), so the two writers can never disagree about what a firm
     document contains.
+
+    MERGE IS BUILT FROM ONLY THE KEYS THE STORED DOC ALREADY HAS, PLUS
+    `patch` (cross-surface review finding 1/2 on this bead, polyglot-pdf-
+    zopqq): a status-only or allowed_kits-only PATCH must not invent a
+    `kind`/`status`/`allowed_kits` value on a doc that never had one.
+    scripts/backfill_firm_kind.py gates its `--mock` allowlist AND its
+    `--seed-credits` grant on `"kind" in firm` (had_kind) -- a stray write
+    that materializes `kind` here during the still-open pre-backfill
+    window (A6 exit criterion 2 has no journal-recorded staging run yet)
+    would make that firm skip both, silently converting an unclassified
+    firm into a permanently-`live`, unseeded one. tx.set(..., merge=True)
+    already leaves every OTHER stored field untouched; the fix is for
+    `merged` to mirror that same merge-only-what's-named discipline for
+    the fields upsert_firm's shape lists, rather than coercing them to a
+    default the caller never asked for.
     """
     from firebase_admin import firestore
 
@@ -241,15 +262,25 @@ def _apply_firm_patch(
             # phantom back into existence.
             raise HTTPException(status_code=404, detail="No such firm")
         current = snap.to_dict() or {}
+        # One dict literal carrying the SAME key set as upsert_firm's
+        # `payload` (test_apply_firm_patch_merged_dict_matches_upsert_
+        # firm_payload_keys pins the two by AST-walking each function's
+        # first dict literal, so this stays a literal rather than a
+        # build-up of conditional assignments). Each value is _ABSENT when
+        # `current` never had that key, so the drop-absent-keys step right
+        # after this literal can tell "stored empty/false-y" apart from
+        # "never stored" without coercing the latter to a default.
         merged = {
-            "name": current.get("name"),
-            "contact_email": current.get("contact_email"),
-            "allowed_kits": current.get("allowed_kits")
-            if isinstance(current.get("allowed_kits"), list) else [],
-            "status": current.get("status", firms.FIRM_STATUS_ACTIVE),
-            "kind": current.get("kind") if current.get("kind") in
-            _FIRM_KINDS else firms.FIRM_KIND_LIVE,
+            "name": current.get("name", _ABSENT),
+            "contact_email": current.get("contact_email", _ABSENT),
+            "allowed_kits": current["allowed_kits"]
+            if isinstance(current.get("allowed_kits"), list) else _ABSENT,
+            "status": current.get("status", _ABSENT),
+            "kind": (current.get("kind") if current.get("kind") in
+                     _FIRM_KINDS else firms.FIRM_KIND_LIVE)
+            if "kind" in current else _ABSENT,
         }
+        merged = {k: v for k, v in merged.items() if v is not _ABSENT}
         merged.update(patch)
         tx.set(firm_ref, {
             **merged,
@@ -471,7 +502,7 @@ def _do_set_firm_status(*, firm_id: str, body: SetStatusRequest,
     doc = _get_firm_or_404(db, firm_id)
     before_status = doc.get("status")
     _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc, patch={"status": body.status},
+        db=db, firm_id=firm_id, patch={"status": body.status},
         actor=actor, action=ACTION_FIRM_STATUS,
         before={"status": before_status}, after={"status": body.status},
         request_id=request_id,
@@ -514,7 +545,7 @@ def _do_set_firm_allowed_kits(*, firm_id: str, body: SetAllowedKitsRequest,
     before_kits = doc.get("allowed_kits") if isinstance(
         doc.get("allowed_kits"), list) else []
     _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc,
+        db=db, firm_id=firm_id,
         patch={"allowed_kits": list(body.allowed_kits)},
         actor=actor, action=ACTION_FIRM_ALLOWED_KITS,
         before={"allowed_kits": before_kits},
@@ -552,7 +583,7 @@ def _do_set_firm_kind(*, firm_id: str, body: SetKindRequest,
     before_kind = doc.get("kind") if doc.get("kind") in _FIRM_KINDS else \
         firms.FIRM_KIND_LIVE
     _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc, patch={"kind": body.kind},
+        db=db, firm_id=firm_id, patch={"kind": body.kind},
         actor=actor, action=ACTION_FIRM_KIND,
         before={"kind": before_kind, "reason": None},
         after={"kind": body.kind, "reason": body.reason},

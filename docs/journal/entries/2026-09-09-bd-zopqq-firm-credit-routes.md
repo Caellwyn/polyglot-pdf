@@ -110,6 +110,56 @@ verified to flip the right way) and a tie-back test against the real
 `credit_routes.py` module, matching the file's existing prove-both-ways
 pattern for the plain and external forms.
 
+### Cross-surface review round: adopt/reject/defer
+
+The outer cross-surface review (STATUS: GAPS-FOUND (2)) traced `firms/{firm_id}`
+consumers outside this diff's own files and found `scripts/backfill_firm_kind.py`
+as a second, untouched-file consumer of the document shape `_apply_firm_patch`
+writes.
+
+- **ADOPTED -- `_apply_firm_patch` invents `kind`/`status`/`allowed_kits` on a
+  doc that never had them (blocker, findings 1+2, enumerated and fixed
+  together per CLAUDE.md scar #8).** `_apply_firm_patch`'s old `merged` dict
+  coerced a missing `kind` to `firms.FIRM_KIND_LIVE` (and missing
+  `status`/`allowed_kits` to their own defaults) and wrote it back on EVERY
+  patch, even a status-only or allowed_kits-only one. `scripts/
+  backfill_firm_kind.py` gates both its `--mock` allowlist and its
+  `--seed-credits` grant on `"kind" in firm` (`had_kind`) -- a stray write
+  that materializes `kind` here during the still-open pre-backfill window (A6
+  exit criterion 2 has no journal-recorded staging run yet) would silently
+  and permanently misclassify an unclassified firm as a paying live one, and
+  it would lose its seed-credit grant too. Reproduced the reviewer's repro
+  (seed a doc with no `kind`, PATCH `.../status`, watch `kind: "live"`
+  appear) before fixing. Fix: `merged` is still one dict literal (so
+  `test_apply_firm_patch_merged_dict_matches_upsert_firm_payload_keys`'s
+  AST-derived key-set pin still finds it) but each value now reads via
+  `current.get(key, _ABSENT)` (a module-level sentinel distinct from any real
+  stored value, including `None`) instead of a hard default, and a
+  dict-comprehension right after the literal drops every `_ABSENT` entry
+  before `patch` is applied -- so a field the stored doc never had stays
+  absent from the re-write. Added five pinning tests covering all three
+  patch routes against a kindless doc plus a guard test that a
+  fully-classified doc's `kind`/`allowed_kits` still survive a status-only
+  patch unchanged. Mutation-verified: reverting the sentinel-based merge back
+  to the old hard-defaulted literal turned all four bug-catching tests red
+  (`kind`/`allowed_kits` reappeared on the doc); the guard test stayed green
+  under that mutation as expected, confirming it is not accidentally coupled
+  to the same code path.
+- **NOT RE-FILED -- finding 3 (unused `Optional` import, unused `doc` param
+  on `_apply_firm_patch`).** Already filed by the reviewer as
+  `polyglot-pdf-zs9yb`. The finding-1/2 fix above removes `_apply_firm_patch`'s
+  `doc` parameter and all three call sites as a direct consequence of
+  rebuilding `merged` from the in-transaction snapshot only (the function
+  never read the passed-in `doc` to begin with) -- so that half of zs9yb's
+  exit criterion is already satisfied by this round; also dropped the now-
+  fully-unused `Optional` import in the same file for the same reason
+  (finishing the other half). `polyglot-pdf-zs9yb` is left open rather than
+  closed here since fixing it was not this round's assignment; whoever picks
+  it up next will find both items already done and can close it against this
+  commit.
+- **CONFIRMED STILL OPEN -- pre-existing nit `polyglot-pdf-0w13i`.** Reviewer
+  re-verified it is open and correctly scoped; no action needed here.
+
 ### A missing catch-all in credit_routes.py
 
 While mutation-testing the "forced audit failure leaves the balance

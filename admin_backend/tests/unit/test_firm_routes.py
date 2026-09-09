@@ -553,6 +553,99 @@ def test_set_status_preserves_the_firms_other_fields(client, fake_db):
     assert doc["kind"] == "live"
 
 
+def _seed_kindless_firm(fake_db, firm_id="acme"):
+    """A pre-A1 firm doc: no `kind` key at all (scripts/backfill_firm_kind.py
+    has not yet run on it), and -- for the same reason -- no `status` or
+    `allowed_kits` key either, matching a doc bootstrap_firm.py wrote before
+    those fields existed. Built by hand rather than via _seed_firm (which
+    always seeds all five fields) so the missing keys are truly absent from
+    the fake store, not merely falsy."""
+    doc = {"name": "Acme LLC", "contact_email": "ops@acme.example"}
+    fake_db.docs[("firms", firm_id)] = doc
+    return doc
+
+
+# --------------------------------------------------------------------------
+# Cross-surface review findings 1 + 2 on bd polyglot-pdf-zopqq: a PATCH must
+# not materialize a default for a field the stored doc never had.
+# scripts/backfill_firm_kind.py gates its --mock allowlist and its
+# --seed-credits grant on `"kind" in firm`; a PATCH that invents `kind` on a
+# kindless doc makes the backfill script skip that firm for both, silently
+# and permanently misclassifying it as a paying live firm.
+# --------------------------------------------------------------------------
+
+def test_set_status_on_a_kindless_doc_does_not_invent_kind(client, fake_db):
+    """Reproduces the reviewer's repro: PATCH .../status on a doc with no
+    stored `kind` must leave `kind` absent, not write kind="live".
+
+    Mutation-verified: reverting _apply_firm_patch's merged-dict fix (making
+    every field always-present, defaulted via .get(key, default) the way the
+    pre-fix code did) turns this red -- 'kind' appears in the doc as 'live'
+    after a status-only patch. Confirmed 2026-09-08; fix restored after."""
+    _seed_kindless_firm(fake_db, "acme")
+    resp = client.patch("/admin/firms/acme/status", json={"status": "active"})
+    assert resp.status_code == 200, resp.text
+    doc = fake_db.firm("acme")
+    assert "kind" not in doc, (
+        "a status-only PATCH must not materialize kind onto a kindless "
+        "doc -- doing so makes scripts/backfill_firm_kind.py's had_kind "
+        "gate skip this firm for both --mock and --seed-credits")
+    assert doc["status"] == "active"
+
+
+def test_set_status_on_a_kindless_doc_does_not_invent_allowed_kits(
+        client, fake_db):
+    """Same root cause as the kind case: allowed_kits must stay absent too
+    (finding 2 -- same fix, enumerated together per CLAUDE.md scar #8)."""
+    _seed_kindless_firm(fake_db, "acme")
+    client.patch("/admin/firms/acme/status", json={"status": "active"})
+    doc = fake_db.firm("acme")
+    assert "allowed_kits" not in doc
+
+
+def test_set_allowed_kits_on_a_kindless_doc_does_not_invent_kind_or_status(
+        client, fake_db):
+    """The allowed_kits route must not invent kind or status either --
+    enumerating the OTHER patch route for the same finding, not just the
+    status one the repro happened to use."""
+    _seed_kindless_firm(fake_db, "acme")
+    resp = client.patch("/admin/firms/acme/allowed_kits",
+                        json={"allowed_kits": ["w7"]})
+    assert resp.status_code == 200, resp.text
+    doc = fake_db.firm("acme")
+    assert "kind" not in doc
+    assert "status" not in doc
+    assert doc["allowed_kits"] == ["w7"]
+
+
+def test_set_kind_on_a_kindless_doc_does_not_invent_status_or_allowed_kits(
+        client, fake_db):
+    """The kind route itself must not invent status/allowed_kits when
+    reclassifying a firm that never had them stored."""
+    _seed_kindless_firm(fake_db, "acme")
+    resp = client.patch("/admin/firms/acme/kind",
+                        json={"kind": "mock", "reason": "backfill by hand"})
+    assert resp.status_code == 200, resp.text
+    doc = fake_db.firm("acme")
+    assert "status" not in doc
+    assert "allowed_kits" not in doc
+    assert doc["kind"] == "mock"
+
+
+def test_set_status_on_a_fully_seeded_doc_still_preserves_kind(
+        client, fake_db):
+    """Guard against overcorrecting: a doc that DOES have a stored kind
+    must still carry it forward unchanged on a status-only patch (this is
+    test_set_status_preserves_the_firms_other_fields's assertion restated
+    against the new absent-key-aware merge, so a fix for the kindless case
+    cannot regress the already-classified case)."""
+    _seed_firm(fake_db, "acme", kind="mock", allowed_kits=["w7"])
+    client.patch("/admin/firms/acme/status", json={"status": "suspended"})
+    doc = fake_db.firm("acme")
+    assert doc["kind"] == "mock"
+    assert doc["allowed_kits"] == ["w7"]
+
+
 # --------------------------------------------------------------------------
 # PATCH /admin/firms/{firm_id}/allowed_kits
 # --------------------------------------------------------------------------
