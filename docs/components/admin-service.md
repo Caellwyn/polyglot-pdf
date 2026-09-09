@@ -383,15 +383,16 @@ constant fails CI):
 | `roles/logging.logWriter` | project | Structured logs to Cloud Logging, same as the public backend. |
 | `roles/secretmanager.secretAccessor` | project | Read Secret-Manager-backed values (the link-signing secret, an email-provider key) -- a missing binding here fails LOUDLY at Cloud Run deploy time, not silently. |
 | `roles/storage.objectAdmin` | the form-kits bucket ONLY | Publish/retire form kits. The public backend holds only `roles/storage.objectViewer` on the same bucket. |
+| `roles/bigquery.jobUser` | project | Run BigQuery queries against the telemetry views (Epic 3 bead 6). Granted by `scripts/setup-telemetry.sh`, not this script -- see that script's own comment for why the BigQuery grants live there instead of here. |
+| `roles/bigquery.dataViewer` | the telemetry dataset ONLY | Read the cost/income views. Dataset-scoped, not project-wide, so a compromised admin-backend-sa credential cannot read an unrelated BigQuery dataset in the same project. Also granted by `scripts/setup-telemetry.sh`. |
 
 Deferred, deliberately absent until the epic that first needs them (an
 unused grant is its own risk): `roles/cloudbuild.builds.editor` +
 `roles/iam.serviceAccountUser` on the Cloud Build SA, `roles/run.admin` +
 `roles/iam.serviceAccountUser` on `polyglot-backend-sa` (resource-scoped),
 `roles/firebasehosting.admin` (Epic 4, deploy control plane);
-`roles/bigquery.jobUser` + dataset-scoped `roles/bigquery.dataViewer`,
-`roles/errorreporting.viewer`, `roles/monitoring.viewer` (Epic 3,
-telemetry).
+`roles/errorreporting.viewer`, `roles/monitoring.viewer` (Epic 3 bead 8,
+error reporting + monitoring, not yet built).
 
 ## CORS
 

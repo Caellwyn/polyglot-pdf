@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new Surface contract 25, the BigQuery telemetry sink + cost/income views (`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that ORs across three genuinely different `jsonPayload` shapes (contract 20's nested `message.event_type` for usage events, contract 18's flat `event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed `jsonPayload.event` for the two wired session events) rather than the single field name the plan's prose implied; five views whose referenced columns are pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and `LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind = 'live'` filter hard-coded in the view; and `admin-backend-sa`'s two BigQuery roles moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than `setup-admin-service.sh`.) (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -1959,3 +1959,103 @@ buffer-and-retry Firestore fake, used by both `test_credit_ledger.py` and
 `test_link_routes.py` now that two callers drive the same transaction. A
 second copy would drift, and a drifted copy lets one caller's tests pass
 against semantics the other does not have.
+
+### 25. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
+
+The consumer half of contract 20's usage-event shape, plus a second, genuinely
+DIFFERENT shape (`ledger_export`) that contract 18 already produces. Declarative,
+operator-run infrastructure: nothing in this contract executes against GCP from
+a deploy script.
+
+- **Producer:** `scripts/setup-telemetry.sh` creates the `polyglot_telemetry`
+  BigQuery dataset (`us-central1`) and a Cloud Logging sink over THREE Cloud Run
+  services -- the public backend, its staging twin, AND the admin service
+  (`polyglot-admin`, since `ledger_export` is emitted only from
+  `admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never from the
+  public backend) -- then applies `sql/telemetry_views.sql`'s five
+  `CREATE OR REPLACE VIEW` statements via `bq query`, substituting `${DATASET}`,
+  `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}` (read back from
+  `bq ls` on the dataset, not hardcoded -- the sink writes TWO destination
+  tables, not one: usage events print to stdout
+  (`structured_logger.py`'s `print(..., file=sys.stdout)`) while
+  `ledger_export` and the session events go through plain `structlog` calls
+  that reach stdlib logging's default stream, which `backend/utils/logging.py`
+  never overrides to stdout, so those land on stderr instead -- the three
+  cost views read `${TELEMETRY_TABLE_STDOUT}` and `income_month` reads
+  `${TELEMETRY_TABLE_STDERR}`; see bd polyglot-pdf-ih428) and
+  `${BILLING_EXPORT_TABLE}` (a required second script argument; the Cloud
+  Billing export itself is a separate maintainer console step, Epic 3
+  bead 7).
+- **Consumers:** the admin console's cost/income dashboards (a later bead) query
+  `cost_by_firm_month`, `cost_by_kit_month`, `cost_by_employee_month`,
+  `hosting_cost_by_service_month` and `income_month` directly; `admin-backend-sa`
+  is the identity that runs those queries (`roles/bigquery.jobUser` +
+  dataset-scoped `roles/bigquery.dataViewer`, both granted by this script rather
+  than `scripts/setup-admin-service.sh`).
+- **The sink filter is three DIFFERENT jsonPayload shapes ORed together, not
+  one field name.** *Breaks if collapsed to a single clause:* `jsonPayload.
+  event_type IN (...)` alone would match `ledger_export` (contract 18's
+  producer passes `event_type=` as an explicit `structlog`-bound kwarg, so
+  `JSONRenderer` puts it at the top level) but silently drop every usage event
+  (contract 20's producer, `StructuredLogger._emit`, wraps the whole envelope
+  in a `message` key, so its event type is at the NESTED
+  `jsonPayload.message.event_type`) and every session event
+  (`confirmation_logger.py`'s `log_form_session_start`/`log_form_session_end`
+  pass NO `event_type` kwarg at all, so `structlog` renders the POSITIONAL
+  event name under the plain key `jsonPayload.event`, a third shape again).
+  Verified against real emitted JSON, not the plan's prose, which describes
+  the filter as if one field covered every case. Error events (Epic 3 bead 8,
+  not yet built) are deliberately absent from the filter until
+  `StructuredLogger.log_error` has a real call site; when it does, it shares
+  contract 20's nested shape, so widening this filter is a one-line addition.
+- **Views reference ONLY columns their source event actually emits, checked by
+  a DERIVED set, not a hand list.** `backend/tests/unit/test_telemetry_views.py`
+  parses `sql/telemetry_views.sql` and asserts every
+  `jsonPayload.message.metadata.*` reference in the three cost-by-* views is a
+  member of `log_schemas.USAGE_CONTEXT_KEYS` (contract 20) plus the fixed
+  cost/count keys `StructuredLogger._emit_usage` always writes, and every flat
+  `jsonPayload.*` reference in `income_month` is a member of
+  `credit_ledger.LEDGER_EXPORT_FIELDS` (contract 18). *Breaks if a view drifts
+  onto an unemitted column:* BigQuery does not error on an unknown JSON path --
+  it returns NULL forever, so a dashboard column goes silently and permanently
+  empty.
+- **`income_month` hard-codes `firm_kind = 'live'` in the view definition, not
+  left to a caller's WHERE clause** -- Epic 3's overall exit criterion 5 (the
+  income-filter half this bead inherits). Income cannot filter on `channel`:
+  the admin service that writes `purchase`/`subscription_grant` ledger entries
+  has none, so the firm's `firm_kind`, snapshotted onto each `ledger_export`
+  line by `append_entry` (contract 18), is the only test-vs-real signal
+  available. `backend/tests/unit/test_telemetry_views.py` and
+  `backend/tests/unit/test_credit_ledger.py::
+  test_export_line_carries_every_column_income_month_reads` both pin this --
+  the latter closes the loop from the OTHER direction, deriving `income_month`'s
+  referenced columns from the SQL and asserting a real emitted `ledger_export`
+  payload carries every one of them.
+- **`hosting_cost_by_service_month` reads the Cloud Billing detailed export
+  table, not the telemetry sink** -- the sink carries no cost figures for
+  Cloud Run compute or Firebase Hosting bandwidth, only the application's own
+  usage/ledger events. Splits by `resource.name` (the Cloud Run service name)
+  so `polyglot-backend` and `polyglot-backend-staging` cost never mix; Firebase
+  Hosting line items carry no per-channel resource name in the export and
+  group under `NULL` rather than being misattributed to one channel. Returns
+  zero rows until the maintainer enables the export (Epic 3 bead 7) -- not
+  retroactive.
+- **The sink step is create-or-update, not create-only (bd polyglot-pdf-f7f0h):**
+  `gcloud logging sinks describe` decides whether to `sinks create` (first
+  run) or `sinks update` (the sink already exists), so a re-run after
+  `SINK_FILTER` changes actually applies the new filter to the LIVE sink --
+  a bare `sinks create` fails on an existing sink and cannot do this.
+- **IAM, four grants total:** the sink's own writer identity (parsed at
+  runtime -- from `gcloud logging sinks create`'s output on first creation, or
+  from a `gcloud logging sinks describe --format=value(writerIdentity)` call
+  on a re-run, NOT a hardcoded principal) gets `roles/bigquery.dataEditor` on
+  the dataset; `admin-backend-sa`
+  gets project-level `roles/bigquery.jobUser` and dataset-scoped
+  `roles/bigquery.dataViewer`. The latter two were moved OUT of
+  `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s `DEFERRED_ROLES`
+  set (where Epic 1's `setup-admin-service.sh` had deliberately left them
+  ungranted) into `EXPECTED_ADMIN_SA_ROLES`, with a new
+  `TELEMETRY_GRANTED_ROLES` constant marking that `setup-telemetry.sh`, not
+  `setup-admin-service.sh`'s `PROJECT_ROLES` array, is what actually grants
+  them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
+  that constant out before comparing against `setup-admin-service.sh` alone.

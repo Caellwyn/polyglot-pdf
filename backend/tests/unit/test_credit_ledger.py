@@ -771,6 +771,74 @@ def test_the_export_line_carries_NO_field_values_or_free_text(
     assert not any("123-45-6789" in str(v) for v in payload.values())
 
 
+def test_export_line_carries_every_column_income_month_reads(
+        fake_db, monkeypatch):
+    """Epic 3 bead 6 (E3.6) exit criterion 3: the ledger_export log line
+    carries every field sql/telemetry_views.sql's income_month view reads.
+
+    Parses income_month's actual SQL (not a hand-copied list) so this test
+    and the view cannot silently drift apart -- if a future edit to the view
+    reads a NEW jsonPayload column, this test fails here (income_month would
+    read a column that is always NULL) rather than shipping a quietly-empty
+    dashboard number. The reverse direction (every LEDGER_EXPORT_FIELDS
+    member is a real emitted key) is already pinned by
+    test_every_write_emits_ONE_ledger_export_line_with_the_declared_fields
+    above via the `set(payload) == LEDGER_EXPORT_FIELDS` equality.
+
+    Mutation: add a jsonPayload.<col> reference to income_month's SQL for a
+    column not in LEDGER_EXPORT_FIELDS (e.g. jsonPayload.kit_id, which
+    ENTRY_FIELDS has but LEDGER_EXPORT_FIELDS deliberately does not) --
+    red. Also mutation: drop a kwarg from the append_entry _log.info call
+    that income_month reads (e.g. remove usd_amount=... from the emit
+    call) -- also red, via the payload-vs-referenced-columns check below."""
+    import pathlib
+    import re
+
+    sql_path = (pathlib.Path(__file__).resolve().parents[3] / "sql"
+                / "telemetry_views.sql")
+    assert sql_path.is_file(), "sql/telemetry_views.sql is missing"
+    sql_text = sql_path.read_text(encoding="utf-8")
+
+    view_match = re.search(
+        r"CREATE OR REPLACE VIEW `\$\{DATASET\}\.income_month` AS"
+        r"(.*?)(?=CREATE OR REPLACE VIEW|\Z)",
+        sql_text, re.DOTALL)
+    assert view_match, "income_month view not found in sql/telemetry_views.sql"
+    income_body = view_match.group(1)
+
+    # Every flat jsonPayload.<col> the view references (excluding the
+    # nested `message` accessor, which belongs to the usage-event shape,
+    # not ledger_export's).
+    referenced_columns = set(
+        re.findall(r"jsonPayload\.(\w+)", income_body)) - {"message"}
+    # timestamp is the LogEntry's own field, not part of the emitted
+    # ledger_export payload kwargs -- structural, like event_type.
+    referenced_columns -= {"timestamp"}
+
+    unknown = referenced_columns - credit_ledger.LEDGER_EXPORT_FIELDS
+    assert not unknown, (
+        "income_month references column(s) the ledger_export line does not "
+        "carry: {}. Either the view is wrong, or credit_ledger.py's emit "
+        "call is missing a field income_month needs.".format(sorted(unknown))
+    )
+
+    # And the LIVE emitted payload actually has every column the view
+    # reads (not just the static LEDGER_EXPORT_FIELDS set pin) -- catches a
+    # kwarg silently dropped from the _log.info(...) call while
+    # LEDGER_EXPORT_FIELDS itself is left stale and un-updated.
+    lines = _capture_export(monkeypatch)
+    credit_ledger.append_entry(
+        fake_db, "acme", entry_type="purchase", amount=100, actor="uid-ops",
+        usd_amount=249.0, link_jti=None, kit_id="w7")
+    payload = [kw for event, kw in lines
+               if event == credit_ledger.LEDGER_EXPORT_EVENT][0]
+    missing_from_payload = referenced_columns - set(payload)
+    assert not missing_from_payload, (
+        "income_month reads column(s) the ACTUAL emitted ledger_export "
+        "line does not carry: {}".format(sorted(missing_from_payload))
+    )
+
+
 # ------------------------------------------------------- the ONE-writer rule
 
 
