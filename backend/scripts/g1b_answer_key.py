@@ -197,7 +197,9 @@ def option_label(field: dict, value: str) -> str:
 
     STATE pickers are special: their schema-v2 option slugs are full-name
     ("texas"), but the bead's coherence rule keeps the payload on two-letter
-    abbreviations ("TX"), so a state slug is resolved via _STATE_SLUG_TO_ABBR
+    abbreviations ("TX"), so a state slug is resolved through the option's own
+    pdf_on_value (the abbreviation, since bd polyglot-pdf-g2fpr), falling back
+    to the hand-built _STATE_SLUG_TO_ABBR for a schema without the channel,
     instead of to its full-name label. A value ALREADY a two-letter code (e.g. the
     corpus injection cases set state directly to "TX", or a foreign address leaves
     it "") passes through unchanged.
