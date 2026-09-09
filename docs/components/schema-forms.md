@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-38p0y: the AI-write gates now honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it, where before it was refused as system-managed while the UI and PDF filler both unlocked it. See [the journal entry](../journal/entries/2026-09-08-bd-38p0y-readonly-unlock-on-the-ai-write-gate.md) for closeout details.)*
+*Last updated: 2026-09-11 (bd polyglot-pdf-96um6: the Enter->verify modal is the keyboard path to an audit claim, and reaches every field type -- radio/checkbox groups now carry id={field.id} on their first option, which is what makes them reachable at all. bd polyglot-pdf-38p0y: the AI-write gates honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it.)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -377,6 +377,15 @@ now comes only from an explicit act -- the verbal confirm, the skip control, or
 (bd polyglot-pdf-96um6) the Enter->verify modal. An unverified field keeps its
 value and stays in the next-field search (`computeNextField`), so it is re-offered
 rather than stranded.
+
+The Enter->verify gesture reaches **every** field type, and that is a real
+constraint rather than a happy accident: the handler keys on `target.id`, so a
+field type whose control does not render `id={field.id}` has NO keyboard verify
+path at all. Radio and checkbox GROUPS rendered only `name` and so were
+unreachable -- 30 of 323 fields across the shipped kits. Both now put the id on
+their FIRST option (one id per field, never per option), and
+`SchemaForm.fieldIds.test.tsx` pins the whole set, so a new field type that
+forgets it fails CI instead of silently losing verification.
 
 `field.copy_to` auto-copies the value to listed target
 fields at the **write chokepoint** -- `SchemaFormStateManager.updateField` --
