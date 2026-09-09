@@ -493,6 +493,46 @@ def test_readonly_conditional_no_unlock_warns():
     assert "id=dep" in rel[0].path
 
 
+def test_readonly_conditional_remedy_describes_flip_readonly_bit_as_WORKING():
+    """The remedy must not tell authors flip_readonly_bit leaves a field unfillable.
+
+    THE BUG THIS PINS (bd polyglot-pdf-38p0y). This message used to say an
+    unlock "lets the PDF filler clear the bit, but the voice assistant is still
+    refused, so a REQUIRED field stays unfillable" -- true while isFieldReadOnly
+    ignored unlock_method, and FALSE once the AI-write gate learned to honor it.
+    Left alone it steers authors away from the mechanism and toward permanently
+    clearing read_only, which drops the form's own lock.
+
+    Asserted as an ALLOWLIST of the sanctioned remedies plus a no-residue check,
+    not as a banned phrase: banning one wording is a synonym away from defeat
+    (bd memory pin-message-tests-with-allowlists). The rule NAME and severity are
+    pinned by the sibling tests; this pins what the sentence MEANS.
+    """
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
+    assert rel, "the rule must still fire for a locked conditional field"
+    msg = rel[0].message
+
+    # BOTH sanctioned remedies are offered...
+    assert "flip_readonly_bit" in msg
+    assert "clear read-only" in msg
+    # ...and the unlock path is named as one that WORKS for the voice assistant,
+    # which is the half that went stale.
+    assert "voice assistant may fill" in msg
+    # ...with the companion requirement, or the unlock never reaches the PDF.
+    assert "pdf_field_flag_change" in msg
+
+    # No residue of the superseded claim, in any of its plausible spellings.
+    lowered = msg.lower()
+    for dead in ("still refused", "stays unfillable", "cannot be filled by voice"):
+        assert dead not in lowered, f"stale remedy text survives: {dead!r}"
+
+
 def test_readonly_conditional_WITH_unlock_is_clean():
     # The same field WITH conditional_behavior.unlock_method is fine (it unlocks
     # when shown -- i-90's 20 real read-only-text fields work this way).

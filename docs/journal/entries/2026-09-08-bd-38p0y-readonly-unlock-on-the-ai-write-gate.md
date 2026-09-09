@@ -116,6 +116,36 @@ trigger is filled, is still refused before it, and a no-unlock field is still
 refused however it is shown. Reverting the gate reddens them, which is what
 proves they exercise the real wiring rather than the helper.
 
+### The fix made two of my own sentences false
+
+Round 2 found the sharpest thing in this bead: the change falsified prose that
+shipped in the SAME branch.
+
+`schema_lint.py`'s remedy for `readonly-conditional-no-unlock` told authors that
+an unlock "lets the PDF filler clear the bit, but the voice assistant is still
+refused, so a REQUIRED field stays unfillable" -- and therefore to just clear
+`read_only`. That was true when I wrote it, four commits earlier, and false the
+moment the AI-write gate learned to honor the unlock. The linter was steering
+authors away from the mechanism this bead exists to repair, and toward dropping
+the form's own lock. Nothing pinned the message text, so nothing caught it.
+
+It now describes both remedies accurately, and a new test pins what the sentence
+MEANS: an allowlist of the sanctioned remedies plus a no-residue check for the
+superseded claim. Banning one phrasing would be a synonym away from defeat. Both
+halves mutation-verified separately -- swapping the working-unlock clause reddens
+the allowlist, and re-adding "still refused" alongside the allowlisted phrases
+reddens the residue check.
+
+The same staleness hit `test_form_models_v2.py`'s docstring, which asserted twice
+that `isFieldReadOnly` blocks the AI write regardless of unlock. Correcting it
+surfaced something better than a prose fix: the guard checks `copy_to` and not
+`unlock_method`, and that narrowness USED to be a consequence of the frontend's
+behavior. Now it is a live design question -- a required read_only field carrying
+a valid unlock is arguably fine, and the guard would still flag it. No tracked kit
+has that shape (w7's offender declares no unlock at all; f1040 has no read_only
+fields), so nothing is mis-flagged today. The docstring now names the question
+instead of implying the answer, and it rides on bd `polyglot-pdf-cgb5a`.
+
 ### Caught by the typechecker, not by me
 
 My first negative test asserted that `unlock_method: 'something_else'` does not
@@ -148,6 +178,13 @@ When a bead's exit criterion names an integration point, satisfying it at a lowe
 layer is a narrowing -- and the honest move is to check whether the repo already
 has a harness for that layer before declaring the substitution necessary. It did.
 
+**A fix can falsify prose elsewhere in its own branch.** The lint remedy was
+written four commits before the fix that made it wrong, in the same PR. The
+enumeration reflex (scar #8) is usually aimed at code; it applies just as well to
+every sentence that explains why the old behavior was the way it was. After
+changing a behavior, grep for text that ASSERTS the old one -- especially text
+that tells a human what to do about it.
+
 **Do not claim a consolidation you did not perform.** The helper's first docstring
 said the rule "lives here so the surfaces cannot drift apart again" while two
 surfaces kept their own copies. That sentence would have taught the next reader
@@ -174,6 +211,28 @@ Nothing bumped.
 - `frontend/src/webFormConnection.aivalidation.test.ts` -- three integration tests
   driving a real `WebFormConnection` through `update_form_fields`, added after
   fresh-eyes correctly scored criterion 1 a FAIL.
+- `backend/services/schema_lint.py` -- the `readonly-conditional-no-unlock`
+  remedy, which this branch itself had made false.
+- `backend/tests/test_schema_lint.py` -- a pin on what that remedy MEANS
+  (allowlist + no-residue), mutation-verified in both directions.
+- `backend/tests/test_form_models_v2.py` -- docstring only; states the current
+  behavior and names the now-open carve-out question. No logic change.
+
+### Exit criterion 2 is not satisfied by this PR, deliberately
+
+Worth stating plainly rather than burying. Criterion 2 asks for a test pinning
+the complete set of read_only fields that are require_if/show_if-gated with no
+copy_to source. That guard EXISTS -- but it shipped in PR #745, it is already on
+`origin/dev`, and this branch does not touch it. This PR contributes nothing
+toward criterion 2, and the shipped guard does not cover `show_if` as the
+criterion's wording asks.
+
+The criterion was written expecting the guard to be built here; it was built
+earlier instead. So the criterion reads as stale rather than unmet -- but that is
+a judgment, and the honest record is that this PR closes a bead one of whose two
+criteria it does not satisfy. The uncovered half is filed as
+`polyglot-pdf-cgb5a`. If the bead should stay open until that lands, this is the
+paragraph that says so.
 
 ## Deferred
 

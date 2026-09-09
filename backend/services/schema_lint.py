@@ -1043,13 +1043,16 @@ def lint_schema(
                 SEVERITY_WARNING, "readonly-conditional-no-unlock", field_path,
                 "this field is locked, and a condition makes it appear or "
                 "become required, but nothing unlocks it -- when that "
-                "happens, no one can ever fill it in. If the form itself "
-                "locks the box, set its unlock method to flip_readonly_bit. "
-                "If it does NOT (the usual case), just clear read-only: an "
-                "unlock lets the PDF filler clear the bit, but the voice "
-                "assistant is still refused, so a REQUIRED field stays "
-                "unfillable -- the one exception is a field another field "
-                "copies into, which is written for the applicant.",
+                "happens, no one can ever fill it in. Two ways to fix it. "
+                "If the form itself locks the box, set the unlock method to "
+                "flip_readonly_bit: the PDF filler clears the bit, and the "
+                "voice assistant may fill the field once the condition shows "
+                "it (bd polyglot-pdf-38p0y). Pair it with a "
+                "pdf_field_flag_change, or the unlock never reaches the "
+                "printed form. If the form does NOT lock the box, just clear "
+                "read-only -- simpler, and nothing has to stay in sync. "
+                "Either way the exception is a field another field copies "
+                "into, which is written for the applicant.",
             ))
         # An unlock_method WITHOUT pdf_field_flag_change is invisible-broken
         # (bd polyglot-pdf-xbfm fresh-eyes): the editor UI and the check above
