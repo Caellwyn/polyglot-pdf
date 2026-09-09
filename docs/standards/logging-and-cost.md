@@ -4,7 +4,8 @@
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
 shape for every paid call, the `usage_kind` closed set, and the text +
-TTS pricing tables).*
+TTS pricing tables. bd polyglot-pdf-cjifh: the live-voice path now threads
+firm/employee/link/kit/channel/model into every per-turn usage event.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -215,9 +216,15 @@ added rather than billing silently. `backend/scripts/` is deliberately out of
 scope: those probes run on an operator's own budget. Today the allowlist holds
 three sites — the Live adapter, the text adapter, and `spellback_tts._synthesize_sync`
 (which `intro_tts` and `notice_tts` both call, so the three TTS paths share one
-site). The text and TTS emit proofs are `xfail(strict=True)` until beads
-`polyglot-pdf-cjifh` and `polyglot-pdf-t86oz` plumb the ids through; strict, so
-wiring one turns the test red and forces the marker off.
+site). The text and TTS emit proofs are `xfail(strict=True)` until bead
+`polyglot-pdf-t86oz` plumbs the ids through; strict, so wiring one turns the test
+red and forces the marker off. The Live adapter's own proof is NOT xfail (it
+already called `log_gemini_api_response` before this): bd `polyglot-pdf-cjifh`
+widened that existing call with the firm/employee/link/kit/channel/model
+context ids (`_handle_fill_session` -> `FormFillingService.start_session` ->
+`LiveAIGemini.set_session_context`, threaded from the WS route's decoded
+token claims and `link_tokens.link_channel()`), so a live-voice usage event now
+actually carries them instead of six nulls.
 
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)
