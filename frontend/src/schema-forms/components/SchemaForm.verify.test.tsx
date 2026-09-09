@@ -348,6 +348,16 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
     fireEvent.keyDown(options[1], { key: 'Enter' });    // Enter where focus actually is
 
     expect(screen.getByTestId('verify-field-modal')).toBeTruthy();
+
+    // ...and carry it through: opening is not the claim, VERIFYING is. Asserts
+    // the write lands on the resolved field with the NON-FIRST value, which is
+    // the shape the bug lived in (fresh-eyes round-4 coverage point).
+    fireEvent.keyDown(screen.getByTestId('verify-field-checkbox'), { key: 'Enter' });
+
+    const stored = SchemaFormStateManager.load()!;
+    expect((stored.fieldValues['sex'] as any).value, 'the answer the user picked').toBe('f');
+    expect((stored.fieldValues['sex'] as any).confirmed).toBe(true);
+    expect((stored.fieldValues['sex'] as any).confirmationMethod).toBe('manual_edit');
   });
 
   it('ENTER on a non-first CHECKBOX-GROUP option opens the modal too', () => {

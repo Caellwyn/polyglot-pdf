@@ -384,8 +384,9 @@ element's `id` **or its `name`**, and the name is the load-bearing half: a
 radio/checkbox GROUP carries `id={field.id}` on its FIRST option only (duplicate
 ids are invalid HTML), but the browser focuses the CHECKED option -- so an
 id-only lookup missed every already-answered group whose answer was not the first
-choice. Every option carries the name, which is why the handler prefers it as the
-fallback.
+choice. The handler checks the id first and falls back to the name, and the
+fallback is what does the real work for groups, because every option carries the
+name while only one carries the id.
 
 `SchemaForm.fieldIds.test.tsx` pins the set by keying its cases on the `FieldType`
 union itself, so adding a type without a case is a TYPE error, not a silent gap.
