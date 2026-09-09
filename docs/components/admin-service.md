@@ -2,16 +2,24 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-dmjl5: the four staff-account
-routes (`POST /admin/users`, `PATCH /admin/users/{uid}/disable`, `PATCH
-.../role`, `GET /admin/users`) behind the new composite gate
-`require_app_admin_or_owning_manager`; the claims allowlist in
-`admin_backend/services/user_admin.py`; and `require_firm_manager` in
-`backend/services/auth.py`, whose rule the retire route now consumes -- so
-three of the four gates now exist.) (bd polyglot-pdf-2cwja: doc created --
-the admin tier as current state, covering `admin_backend/` (bd
-polyglot-pdf-pnoik, polyglot-pdf-7w17m, polyglot-pdf-li9x0) and
-`admin-console/` (bd polyglot-pdf-b6943).)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-z4y91: the console's Users tab
+(`admin-console/src/pages/UsersPage.tsx`) -- the first console page under a
+`pages/` directory rather than `components/`, since it is the console's
+first CRUD page rather than a read-mostly or single-write one; list a
+firm's staff, create one with the reset link shown exactly once, disable/
+re-enable, change role. `adminApi.ts` gains `listUsers`, `createUser`,
+`setUserDisabled`, `setUserRole`. The firm-ID field is REQUIRED and always
+shown -- the console's sign-in gate only supports the strict app-admin path
+today, so every caller of this page is an app admin who must name a firm.)
+(bd polyglot-pdf-dmjl5: the four staff-account routes (`POST /admin/users`,
+`PATCH /admin/users/{uid}/disable`, `PATCH .../role`, `GET /admin/users`)
+behind the new composite gate `require_app_admin_or_owning_manager`; the
+claims allowlist in `admin_backend/services/user_admin.py`; and
+`require_firm_manager` in `backend/services/auth.py`, whose rule the retire
+route now consumes -- so three of the four gates now exist.) (bd
+polyglot-pdf-2cwja: doc created -- the admin tier as current state, covering
+`admin_backend/` (bd polyglot-pdf-pnoik, polyglot-pdf-7w17m,
+polyglot-pdf-li9x0) and `admin-console/` (bd polyglot-pdf-b6943).)*
 
 The privileged control plane: a second FastAPI service (`admin_backend/`,
 Cloud Run `polyglot-admin`) and a second Vite app (`admin-console/`,
@@ -299,22 +307,45 @@ A separate Vite + React app, mirroring `schema-editor/`'s shape: Firebase
 sign-in (`admin-console/src/components/SignInGate.tsx`) followed by a
 server-side authorization probe (`GET /admin/whoami`) -- an authenticated
 but non-admin account sees an explicit not-authorized screen, not a blank
-or broken page. No router: three tabs (`admin-console/src/App.tsx`) behind
-a boolean signed-in state, since the page count does not yet justify one.
+or broken page. No router: a handful of tabs (`admin-console/src/App.tsx`)
+behind a boolean signed-in state, since the page count does not yet justify
+one.
 
-- **Pages:** Who-am-I (`WhoAmIPage.tsx` -- identity plus the console's own
-  build SHA), Audit log (`AuditLogPage.tsx` -- lists/filters `GET
-  /admin/audit`), Runtime config (`ConfigEditorPage.tsx` -- reads/writes
-  `GET`/`PUT /admin/config/{channel}`).
+- **Pages:** Who-am-I (`components/WhoAmIPage.tsx` -- identity plus the
+  console's own build SHA), Audit log (`components/AuditLogPage.tsx` --
+  lists/filters `GET /admin/audit`), Runtime config
+  (`components/ConfigEditorPage.tsx` -- reads/writes `GET`/`PUT
+  /admin/config/{channel}`), Users (`pages/UsersPage.tsx`, bd
+  polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
+  `components/`: it drives four routes and two mutations with a re-read
+  each, past the point a single-file "page" component was the more natural
+  location).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
   `handleAuthExpired`.
+- **Users page** (`pages/UsersPage.tsx`): the firm-ID field is a REQUIRED
+  text input, always shown -- there is no firm-picker dropdown, because no
+  `GET /admin/firms` list route exists yet (Epic 2 Track C's firms page, C2,
+  has not shipped) and because the console's sign-in gate calls only `GET
+  /admin/whoami` (`require_app_admin`, the STRICT gate), never the composite
+  `require_app_admin_or_owning_manager` the user routes accept -- so every
+  signed-in caller of this page is necessarily an app admin, who must name a
+  firm (`admin_auth.resolve_target_firm` 422s an app admin who omits one). A
+  firm-manager sign-in mode with the selector hidden is a later bead's
+  concern, once the console itself supports signing in as one. Create shows
+  the returned password-RESET LINK exactly once, with a copy button, and
+  clears it on the next create or firm switch; NO password ever reaches this
+  page (`create_staff_user` never returns one). Disable and role-change each
+  call their route once and then RE-READ the firm's list, the same
+  round-trip pattern `ConfigEditorPage` uses, so the screen always reflects
+  what the server actually stored.
 - **API client:** `admin-console/src/utils/adminApi.ts` (`probeWhoAmI`,
-  `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`), each call
-  carrying `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST
-  from `admin-console/src/utils/adminAuth.ts` (never cached client-side, so
-  a mid-session token refresh cannot leave a stale credential in memory). A
+  `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`, `listUsers`,
+  `createUser`, `setUserDisabled`, `setUserRole`), each call carrying
+  `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST from
+  `admin-console/src/utils/adminAuth.ts` (never cached client-side, so a
+  mid-session token refresh cannot leave a stale credential in memory). A
   403 is classified into `ForbiddenError.noAdminAccess` by the
   `NO_ADMIN_ACCESS:` wire prefix, the same idiom the schema editor's
   `NO_EDITOR_ACCESS_PREFIX` uses.
@@ -368,5 +399,6 @@ route/gate set pin above), `test_admin_health.py` (`/health`/`/version`),
 contract 13), `test_audit_log.py` + `test_admin_audit_coverage.py` (the
 audit forms and coverage pin), `test_config_routes.py` (the config route's
 validation and transactional write), `test_firestore_indexes.py` (the audit
-route's filter/index pin). `admin-console/src/components/*.test.tsx` covers
-the console pages (Vitest, same harness as `schema-editor/`).
+route's filter/index pin). `admin-console/src/components/*.test.tsx` and
+`admin-console/src/pages/*.test.tsx` cover the console pages (Vitest, same
+harness as `schema-editor/`).
