@@ -15,6 +15,8 @@ from backend.utils.log_schemas import (
     EventType,
     EventSource,
     Severity,
+    UsageKind,
+    USAGE_CONTEXT_KEYS,
 )
 
 
@@ -193,7 +195,80 @@ class StructuredLogger:
             metadata=metadata or {},
         )
 
-    # Token tracking (PRIORITY)
+    # ------------------------------------------------------------------
+    # Usage event v2 (bd polyglot-pdf-wio6m)
+    # ------------------------------------------------------------------
+    # ONE emitter for every paid model or TTS call. The three public wrappers
+    # below differ only in their event_type, their usage_kind, and which
+    # count keys they have a value for -- they all route through _emit_usage,
+    # which stamps the FULL key set so BigQuery sees one column shape.
+
+    def _emit_usage(
+        self,
+        event_type: EventType,
+        usage_kind: UsageKind,
+        metadata: Optional[Dict[str, Any]] = None,
+        form_id: Optional[str] = None,
+        form_version: Optional[str] = None,
+        form_session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+        section_number: Optional[int] = None,
+        firm_id: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        """Emit one usage event with the complete envelope.
+
+        The context keys in USAGE_CONTEXT_KEYS are written UNCONDITIONALLY,
+        None included. This is the whole point of the v2 shape: at the
+        BigQuery sink a missing key and a null are different things, and only
+        a null is queryable -- a path that simply omits firm_id produces rows
+        that silently drop out of a GROUP BY on firm_id. So every wrapper, on
+        every call, emits every key.
+
+        usage_kind is likewise always present: it is what tells the sink which
+        paid path a row came from now that they share one shape.
+
+        PII: ids, counts, costs and model names only. Callers must never put a
+        field value or transcript in metadata (see
+        docs/standards/hipaa-pii-policy.md and
+        backend/tests/test_no_pii_logging.py).
+        """
+        # Caller-supplied counts/costs first, then the envelope keys on top --
+        # so a caller cannot accidentally shadow usage_kind or a context key
+        # with a stray metadata entry of the same name.
+        usage_metadata: Dict[str, Any] = dict(metadata or {})
+        usage_metadata["usage_kind"] = usage_kind
+
+        context_values = {
+            "firm_id": firm_id,
+            "employee_id": employee_id,
+            "link_jti": link_jti,
+            "kit_id": kit_id,
+            "channel": channel,
+            "model": model,
+        }
+        # Derived from the schema's tuple rather than hand-listed here, so a key
+        # added to USAGE_CONTEXT_KEYS without a matching parameter fails loudly
+        # (KeyError at the first emit) instead of silently never being written.
+        for key in USAGE_CONTEXT_KEYS:
+            usage_metadata[key] = context_values[key]
+
+        self._emit(
+            severity="INFO",
+            event_type=event_type,
+            source="backend",
+            form_id=form_id,
+            form_version=form_version,
+            form_session_id=form_session_id,
+            ws_session_id=ws_session_id,
+            section_number=section_number,
+            metadata=usage_metadata,
+        )
+
     def log_gemini_api_response(
         self,
         form_id: str,
@@ -202,28 +277,113 @@ class StructuredLogger:
         ws_session_id: str,
         metadata: Dict[str, Any],
         section_number: Optional[int] = None,
+        firm_id: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> None:
-        """
-        Log Gemini API response with token usage.
+        """Log a Gemini Live turn's token usage (usage_kind live_voice).
+
+        Name and positional signature are UNCHANGED from v1 -- the live adapter
+        call site keeps compiling untouched, and the new context ids arrive as
+        optional keywords that bead polyglot-pdf-cjifh plumbs through.
 
         Args:
-            form_id: Form identifier
-            form_version: Form version
-            form_session_id: Session ID
-            ws_session_id: WebSocket session ID
-            metadata: Must include token counts and cost estimate
-            section_number: Optional section number
+            metadata: Token counts and cost estimate. NEVER field values.
         """
-        self._emit(
-            severity="INFO",
+        self._emit_usage(
             event_type="gemini_api_response",
-            source="backend",
+            usage_kind="live_voice",
+            metadata=metadata,
             form_id=form_id,
             form_version=form_version,
             form_session_id=form_session_id,
             ws_session_id=ws_session_id,
             section_number=section_number,
+            firm_id=firm_id,
+            employee_id=employee_id,
+            link_jti=link_jti,
+            kit_id=kit_id,
+            channel=channel,
+            model=model,
+        )
+
+    def log_text_ai_usage(
+        self,
+        usage_kind: UsageKind,
+        metadata: Optional[Dict[str, Any]] = None,
+        form_id: Optional[str] = None,
+        form_version: Optional[str] = None,
+        form_session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+        firm_id: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        """Log one generate_content call (secretary / validator / translation).
+
+        Every identifier is optional because these paths genuinely differ in
+        what they know: the authoring-time translation bake has a kit_id and no
+        session at all, while the secretary runs inside a live form session.
+        The keys are emitted either way.
+        """
+        self._emit_usage(
+            event_type="text_ai_usage",
+            usage_kind=usage_kind,
             metadata=metadata,
+            form_id=form_id,
+            form_version=form_version,
+            form_session_id=form_session_id,
+            ws_session_id=ws_session_id,
+            firm_id=firm_id,
+            employee_id=employee_id,
+            link_jti=link_jti,
+            kit_id=kit_id,
+            channel=channel,
+            model=model,
+        )
+
+    def log_tts_usage(
+        self,
+        usage_kind: UsageKind,
+        metadata: Optional[Dict[str, Any]] = None,
+        form_id: Optional[str] = None,
+        form_version: Optional[str] = None,
+        form_session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+        firm_id: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        link_jti: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        """Log one synthesize_speech call (spell-back / notice / intro).
+
+        model carries the resolved VOICE name, which is what Cloud TTS bills by
+        tier. There is no form_session_id on the TTS path: it is served by an
+        ordinary HTTP route that has claims but no WebSocket session, so the key
+        is emitted as None rather than filled with a fabricated id.
+        """
+        self._emit_usage(
+            event_type="tts_usage",
+            usage_kind=usage_kind,
+            metadata=metadata,
+            form_id=form_id,
+            form_version=form_version,
+            form_session_id=form_session_id,
+            ws_session_id=ws_session_id,
+            firm_id=firm_id,
+            employee_id=employee_id,
+            link_jti=link_jti,
+            kit_id=kit_id,
+            channel=channel,
+            model=model,
         )
 
     # Field events

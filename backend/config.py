@@ -1439,3 +1439,91 @@ def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
 # corrupt GEMINI_PRICING_BY_FAMILY for everyone else in the process.
 GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 
+
+
+# ============================================================================
+# Text-generation pricing (plain generate_content, NOT the Live endpoint)
+# ============================================================================
+# The Live table above does NOT transfer here: GEMINI_PRICING_BY_FAMILY prices
+# the native-audio Live models, and the secretary/validator/translation paths
+# call the ordinary generate_content endpoint on different models at different
+# rates. Two tables, because they bill as two products.
+#
+# Verified against https://ai.google.dev/gemini-api/docs/pricing on 2026-09-09
+# (bd polyglot-pdf-wio6m), paid-tier rows, quoted per 1M tokens:
+#   gemini-2.5-flash:       text in 0.30 / cached in 0.03 / out 2.50
+#   gemini-2.5-flash-lite:  text in 0.10 / cached in 0.01 / out 0.40
+# Output rates include thinking tokens. Audio input is priced separately on that
+# page (2.5-flash 1.00, 2.5-flash-lite 0.30) and is NOT carried here: these are
+# the TEXT paths, which send no audio. Add an "audio_input" column if a text
+# model is ever handed audio.
+# Updated: 2026-09-09.
+TEXT_GENERATION_PRICING: dict[str, dict[str, float]] = {
+	"gemini-2.5-flash": {
+		"text_input": 0.30 / _PER_1M,
+		"cached_input": 0.03 / _PER_1M,
+		"text_output": 2.50 / _PER_1M,
+	},
+	"gemini-2.5-flash-lite": {
+		"text_input": 0.10 / _PER_1M,
+		"cached_input": 0.01 / _PER_1M,
+		"text_output": 0.40 / _PER_1M,
+	},
+}
+
+
+def get_text_generation_pricing(model_name: str | None) -> dict[str, float] | None:
+	"""Return the per-token rate row for a text-generation model, or None.
+
+	Matches on the model id with any date/preview suffix stripped (the chain
+	ships concrete ids like "gemini-2.5-flash-lite-preview-09-2025", which must
+	bill at the base model's rate). Returns None -- not a fallback row -- for an
+	unknown model: billing an unknown model at a guessed rate produces a
+	confident wrong number, which is worse for a cost dashboard than an
+	explicit gap. Callers emit cost_estimate_usd=None in that case.
+	"""
+	name = (model_name or "").lower()
+	if not name:
+		return None
+	# Longest key first, so "gemini-2.5-flash-lite" wins over "gemini-2.5-flash"
+	# for an id that starts with both.
+	for key in sorted(TEXT_GENERATION_PRICING, key=len, reverse=True):
+		if name.startswith(key):
+			return TEXT_GENERATION_PRICING[key]
+	return None
+
+
+# ============================================================================
+# Cloud Text-to-Speech pricing (USD per CHARACTER, keyed by voice tier)
+# ============================================================================
+# TTS bills per character of input text, not per token. Keyed by voice tier
+# because the tiers differ by an order of magnitude; this app synthesizes with
+# Chirp 3 HD voices only ({locale}-Chirp3-HD-{persona}, see spellback_tts.py),
+# so that is the only tier that needs a row today.
+#
+# TODO(bd polyglot-pdf-wio6m): the Chirp3-HD rate is UNVERIFIED and therefore
+# None. https://cloud.google.com/text-to-speech/pricing could not be fetched on
+# 2026-09-09 -- the page truncates before the pricing table, and the
+# /docs/pricing alias 301s to a docs host that 404s. Per the bead contract, an
+# unfetchable page leaves an explicit None rather than a number typed from
+# memory: a wrong rate in a cost dashboard is worse than a visible gap.
+# backend/tests/unit/test_pricing_tables.py fails on this None until an operator
+# reads the live page and fills it in (with the date, in the shape above).
+TTS_PRICING_USD_PER_CHAR: dict[str, float | None] = {
+	"Chirp3-HD": None,
+}
+
+
+def tts_voice_tier(voice_name: str | None) -> str | None:
+	"""Map a resolved TTS voice name to a TTS_PRICING_USD_PER_CHAR tier key.
+
+	Voice names are "{locale}-{tier}-{persona}", e.g. "en-US-Chirp3-HD-Algieba".
+	Returns None for an empty name (the locale-default fallback rung in
+	resolve_spellback_voice, which leaves the voice unnamed) or an unrecognized
+	tier -- callers then emit cost_estimate_usd=None rather than guessing.
+	"""
+	name = voice_name or ""
+	for tier in TTS_PRICING_USD_PER_CHAR:
+		if tier in name:
+			return tier
+	return None

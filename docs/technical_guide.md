@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -1527,3 +1527,72 @@ object.
   `test_admin_sa_iam_envelope.py` pins by name. This contract adds NO new
   permission (CLAUDE.md scar #7). The PUBLIC backend still makes zero
   privileged Auth calls -- these live only under `admin_backend/`.
+
+
+### 20. Usage event v2: the emitter -> Cloud Logging -> BigQuery shape (Epic 3 bead E3.1)
+
+ONE structured event shape for every paid model or TTS call, so the logging sink
+sees one column shape instead of one per call path. This is a WIRE contract in
+the same sense as the WS legs: nothing type-checks it end to end, and a producer
+that drops a key breaks a consumer query silently.
+
+- **Producer:** `StructuredLogger._emit_usage`
+  (`backend/utils/structured_logger.py`), reached only through three wrappers on
+  the same class -- `log_gemini_api_response` (`event_type`
+  `gemini_api_response`, `usage_kind` `live_voice`), `log_text_ai_usage`
+  (`text_ai_usage`), `log_tts_usage` (`tts_usage`). Nothing else may emit a
+  usage event; the wrappers exist so the key set has exactly one writer.
+- **Consumers:** the Cloud Logging -> BigQuery sink and the cost views built on
+  it (Epic 3 bead `polyglot-pdf-rd3s8`), plus the session-end Firestore rollups
+  (`polyglot-pdf-*` E3.4) which read the same cost figures.
+- **The shape.** `usage_kind` is a closed `Literal` in
+  `backend/utils/log_schemas.py`: `live_voice`, `text_secretary`,
+  `text_validator`, `text_translation`, `tts_spellback`, `tts_notice`,
+  `tts_intro`. The optional context keys are declared ONCE as
+  `USAGE_CONTEXT_KEYS` (`firm_id`, `employee_id`, `link_jti`, `kit_id`,
+  `channel`, `model`), and `_emit_usage` iterates THAT tuple -- a key added to
+  the schema without a matching emitter parameter raises `KeyError` on the first
+  emit rather than silently never being written.
+- **Every key on every call, `None` included.** *Breaks if drifted:* at the
+  BigQuery sink a MISSING key and a NULL are not the same thing. A wrapper that
+  omits `firm_id` when it has no value produces rows that vanish from a
+  `GROUP BY firm_id`, so a per-firm cost total under-reports with no error
+  anywhere -- the invoice and the dashboard just disagree. Pinned per
+  `usage_kind` by `backend/tests/test_usage_event_schema.py`.
+- **Ordering guarantee:** caller `metadata` is written FIRST and the envelope
+  keys on top, so a caller whose metadata happens to contain `model` or
+  `usage_kind` cannot mislabel its own row.
+- **`log_gemini_api_response` keeps its v1 name and positional signature.** The
+  live adapter's existing call site
+  (`backend/adapters/live_ai_gemini.py`, in the per-turn `usage_metadata` block)
+  compiles unchanged; the six context ids are optional keywords that bead
+  `polyglot-pdf-cjifh` plumbs through. *Breaks if renamed:* that one call site,
+  and any Cloud Logging query or dashboard keyed on the `gemini_api_response`
+  event name.
+- **Call-site coverage is enumerated, not remembered.**
+  `backend/tests/test_usage_event_coverage.py` AST-walks everything under
+  `backend/` that Cloud Run executes (exclusion-derived, like
+  `backend/tests/unit/test_deployed_iam_envelope.py`) for `generate_content`,
+  `aio.live.connect` and `synthesize_speech`, and requires the found set to
+  EQUAL a pinned allowlist -- in both directions, so a new paid call fails the
+  test and a stale entry does too. `backend/scripts/` is deliberately out of
+  scope (operator budget, not product cost). Three sites today: the Live
+  adapter, the text adapter, and `spellback_tts._synthesize_sync` -- which
+  `intro_tts` and `notice_tts` both call, so all three TTS kinds share ONE call
+  site. The text and TTS emit proofs are `xfail(strict=True)` pending beads
+  `polyglot-pdf-cjifh` / `polyglot-pdf-t86oz`; strict, so wiring one turns the
+  test red and forces the marker off rather than letting a stale xfail mask a
+  later regression.
+- **Pricing is a separate table per product** (`backend/config.py`).
+  `GEMINI_PRICING_BY_FAMILY` prices the Live endpoint and does NOT transfer:
+  `TEXT_GENERATION_PRICING` prices plain `generate_content`, and
+  `TTS_PRICING_USD_PER_CHAR` prices Cloud TTS per CHARACTER, not per token.
+  `get_text_generation_pricing` matches longest-key-first (so a `-lite` id is
+  not billed at flash rates) and returns `None` for an unknown model instead of
+  a fallback row -- deliberately unlike the Live lookup's
+  `DEFAULT_PRICING_FAMILY`, because a confident wrong number in a cost report is
+  worse than a visible gap. The Chirp3-HD rate is an unverified `None` today;
+  see `docs/standards/logging-and-cost.md`.
+- **PII:** ids, counts, costs and model names only. The envelope has no
+  free-text slot, so the shape is HIPAA-safe by construction
+  (`docs/standards/hipaa-pii-policy.md`, `backend/tests/test_no_pii_logging.py`).
