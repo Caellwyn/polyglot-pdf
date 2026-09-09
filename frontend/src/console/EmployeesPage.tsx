@@ -76,8 +76,11 @@ interface CreateUserResult {
 
 /** The minimal shape this page needs from a signed-in Firebase user --
  * matches MintLinkPage's own minimal prop shape, plus getIdTokenResult for
- * the manager-only UX check. */
+ * the manager-only UX check and `uid` for the self-action guard below (a
+ * manager's own row appears in their firm's staff list -- see the
+ * self-action guard comment on the table body). */
 export interface EmployeesPageUser {
+  uid: string;
   getIdToken: () => Promise<string>;
   getIdTokenResult: (forceRefresh?: boolean) => Promise<{ claims: Record<string, unknown> }>;
 }
@@ -268,6 +271,11 @@ export function EmployeesPage({ user: userOverride, fetchImpl }: EmployeesPagePr
   }, [resetLink]);
 
   const handleToggleDisabled = useCallback(async (row: EmployeeRow) => {
+    // Defense in depth: the Disable button is already disabled for the
+    // signed-in manager's own row (see the table body), but a caller
+    // reaching this handler directly should not be able to route around
+    // that -- see the self-action guard comment in the table body.
+    if (user && row.uid === user.uid) return;
     setBusyUid(row.uid);
     setRowError('');
     try {
@@ -282,6 +290,8 @@ export function EmployeesPage({ user: userOverride, fetchImpl }: EmployeesPagePr
 
   const handleRoleChange = useCallback(async (row: EmployeeRow, role: FirmRole) => {
     if (role === row.firm_role) return;
+    // Defense in depth: see handleToggleDisabled above.
+    if (user && row.uid === user.uid) return;
     setBusyUid(row.uid);
     setRowError('');
     try {
@@ -379,34 +389,53 @@ export function EmployeesPage({ user: userOverride, fetchImpl }: EmployeesPagePr
               </tr>
             </thead>
             <tbody>
-              {employees.map((row) => (
-                <tr key={row.uid}>
-                  <td>{row.email ?? ''}</td>
-                  <td>{row.display_name ?? ''}</td>
-                  <td>
-                    <select
-                      aria-label={`Role for ${row.email ?? row.uid}`}
-                      value={row.firm_role ?? ''}
-                      disabled={busyUid === row.uid}
-                      onChange={(e) => void handleRoleChange(row, e.target.value as FirmRole)}
-                    >
-                      {FIRM_ROLES.map((role) => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>{row.disabled ? 'Disabled' : 'Active'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      disabled={busyUid === row.uid}
-                      onClick={() => void handleToggleDisabled(row)}
-                    >
-                      {row.disabled ? 'Enable' : 'Disable'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {employees.map((row) => {
+                // Self-action guard: list_firm_users filters on the same
+                // firm_id claim the signed-in manager carries, so the
+                // manager's OWN row is in this list. Neither backend route
+                // (user_routes.py / user_admin.py) refuses actor.uid ===
+                // uid, so a role change or Disable click on this row would
+                // otherwise succeed and lock the manager out -- of the
+                // console (self-demotion drops the firm_role claim a
+                // subsequent /admin/users* call needs) or of the whole app
+                // (self-disable). Render this row's role as static text and
+                // the Disable button as disabled rather than omitted, so the
+                // row does not silently lose its "who am I" affordance.
+                const isSelf = !!user && row.uid === user.uid;
+                return (
+                  <tr key={row.uid}>
+                    <td>{row.email ?? ''}{isSelf ? ' (you)' : ''}</td>
+                    <td>{row.display_name ?? ''}</td>
+                    <td>
+                      {isSelf ? (
+                        <span>{row.firm_role ?? ''}</span>
+                      ) : (
+                        <select
+                          aria-label={`Role for ${row.email ?? row.uid}`}
+                          value={row.firm_role ?? ''}
+                          disabled={busyUid === row.uid}
+                          onChange={(e) => void handleRoleChange(row, e.target.value as FirmRole)}
+                        >
+                          {FIRM_ROLES.map((role) => (
+                            <option key={role} value={role}>{role}</option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
+                    <td>{row.disabled ? 'Disabled' : 'Active'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        disabled={isSelf || busyUid === row.uid}
+                        title={isSelf ? 'You cannot disable your own account' : undefined}
+                        onClick={() => void handleToggleDisabled(row)}
+                      >
+                        {row.disabled ? 'Enable' : 'Disable'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {employees.length === 0 && (
                 <tr>
                   <td colSpan={5}>No staff accounts yet.</td>

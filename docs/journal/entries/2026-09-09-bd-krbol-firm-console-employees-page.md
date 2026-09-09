@@ -98,6 +98,40 @@ here per the fix-inline rule's pre-existing/nit carve-out):
 
 Rejected: none -- every finding was either fixed or already had a bead.
 
+## Review round 2 (cross-surface, GAPS-FOUND(1))
+
+Adopted (fixed inline, this round): the self-action gap re-surfaced as this
+round's BLOCKER -- a firm manager's own row comes back from
+`list_firm_users` (it filters on the same `firm_id` claim the manager
+carries), and the table rendered a live role `<select>` and Disable button
+on every row including the manager's own, with no guard at any layer. Fixed
+client-side: `EmployeesPageUser` now carries `uid`; the table renders the
+signed-in manager's own row with a static role display (no `<select>`) and
+a disabled Disable button (both keyed on `row.uid === user.uid`), plus a
+matching early-return guard in `handleToggleDisabled`/`handleRoleChange` as
+defense in depth against a future caller reaching those handlers some other
+way. Two new vitest cases pin it (disabled-state assertion + a click-sends-
+no-request assertion), each independently mutation-verified by reverting
+one guard layer at a time and confirming the matching test alone goes red.
+Narrowed the earlier-filed `polyglot-pdf-n9wax` (which had bundled both a
+client fix and a server-side `user_routes.py` guard into one bead) down to
+the server-side guard only, and recorded the client fix landing here in its
+body -- per this round's own guidance, the stronger server-side guard
+reaches beyond this bead's surfaces (`user_routes.py` is not in the bead's
+`## Surfaces` list) and is reasonably left as its own follow-up.
+
+Deferred (already filed as their own beads by the reviewer, not touched
+here): `polyglot-pdf-g0bjk` (technical_guide.md's new sentence cites
+"contract 22" for `/admin/users`; it is contract 19 -- nit), `polyglot-pdf-
+p36t4` (the manager gate reads a cached ID token, so a freshly-promoted
+manager sees a blank page until the token refreshes -- nit, mechanism-only,
+server gate is intact), `polyglot-pdf-7z8qm` (adminApi.ts's doc comment and
+contract 23 both claim `/admin/users` requires a `channel` query param it
+does not take -- pre-existing, introduced by C0, this diff only made it
+observable).
+
+Rejected: none.
+
 ## Lessons
 
 `consoleStyles.test.ts` (bd polyglot-pdf-41ay8) hardcoded ONE page file

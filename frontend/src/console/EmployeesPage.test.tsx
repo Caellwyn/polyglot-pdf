@@ -13,7 +13,7 @@
 // omitted key rather than serializing `firm_id: undefined` as some other
 // shape.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 import { EmployeesPage } from './EmployeesPage';
 
@@ -63,7 +63,26 @@ const MANAGER_ROW = {
   firm_role: 'manager',
 };
 
+// The signed-in manager's OWN row, as it comes back from list_firm_users:
+// the query filters on the firm_id claim the manager carries too, so their
+// own account is a normal member of the returned staff pool. `uid` matches
+// MANAGER_USER.uid deliberately -- this is the shape the self-action guard
+// must recognize.
+const SELF_ROW = {
+  uid: 'staff-1',
+  email: 'manager@example.com',
+  display_name: 'The Manager',
+  disabled: false,
+  firm_id: 'firm-a',
+  firm_role: 'manager',
+};
+
 const LIST_PAGE = { firm_id: 'firm-a', users: [EMPLOYEE_ROW, MANAGER_ROW], truncated: false };
+const LIST_PAGE_WITH_SELF = {
+  firm_id: 'firm-a',
+  users: [EMPLOYEE_ROW, MANAGER_ROW, SELF_ROW],
+  truncated: false,
+};
 
 interface Call { url: string; init: RequestInit; body: unknown; }
 
@@ -270,5 +289,47 @@ describe('EmployeesPage: disable / role change', () => {
     fireEvent.change(roleSelect, { target: { value: 'employee' } }); // already employee
     await new Promise((r) => setTimeout(r, 0));
     expect(calls.filter((c) => c.url.includes('/role'))).toHaveLength(0);
+  });
+});
+
+describe('EmployeesPage: self-action guard', () => {
+  // list_firm_users filters on the firm_id claim the signed-in manager
+  // carries too, so the manager's OWN row appears in their firm's staff
+  // list. Neither backend route refuses actor.uid === uid, so the page
+  // itself must not offer a way to demote or disable that row -- doing
+  // either would drop the manager's own firm_role claim (locking them out
+  // of the console) or disable their whole account (locking them out of
+  // the app). This uses MANAGER_USER's own uid ('staff-1'), which the
+  // other fixtures in this file deliberately never use.
+  it('renders no role select and no enabled Disable button for the signed-in manager\'s own row', async () => {
+    const { impl } = mockFetch(undefined, { ok: true, status: 200, json: async () => LIST_PAGE_WITH_SELF });
+    render(<EmployeesPage user={MANAGER_USER} fetchImpl={impl} />);
+    await waitFor(() => expect(screen.getByText(/manager@example\.com/)).toBeTruthy());
+
+    // No role <select> for the self row -- only a static role display.
+    expect(screen.queryByLabelText('Role for manager@example.com')).toBeNull();
+
+    // The self row's own Disable button (there are three rows total; the
+    // self row's button is identified by its disabled state plus title).
+    const selfRow = screen.getByText(/manager@example\.com/).closest('tr')!;
+    const disableButton = within(selfRow).getByRole('button', { name: /^(Disable|Enable)$/ }) as HTMLButtonElement;
+    expect(disableButton.disabled).toBe(true);
+  });
+
+  it('clicking the disabled self-row Disable button sends no request', async () => {
+    const { impl, calls } = mockFetch(undefined, { ok: true, status: 200, json: async () => LIST_PAGE_WITH_SELF });
+    render(<EmployeesPage user={MANAGER_USER} fetchImpl={impl} />);
+    await waitFor(() => expect(screen.getByText(/manager@example\.com/)).toBeTruthy());
+
+    const selfRow = screen.getByText(/manager@example\.com/).closest('tr')!;
+    const disableButton = within(selfRow).getByRole('button', { name: /^(Disable|Enable)$/ });
+    fireEvent.click(disableButton);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // A disabled DOM button does not fire React's onClick at all, so this
+    // also exercises the handler-level guard (handleToggleDisabled's own
+    // early return) should that ever change: either way, no request for
+    // the manager's own uid is ever sent.
+    expect(calls.filter((c) => c.url.includes(`/${MANAGER_USER.uid}/`))).toHaveLength(0);
   });
 });
