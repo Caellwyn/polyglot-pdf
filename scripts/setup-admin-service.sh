@@ -94,10 +94,19 @@ fi
 #     roles/iam.serviceAccountUser on the Cloud Build SA, roles/run.admin +
 #     roles/iam.serviceAccountUser on polyglot-backend-sa (resource-scoped),
 #     roles/firebasehosting.admin.
-#   Epic 3 (telemetry): roles/bigquery.jobUser + dataset-scoped
-#     roles/bigquery.dataViewer, roles/errorreporting.viewer,
-#     roles/monitoring.viewer.
+#   Epic 3 bead 8 (setup-monitoring.sh, not yet built):
+#     roles/errorreporting.viewer, roles/monitoring.viewer.
 # An unused grant is its own risk; the pin test fails if one appears early.
+#
+# roles/bigquery.jobUser + dataset-scoped roles/bigquery.dataViewer are NOT
+# deferred and NOT granted here -- Epic 3 bead 6 (E3.6) grants them from
+# scripts/setup-telemetry.sh instead, alongside the polyglot_telemetry
+# dataset that roles/bigquery.dataViewer is scoped to. admin_backend/tests/
+# unit/test_admin_sa_iam_envelope.py's EXPECTED_ADMIN_SA_ROLES pin includes
+# both roles for the full envelope, but subtracts them back out
+# (TELEMETRY_GRANTED_ROLES) before comparing against THIS script's
+# PROJECT_ROLES array, and a separate pair of tests reads
+# setup-telemetry.sh directly for the grants themselves.
 PROJECT_ROLES=(
     # Firebase Auth admin: create and disable users, and stamp the app_admin
     # and firm_role custom claims. THIS is the permission polyglot-backend-sa

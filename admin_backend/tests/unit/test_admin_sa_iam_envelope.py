@@ -49,10 +49,20 @@ ADMIN_SA_NAME = "admin-backend-sa"
 #
 # Roles the plan DEFERS to the epic that first needs them are deliberately
 # ABSENT: cloudbuild.builds.editor + iam.serviceAccountUser, run.admin,
-# firebasehosting.admin (Epic 4); bigquery.jobUser + bigquery.dataViewer,
-# errorreporting.viewer, monitoring.viewer (Epic 3). An unused grant is its
-# own risk, so each lands with its first consumer -- pinned by
+# firebasehosting.admin (Epic 4); errorreporting.viewer, monitoring.viewer
+# (Epic 3 bead 8, not yet built). An unused grant is its own risk, so each
+# lands with its first consumer -- pinned by
 # test_admin_sa_holds_no_deferred_role_early below.
+#
+# bigquery.jobUser + bigquery.dataViewer landed HERE (Epic 3 bead 6, E3.6):
+# they are granted by scripts/setup-telemetry.sh, NOT
+# scripts/setup-admin-service.sh's PROJECT_ROLES array (jobUser is
+# project-level like the rest of PROJECT_ROLES, but dataViewer is scoped to
+# the polyglot_telemetry DATASET, so both are provisioned by the same script
+# that creates that dataset in the first place -- see
+# test_telemetry_script_grants_admin_sa_bigquery_roles below, which reads
+# setup-telemetry.sh directly instead of folding these into the
+# PROJECT_ROLES pin test above).
 EXPECTED_ADMIN_SA_ROLES = {
     # Create and disable users, and stamp the app_admin / firm_role custom
     # claims. This is the permission the public backend deliberately LACKS.
@@ -65,6 +75,16 @@ EXPECTED_ADMIN_SA_ROLES = {
     # Read the email-provider API key (and the link-signing secret) out of
     # Secret Manager.
     "roles/secretmanager.secretAccessor",
+    # Run queries against the Epic 3 BigQuery telemetry views (cost/income
+    # dashboards). Granted by scripts/setup-telemetry.sh, project-level like
+    # a query job itself is not resource-scoped.
+    "roles/bigquery.jobUser",
+    # Read the polyglot_telemetry dataset ONLY (scripts/setup-telemetry.sh
+    # grants this with `bq add-iam-policy-binding` on the dataset, not
+    # `gcloud projects add-iam-policy-binding` -- see
+    # test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset
+    # below for why the SCOPE, not just the role name, is pinned).
+    "roles/bigquery.dataViewer",
 }
 
 # Roles granted on ONE RESOURCE rather than project-wide. Kept apart from the
@@ -79,6 +99,16 @@ EXPECTED_ADMIN_SA_BUCKET_ROLES = {
     "roles/storage.objectAdmin",
 }
 
+# The subset of EXPECTED_ADMIN_SA_ROLES granted by scripts/setup-telemetry.sh
+# rather than scripts/setup-admin-service.sh's PROJECT_ROLES array. Kept
+# separate so test_admin_sa_project_role_pin_matches_the_setup_script (which
+# reads ONLY setup-admin-service.sh) can subtract these out instead of
+# wrongly demanding that script grant BigQuery roles it does not touch.
+TELEMETRY_GRANTED_ROLES = {
+    "roles/bigquery.jobUser",
+    "roles/bigquery.dataViewer",
+}
+
 # Roles the plan defers to the epic that first needs them. Granting one early
 # widens the blast radius of a compromise for a capability nothing calls.
 DEFERRED_ROLES = {
@@ -87,9 +117,7 @@ DEFERRED_ROLES = {
     "roles/iam.serviceAccountUser",
     "roles/run.admin",
     "roles/firebasehosting.admin",
-    # Epic 3 (telemetry).
-    "roles/bigquery.jobUser",
-    "roles/bigquery.dataViewer",
+    # Epic 3 bead 8 (error reporting + monitoring script), not yet built.
     "roles/errorreporting.viewer",
     "roles/monitoring.viewer",
 }
@@ -128,15 +156,24 @@ def test_admin_sa_project_role_pin_matches_the_setup_script():
     ships: a new privileged call, a role quietly added to the setup script to
     make it work, and no reviewer ever asked whether the widening was
     intended.
+
+    TELEMETRY_GRANTED_ROLES is subtracted out: those two roles are granted by
+    scripts/setup-telemetry.sh (see
+    test_telemetry_script_grants_admin_sa_bigquery_roles below), not by this
+    script's PROJECT_ROLES array, so comparing the full envelope against
+    setup-admin-service.sh alone would wrongly demand it grant BigQuery
+    roles it never touches.
     """
     granted = _named_array(_setup_script_text(), "PROJECT_ROLES")
-    assert granted == EXPECTED_ADMIN_SA_ROLES, (
+    expected = EXPECTED_ADMIN_SA_ROLES - TELEMETRY_GRANTED_ROLES
+    assert granted == expected, (
         "scripts/setup-admin-service.sh grants a different PROJECT-level role "
-        "set than EXPECTED_ADMIN_SA_ROLES pins."
+        "set than EXPECTED_ADMIN_SA_ROLES (minus the telemetry-script roles) "
+        "pins."
         + chr(10) + "  only in the script: {}".format(
-            sorted(granted - EXPECTED_ADMIN_SA_ROLES))
+            sorted(granted - expected))
         + chr(10) + "  only in the pin:    {}".format(
-            sorted(EXPECTED_ADMIN_SA_ROLES - granted))
+            sorted(expected - granted))
         + chr(10) + "Widening admin-backend-sa is a deliberate act: add the "
           "role to BOTH, with the one-line justification saying which call "
           "needs it.")
@@ -186,6 +223,72 @@ def test_the_bucket_roles_are_granted_on_the_bucket_not_the_project():
         assert role not in _named_array(text, "PROJECT_ROLES"), (
             "{} is granted PROJECT-WIDE. It is meant to be scoped to the "
             "form-kits bucket only.".format(role))
+
+
+def _telemetry_script_text() -> str:
+    script = REPO_ROOT / "scripts" / "setup-telemetry.sh"
+    assert script.is_file(), (
+        "scripts/setup-telemetry.sh is missing. It is the script that grants "
+        "admin-backend-sa the two BigQuery roles this test pins.")
+    return script.read_text(encoding="utf-8")
+
+
+def test_telemetry_script_grants_admin_sa_bigquery_roles():
+    """The two BigQuery roles admin-backend-sa needs to query the telemetry
+    views (Epic 3 bead 6, E3.6) are actually granted, in
+    scripts/setup-telemetry.sh -- not merely pinned as a name in
+    EXPECTED_ADMIN_SA_ROLES with nothing on the other side actually granting
+    them. Mutation: delete either add-iam-policy-binding call from
+    setup-telemetry.sh -- red."""
+    text = _telemetry_script_text()
+    assert "roles/bigquery.jobUser" in text, (
+        "setup-telemetry.sh does not grant roles/bigquery.jobUser to "
+        "admin-backend-sa")
+    assert "roles/bigquery.dataViewer" in text, (
+        "setup-telemetry.sh does not grant roles/bigquery.dataViewer to "
+        "admin-backend-sa")
+    assert TELEMETRY_GRANTED_ROLES <= EXPECTED_ADMIN_SA_ROLES, (
+        "TELEMETRY_GRANTED_ROLES must be a subset of EXPECTED_ADMIN_SA_ROLES "
+        "-- a role granted by the telemetry script that the envelope pin "
+        "does not expect is exactly the kind of drift this file exists to "
+        "catch.")
+
+
+def test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset():
+    """The SCOPE of the two BigQuery grants, not just their names.
+
+    jobUser must be granted with `gcloud projects add-iam-policy-binding`
+    (running a query job is not a per-dataset action); dataViewer must be
+    granted with `bq add-iam-policy-binding ... $DATASET` -- scoped to the
+    polyglot_telemetry dataset only, never project-wide, which would hand
+    the admin service read access to every dataset in the project. Mutation:
+    swap dataViewer onto `gcloud projects add-iam-policy-binding` -- red."""
+    text = _telemetry_script_text()
+    assert re.search(
+        r'gcloud projects add-iam-policy-binding\b(?:[^\n]*\n){1,5}?\s*'
+        r'--role="roles/bigquery\.jobUser"',
+        text,
+    ), (
+        "roles/bigquery.jobUser is not granted via `gcloud projects "
+        "add-iam-policy-binding` -- it should be project-level, matching "
+        "every other PROJECT_ROLES grant.")
+    assert re.search(
+        r'bq add-iam-policy-binding\b(?:[^\n]*\n){1,5}?\s*'
+        r'--role="roles/bigquery\.dataViewer"',
+        text,
+    ), (
+        "roles/bigquery.dataViewer is not granted via `bq "
+        "add-iam-policy-binding` -- it should be scoped to the "
+        "polyglot_telemetry dataset, not the whole project.")
+    # And the negative half: dataViewer must never appear on a
+    # `gcloud projects add-iam-policy-binding` invocation.
+    project_binding_blocks = re.findall(
+        r'gcloud projects add-iam-policy-binding.*?(?=\n\n|\Z)', text,
+        re.DOTALL)
+    for block in project_binding_blocks:
+        assert "bigquery.dataViewer" not in block, (
+            "roles/bigquery.dataViewer appears in a project-level "
+            "add-iam-policy-binding call -- it must be dataset-scoped.")
 
 
 def test_admin_sa_holds_no_deferred_role_early():
