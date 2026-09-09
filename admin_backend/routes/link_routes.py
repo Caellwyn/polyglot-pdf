@@ -1,14 +1,26 @@
 """Link listing + revoke on the admin service (bd polyglot-pdf-jmiys, Epic 2
-Track B bead B4).
+Track B bead B4; the listing route's gate widened by bd polyglot-pdf-scaig).
 
 TWO ROUTES, ONE FIRM-SCOPED READ AND ONE JTI-SCOPED WRITE:
 
     GET  /admin/firms/{firm_id}/links?status=&employee_id=&channel=
     POST /admin/links/{jti}/revoke?channel=
 
-Both behind require_app_admin_or_owning_manager (bd polyglot-pdf-dmjl5): an
-app admin serves any firm; a firm manager sees and revokes only their OWN
-firm's links.
+DIFFERENT GATES ON THE TWO ROUTES, DELIBERATELY. Revoke stays behind
+require_app_admin_or_owning_manager (bd polyglot-pdf-dmjl5): an app admin
+may revoke any firm's link; a firm manager only their own; an employee
+never (there is no employee branch on that gate at all). Listing is behind
+the WIDER require_app_admin_or_owning_manager_or_employee (bd
+polyglot-pdf-scaig): the same two actors, PLUS a firm EMPLOYEE, who sees
+ONLY links whose employee_id equals their own uid -- forced server-side
+from the verified token, never the query (see list_firm_links's own
+docstring). The two routes intentionally do NOT share one gate here: an
+employee-role staff account was originally refused with a flat 403 on
+LISTING (an actor kind the plan's original composite gate never had a
+branch for), even though the bead that shipped this file already had the
+right shape for a manager and an app admin -- see bd polyglot-pdf-scaig for
+the full story and why a THIRD actor kind became a new dependency rather
+than a widening of the existing one.
 
 CHANNEL IS A REQUIRED, EXPLICIT QUERY PARAMETER ON BOTH ROUTES. The admin
 service has no channel of its own (admin_backend/main.py's own docstring:
@@ -111,8 +123,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import (
+    ACTOR_KIND_FIRM_EMPLOYEE,
     CompositeActor,
     require_app_admin_or_owning_manager,
+    require_app_admin_or_owning_manager_or_employee,
 )
 from backend.services import links_store
 
@@ -167,11 +181,14 @@ def _validate_channel(channel: Optional[str]) -> str:
 
 
 def _require_owning_firm(actor: CompositeActor, firm_id: str) -> None:
-    """Refuse a manager acting on a firm that is not their own, with the
-    SAME 404 an unknown firm_id would produce (see module docstring's
-    "why not resolve_target_firm" section). An app admin is never refused
-    here -- they may act on any firm, exactly like every other
-    require_app_admin_or_owning_manager route in this service.
+    """Refuse a manager OR EMPLOYEE acting on a firm that is not their own,
+    with the SAME 404 an unknown firm_id would produce (see module
+    docstring's "why not resolve_target_firm" section). An app admin is
+    never refused here -- they may act on any firm, exactly like every
+    other require_app_admin_or_owning_manager(_or_employee) route in this
+    service. actor.firm_id is populated identically for a manager and an
+    employee actor (bd polyglot-pdf-scaig), so this one check already
+    covers both kinds -- no employee-specific branch is needed here.
     """
     if actor.is_app_admin:
         return
@@ -296,7 +313,7 @@ def _do_list_links(
 async def list_firm_links(
     firm_id: str,
     actor: Annotated[CompositeActor,
-                     Depends(require_app_admin_or_owning_manager)],
+                     Depends(require_app_admin_or_owning_manager_or_employee)],
     channel: Annotated[Optional[str], Query()] = None,
     status: Annotated[Optional[str], Query()] = None,
     employee_id: Annotated[Optional[str], Query()] = None,
@@ -305,15 +322,30 @@ async def list_firm_links(
 
     channel is REQUIRED (422 when missing or unknown -- see
     _validate_channel). status/employee_id are optional equality filters,
-    matching the bead's own query-param names exactly.
+    matching the bead's own query-param names exactly -- EXCEPT for an
+    employee actor, for whom employee_id is FORCED to their own uid
+    regardless of what (if anything) the query names (bd polyglot-pdf-scaig,
+    plan's own words: "ids come from the token, not the query"). A query
+    employee_id from an employee actor is silently overridden rather than
+    refused: unlike resolve_target_firm's firm-naming rule (where naming
+    ANY firm at all is the thing being refused, because a console bug
+    sending the wrong firm must be visible), an employee-scoped console
+    build may reasonably always send its own uid as a filter out of habit,
+    and there is exactly one value that request could ever legitimately
+    mean -- their own -- so silently substituting it is not hiding a
+    disagreement, it is applying the only value that was ever going to be
+    correct.
 
-    A manager reaches only their OWN firm (404 for any other firm_id, the
-    same 404 an unknown firm_id would get -- see _require_owning_firm); an
-    app admin may list any firm's links, matching every other
-    require_app_admin_or_owning_manager route's admin branch.
+    A manager or employee reaches only their OWN firm (404 for any other
+    firm_id, the same 404 an unknown firm_id would get -- see
+    _require_owning_firm); an app admin may list any firm's links, matching
+    every other require_app_admin_or_owning_manager(_or_employee) route's
+    admin branch.
     """
     channel = _validate_channel(channel)
     _require_owning_firm(actor, firm_id)
+    if actor.kind == ACTOR_KIND_FIRM_EMPLOYEE:
+        employee_id = actor.employee_id
     rows = await asyncio.to_thread(
         _do_list_links, firm_id=firm_id, channel=channel, status=status,
         employee_id=employee_id,

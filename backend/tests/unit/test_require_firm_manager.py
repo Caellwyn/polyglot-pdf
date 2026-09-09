@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from backend.services.firms import (
     FIRM_ROLE_EMPLOYEE,
     FIRM_ROLE_MANAGER,
+    employee_firm_id,
     manager_firm_id,
 )
 
@@ -94,6 +95,84 @@ def test_a_non_dict_is_not_a_manager(bad):
     refusal, not an AttributeError -- the FastAPI dependency and the retire
     helper both hand it whatever their credential resolver returned."""
     assert manager_firm_id(bad) is None
+
+
+# --------------------------------------------------------------------------
+# employee_firm_id (bd polyglot-pdf-scaig) -- the SAME shape as
+# manager_firm_id above, one role over. Enumerated the same way (scar #8/#9:
+# enumerate the whole claim space, not a couple of samples) rather than
+# assumed identical from symmetry with the manager rule.
+# --------------------------------------------------------------------------
+
+_EMPLOYEE_CLAIM_SHAPES = [
+    # (claims, expected firm_id or None, why)
+    ({"firm_id": "acme", "firm_role": FIRM_ROLE_EMPLOYEE}, "acme",
+     "the one accepting shape"),
+    ({"firm_id": "acme", "firm_role": FIRM_ROLE_MANAGER}, None,
+     "a manager is not thereby an employee of their own firm"),
+    ({"firm_id": "acme", "firm_role": "Employee"}, None,
+     "role match is case-SENSITIVE; a near-miss is not an employee"),
+    ({"firm_id": "acme", "firm_role": "employee "}, None,
+     "a trailing space is not the role string"),
+    ({"firm_id": "acme"}, None, "no role at all"),
+    ({"firm_id": "acme", "firm_role": None}, None, "an explicit null role"),
+    ({"firm_id": "acme", "firm_role": True}, None,
+     "a truthy non-string role must not pass"),
+    ({"firm_id": "", "firm_role": FIRM_ROLE_EMPLOYEE}, None,
+     "an EMPTY firm_id is not a firm -- it would make every firm-scoped "
+     "query match nothing while the caller looked authorized"),
+    ({"firm_id": None, "firm_role": FIRM_ROLE_EMPLOYEE}, None,
+     "an explicit null firm"),
+    ({"firm_role": FIRM_ROLE_EMPLOYEE}, None, "an employee of no firm"),
+    ({"firm_id": 7, "firm_role": FIRM_ROLE_EMPLOYEE}, None,
+     "a non-string firm_id"),
+    ({"firm_id": ["acme"], "firm_role": FIRM_ROLE_EMPLOYEE}, None,
+     "a list firm_id must not be accepted and then used as a doc key"),
+    ({}, None, "no claims at all"),
+    ({"is_client_link": True, "jti": "j1"}, None,
+     "a CLIENT LINK credential carries no firm claims and is never an "
+     "employee actor"),
+    ({"vff_dev": True}, None, "a dev with no firm is an employee of none"),
+    ({"schema_editor_role": "editor"}, None,
+     "an editor account is a different surface entirely"),
+    ({"app_admin": True}, None,
+     "an app admin is not thereby an employee of any particular firm"),
+]
+
+
+@pytest.mark.parametrize(
+    "claims,expected,why", _EMPLOYEE_CLAIM_SHAPES,
+    ids=[w[:44].replace(" ", "-") for _, _, w in _EMPLOYEE_CLAIM_SHAPES])
+def test_employee_firm_id_over_the_whole_claim_space(claims, expected, why):
+    """Mutation: drop the isinstance(firm_id, str) check -- the int and
+    list cells go red; drop the `or not firm_id` -- the empty-string cell
+    goes red; compare the role with .lower() -- the "Employee" cell goes
+    red; compare against FIRM_ROLE_MANAGER instead of FIRM_ROLE_EMPLOYEE --
+    the one accepting shape AND the manager cell both go red."""
+    assert employee_firm_id(claims) == expected, why
+
+
+@pytest.mark.parametrize("bad", [None, "acme", 7, ["firm_id"], object()])
+def test_a_non_dict_is_not_an_employee(bad):
+    """Same defensive contract as manager_firm_id -- a caller that passes
+    something other than a claims dict must get a refusal, not an
+    AttributeError."""
+    assert employee_firm_id(bad) is None
+
+
+def test_manager_and_employee_rules_never_both_accept_the_same_claims():
+    """A single firm_role value can only equal ONE of the two role
+    constants -- proven here rather than assumed, so a future rename that
+    accidentally makes FIRM_ROLE_MANAGER == FIRM_ROLE_EMPLOYEE (or a
+    manager_firm_id/employee_firm_id edit that drops the role check
+    entirely) is caught structurally."""
+    for claims, _, _ in _CLAIM_SHAPES + _EMPLOYEE_CLAIM_SHAPES:
+        manager_result = manager_firm_id(claims)
+        employee_result = employee_firm_id(claims)
+        assert not (manager_result and employee_result), (
+            f"claims {claims!r} resolved as BOTH a manager ({manager_result}"
+            f") and an employee ({employee_result}) -- exactly one role "
+            "must ever apply")
 
 
 def test_the_role_constants_are_the_strings_actually_stamped():

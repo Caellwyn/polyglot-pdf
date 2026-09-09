@@ -1,5 +1,5 @@
-"""Every registered admin-service route carries exactly one of FOUR gates
-(bd polyglot-pdf-7w17m).
+"""Every registered admin-service route carries exactly one of FIVE gates
+(bd polyglot-pdf-7w17m; the fifth added by bd polyglot-pdf-scaig).
 
 Cloud Run runs this service with --allow-unauthenticated, so the app-level
 gate on every route IS the whole access control -- there is no infrastructure
@@ -8,14 +8,15 @@ _routes_depending_on-derived set pins: the set is read off the LIVE app
 object, never hand-maintained, so a route added without a gate fails HERE
 instead of shipping reachable by anyone with the URL.
 
-The four gates, per the plan ("Admin service" gating section). ALL FOUR now
-exist (bd polyglot-pdf-8vgfh lands the last one):
+The FOUR gates the plan itself names ("Admin service" gating section). ALL
+FOUR exist (bd polyglot-pdf-8vgfh landed the last one):
   - require_app_admin -- shipped with GET /admin/whoami (bd
     polyglot-pdf-7w17m).
   - require_app_admin_or_owning_manager -- the composite, shipped with the
-    four /admin/users routes; also the gate Epic 2 B4's link listing (GET
-    /admin/firms/{firm_id}/links) and revoke (POST /admin/links/{jti}/
-    revoke) carry (bd polyglot-pdf-jmiys).
+    four /admin/users routes; also the gate Epic 2 B4's revoke route (POST
+    /admin/links/{jti}/revoke) carries (bd polyglot-pdf-jmiys), and carried
+    the link-listing route too UNTIL bd polyglot-pdf-scaig (see the fifth
+    gate below).
   - require_firm_manager -- exists in backend/services/auth.py over the
     shared rule backend/services/firms.py::manager_firm_id. NO ROUTE
     declares it yet, deliberately: the retire route consumes the RULE
@@ -27,6 +28,19 @@ exist (bd polyglot-pdf-8vgfh lands the last one):
     Pub/Sub push callers. Shipped here with its first consuming route, POST
     /admin/links/sweep-expired (bd polyglot-pdf-8vgfh); Epic 4 4.3's Pub/Sub
     push route will be its second.
+
+A FIFTH gate, ADDED SEPARATELY from the plan's own four (bd
+polyglot-pdf-scaig): require_app_admin_or_owning_manager_or_employee, the
+ONLY gate on GET /admin/firms/{firm_id}/links. An employee-role staff
+account has no seat in the plan's four-name vocabulary at all (an employee
+is neither an app admin nor a firm manager), so letting an employee reach
+their own link history needed a gate the plan's four never described,
+rather than silently widening require_app_admin_or_owning_manager (which
+would also widen the four /admin/users routes to accept an employee --
+test_composite_gate.py pins that as a 403 through that name on purpose).
+Kept OUT of _OTHER_GATE_NAMES below and pinned instead on its one route
+directly (test_admin_link_routes.py), exactly as require_google_oidc's
+specific route is pinned beyond the generic four-gate set check.
 
 /health and /version are the deliberate exception (pinned separately in
 test_admin_health.py): the unauthenticated liveness/identity probe.
@@ -49,6 +63,11 @@ from admin_backend.services.admin_auth import require_app_admin
 # __name__ strings would add nothing test_whoami_is_gated_by_require_app_
 # admin_specifically (below) does not already prove for the identity case.
 #
+# require_app_admin_or_owning_manager_or_employee (bd polyglot-pdf-scaig) is
+# DELIBERATELY NOT one of these four -- see the module docstring's "fifth
+# gate" section. It carries its own route-specific pin in
+# test_admin_link_routes.py instead of joining this generic vocabulary.
+#
 # require_firm_manager appears in the known set even though no route on THIS
 # service declares it (its consumer is the public backend's retire route):
 # the four names are the vocabulary of legal gates, and dropping one from the
@@ -58,6 +77,14 @@ _OTHER_GATE_NAMES = (
     "require_app_admin_or_owning_manager",
     "require_google_oidc",
 )
+
+# The fifth gate (bd polyglot-pdf-scaig), kept OUT of _OTHER_GATE_NAMES
+# because that tuple is the plan's own four-name vocabulary (see the module
+# docstring's "fifth gate" section) -- but a route carrying it must still
+# count as gated exactly once below, so it joins the SET pin's known names
+# without joining the plan's four-name list any docstring or error message
+# enumerates.
+_FIFTH_GATE_NAME = "require_app_admin_or_owning_manager_or_employee"
 
 _UNGATED_PATHS = {"/health", "/version"}
 
@@ -92,8 +119,18 @@ def _business_routes():
 def test_every_business_route_carries_exactly_one_of_the_four_gates():
     """THE SET PIN. Mutation: register a route with no Depends(require_*) --
     red; register one with two of the four -- red (ambiguous authorization is
-    itself a bug, per CLAUDE.md scar #8: the rule must have ONE home)."""
-    known_gate_names = {"require_app_admin", *_OTHER_GATE_NAMES}
+    itself a bug, per CLAUDE.md scar #8: the rule must have ONE home).
+
+    The fifth gate (_FIFTH_GATE_NAME) counts as a legal single gate here too
+    -- this test's job is "is there EXACTLY ONE recognized gate", not "is it
+    one of the plan's original four" -- but it is EXCLUDED from every OTHER
+    route's allowed set below (test_link_listing_route_gate_set below pins
+    that it appears on GET /admin/firms/{firm_id}/links alone), so a route
+    other than that one growing this gate by mistake still fails as an
+    unrecognized-combination offender there rather than silently passing
+    here."""
+    known_gate_names = {"require_app_admin", *_OTHER_GATE_NAMES,
+                        _FIFTH_GATE_NAME}
 
     offenders = []
     for route in _business_routes():
@@ -106,12 +143,26 @@ def test_every_business_route_carries_exactly_one_of_the_four_gates():
 
     assert not offenders, (
         "every business route on the admin service must carry EXACTLY ONE "
-        "of the four gates (require_app_admin, require_firm_manager, "
-        "require_app_admin_or_owning_manager, require_google_oidc) -- "
+        "of the five gates (require_app_admin, require_firm_manager, "
+        "require_app_admin_or_owning_manager, require_google_oidc, "
+        "require_app_admin_or_owning_manager_or_employee) -- "
         "Cloud Run runs this service with --allow-unauthenticated, so a "
         "missing or doubled gate is directly reachable:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_only_the_link_listing_route_carries_the_fifth_gate():
+    """The fifth gate (require_app_admin_or_owning_manager_or_employee, bd
+    polyglot-pdf-scaig) is scoped to ONE route on purpose -- see that
+    function's own docstring for why an employee must not reach any other
+    composite route. Mutation: wire it onto a second route (e.g. revoke) --
+    red."""
+    carriers = [
+        route.path for route in _business_routes()
+        if _FIFTH_GATE_NAME in _dependency_names_for(route)
+    ]
+    assert carriers == ["/admin/firms/{firm_id}/links"]
 
 
 def test_the_registered_route_set_is_pinned():

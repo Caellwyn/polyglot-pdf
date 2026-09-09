@@ -121,6 +121,36 @@ def manager_firm_id(claims: Optional[dict]) -> Optional[str]:
     return firm_id
 
 
+def employee_firm_id(claims: Optional[dict]) -> Optional[str]:
+    """The firm this caller is an EMPLOYEE of, or None if they are not.
+
+    THE SAME SHAPE as manager_firm_id above, one role over (bd
+    polyglot-pdf-scaig): a pure, side-effect-free predicate over an
+    already-verified claims dict, living beside the manager rule rather than
+    written inline a second time at its one call site (CLAUDE.md scar #8).
+    Added because the admin service's link-listing route needed an employee
+    actor kind and this repo has already paid once for hand-written copies
+    of "who is a firm X" (manager_firm_id's own docstring).
+
+    THE CALLER MUST HAVE VERIFIED THE TOKEN, exactly as manager_firm_id
+    requires -- this decides authorization, not authentication.
+
+    Returns the firm_id only when BOTH hold: firm_role is exactly
+    "employee", and firm_id is a non-empty string. A manager, a dev with no
+    firm, and a client link each get None -- deliberately NOT "not a
+    manager", since an app admin or a firm manager token must not also read
+    as an employee of their own or any firm.
+    """
+    if not isinstance(claims, dict):
+        return None
+    firm_id = claims.get("firm_id")
+    if not isinstance(firm_id, str) or not firm_id:
+        return None
+    if claims.get("firm_role") != FIRM_ROLE_EMPLOYEE:
+        return None
+    return firm_id
+
+
 def _firms_enabled() -> bool:
     """Env-resolved per call (mirrors confirmation_logger._firestore_enabled)
     so tests and deploys control it without an import-order dance.

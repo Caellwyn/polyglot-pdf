@@ -36,6 +36,17 @@ consuming route, POST /admin/links/sweep-expired. See
 admin_backend/tests/unit/test_admin_route_auth.py, which derives the
 registered route set and asserts each route carries exactly one of the four
 names.
+
+A FIFTH dependency, require_app_admin_or_owning_manager_or_employee (bd
+polyglot-pdf-scaig), lives beside the composite for the ONE route that
+needs a third actor kind (GET /admin/firms/{firm_id}/links) -- see that
+function's own docstring for why it is a separate dependency rather than a
+widening of require_app_admin_or_owning_manager. It is deliberately NOT
+part of the "four gates" vocabulary test_admin_route_auth.py enforces:
+that test's known-gate set is the plan's own named vocabulary, and this
+dependency's presence is instead pinned directly on the one route that
+carries it (test_admin_link_routes.py), the same way require_google_oidc's
+own route is pinned beyond the generic set check.
 """
 from __future__ import annotations
 
@@ -192,25 +203,39 @@ async def require_app_admin(
 # had acted on a firm they had not. Refusing makes the disagreement visible
 # at the one moment it is cheap to fix.
 
-# The two shapes an actor can have on a composite route, as a machine-readable
+# The shapes an actor can have on a composite route, as a machine-readable
 # discriminator rather than "did email come back None" inference.
 ACTOR_KIND_APP_ADMIN = "app_admin"
 ACTOR_KIND_FIRM_MANAGER = "firm_manager"
+# The third actor kind, added for the link-listing route only (bd
+# polyglot-pdf-scaig) -- see require_app_admin_or_owning_manager_or_employee
+# below for why this does NOT widen require_app_admin_or_owning_manager
+# itself.
+ACTOR_KIND_FIRM_EMPLOYEE = "firm_employee"
 
 
 class CompositeActor(BaseModel):
     """WHO is acting on a route both actors can reach.
 
-    firm_id is the manager's own firm, taken from the token, and is None for
-    an app admin -- an admin's target firm arrives in the request and is
-    resolved by the ROUTE (which is also where the "a manager may not name
-    one" refusal lives, since only the route can see its own body).
+    firm_id is the manager's (or employee's) own firm, taken from the token,
+    and is None for an app admin -- an admin's target firm arrives in the
+    request and is resolved by the ROUTE (which is also where the "a
+    manager may not name one" refusal lives, since only the route can see
+    its own body).
+
+    employee_id is set ONLY for ACTOR_KIND_FIRM_EMPLOYEE (the caller's own
+    uid, restated under this name so a route scoping a query to "this
+    employee's own records" reads employee_id off the actor rather than
+    reaching for uid and risking confusion with an app admin's or manager's
+    uid, neither of which means "an employee_id to filter by"). None for
+    the other two kinds.
     """
 
     uid: str
     email: Optional[str] = None
     kind: str
     firm_id: Optional[str] = None
+    employee_id: Optional[str] = None
 
     @property
     def is_app_admin(self) -> bool:
@@ -219,6 +244,102 @@ class CompositeActor(BaseModel):
     def label(self) -> str:
         """Human-facing name for audit rows and log lines. Never empty."""
         return self.email or self.uid
+
+
+def _resolve_admin_or_manager_or_employee_actor(
+    token: str, *, allow_employee: bool,
+) -> CompositeActor:
+    """Shared body behind BOTH require_app_admin_or_owning_manager and
+    require_app_admin_or_owning_manager_or_employee (bd polyglot-pdf-scaig).
+
+    ONE HOME for the token-verification branch order (CLAUDE.md scar #8),
+    so the two public dependencies cannot drift on how they decide "app
+    admin first, then manager/employee" -- only on WHETHER the employee
+    branch is reachable at all, via allow_employee. See the two public
+    wrappers for why a THIRD actor kind is a new function rather than a
+    widening of the existing one: test_composite_gate.py's
+    test_neither_an_admin_nor_a_manager_is_403 already pins an employee
+    claims dict as a 403 through the ORIGINAL name, because /admin/users and
+    every other existing composite route must keep refusing an employee.
+
+    401 when the token does not verify at all; 403 when it verifies and the
+    account matches none of the kinds this call allows.
+    """
+    # Branch 1: app admin. verify_admin_token raises 403 for a VALID account
+    # with no app_admin claim -- which is not a refusal here, it is the
+    # signal to try the next branch. A 401 IS terminal: an unverifiable
+    # token will not verify differently for a later reader.
+    try:
+        admin = verify_admin_token(token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise
+        admin = None
+    if admin is not None:
+        return CompositeActor(
+            uid=admin.uid, email=admin.email, kind=ACTOR_KIND_APP_ADMIN)
+
+    # Branch 2 (and, when allowed, branch 3): firm manager, or firm
+    # employee. THIS MODULE VERIFIES THE TOKEN ITSELF, with the same
+    # fb_auth.verify_id_token the admin branch used -- it does not call
+    # backend.services.auth.verify_token. That module is the VOICE app's
+    # verifier: importing it would make the admin service depend on the
+    # voice surface's enrolment rules (which have nothing to do with
+    # managing staff) and would break this module's liftability, pinned by
+    # test_admin_auth.py::test_admin_auth_does_not_import_the_other_two_
+    # auth_modules.
+    #
+    # What IS shared is the manager/employee RULES, and only the rules:
+    # backend.services.firms.manager_firm_id and .employee_firm_id are pure,
+    # side-effect-free predicates over an already-verified claims dict,
+    # living in the module that owns what a firm IS. Sharing them is what
+    # keeps each rule in ONE home without sharing a verifier.
+    from backend.services.firms import employee_firm_id, manager_firm_id
+
+    import firebase_admin
+    from firebase_admin import auth as fb_auth
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+    try:
+        claims = fb_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401,
+                            detail="Invalid or expired sign-in")
+
+    firm_id = manager_firm_id(claims)
+    if firm_id:
+        uid = claims.get("uid") or claims.get("sub")
+        if not uid:
+            raise HTTPException(status_code=401,
+                                detail="Invalid or expired sign-in")
+        return CompositeActor(
+            uid=uid,
+            email=claims.get("email"),
+            kind=ACTOR_KIND_FIRM_MANAGER,
+            firm_id=firm_id,
+        )
+
+    if allow_employee:
+        employee_of = employee_firm_id(claims)
+        if employee_of:
+            uid = claims.get("uid") or claims.get("sub")
+            if not uid:
+                raise HTTPException(status_code=401,
+                                    detail="Invalid or expired sign-in")
+            return CompositeActor(
+                uid=uid,
+                email=claims.get("email"),
+                kind=ACTOR_KIND_FIRM_EMPLOYEE,
+                firm_id=employee_of,
+                employee_id=uid,
+            )
+
+    raise HTTPException(
+        status_code=403,
+        detail=(NO_ADMIN_ACCESS_PREFIX
+                + " This account is neither an admin nor a firm manager"),
+    )
 
 
 async def require_app_admin_or_owning_manager(
@@ -233,14 +354,15 @@ async def require_app_admin_or_owning_manager(
     outcome (and the one an operator would debug for an hour).
 
     Both branches verify the SAME token through the SAME call --
-    firebase_admin.auth.verify_id_token, made by THIS module in both cases.
-    Neither branch reaches into another surface's verifier, and neither
-    invents a second credential path. What the manager branch borrows is the
-    manager RULE (backend.services.firms.manager_firm_id), a pure predicate
-    over the claims this module already verified.
+    firebase_admin.auth.verify_id_token, made by THIS module in both cases
+    (see _resolve_admin_or_manager_or_employee_actor, the shared body).
 
     401 when the token does not verify at all; 403 when it verifies and the
-    account is neither an app admin nor any firm's manager.
+    account is neither an app admin nor any firm's manager -- an EMPLOYEE
+    included, on purpose: this is the gate the four /admin/users routes
+    carry, where a firm employee has never had access, and widening it here
+    would widen those too. See require_app_admin_or_owning_manager_or_
+    employee below for the one route that needs the third actor kind.
     """
     if _dev_bypass_allowed():
         return CompositeActor(
@@ -255,64 +377,62 @@ async def require_app_admin_or_owning_manager(
     if not token:
         raise HTTPException(status_code=401, detail="Sign-in required")
 
-    # Branch 1: app admin. verify_admin_token raises 403 for a VALID account
-    # with no app_admin claim -- which is not a refusal here, it is the
-    # signal to try the manager branch. A 401 IS terminal: an unverifiable
-    # token will not verify differently for the second reader.
-    try:
-        admin = verify_admin_token(token)
-    except HTTPException as exc:
-        if exc.status_code == 401:
-            raise
-        admin = None
-    if admin is not None:
+    return _resolve_admin_or_manager_or_employee_actor(
+        token, allow_employee=False)
+
+
+async def require_app_admin_or_owning_manager_or_employee(
+    authorization: Annotated[Optional[str], Header()] = None,
+) -> CompositeActor:
+    """FastAPI dependency: an app admin, a manager of some firm, OR an
+    EMPLOYEE of some firm (bd polyglot-pdf-scaig).
+
+    THE ONE ROUTE THIS GATE IS FOR: GET /admin/firms/{firm_id}/links. The
+    plan's own composite gate (require_app_admin_or_owning_manager, above)
+    has exactly two actor kinds by design -- widening IT to accept an
+    employee would silently widen every route already gated by it (the four
+    /admin/users routes), where an employee legitimately has no business
+    (test_composite_gate.py's test_neither_an_admin_nor_a_manager_is_403
+    already pins an employee claims dict as 403 through that name). This is
+    a SEPARATE dependency, scoped to the ONE route that needs a third actor
+    kind, rather than a parameter that changes the older gate's behavior for
+    every caller of it.
+
+    REVOKE (POST /admin/links/{jti}/revoke) DELIBERATELY STAYS ON THE
+    NARROWER require_app_admin_or_owning_manager -- an employee must never
+    revoke a link, so the write-side route keeps the existing two-actor
+    gate untouched, per the bead's own shape-(a)-vs-(b) analysis: this is
+    the same choice, made as a wholly separate dependency (shape (b))
+    rather than a widened one (shape (a)) with an extra guard bolted onto
+    the write route, so there is no third actor kind that revoke's gate can
+    even resolve to without deliberately calling this function.
+
+    An employee actor's firm_id is their OWN firm (backend.services.firms.
+    employee_firm_id) and employee_id is their own uid -- both taken from
+    the VERIFIED TOKEN, never the request, matching the plan's own words
+    ("ids come from the token, not the query"). The route itself is
+    responsible for using employee_id to scope (or override) any
+    employee_id query parameter for this actor kind; this dependency only
+    resolves WHO is calling.
+
+    401 when the token does not verify at all; 403 when it verifies and the
+    account is none of the three kinds.
+    """
+    if _dev_bypass_allowed():
         return CompositeActor(
-            uid=admin.uid, email=admin.email, kind=ACTOR_KIND_APP_ADMIN)
-
-    # Branch 2: firm manager. THIS MODULE VERIFIES THE TOKEN ITSELF, with
-    # the same fb_auth.verify_id_token the admin branch used -- it does not
-    # call backend.services.auth.verify_token. That module is the VOICE
-    # app's verifier: importing it would make the admin service depend on
-    # the voice surface's enrolment rules (which have nothing to do with
-    # managing staff) and would break this module's liftability, pinned by
-    # test_admin_auth.py::test_admin_auth_does_not_import_the_other_two_
-    # auth_modules.
-    #
-    # What IS shared is the manager RULE, and only the rule:
-    # backend.services.firms.manager_firm_id is a pure, side-effect-free
-    # predicate over an already-verified claims dict, living in the module
-    # that owns what a firm IS. Sharing it is what keeps that rule in ONE
-    # home (CLAUDE.md scar #8) without sharing a verifier.
-    from backend.services.firms import manager_firm_id
-
-    import firebase_admin
-    from firebase_admin import auth as fb_auth
-
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app()
-    try:
-        claims = fb_auth.verify_id_token(token)
-    except Exception:
-        raise HTTPException(status_code=401,
-                            detail="Invalid or expired sign-in")
-
-    firm_id = manager_firm_id(claims)
-    if not firm_id:
-        raise HTTPException(
-            status_code=403,
-            detail=(NO_ADMIN_ACCESS_PREFIX
-                    + " This account is neither an admin nor a firm manager"),
+            uid="dev_admin",
+            email="dev@example.com",
+            kind=ACTOR_KIND_APP_ADMIN,
         )
-    uid = claims.get("uid") or claims.get("sub")
-    if not uid:
-        raise HTTPException(status_code=401,
-                            detail="Invalid or expired sign-in")
-    return CompositeActor(
-        uid=uid,
-        email=claims.get("email"),
-        kind=ACTOR_KIND_FIRM_MANAGER,
-        firm_id=firm_id,
-    )
+
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Sign-in required")
+
+    return _resolve_admin_or_manager_or_employee_actor(
+        token, allow_employee=True)
 
 
 def resolve_target_firm(actor: CompositeActor,
