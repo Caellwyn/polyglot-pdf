@@ -314,7 +314,9 @@ def test_one_repair_on_the_pre_migration_archive_reproduces_the_migrated_kit():
     """The editor's Repair and scripts/migrate_select_on_values must agree on
     the real kit (bd kch40): repairing the pre-migration archive with the
     kit's dump yields exactly the migrated schema's select options -- values
-    AND codes -- for all six dropdowns, live and quarantined alike."""
+    AND codes -- for the four LIVE dropdowns. Repair walks fields[] only; the
+    two quarantined selects are the migration tool's job (PR 3a), and a
+    second Repair after un-ignore converts them the same way."""
     from backend.services.schema_repair import repair
     archive = _KIT_ROOT / "_schema_pre_select_migration.json"
     if not archive.exists():

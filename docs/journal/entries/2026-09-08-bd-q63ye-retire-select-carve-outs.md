@@ -94,6 +94,16 @@ could not deliver. A legal code with no slot is now itself a reason to
 repair. The pin that matters is the round trip on the real archive: one
 Repair must reproduce the migrated kit's selects exactly.
 
+**A write the report does not name is a silent schema change.** Round 2
+of the outer review: the height codes keep their value on conversion
+(`'5' -> '5'`), so the rename list stayed empty and the field was written --
+`pdf_on_value` added, an int retyped -- with no `repairs[]` entry, while the
+sibling migration tool names every kept code. The conversion is reported
+now, whatever the value did. And my round-trip test's docstring claimed the
+quarantined dropdowns; it asserts the four live ones, which is what repair
+walks -- the quarantine is the migration tool's job, and a second Repair
+after un-ignore converts them the same way. The docstring says that now.
+
 ## Files touched
 
 - `backend/services/schema_lint.py`, `backend/services/schema_repair.py`,

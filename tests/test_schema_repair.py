@@ -1896,3 +1896,22 @@ def test_slug_shaped_legacy_codes_are_still_CONVERTED_by_repair():
     # Idempotent: the converted field is not repaired again.
     again, repairs2 = repair(repaired, dump)
     assert again == repaired
+
+
+def test_a_conversion_that_keeps_the_value_is_still_REPORTED():
+    """Cross-surface (g2fpr.4, bd j12it): the height codes keep their value
+    ('5' -> '5') while the code moves into pdf_on_value -- a real write. The
+    report names it, like the migration tool's kept_codes; a silent schema
+    change on Repair is what the report exists to prevent."""
+    dump = {"fields": [{"name": "form1[0].P1_Line6e_State[0]",
+                        "widgets": [{"choices": [{"value": "5"}, {"value": "6"}]}]}]}
+    opts = [{"value": "5", "label": "5"}, {"value": "6", "label": "6"}]
+    repaired, repairs = repair(_schema(_combo(opts)), dump)
+    assert _pairs(repaired) == [("5", "5"), ("6", "6")]
+    mints = [r for r in repairs if r["action"] == "mint-option-slugs"]
+    assert len(mints) == 1
+    assert "'5': export code -> pdf_on_value" in mints[0]["detail"]
+    assert "'6': export code -> pdf_on_value" in mints[0]["detail"]
+    # ...and a second repair reports nothing (idempotent).
+    _, again = repair(repaired, dump)
+    assert not any(r["action"] == "mint-option-slugs" for r in again)

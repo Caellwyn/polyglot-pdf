@@ -331,6 +331,7 @@ def _mint_slugs(
             # minted slug is the correct repair for them.
             is_select = f.get("type") == "select"
             keep = []
+            converted: List[int] = []   # option indexes whose code moved into pdf_on_value
             for o in dict_opts:
                 v = o.get("value")
                 v = str(v) if v is not None else None
@@ -359,6 +360,7 @@ def _mint_slugs(
                     # named it still resolves (the tail loop registers
                     # pdf_on_value -> current value).
                     o["pdf_on_value"] = v
+                    converted.append(len(keep))
                 keep.append(held)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
@@ -399,7 +401,7 @@ def _mint_slugs(
                 minted = vocab.mint_unique_slugs(reserved + labels)[len(reserved):]
             slug_iter = iter(minted)
             renames = []
-            for o, k in zip(dict_opts, keep):
+            for idx, (o, k) in enumerate(zip(dict_opts, keep)):
                 old = o.get("value")
                 if k:
                     # Only a REAL value is its own alias. A held-aside empty
@@ -412,6 +414,13 @@ def _mint_slugs(
                 slug = next(slug_iter)
                 if old is not None and str(old) != slug:
                     renames.append(f"{old!r} -> {slug!r}")
+                elif idx in converted:
+                    # The value stayed ('5' is already a slug) but the export
+                    # code moved into pdf_on_value: a real write, so it is
+                    # REPORTED like the migration tool's kept_codes -- a silent
+                    # schema change on Repair is what the report exists to
+                    # prevent (cross-surface, bd polyglot-pdf-j12it).
+                    renames.append(f"{old!r}: export code -> pdf_on_value")
                 if old is not None:
                     _register(str(old), slug)
                 o["value"] = slug
