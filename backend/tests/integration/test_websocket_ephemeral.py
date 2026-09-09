@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from backend.services.link_spend import (
@@ -494,6 +495,88 @@ def test_the_TEARDOWN_actually_calls_the_banking_helper():
     )
     # ...and it must run BEFORE end_session finalises the adapter.
     assert body.index("await _bank_link_spend(") < body.index("await service.end_session()")
+
+
+@pytest.mark.asyncio
+async def test_TEARDOWN_passes_usage_employee_id_not_link_employee_id_to_rollup(
+    monkeypatch,
+):
+    """Drives the REAL `_handle_fill_session` teardown end-to-end and pins
+    the exact keyword wiring on the usage-rollup call site (bd
+    polyglot-pdf-w828m fresh-eyes finding 1).
+
+    The module's own comment right above the call site is explicit that
+    `usage_employee_id` (NOT `link_employee_id`) is the by_employee key:
+    the link's employee_id for a client session, the staff uid for a staff
+    session -- the two are NOT interchangeable. Every existing test for
+    record_session_end / _rollup_language_key / _session_cost_usd drives
+    them as isolated pure functions with hand-supplied arguments; none
+    drives the real teardown and asserts the actual kwargs passed at the
+    call site, so a swap of `usage_employee_id` for `link_employee_id`
+    there was invisible to the suite (verified: mutating just that one
+    keyword left all 76 usage-rollup tests plus this file green before
+    this test existed).
+
+    MUTATION HOOK: swap `employee_id=usage_employee_id` for
+    `employee_id=link_employee_id` at the real call site in
+    websocket_routes.py's `_handle_fill_session` teardown -- red, because
+    this test passes the two as DIFFERENT values and asserts on the one
+    that must win.
+    """
+    from backend.routes import websocket_routes as wr
+
+    captured = {}
+
+    def _fake_record_session_end(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        "backend.services.usage_rollups.record_session_end",
+        _fake_record_session_end,
+    )
+
+    ws = MagicMock(spec=WebSocket)
+    ws.accept = AsyncMock()
+    ws.receive = AsyncMock(return_value={"type": "websocket.disconnect"})
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+
+    service = MagicMock(name="form_filling_service")
+    service._is_resume_session = False
+    service.start_session = AsyncMock()
+    service.end_session = AsyncMock()
+    service.confirmed_field_count = MagicMock(return_value=0)
+    # No spoken_language attribute at all -> _rollup_language_key returns
+    # None cleanly; irrelevant to this test's assertion.
+    del service.spoken_language
+
+    await asyncio.wait_for(
+        wr._handle_fill_session(
+            ws,
+            "session-wiring-test",
+            service,
+            False,
+            accept_connection=False,
+            schema=None,
+            form_session_id="fs-wiring-1",
+            firm_id=None,  # keeps firm_kind() OFF the call path (falls
+                           # through to the "live" ternary literal) so this
+                           # test needs no Firestore stub to isolate the
+                           # ONE kwarg it is pinning.
+            kit_id="i-90",
+            link_jti=None,
+            link_employee_id="LINK-EMPLOYEE-should-not-be-used",
+            usage_employee_id="USAGE-EMPLOYEE-the-real-key",
+        ),
+        timeout=5.0,
+    )
+
+    assert captured.get("employee_id") == "USAGE-EMPLOYEE-the-real-key", (
+        "the teardown's usage-rollup call must attribute to "
+        "usage_employee_id, not link_employee_id -- got "
+        f"{captured.get('employee_id')!r}"
+    )
 
 
 @pytest.mark.asyncio

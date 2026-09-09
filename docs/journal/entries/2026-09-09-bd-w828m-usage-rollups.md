@@ -138,6 +138,44 @@ including a from-scratch mutation of `_nest_increment`):
   "live"` at the call site and `record_session_end`'s own `if not firm_id`
   check.
 
+### Second fresh-eyes round -- adopt/reject/defer
+
+A second Opus cross-surface pass (after the round above landed) re-verified
+all three exit criteria PASS (independently re-ran the hyphenated-key/
+FieldPath test and the rules deny-block test) and returned `GAPS-FOUND (1)`:
+
+- **ADOPTED -- finding 1 (untested teardown wiring, blocker):** every
+  existing test for `record_session_end`/`_rollup_language_key`/
+  `_session_cost_usd` drove them as isolated pure functions with
+  hand-supplied arguments; none drove the REAL `_handle_fill_session`
+  teardown and asserted the actual keyword arguments passed to
+  `record_session_end` at the call site. The reviewer mutation-verified
+  this live: swapping `employee_id=usage_employee_id` for
+  `employee_id=link_employee_id` at the real call site (the exact
+  confusion the module's own comment warns against by name) left
+  `test_usage_rollups.py` + `test_websocket_ephemeral.py` fully green.
+  Fixed by adding
+  `test_TEARDOWN_passes_usage_employee_id_not_link_employee_id_to_rollup`
+  to `backend/tests/integration/test_websocket_ephemeral.py`: drives the
+  real `_handle_fill_session` end-to-end (immediate-disconnect socket
+  double, `firm_id=None` to keep `firm_kind()`'s Firestore read off the
+  path), monkeypatches `usage_rollups.record_session_end` to capture its
+  kwargs, and asserts `employee_id` resolves to `usage_employee_id`'s
+  value specifically -- passing `link_employee_id` and `usage_employee_id`
+  as two DIFFERENT sentinel strings so the assertion cannot pass by
+  accident. Mutation-verified red against the exact swap the reviewer
+  demonstrated, then restored.
+- **Findings 2-5 (nits/pre-existing, no action):** finding 2 (the
+  `record_link_opened` local-guard brittleness) was already filed and
+  correctly scoped in `polyglot-pdf-lp8fw` from the first round -- verified
+  it exists and is accurate, not re-filed. Findings 3 and 4 (the redundant
+  `firm_kind` ternary; the untested `hasattr` guard branch) are the SAME
+  two nits already in `polyglot-pdf-lp8fw` from the first round -- not
+  re-filed. Finding 5 (an added `doc_ref.get()` read in `complete_link` on
+  every completion) is a real, deliberate behavior change but not a
+  correctness gap and the reviewer explicitly did not ask for a fix or a
+  new bead; no action taken.
+
 ## Lessons
 
 The generalizable lesson: **when a bead's own description names a specific
@@ -192,6 +230,8 @@ further, into actually simulating one specific SDK code path's semantics.
 - `backend/services/form_filling_service.py` (new `spoken_language()`
   accessor)
 - `backend/tests/unit/test_usage_rollups.py` (new)
+- `backend/tests/integration/test_websocket_ephemeral.py` (added the
+  teardown-wiring test, second fresh-eyes round)
 - `backend/tests/unit/test_firestore_rules_text.py` (extended set)
 - `firestore.rules` (two new deny blocks)
 - `docs/components/auth.md`, `docs/technical_guide.md`
