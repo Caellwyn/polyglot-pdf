@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: typing no longer verifies a field on either surface -- blur, tab, keystroke and checkbox click all store the value UNVERIFIED, so a keystroke stops writing an audit record; the copy_to target keeps its inherited confirmation deliberately).*
+*Last updated: 2026-09-08 (bd polyglot-pdf-38p0y: the AI-write gates now honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it, where before it was refused as system-managed while the UI and PDF filler both unlocked it. See [the journal entry](../journal/entries/2026-09-08-bd-38p0y-readonly-unlock-on-the-ai-write-gate.md) for closeout details.)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -455,9 +455,30 @@ composite gates by listing EVERY atom's trigger in `required_fields` (the
 locked-reason wording names the first trigger, then counts the rest);
 `getDependencyChain` walks all atoms and carries a visited-set cycle guard.
 A field with `unlock_method === "flip_readonly_bit"` becomes **editable even when
-`read_only`** — the unlock is driven by that flag alone (visibility is a separate
-`show_if` decision), the same flag the PDF filler honors to unlock locked widgets
-(see [pdf-filling.md](pdf-filling.md)).
+`read_only`** — the same flag the PDF filler honors to unlock locked widgets
+(see [pdf-filling.md](pdf-filling.md)). **The surfaces read it differently, and
+the difference is in what each one can assume.**
+
+- `FieldRenderer` (`components/FieldRenderer.tsx`) keys on the flag ALONE — it
+  returns `null` for a not-shown field before the unlock expression is reached,
+  so visibility is already settled by the time it matters.
+- `FieldEditPopover` (in `frontend/src/pdf-view/`, a SIBLING of `schema-forms/`)
+  also keys on the flag alone, but it does NOT
+  get that guarantee: the PDF preview keeps a conditionally-hidden field on the
+  page (dimmed, because it exists on paper), and `pdf-view/PDFViewer` resolves the
+  edited field with a bare `find`. What actually keeps the popover off a hidden
+  field is elsewhere — `pdf-view/FieldOverlay` makes a dimmed field
+  non-clickable, and `pdf-view/PreviewPane` auto-closes the popover when the
+  edited field's `show_if` flips false. Do not remove either guard on the assumption the popover checks
+  visibility itself; it does not.
+- The AI-write path requires the field to be SHOWN as well as unlockable:
+  `isFieldReadOnly` (`utils/validation.ts`) folds `shouldShowField` into the
+  answer, and its three live call sites — two in `utils/conditionalFieldCheck.ts`
+  and the load-bearing one in `webFormConnection.ts` — inherit that. They are
+  called on any field in the schema, so an unlock whose condition has not fired
+  must still read as locked (bd polyglot-pdf-38p0y). Before that bead they
+  ignored the flag entirely, so a shown, required, unlockable field was refused
+  to the voice model while the UI and the PDF filler both unlocked it.
 `FieldRenderer` reads the unlock flag from **either** `conditional_behavior`
 (canonical) **or** `conditional_logic` (a legacy alias of the same
 `ConditionalBehavior` type, still emitted by some generated form-kit schemas,

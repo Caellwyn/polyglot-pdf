@@ -823,3 +823,200 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
     expect(marriageSentence).not.toContain('system-managed')
   })
 })
+
+// --- bd polyglot-pdf-38p0y: a read_only field that UNLOCKS when shown ---------
+// The unit tests in schema-forms/utils/readonlyUnlock.test.ts pin the three gate
+// FUNCTIONS. This suite drives the REAL WebFormConnection update path, because a
+// bug in the wiring between updateField and isFieldReadOnly would leave every one
+// of those unit tests green while the model is still refused -- they call the gate
+// directly and never touch the code that decides WHETHER to call it.
+//
+// Measured limit, so the next reader does not over-trust this: dropping the
+// `schema.fields` argument at the call site does NOT redden these, because
+// evaluateAtomicCondition currently accepts `fields` without ever dereferencing
+// it. That argument is inert today and is passed for correctness under a future
+// evaluator that does use it, NOT because anything here would catch its loss.
+//
+// The shape is the i-90's mail_unit_number: read_only, shown+required the moment
+// a mailing unit TYPE is picked, and declaring flip_readonly_bit -- which the PDF
+// filler and the UI both honor. SYNTHETIC on purpose: no git-tracked kit ships a
+// flip_readonly_bit field (w7 and f1040 both measure zero), so a kit-reading test
+// would pass locally and SKIP in CI (CLAUDE.md scar #10).
+describe('WebFormConnection honors flip_readonly_bit (bd polyglot-pdf-38p0y)', () => {
+  const UNLOCK_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'mail_unit_type',
+        name: 'mailUnitType',
+        spoken_name: 'Mailing Unit Type',
+        type: 'text',
+      },
+      {
+        id: 'mail_unit_number',
+        name: 'mailUnitNumber',
+        spoken_name: 'Mailing Unit Number',
+        type: 'text',
+        read_only: true,
+        show_if: { field: 'mail_unit_type', operator: 'is_not_empty' },
+        conditional_behavior: { unlock_method: 'flip_readonly_bit' },
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['mail_unit_type', 'mail_unit_number'] },
+    ],
+  } as unknown as FormSchema
+
+  function sent(ws: MockWebSocket): any[] {
+    return ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+  }
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('THE BUG: once the trigger is filled, the AI write to the unlocked field LANDS', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(UNLOCK_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+
+    // The user picks a mailing unit type -- this SHOWS mail_unit_number and,
+    // because it declares flip_readonly_bit, unlocks it.
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { mailUnitType: 'Apt' } }) })
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { mailUnitNumber: '4B' } }) })
+
+    // The value must actually LAND -- onFieldUpdate fires only for applied values.
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).toContain('mail_unit_number')
+    // ...and the model must NOT be told to stop trying.
+    const msgs = sent(ws).map((m: any) => JSON.stringify(m)).join(' ')
+    expect(msgs).not.toContain('system-managed')
+  })
+
+  it('...but BEFORE the trigger is filled it is still refused (the unlock has not fired)', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(UNLOCK_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { mailUnitNumber: '4B' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('mail_unit_number')
+  })
+
+  // The SECOND field exit criterion 1 names. Not a duplicate of the above: the
+  // trigger is a CHECKBOX read with is_checked (vs a text field read with
+  // is_not_empty) and the target is a textarea. Driven through the real
+  // connection because a unit test on the gate functions cannot see the call
+  // site -- which is the whole reason this block exists (fresh-eyes round 5).
+  const ACCOMMODATION_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'accommodation_other',
+        name: 'accommodationOther',
+        spoken_name: 'Other Accommodation',
+        type: 'checkbox',
+      },
+      {
+        id: 'accommodation_other_detail',
+        name: 'accommodationOtherDetail',
+        spoken_name: 'Accommodation Detail',
+        type: 'textarea',
+        read_only: true,
+        show_if: { field: 'accommodation_other', operator: 'is_checked' },
+        conditional_behavior: { unlock_method: 'flip_readonly_bit' },
+      },
+    ],
+    sections: [
+      {
+        id: 's1', label: 'S1', order: 1,
+        fields: ['accommodation_other', 'accommodation_other_detail'],
+      },
+    ],
+  } as unknown as FormSchema
+
+  it('accommodation_other_detail: the write LANDS once the box is checked', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(ACCOMMODATION_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOther: true } }) })
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOtherDetail: 'wheelchair access' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).toContain('accommodation_other_detail')
+    expect(sent(ws).map((m: any) => JSON.stringify(m)).join(' ')).not.toContain('system-managed')
+  })
+
+  it('accommodation_other_detail: still refused while the box is unchecked', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(ACCOMMODATION_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { accommodationOtherDetail: 'wheelchair access' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('accommodation_other_detail')
+  })
+
+  it('a read_only field with NO unlock is still refused however it is shown', async () => {
+    // Guards the other direction: the fix must not have opened every read_only
+    // field. Same schema shape, minus the unlock declaration.
+    const NO_UNLOCK = JSON.parse(JSON.stringify(UNLOCK_SCHEMA)) as FormSchema
+    delete (NO_UNLOCK.fields[1] as any).conditional_behavior
+
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(NO_UNLOCK, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { mailUnitType: 'Apt' } }) })
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { mailUnitNumber: '4B' } }) })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('mail_unit_number')
+    expect(sent(ws).map((m: any) => JSON.stringify(m)).join(' ')).toContain('system-managed')
+  })
+})

@@ -869,20 +869,53 @@ export function isFieldRequired(
 }
 
 /**
+ * Whether a read_only field declares that being SHOWN unlocks it.
+ *
+ * Checks the canonical key (conditional_behavior) and the legacy alias
+ * (conditional_logic) still emitted by generated form-kit schemas (e.g. i-90).
+ *
+ * This is the SAME rule FieldRenderer (the UI disable) and FieldEditPopover
+ * (manual typing) apply -- but note they still carry their OWN copies of the
+ * expression; this helper consolidates only the three AI-write gates, which is
+ * where the bug was (bd polyglot-pdf-38p0y). Folding those two surfaces in as
+ * well is bd polyglot-pdf-6sfal. Until that lands, a change to the unlock rule
+ * must be applied here AND in those two files.
+ */
+export function declaresShownUnlock(field: FormField): boolean {
+  return (
+    field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
+    field.conditional_logic?.unlock_method === "flip_readonly_bit"
+  );
+}
+
+/**
  * Check if a field should be read-only based on conditional logic
+ *
+ * A field marked read_only is normally unwritable. The exception is a field
+ * that declares flip_readonly_bit: the PDF filler unlocks its widget and the UI
+ * lifts the disable once the field is SHOWN, so refusing the AI's write left
+ * three surfaces disagreeing -- a required-when-shown field the user was asked
+ * for and the model was forbidden to fill (bd polyglot-pdf-38p0y).
+ *
+ * Visibility is part of the condition, not an assumption: FieldRenderer only
+ * ever runs on a field that is already shown, but this helper is called on any
+ * field, so an unlock that has not fired yet must still read as read-only.
  *
  * @param field - The field to check
  * @param fieldValues - Current form values
+ * @param fields - All fields, for evaluating show_if against sibling values
  * @returns true if field should be read-only
  */
-export function isFieldReadOnly(field: FormField, fieldValues: Record<string, any>): boolean {
-  // Check default read_only state
-  if (field.read_only) {
-    // Check if any conditional control unlocks this field
-    // (This would require checking all fields with controls_fields)
-    // For now, just return the default state
-    return true;
+export function isFieldReadOnly(
+  field: FormField,
+  fieldValues: Record<string, any>,
+  fields?: FormField[],
+): boolean {
+  if (!field.read_only) {
+    return false;
   }
-
-  return false;
+  if (declaresShownUnlock(field) && shouldShowField(field, fieldValues, fields)) {
+    return false;
+  }
+  return true;
 }

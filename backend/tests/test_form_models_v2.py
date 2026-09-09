@@ -267,21 +267,29 @@ def test_shipped_kit_required_fields_are_not_read_only(kit):
     i-90. It's required, but it's filled from a previous field automatically."
 
     WHY IT IS A DEAD END OTHERWISE. isFieldReadOnly (frontend/src/schema-forms/
-    utils/validation.ts) returns true whenever field.read_only is set -- it does
-    NOT consult unlock_method -- so webFormConnection refuses the model's write
-    and tells it the field is "system-managed, never fillable". The model stops
-    trying. Meanwhile the renderer unlocks the UI and the PDF filler unlocks the
-    widget, so three surfaces disagree and the user is asked for a value nothing
-    can supply. Required makes it terminal rather than merely awkward: the form
-    cannot be completed.
+    utils/validation.ts) refuses the model's write for a read_only field and
+    tells it the field is "system-managed, never fillable", so the model stops
+    trying. The user is asked for a value nothing can supply, and required makes
+    that terminal rather than merely awkward: the form cannot be completed.
+
+    ONE EXCEPTION, since bd polyglot-pdf-38p0y: a field declaring
+    unlock_method=flip_readonly_bit is now writable by the AI once its condition
+    SHOWS it -- the AI-write gate honors the unlock, matching the renderer and
+    the PDF filler. Before that fix those three surfaces disagreed.
 
     THE CARVE-OUT is copy_to, and it is the whole of it: a field listed as some
     other field's copy_to target IS written from elsewhere, which is exactly the
     case the rule allows (the I-90's Part-8 continuation-sheet copies of the
     A-Number and name -- required on the printed form, filled automatically from
-    page 1). Note copy_to is checked, NOT unlock_method: an unlock lets the PDF
-    FILLER clear the bit, but isFieldReadOnly still blocks the AI write, so an
-    unlock alone does not make a required field fillable.
+    page 1). Note this guard checks copy_to and NOT unlock_method. That is now a
+    DELIBERATE NARROWNESS rather than a consequence of the old frontend
+    behaviour: since bd polyglot-pdf-38p0y an unlock DOES make a shown field
+    AI-fillable, so a required+read_only field carrying flip_readonly_bit is
+    arguably fine and this guard would still flag it. No tracked kit has that
+    shape today (w7's offender declares no unlock at all, and f1040 has no
+    read_only fields), so nothing is mis-flagged right now -- but whether an
+    unlock should become a second carve-out is open, and rides with the wider
+    predicate question in bd polyglot-pdf-cgb5a.
 
     Caught two live instances when first written: the i-90's
     accommodation_other_detail (fixed in the kit) and the W-7's

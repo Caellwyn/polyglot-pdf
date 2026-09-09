@@ -1148,7 +1148,7 @@ export class WebFormConnection {
         // wrongly locked a `hidden: true` field whose show_if is SATISFIED --
         // a field that renders and is required, reported back to the model as
         // unavailable so it could never be filled by voice.
-        const readOnly = isFieldReadOnly(field, this.state.fieldValues);
+        const readOnly = isFieldReadOnly(field, this.state.fieldValues, this.state.schema.fields);
         const isAvailable =
           shouldShowField(field, this.state.fieldValues, this.state.schema.fields) &&
           !readOnly;
