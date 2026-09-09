@@ -59,11 +59,18 @@ bool. The backend phrases both cases as STATE, retiring the last provenance leak
 Absent reads as false, which is the safe direction: an unverified field is
 re-offered rather than treated as settled.
 
-**5. The Enter wiring.** Bound at the `<form>`, not threaded through every field
-component -- Enter bubbles and every field type renders `id={field.id}`, so one
-handler covers all of them. Scope is deliberately narrow: only a field holding a
-real value opens the modal, because Enter currently reaches the form submit and
-advances the section, and that is a shortcut people may rely on.
+**5. The Enter wiring.** Bound above the view fork rather than threaded through
+every field component, so Enter bubbles from either the schema form or the PDF
+view. Scope is deliberately narrow: only a field holding a real value opens the
+modal, because Enter otherwise reaches the form submit and advances the section,
+and that is a shortcut people may rely on.
+
+I first wrote here that "every field type renders `id={field.id}`, so one handler
+covers all of them". **That was false, and it was the bug** -- radio and checkbox
+groups render only `name`. The handler now resolves from id OR name, and
+`SchemaForm.fieldIds.test.tsx` pins the id contract across every implemented type
+by keying its cases on the `FieldType` union, so a new type that forgets it is a
+compile error rather than a silent gap.
 
 ## Lessons
 
@@ -73,9 +80,9 @@ GREEN -- because **jsdom does not implement implicit form submission**, so the s
 could never fire either way. It was testing nothing.
 
 Rewritten to assert `evt.defaultPrevented`, which is the real observable contract,
-and that version does redden. This is the fourth time in this line of work that a
-test looked verified and was not, and the only reason it surfaced is running the
-mutation instead of trusting green.
+and that version does redden. The only reason it surfaced is running the mutation
+instead of trusting green -- see "Three of my tests proved nothing" below for the
+full set, which this was the first of.
 
 **Then I audited my own remaining absence assertions** rather than wait to be told.
 Eight of them, which is the vulnerable shape. Two findings: the "modal does not
@@ -89,6 +96,52 @@ claim would be the worst bug this feature could have.
 having grepped the `.tsx` files and found nothing. Wrong: `fieldManager` binds by
 DOM **id**, not by surface, and React's inputs render that id -- so it covers both
 surfaces. The grep looked like evidence of a gap and was evidence of nothing.
+
+### What the reviews found, and the one pattern behind all of it
+
+Six inner rounds and four outer ones. Two findings were serious, and both were
+mine:
+
+**Groups had no keyboard verification path at all.** Radio and checkbox-group
+inputs render only `name`, never `id`, and the Enter handler keyed on `id`. That
+is **30 of 323 fields** across the three shipped kits -- w7 `sex` and
+`application_type`, i-90 `name_changed`, f1040 `filing_status` -- so a
+keyboard-only user could not complete ANY shipped form. The exact hole this bead
+exists to close, in a field class I had not enumerated.
+
+**Fixing it broke voice fill.** Giving groups `id={field.id}` on option[0] made
+`getElementById` succeed where it had always returned null, so `applyUpdates`
+took the single-control path and a voice fill of a radio group **selected
+nothing** while the model believed it had filled the field. Measured both
+directions: `Female.checked` true without the id, false with.
+
+**The pattern, stated plainly: NINE of my fixes closed one gap and opened or
+exposed another.** Every one has the same shape -- the change altered WHICH CODE
+PATH a value takes, and I verified the path I was fixing rather than the paths I
+was diverting. The id change alone touched five `getElementById` sites; I guarded
+one, and the reviewers found the second, then the third.
+
+What finally worked was enumerating the set before fixing (there are exactly two
+resolution sites in `fieldManager.ts`, now behind ONE shared helper) and tracing
+consumers BEFORE the review asks. That habit caught the notify payload sending
+"verified and empty", the always-true harness clear-check, and the third alias
+read -- none of which a reviewer had to find.
+
+### Three of my tests proved nothing
+
+Each was caught by running the mutation rather than trusting green:
+
+1. An `onSubmit` spy asserting the form did not submit -- **jsdom does not
+   implement implicit form submission**, so the spy could never fire either way.
+2. A Cancel-button test that fired a keystroke AND a corroborating click, so it
+   passed whether or not the guard existed. Written, ironically, in the commit
+   closing out finding 1.
+3. Non-first-option tests asserting only that the modal OPENS, when the claim is
+   that it VERIFIES.
+
+The lesson that generalises: **when jsdom is the environment, assert on the
+event, not on what a browser would do next** -- and when a test asserts an
+absence, ask what would have produced the presence.
 
 ## Doc freshness
 
