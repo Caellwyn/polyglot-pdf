@@ -250,6 +250,57 @@ correctness bug (demo billing figures inflated by staging test-drives) --
 not a case where "no fix" was a safe default to leave in place pending an
 answer.
 
+### Third fresh-eyes round -- adopt/reject/defer
+
+A further Opus cross-surface pass returned `GAPS-FOUND (2)`:
+
+- **ADOPTED -- finding 1 (unvalidated handshake kit_id as a Firestore path
+  segment, blocker):** on a STAFF session (not a client link), the
+  handshake's `kit_id` (`websocket_routes.py`'s `kit_id =
+  handshake.get("kit_id")`) is raw, unvalidated client input -- the
+  client-link branch overrides it with the signed token's `link_kit_id`,
+  but that override does not run for staff, and that value flowed straight
+  into `record_session_end(kit_id=kit_id)` -> `.document(kit_id)`. The
+  reviewer verified against the vendored SDK that Firestore's `.document()`
+  does not reject embedded slashes: an id like `"a/b/c"` commits
+  successfully to `kits/a/b/c/usage/...`, a path this module never intended
+  to touch, and a non-string kit_id (dict/list) raised `TypeError`,
+  silently dropping the whole rollup write (including the firm-side half)
+  under the module's broad `except`. Fixed by adding `_safe_kit_id()` to
+  `usage_rollups.py` -- the SAME charset as `form_kit_routes.py`'s
+  `_KIT_ID_RE`/`_safe_kit_id` (bd `polyglot-pdf-sbfk`/`0dsv4`), duplicated
+  rather than imported (a route module importing FastAPI/Depends has no
+  business being a dependency of a service module) -- called once at the
+  top of `record_session_end` so every downstream use (the `.document()`
+  call AND the `by_kit` map key) sees only a validated id; an invalid one
+  degrades to kit-less (same as a genuinely absent one) rather than failing
+  the whole write. Four new tests in `test_usage_rollups.py`
+  (`test_a_SLASHED_kit_id_is_DROPPED...`, `..._PATH_TRAVERSAL_kit_id...`,
+  `..._VALID_kit_id_still_writes...`, `..._NON_STRING_kit_id...`),
+  mutation-verified red against removing the `_safe_kit_id` call (3 of 4
+  went red; the "still writes a valid id" sanity test correctly stayed
+  green since it does not depend on the guard).
+- **ADOPTED -- finding 2 (stale cost-sizing doc, gap):**
+  `docs/components/config-deployment.md`'s "size from all four" Firestore-
+  write sizing note (redemption reads + writes on the paid path) predates
+  this bead's writes and now undercounts: first-open is TWO writes (not
+  one -- `open_link`'s record plus the rollup's `links_opened`), completion
+  is one read plus TWO writes (not one -- `complete_link`'s update, its own
+  read-back for the rollup's firm_id, plus `links_completed`), and every
+  connection teardown now separately adds one read (`firm_kind()`) plus
+  one-or-two writes (`record_session_end`'s batched commit). Corrected the
+  note in place with the exact counts and bumped the doc's own "Last
+  updated" stamp; did not touch `kit_gates.py`'s sibling cost-note comment
+  or `docs/components/auth.md`'s doc-id stamp -- both already filed as
+  separate beads (`polyglot-pdf-ahsn3`, `polyglot-pdf-qrieq`) by this same
+  review round, verified to exist before leaving them unfixed here.
+- **Finding 3 (the `record_link_opened` import-inside-try coupling): NOT
+  filed, per the reviewer's own note** -- traced as unreachable today
+  (`record_link_opened` itself cannot raise; only a hypothetical future
+  `ImportError` on the lazy import could reach `open_link`'s
+  `except Exception`), and the reviewer explicitly folded it into finding
+  1's fix rather than asking for a separate bead.
+
 ## Lessons
 
 The generalizable lesson: **when a bead's own description names a specific
@@ -309,3 +360,5 @@ further, into actually simulating one specific SDK code path's semantics.
 - `backend/tests/unit/test_firestore_rules_text.py` (extended set)
 - `firestore.rules` (two new deny blocks)
 - `docs/components/auth.md`, `docs/technical_guide.md`
+- `docs/components/config-deployment.md` (third fresh-eyes round: corrected
+  Firestore write-sizing counts, stamp bumped)

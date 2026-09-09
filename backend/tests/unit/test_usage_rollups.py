@@ -363,6 +363,91 @@ def test_a_HYPHENATED_kit_id_increments_the_INTENDED_nested_field(db):
     assert "by_kit.i-90.sessions" not in firm
 
 
+def test_a_SLASHED_kit_id_is_DROPPED_not_written_as_a_path_segment(db):
+    """Opus cross-surface finding 1 (bd polyglot-pdf-w828m): a STAFF
+    session's handshake kit_id is raw client input (websocket_routes.py's
+    client-link branch is the only guard, and it does not run for staff).
+    firestore.Client.document() does not reject embedded slashes, so
+    kit_id="a/b/c" would otherwise commit to kits/a/b/c/usage/... -- a path
+    this module never intended to touch -- instead of being refused.
+
+    Mutation: delete the `kit_id = _safe_kit_id(kit_id)` line in
+    record_session_end -- red, because this fake's _Collection.document()
+    naively concatenates the raw id into the path (exactly like real
+    Firestore does NOT validate it either), so kits/a/b/c/usage/2026-09
+    would appear in db.docs and this test's absence assertions fail.
+    """
+    ok = usage_rollups.record_session_end(
+        firm_id="acme", kit_id="a/b/c", employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=1.0, now=_NOW,
+    )
+    assert ok is True, "the firm-side write must still happen"
+    assert "kits/a/b/c/usage/2026-09" not in db.docs
+    assert not any(path.startswith("kits/a/b/c") for path in db.docs), (
+        "no document under the attacker-chosen path should be written"
+    )
+    firm = db.docs[_FIRM_DOC]
+    assert "by_kit" not in firm, (
+        "an invalid kit_id must be dropped, not used as a by_kit map key"
+    )
+
+
+def test_a_PATH_TRAVERSAL_kit_id_is_DROPPED(db):
+    """kit_id=".." must never reach .document() or a by_kit map key.
+
+    Mutation: same as above -- delete the _safe_kit_id call -- red because
+    the fake would happily record kits/../usage/2026-09.
+    """
+    ok = usage_rollups.record_session_end(
+        firm_id="acme", kit_id="..", employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=1.0, now=_NOW,
+    )
+    assert ok is True
+    assert not any(".." in path for path in db.docs)
+    assert "by_kit" not in db.docs[_FIRM_DOC]
+
+
+def test_a_VALID_kit_id_still_writes_the_kit_doc(db):
+    """Sanity check the guard is not overbroad: a genuinely valid kit id
+    (matching form_kit_routes.py's own charset) must still write both docs.
+
+    Mutation: tighten _KIT_ID_RE to reject hyphens -- red, because "i-90"
+    (an existing real kit id used throughout this file) would then be
+    dropped and kits/i-90/usage/2026-09 would never appear.
+    """
+    ok = usage_rollups.record_session_end(
+        firm_id="acme", kit_id="i-90", employee_id=None, language=None,
+        channel="demo", kind="live", completion_status="completed",
+        cost_usd=1.0, now=_NOW,
+    )
+    assert ok is True
+    assert _KIT_DOC in db.docs
+    assert db.docs[_FIRM_DOC]["by_kit"]["i-90"]["sessions"] == 1
+
+
+def test_a_NON_STRING_kit_id_is_DROPPED_not_raised(db):
+    """A dict/list/int kit_id (e.g. a malformed handshake payload) must
+    degrade to kit-less, matching this module's never-raise contract --
+    not raise TypeError out of .document() or _nest_increment.
+
+    Mutation: remove the isinstance(kit_id, str) check from _safe_kit_id --
+    red, because _KIT_ID_RE.fullmatch(kit_id) raises TypeError on a
+    non-string and the whole record_session_end call would then be caught
+    by the module's broad except and return False, silently dropping the
+    FIRM-side write too (not just the kit-side one).
+    """
+    ok = usage_rollups.record_session_end(
+        firm_id="acme", kit_id={"bad": "shape"}, employee_id=None,
+        language=None, channel="demo", kind="live",
+        completion_status="completed", cost_usd=1.0, now=_NOW,
+    )
+    assert ok is True, "a bad kit_id shape must not sink the firm-side write"
+    assert db.docs[_FIRM_DOC]["connections_ended"] == 1
+    assert "by_kit" not in db.docs[_FIRM_DOC]
+
+
 def test_a_HYPHENATED_language_code_increments_the_INTENDED_nested_field(db):
     """EXIT CRITERION 2, the language half. language="zh-CN" must land at
     firm.by_language["zh-CN"]["sessions"], not mis-nested or split on the

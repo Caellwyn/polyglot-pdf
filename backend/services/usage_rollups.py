@@ -123,6 +123,7 @@ ASCII only.
 """
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -134,6 +135,40 @@ _log = structlog.get_logger().bind(module="usage_rollups")
 FIRMS_COLLECTION = "firms"
 KITS_COLLECTION = "kits"
 USAGE_SUBCOLLECTION = "usage"
+
+# Mirrors form_kit_routes.py's _KIT_ID_RE exactly (bd polyglot-pdf-sbfk /
+# 0dsv4 -- "id becomes a path segment" hardening). NOT imported from there:
+# form_kit_routes is a route module (FastAPI, Depends, HTTPException) and
+# this is a service that must stay importable with no FastAPI app running;
+# pulling a route module into a service is the wrong direction for that
+# dependency to point. Duplicated on purpose, same charset.
+_KIT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+
+def _safe_kit_id(kit_id: Optional[str]) -> Optional[str]:
+    """Return kit_id if it is a safe single Firestore path segment, else
+    None.
+
+    On a STAFF session (not a client link) the handshake's kit_id is raw,
+    unvalidated client input -- websocket_routes.py's client-link branch
+    overrides it with the signed token's link_kit_id, but that guard does
+    not run for staff, so this module is the only place left to check it
+    before it becomes `db.collection("kits").document(kit_id)` (Opus
+    cross-surface, bd polyglot-pdf-w828m finding 1). `.document()` does not
+    reject embedded slashes -- an even number of them (e.g. "a/b/c") commits
+    successfully to a collection this module never intended to touch, and a
+    single slash raises ValueError only because Firestore then sees an ODD
+    path length, not because the slash itself was rejected. Never raises
+    (this module's contract): an invalid kit_id degrades to "treat this
+    connection as kit-less", exactly like a genuinely absent one, rather
+    than failing the whole rollup write or being tolerated as a valid id.
+    """
+    if not kit_id or not isinstance(kit_id, str):
+        return None
+    if ".." in kit_id or not _KIT_ID_RE.fullmatch(kit_id):
+        _log.warning("usage_rollup_invalid_kit_id_dropped", kit_id=kit_id[:200])
+        return None
+    return kit_id
 
 
 def _month_key(stamp: float, channel: Optional[str] = None) -> str:
@@ -256,6 +291,17 @@ def record_session_end(
         # the audit row (attribution-free rows are valid there); a rollup
         # has no such "unattributed" bucket to write into.
         return False
+
+    # kit_id becomes a Firestore document-path segment AND a by_kit map key
+    # below -- validate it here, once, before either use. A client-link
+    # session's kit_id is already safe (websocket_routes.py's client-link
+    # branch overrides the handshake value with the signed token's
+    # link_kit_id), but a STAFF session's kit_id is raw handshake input with
+    # no such guard, and this module is the last stop before .document()
+    # (see _safe_kit_id's docstring). An invalid id degrades to kit-less,
+    # same as one that was never provided -- it does not fail the firm-side
+    # write.
+    kit_id = _safe_kit_id(kit_id)
 
     stamp = float(now if now is not None else time.time())
     month = _month_key(stamp, channel)
