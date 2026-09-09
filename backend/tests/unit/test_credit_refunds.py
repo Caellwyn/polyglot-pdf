@@ -345,6 +345,36 @@ def test_a_sweep_and_a_lazy_reconcile_racing_on_ONE_jti_refund_exactly_once(
     assert len(fake_db.ledger_rows("acme")) == 1
 
 
+# ------------------------------------------------------- the actor gate
+
+
+def test_refund_refuses_a_blank_actor(fake_db):
+    """refund_expired_link must go through the SAME _validate() gate every
+    other ledger entry type goes through: "actor is required... the one
+    thing the ledger exists to make impossible" (module docstring). Today's
+    only production caller (reconcile_expired_for_firm) hardcodes a good
+    actor string, but refund_expired_link is a public function the future
+    sweep endpoint (Track B/B5) will also call directly, so a blank or
+    malformed actor slipping past a type hint at runtime must be refused,
+    not silently committed as an unattributable credit line.
+
+    Mutation: delete the `_validate(...)` call added to refund_expired_link
+    -- red (a blank actor commits a ledger entry with actor=""). Verified
+    2026-09-08."""
+    _mint(fake_db, credit_cost=3, open_deadline=500)
+
+    with pytest.raises(credit_ledger.LedgerError):
+        credit_ledger.refund_expired_link(
+            fake_db, "jti-1", actor="", now=1000.0)
+
+    assert fake_db.ledger_rows("acme") == [], (
+        "a blank actor must not commit a ledger entry")
+    assert fake_db.firm("acme")["balance_credits"] == 10, (
+        "a refused refund must not touch the balance")
+    assert fake_db.link("jti-1")["status"] == links_store.STATUS_MINTED, (
+        "a refused refund must not flip the link's status")
+
+
 # ------------------------------------------- EXIT CRITERION 2: opened refuses
 
 
@@ -477,6 +507,59 @@ def test_the_refund_entry_carries_the_credit_cost_channel_and_kit(fake_db):
     assert entry["link_jti"] == "jti-1"
     assert entry["actor"] == "system:sweep"
     assert set(fake_db.ledger_rows("acme")[0]) == credit_ledger.ENTRY_FIELDS
+
+
+def _capture_export(monkeypatch):
+    """Mirrors test_credit_ledger.py's helper of the same name (not imported
+    from there -- this module's fake _log target is the same
+    credit_ledger._log module attribute, but keeping the helper local avoids
+    a cross-test-module import for four lines)."""
+    lines = []
+
+    class _Recorder:
+        def bind(self, **kw):
+            return self
+
+        def info(self, event, **kw):
+            lines.append((event, kw))
+
+        def error(self, event, **kw):
+            lines.append((event, kw))
+
+    monkeypatch.setattr(credit_ledger, "_log", _Recorder())
+    return lines
+
+
+def test_refund_export_line_carries_exactly_LEDGER_EXPORT_FIELDS(
+        fake_db, monkeypatch):
+    """refund_expired_link is a SECOND producer of the ledger_export event
+    (append_entry is the first, pinned by test_credit_ledger.py's
+    test_every_write_emits_ONE_ledger_export_line_with_the_declared_fields).
+    Both producers write the same BigQuery-sink event and must be pinned
+    separately: a future edit to ONE producer's _log.info call must not be
+    able to silently drop a field from only that producer's rows.
+
+    Mutation: remove `usd_amount=...` (or any other key) from
+    refund_expired_link's _log.info call -- red. Verified 2026-09-08."""
+    lines = _capture_export(monkeypatch)
+    _mint(fake_db, credit_cost=4, open_deadline=500, kit_id="i-90")
+
+    credit_ledger.refund_expired_link(
+        fake_db, "jti-1", actor="system:sweep", channel="demo", now=1000.0)
+
+    exports = [kw for event, kw in lines
+               if event == credit_ledger.LEDGER_EXPORT_EVENT]
+    assert len(exports) == 1
+    payload = exports[0]
+    assert set(payload) == credit_ledger.LEDGER_EXPORT_FIELDS
+    assert payload["event_type"] == "ledger_export"
+    assert payload["type"] == "expiry_refund"
+    assert payload["amount"] == 4
+    assert payload["usd_amount"] is None
+    assert payload["firm_id"] == "acme"
+    assert payload["firm_kind"] == "live"
+    assert payload["channel"] == "demo"
+    assert payload["link_jti"] == "jti-1"
 
 
 def test_the_refund_and_the_status_flip_commit_ATOMICALLY(fake_db):

@@ -633,6 +633,17 @@ def refund_expired_link(
             raise LedgerError(
                 "links/{} has no usable credit_cost to refund".format(jti))
 
+        # Same gate every other entry type goes through (module docstring:
+        # "actor is required... the one thing the ledger exists to make
+        # impossible"). Deferred to here, rather than before the transaction
+        # opens like append_entry's call, only because credit_cost -- the
+        # entry's `amount` -- is not known until the links record is read;
+        # everything _validate checks is pure (no Firestore read of its
+        # own), so running it here, still before any write, costs nothing
+        # and closes the gap for a future caller (the Track B/B5 sweep
+        # endpoint) that might pass a blank or malformed actor.
+        _validate(TYPE_EXPIRY_REFUND, credit_cost, None, actor, None)
+
         firm_ref = db.collection(FIRMS_COLLECTION).document(firm_id)
         firm_snap = firm_ref.get(transaction=tx)
         if not firm_snap.exists:

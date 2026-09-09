@@ -77,6 +77,47 @@ admin-service or firm-console route (also Track B/C); any decision on
 budget-exhausted or opened-but-abandoned refunds (both maintainer calls,
 assumed "no" per the plan).
 
+**Fresh-eyes review round -- adopt/reject/defer.** All three exit criteria
+were confirmed PASS (mutation-verified independently by the reviewer). Two
+blockers, adopted:
+
+- ADOPTED: `refund_expired_link` never called `_validate()` -- unlike every
+  other ledger entry path, a blank or malformed `actor` would silently
+  commit an unattributable ledger entry. Fixed by calling `_validate()`
+  inside the transaction body once `credit_cost` (the entry's `amount`) is
+  known from the links record, still before any write. New pinning test:
+  `test_refund_refuses_a_blank_actor`. Mutation-verified (deleting the
+  `_validate` call reddens it).
+- ADOPTED: the second `ledger_export` producer (`refund_expired_link`'s own
+  `_log.info` call) was not pinned against `LEDGER_EXPORT_FIELDS` --
+  `append_entry`'s producer was pinned, this one was not, which is exactly
+  the "enumerate the set" trap CLAUDE.md's scar tissue #8 names. New
+  pinning test: `test_refund_export_line_carries_exactly_LEDGER_EXPORT_FIELDS`.
+  Mutation-verified (dropping `usd_amount` from the call reddens it).
+
+Two nits, deferred (filed as `bd polyglot-pdf-sw2lv`, not fixed in this
+diff per the closeout rule that nits are not fixed inline):
+
+- DEFERRED: `test_the_refund_and_the_status_flip_commit_ATOMICALLY`'s
+  docstring claims a negative-injection proof ("making the joined write
+  explode") the test body does not perform (it asserts only the positive
+  case). The test still correctly catches the mutation it names; this is a
+  stale docstring, not a coverage gap.
+- DEFERRED (not this bead's own finding, but surfaced by the reviewer and
+  carried into the same nits bead for one-place tracking): the pre-existing
+  `bd polyglot-pdf-o4h98` (the doc-freshness ack-counting test bug this
+  branch's `--ack` usage exposed, filed before this review round) is itself
+  missing its required `## Exit criteria` section and `metadata` block.
+
+One pre-existing, out-of-scope failure noted and left alone: the root-level
+`tests/test_doc_freshness.py::TestFreshnessAcks::
+test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus` fails on this
+branch (and on a clean stash of it) because it globs every `.ack` file in
+the working tree rather than comparing against the branch's merge-base --
+exactly the bug `bd polyglot-pdf-o4h98` already describes. Re-confirmed via
+`git stash` that it fails identically with none of this bead's changes
+present.
+
 ## Lessons
 
 **A criterion can name a transaction that does not exist yet as code.**
