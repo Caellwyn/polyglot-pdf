@@ -500,3 +500,38 @@ describe('a GROUP edit reports the checked selection (bd polyglot-pdf-96um6)', (
     expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Maria')
   })
 })
+
+describe('a CLEARED group cannot masquerade as answered (bd polyglot-pdf-96um6)', () => {
+  // The empty-selection carve-out is the risky half of the group-edit fix: a
+  // cleared group now notifies with [] where the old code notified nothing. That
+  // is only safe because the notify writes confirmed:false -- a CONFIRMED blank
+  // is the deliberate "the user said this does not apply" value and DOES settle
+  // (isConfirmedButBlank, bd polyglot-pdf-6oe6). These pin the distinction.
+  const S = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [
+      { id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group', required: true,
+        options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  const stateWith = (value: unknown, confirmed: boolean) => ({
+    schema: S,
+    fieldValues: { race: { value, confirmed } },
+    sectionState: { currentSectionId: 's1' },
+  } as any)
+
+  it('the UNCONFIRMED empty a manual clear writes does not complete the form', () => {
+    expect(isFormComplete(stateWith([], false))).toBe(false)
+  })
+
+  it('and the cleared group is still the next field to ask about', () => {
+    expect(computeNextField(stateWith([], false))?.id).toBe('race')
+  })
+
+  it('a filled group DOES complete it -- so the test above is not vacuous', () => {
+    expect(isFormComplete(stateWith(['Asian'], true))).toBe(true)
+  })
+})
