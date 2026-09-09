@@ -1550,7 +1550,8 @@ async def fill_form_from_schema(
 		def _resolve_ceiling_and_check_budget() -> float:
 			ceiling_usd = cost_ceiling_usd_for_claims(claims)
 			return check_budget(
-				claims.get("jti"), {KIT_COST_CEILING_KEY: ceiling_usd}
+				claims.get("jti"), {KIT_COST_CEILING_KEY: ceiling_usd},
+				firm_id=claims.get("firm_id"),
 			)
 
 		try:

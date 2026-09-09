@@ -69,6 +69,10 @@ ADMIN_SDK_ONLY_COLLECTIONS = (
     # pattern since it shipped.
     ("link_redemptions", "jti"),
     ("link_redemptions_staging", "jti"),
+    # Epic 3 bead E3.5 (bd polyglot-pdf-bo95a) -- telemetry alert docs
+    # (backend/services/alerts.py): the link-budget-exhausted and
+    # credit-low/exhausted alert hooks.
+    ("alerts", "alertId"),
 )
 
 

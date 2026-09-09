@@ -10,6 +10,11 @@ retune them without a redeploy:
     CREDITS_ENFORCED       (bool)  -- NEW; never had an env read. Read only
                                       through this module (Epic 2 bead A3
                                       gates a zero-balance mint on it).
+    CREDIT_LOW_THRESHOLD   (int)   -- NEW; never had an env read, like
+                                      CREDITS_ENFORCED. Read only through
+                                      this module (Epic 3 bead E3.5's
+                                      backend/services/alerts.py compares a
+                                      firm's post-debit balance against it).
 
 NOT MOVED (deliberately -- see the bead body): LINK_TOKEN_SECRET (Secret
 Manager -- moving a secret into a plain Firestore doc would be a regression),
@@ -82,6 +87,7 @@ KEY_LINK_MINTING_ENABLED = "LINK_MINTING_ENABLED"
 KEY_LINK_COST_CEILING_USD = "LINK_COST_CEILING_USD"
 KEY_LINK_FIRM_CAP = "LINK_FIRM_CAP"
 KEY_CREDITS_ENFORCED = "CREDITS_ENFORCED"
+KEY_CREDIT_LOW_THRESHOLD = "CREDIT_LOW_THRESHOLD"
 
 # The complete set of keys this module will read from a channel's doc. A key
 # present in the doc but NOT in this set is ignored (logged), not applied --
@@ -92,6 +98,7 @@ RUNTIME_CONFIG_KEYS = frozenset({
     KEY_LINK_COST_CEILING_USD,
     KEY_LINK_FIRM_CAP,
     KEY_CREDITS_ENFORCED,
+    KEY_CREDIT_LOW_THRESHOLD,
 })
 
 # Compiled fallback constants -- used ONLY when a key has never been
@@ -104,6 +111,7 @@ _ENV_DEFAULTS: dict[str, Any] = {
     KEY_LINK_COST_CEILING_USD: 10.0,
     KEY_LINK_FIRM_CAP: 30,
     KEY_CREDITS_ENFORCED: False,
+    KEY_CREDIT_LOW_THRESHOLD: 10,
 }
 
 
@@ -111,9 +119,10 @@ def _legacy_env_default(key: str) -> Any:
     """The env-shaped default for one key: a live os.getenv read for the
     three legacy keys, parsed exactly as the pre-bg313 call sites parsed
     them, falling back to the compiled constant in _ENV_DEFAULTS when the
-    variable is unset or fails to parse. CREDITS_ENFORCED never reads env --
-    it is brand new and has no pre-bg313 call site to match -- so it always
-    returns its compiled constant (False).
+    variable is unset or fails to parse. CREDITS_ENFORCED and
+    CREDIT_LOW_THRESHOLD never read env -- both are brand new and have no
+    pre-bg313 call site to match -- so they always return their compiled
+    constant (False, 10).
 
     This is what keeps deploy-staging.sh's and deploy-demo.sh's
     LINK_MINTING_ENABLED=true (BACKEND_EXTRA_ENV) a real fallback rather than
@@ -150,7 +159,8 @@ def _legacy_env_default(key: str) -> Any:
         except (TypeError, ValueError):
             return _ENV_DEFAULTS[key]
         return value if value > 0 else _ENV_DEFAULTS[key]
-    # KEY_CREDITS_ENFORCED (and anything else): compiled constant only.
+    # KEY_CREDITS_ENFORCED, KEY_CREDIT_LOW_THRESHOLD (and anything else):
+    # compiled constant only -- neither ever had a pre-bg313 env reader.
     return _ENV_DEFAULTS[key]
 
 
@@ -203,6 +213,18 @@ def _coerce(key: str, raw: Any) -> Optional[Any]:
         except (TypeError, ValueError):
             return None
         return value if value > 0 else None
+    if key == KEY_CREDIT_LOW_THRESHOLD:
+        # Same bool-rejection trap as LINK_FIRM_CAP. Zero IS a legitimate
+        # threshold (an operator who only wants the zero-balance/exhausted
+        # alert and no separate "low" warning) -- unlike the cap and the
+        # ceiling, negative is the only value rejected here.
+        if isinstance(raw, bool):
+            return None
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value >= 0 else None
     return None
 
 
@@ -322,6 +344,16 @@ def credits_enforced(channel: Optional[str] = None) -> bool:
     unenforced until an operator (or a later migration) turns this on.
     """
     return bool(_resolve(channel or _current_channel(), KEY_CREDITS_ENFORCED))
+
+
+def credit_low_threshold(channel: Optional[str] = None) -> int:
+    """The credit balance at or below which a firm's debit fires the
+    `credit_low` telemetry alert (Epic 3 bead E3.5,
+    backend/services/alerts.py). NEW key, like CREDITS_ENFORCED -- never had
+    an os.getenv fallback, so its compiled default (10) is the ONLY
+    pre-Firestore behaviour.
+    """
+    return int(_resolve(channel or _current_channel(), KEY_CREDIT_LOW_THRESHOLD))
 
 
 def clear_cache() -> None:

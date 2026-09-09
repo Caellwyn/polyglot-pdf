@@ -111,12 +111,21 @@ def spend_so_far(jti: str) -> float:
     return float(raw) if raw > 0 else 0.0
 
 
-def check_budget(jti: str, kit_metadata: Optional[dict] = None) -> float:
+def check_budget(
+    jti: str,
+    kit_metadata: Optional[dict] = None,
+    firm_id: Optional[str] = None,
+) -> float:
     """Raise LinkBudgetExhausted if this link is at or over its ceiling.
 
     Returns the remaining USD when there is room. Call this BEFORE starting a
     paid session, not after -- the point is to refuse the session, not to
     discover afterwards that it should have been refused.
+
+    `firm_id` is OPTIONAL and used only to label the telemetry alert doc
+    (bd polyglot-pdf-bo95a) written on refusal -- it is never consulted by
+    the budget decision itself, which stays keyed purely on jti/ceiling/spend
+    exactly as before this parameter existed.
     """
     ceiling = _ceiling_for(kit_metadata)
     spent = spend_so_far(jti)
@@ -126,6 +135,14 @@ def check_budget(jti: str, kit_metadata: Optional[dict] = None) -> float:
             jti=jti,
             spend_usd=round(spent, 6),
             ceiling_usd=ceiling,
+        )
+        # Best-effort telemetry (bd polyglot-pdf-bo95a): NEVER raises, so a
+        # store hiccup on the alert write cannot mask or replace the real
+        # refusal below with a different exception.
+        from backend.services import alerts as _alerts
+
+        _alerts.record_link_exhausted(
+            jti, firm_id=firm_id, spend_usd=spent, ceiling_usd=ceiling,
         )
         raise LinkBudgetExhausted(
             f"link has spent {spent:.4f} of its {ceiling:.2f} ceiling"

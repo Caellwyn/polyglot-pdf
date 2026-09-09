@@ -113,5 +113,16 @@ service cloud.firestore {
     match /link_redemptions_staging/{jti} {
       allow read, write: if false;
     }
+
+    // Telemetry alert docs (alerts/{id}): Admin-SDK-only (Epic 3 bead E3.5,
+    // bd polyglot-pdf-bo95a, backend/services/alerts.py). Deterministic-id
+    // docs written on a link's spend-ceiling refusal and on a firm's credit
+    // debit crossing a low/zero threshold. A client-SDK write could forge or
+    // silently suppress an alert (e.g. pre-writing acknowledged_at so a real
+    // trigger's merge never surfaces it as new); a client-SDK read would let
+    // a browser see another firm's spend/balance telemetry.
+    match /alerts/{alertId} {
+      allow read, write: if false;
+    }
   }
 }
