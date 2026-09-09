@@ -432,12 +432,41 @@ def append_entry(
         channel=channel,
         link_jti=link_jti,
     )
+    _alert_on_low_balance(entry_type, firm_id, captured["balance"])
     return {
         **entry,
         "doc_id": entry_ref.id,
         "firm_id": firm_id,
         "balance_credits": captured["balance"],
     }
+
+
+def _alert_on_low_balance(entry_type: str, firm_id: str, balance: int) -> None:
+    """Fire Epic 3's telemetry alert (bd polyglot-pdf-bo95a) after a DEBIT
+    commits, if the resulting balance is at or below CREDIT_LOW_THRESHOLD or
+    at/below zero.
+
+    DEBITS ONLY, checked by `entry_type`, not by the sign of the resulting
+    balance: a firm can sit below the threshold indefinitely without any
+    NEW alert firing on every unrelated grant, adjustment or refund that
+    happens to land while it is still low -- the alert is about a debit
+    PUSHING the firm there, not the firm's static state. A grant that
+    raises the balance back out never reaches here at all (TYPE_MINT_DEBIT
+    only), so recovery produces no doc; the NEXT UTC day's first low debit
+    (if the firm is still under) creates a fresh dated doc, which is the
+    reset an operator would expect.
+
+    Best-effort, like everything alerts.py exposes: alerts.record_credit_
+    threshold() never raises, so a store hiccup here cannot undo or fail a
+    debit that has ALREADY committed above.
+    """
+    if entry_type != TYPE_MINT_DEBIT:
+        return
+    from backend.services import alerts as _alerts
+    from backend.services import runtime_config as _runtime_config
+
+    threshold = _runtime_config.credit_low_threshold()
+    _alerts.record_credit_threshold(firm_id, balance=balance, threshold=threshold)
 
 
 def read_balance(db, firm_id: str) -> Optional[int]:
