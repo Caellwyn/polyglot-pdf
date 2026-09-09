@@ -92,20 +92,36 @@ ACTION_EXPIRY_REFUND = "credits.expiry_refund"
 SWEEP_ACTOR = "system:sweep_expired_links"
 
 
-def _audience() -> str:
-    """This route's own URL -- the OIDC audience Cloud Scheduler's job must
-    present.
+_SWEEP_ROUTE_PATH = "/admin/links/sweep-expired"
 
-    Read from ADMIN_SERVICE_URL (set by deploy-admin.sh at deploy time,
-    same env-var-at-deploy-time shape as GIT_SHA), never hard-coded: the
-    admin service's own Cloud Run URL is assigned by Google at first deploy
-    and is not knowable at code-review time. A missing value means an
-    operator has not finished wiring the scheduler job to this route yet,
-    so every call is refused (503, at request time via require_google_oidc)
-    rather than accepted against an empty-string audience nothing could
-    ever legitimately present.
+
+def _audience() -> str:
+    """This route's own URL (service root + path) -- the OIDC audience
+    Cloud Scheduler's job must present.
+
+    ADMIN_SERVICE_URL holds the admin service's bare Cloud Run URL (the
+    SERVICE ROOT, set by an operator from `gcloud run services describe
+    ... --format 'value(status.url)'` per deploy-admin.sh's own output,
+    and referenced the same way everywhere else this env var appears --
+    scripts/setup-admin-service.sh's `--uri="$ADMIN_SERVICE_URL/admin/
+    links/sweep-expired"` NOTE line). Cloud Scheduler's job is declared
+    with `--oidc-token-audience="$ADMIN_SERVICE_URL/admin/links/
+    sweep-expired"` (the FULL route path, not the bare root) -- so this
+    function must append the same path here, or every scheduled call's
+    `aud` claim (root+path) would never match a bare-root comparison and
+    require_google_oidc would reject the one caller it exists to admit
+    (bd polyglot-pdf-8vgfh cross-surface review finding 2).
+
+    Never hard-coded: the admin service's own Cloud Run URL is assigned by
+    Google at first deploy and is not knowable at code-review time. A
+    missing ADMIN_SERVICE_URL means an operator has not finished wiring the
+    scheduler job to this route yet, so every call is refused (503, at
+    request time via require_google_oidc) rather than accepted against a
+    bare "/admin/links/sweep-expired" audience nothing could ever
+    legitimately present (no real caller's URL is just a path).
     """
-    return os.getenv("ADMIN_SERVICE_URL", "")
+    root = os.getenv("ADMIN_SERVICE_URL", "")
+    return root + _SWEEP_ROUTE_PATH if root else ""
 
 
 def _allowed_caller_emails() -> tuple:

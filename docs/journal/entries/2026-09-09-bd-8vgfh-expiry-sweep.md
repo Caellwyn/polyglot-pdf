@@ -113,6 +113,73 @@ job or running `setup-admin-service.sh` against a real project (both
 operator actions, PENDING-DEPLOY); Epic 4 4.3's Pub/Sub push route, the
 gate's second consumer.
 
+### Cross-surface review round (fixes)
+
+The Opus outer cross-surface review returned `GAPS-FOUND (3)` on the first
+pass, all three ADOPTED (fixed inline, no maintainer decision needed) plus
+one nit already filed as its own bead by the reviewer:
+
+- **ADOPTED -- missing composite index for the sweep's own query.** The
+  sweep's `status == minted AND open_deadline < now` query has no `firm_id`
+  filter (unlike A5's `reconcile_expired_for_firm`), so the ONE composite
+  index this bead shipped (`firm_id, status, open_deadline`) cannot serve
+  it -- Firestore only serves a query from an index whose fields are a
+  PREFIX of the query's constrained fields. Every hourly sweep would fail
+  at runtime with `FAILED_PRECONDITION` while the suite stayed green (the
+  test fake filters in Python). Fixed: two new `(status, open_deadline)`
+  composite indexes in `firestore.indexes.json` (one per collection,
+  `links` and `links_staging`), plus `test_firestore_indexes.py` extended
+  to guard the new query alongside the old one -- the guard now identifies
+  a shipped index by its FIELD-NAME SET rather than by collectionGroup
+  alone, since two legitimately different queries now share each links
+  collection.
+- **ADOPTED -- OIDC audience mismatch between the scheduler job and the
+  gate.** `scripts/setup-admin-service.sh`'s printed scheduler-job command
+  pins `--oidc-token-audience` to the service root PLUS the route's own
+  path, but `sweep_routes._audience()` was returning the bare
+  `ADMIN_SERVICE_URL` env var (the service root only) with nothing
+  appended -- so a real Cloud Scheduler token's `aud` claim would never
+  match what the gate checked, and every scheduled call would 401. Fixed:
+  `_audience()` now appends the route's own fixed path
+  (`/admin/links/sweep-expired`) to the bare `ADMIN_SERVICE_URL`; the test
+  fixture that had set `ADMIN_SERVICE_URL` to the FULL path (silently
+  masking the exact mismatch the reviewer caught) is corrected to the bare
+  root; new tests pin `_audience()`'s exact composition and cross-check it
+  against the setup script's own shipped text so the two sides cannot
+  silently diverge again.
+- **ADOPTED -- a hand-run env-var step that the next deploy silently
+  erased.** `deploy-admin.sh`'s Cloud Run deploy uses `--set-env-vars`,
+  which REPLACES the service's entire env block. `ADMIN_SERVICE_URL` and
+  `SWEEP_SCHEDULER_SA_EMAIL` were documented as a SEPARATE, one-time
+  `gcloud run services update --update-env-vars` step an operator ran by
+  hand -- so the very next `./deploy-admin.sh` run wiped that binding,
+  fail-closing the sweep route (503) with no test or alert able to notice.
+  Fixed: both values are now computed INSIDE `deploy-admin.sh` itself
+  (`SWEEP_SCHEDULER_SA_EMAIL` is constructible from the setup script's
+  fixed `SCHEDULER_SA_NAME` literal with no lookup needed;
+  `ADMIN_SERVICE_URL` is looked up via `gcloud run services describe`
+  BEFORE the deploy call, tolerating the true-first-deploy case where the
+  service does not exist yet) and folded into the same `BACKEND_EXTRA_ENV`
+  the CORS origins already travel through -- every deploy re-asserts both
+  vars instead of a separate step a later deploy can erase. New test file
+  `tests/test_deploy_admin_sweep_env_vars.py` pins the computation and the
+  wiring into `BACKEND_EXTRA_ENV`; `scripts/setup-admin-service.sh`'s
+  printed NOTE no longer instructs the now-unnecessary manual step.
+- **FILED, not fixed here** -- `docs/sprint_22_admin-console_plan.md`'s
+  "runs per channel with the channel passed explicitly" line describes a
+  per-channel Scheduler job; the shipped script declares ONE job that
+  sweeps every channel in one request. A defensible simplification with a
+  real operational tradeoff (one slow channel now delays the other; a
+  Scheduler retry can't attribute failure to a channel), needing a plan
+  reconciliation rather than a code fix -- filed as bd `polyglot-pdf-2n1qs`
+  by the reviewer, left open.
+
+All three fixes were mutation-verified (the pre-fix behavior was
+reconstructed and confirmed to fail the new/changed test red, then the fix
+was restored and confirmed green) before this round closed. Full backend
+suite (3530 passed, 72 skipped) and root suite (1442 passed, 46 skipped)
+both green after the round.
+
 ## Lessons
 
 **A shared helper's `extra_writes` hook is the load-bearing seam for
@@ -199,5 +266,27 @@ route level) are the pattern to copy.
   pins for the scheduler declaration.
 - `docs/components/admin-service.md`, `docs/technical_guide.md` -- as
   above.
+
+**Cross-surface review round additions:**
+
+- `firestore.indexes.json` -- two new `(status, open_deadline)` composite
+  indexes (`links`, `links_staging`) for the sweep's own query.
+- `admin_backend/tests/unit/test_firestore_indexes.py` -- extended to guard
+  the sweep's query alongside `reconcile_expired_for_firm`'s, keyed on
+  field-name SET rather than collectionGroup alone.
+- `admin_backend/routes/sweep_routes.py` -- `_audience()` now appends the
+  route's own path to the bare `ADMIN_SERVICE_URL` service root.
+- `admin_backend/tests/unit/test_sweep_routes.py` -- fixture corrected to
+  set `ADMIN_SERVICE_URL` to the bare root (was silently masking the
+  mismatch); new tests pinning `_audience()`'s composition and its
+  cross-check against the setup script's shipped text.
+- `deploy-admin.sh` -- computes and forwards `ADMIN_SERVICE_URL` /
+  `SWEEP_SCHEDULER_SA_EMAIL` through `BACKEND_EXTRA_ENV` on every run.
+- `tests/test_deploy_admin_sweep_env_vars.py` (new) -- pins the computation
+  and the durable wiring into `BACKEND_EXTRA_ENV`.
+- `scripts/setup-admin-service.sh` -- corrected `--oidc-token-audience`
+  comment; removed the now-unnecessary manual update-env-vars NOTE.
+- `docs/technical_guide.md` -- sweep route's audience description
+  corrected (service root + path, not the bare env var).
 
 Review outcomes recorded in the closeout ping.

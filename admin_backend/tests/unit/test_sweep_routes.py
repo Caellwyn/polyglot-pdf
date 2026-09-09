@@ -238,7 +238,21 @@ def _redeem(fake_db, jti="jti-1", channel="demo", **over):
 # --------------------------------------------------------------------------
 
 SCHEDULER_EMAIL = "scheduler-sa@test-project.iam.gserviceaccount.com"
-AUDIENCE = "https://polyglot-admin-test.a.run.app/admin/links/sweep-expired"
+# ADMIN_SERVICE_URL is the admin service's BARE Cloud Run URL (the SERVICE
+# ROOT, matching every real caller of this env var -- deploy-admin.sh's own
+# `gcloud run services describe ... status.url` output and scripts/setup-
+# admin-service.sh's `--uri="$ADMIN_SERVICE_URL/admin/links/sweep-expired"`
+# NOTE line). sweep_routes._audience() appends the route's own path to it
+# (bd polyglot-pdf-8vgfh cross-surface review finding 2 -- setting this env
+# var to the FULL path here, as an earlier version of this fixture did,
+# silently masked exactly the audience-mismatch bug that finding caught:
+# the shipped setup script's --oidc-token-audience is root+path, so a test
+# that put the full path directly into ADMIN_SERVICE_URL was testing the
+# wrong contract). AUDIENCE is the value _audience() actually produces once
+# _sweep_oidc_gate resolves it -- what a real Cloud Scheduler token's `aud`
+# claim must equal.
+ADMIN_SERVICE_URL = "https://polyglot-admin-test.a.run.app"
+AUDIENCE = ADMIN_SERVICE_URL + "/admin/links/sweep-expired"
 
 
 @pytest.fixture
@@ -248,7 +262,7 @@ def scheduler_env(monkeypatch):
     the test sends -- 'valid-scheduler-token' resolves to the real
     scheduler identity, anything else raises ValueError (an invalid token),
     matching _verify_google_id_token's own contract."""
-    monkeypatch.setenv("ADMIN_SERVICE_URL", AUDIENCE)
+    monkeypatch.setenv("ADMIN_SERVICE_URL", ADMIN_SERVICE_URL)
     monkeypatch.setenv("SWEEP_SCHEDULER_SA_EMAIL", SCHEDULER_EMAIL)
 
     def _fake_verify(token, audience):
@@ -271,6 +285,67 @@ def client():
 
 def _auth(token):
     return {"Authorization": "Bearer {}".format(token)} if token else {}
+
+
+# --------------------------------------------------------------------------
+# _audience() vs. scripts/setup-admin-service.sh's declared scheduler job
+# (bd polyglot-pdf-8vgfh cross-surface review finding 2). The scheduler job
+# is declared with --oidc-token-audience="$ADMIN_SERVICE_URL/admin/links/
+# sweep-expired" (service root + path); ADMIN_SERVICE_URL on the admin
+# service itself is set to the bare service root. _audience() must bridge
+# that gap by appending the route's own path -- if it instead returned
+# ADMIN_SERVICE_URL bare, every real scheduler-minted token's `aud` claim
+# (root+path) would never match, and require_google_oidc would 401 the one
+# caller it exists to admit.
+# --------------------------------------------------------------------------
+
+def test_audience_appends_the_route_path_to_the_bare_service_root(
+        monkeypatch):
+    """Mutation: change _audience() to `return os.getenv("ADMIN_SERVICE_URL",
+    "")` (the bare root, no path appended) -- this goes red."""
+    monkeypatch.setenv("ADMIN_SERVICE_URL", ADMIN_SERVICE_URL)
+    assert sweep_routes._audience() == AUDIENCE
+
+
+def test_audience_is_empty_when_admin_service_url_is_unset(monkeypatch):
+    """An unconfigured deployment must resolve to an empty audience (which
+    require_google_oidc fail-closes on, see test_route_refuses_with_503_
+    when_unconfigured below) -- never a bare "/admin/links/sweep-expired"
+    path, which is not a URL any real caller could present as `aud`."""
+    monkeypatch.delenv("ADMIN_SERVICE_URL", raising=False)
+    assert sweep_routes._audience() == ""
+
+
+def test_audience_matches_the_setup_scripts_declared_oidc_token_audience():
+    """Cross-checks _audience()'s composed shape against the ACTUAL text of
+    scripts/setup-admin-service.sh's --oidc-token-audience flag, so a future
+    edit to either side that reintroduces the root-vs-root+path mismatch
+    (finding 2) is caught here rather than only in production. Mutation:
+    change --oidc-token-audience in the script to just "$ADMIN_SERVICE_URL"
+    (drop the path) -- this goes red."""
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    script = (repo_root / "scripts" / "setup-admin-service.sh").read_text(
+        encoding="utf-8")
+    # The script's echo statements carry backslash-escaped quotes and a
+    # backslash-escaped "$" (they are printed inside a double-quoted `echo
+    # -e "..."` shell string) -- unescape both before comparing against the
+    # semantic flag value a copy-paste of the printed command would
+    # actually run, same approach as tests/test_setup_admin_service_
+    # scheduler.py's _job_create_block helper.
+    unescaped = script.replace('\\"', '"').replace('\\$', '$')
+    assert (
+        '--oidc-token-audience="$ADMIN_SERVICE_URL'
+        + sweep_routes._SWEEP_ROUTE_PATH + '"'
+    ) in unescaped, (
+        "scripts/setup-admin-service.sh's declared --oidc-token-audience "
+        "must be $ADMIN_SERVICE_URL followed by sweep_routes._SWEEP_ROUTE_"
+        "PATH ({!r}) -- exactly what _audience() computes from the bare "
+        "ADMIN_SERVICE_URL env var set on the admin service. If either "
+        "side changes without the other, the scheduler's real token "
+        "audience stops matching what the route checks against.".format(
+            sweep_routes._SWEEP_ROUTE_PATH))
 
 
 # --------------------------------------------------------------------------

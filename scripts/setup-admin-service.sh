@@ -187,9 +187,12 @@ fi
 # the token's `email` claim, which is exactly what SWEEP_SCHEDULER_SA_EMAIL
 # (the admin service's own env var, read by admin_backend/routes/
 # sweep_routes.py) must be set to for the route to accept it.
-# --oidc-token-audience: the route's own URL -- what ADMIN_SERVICE_URL on
-# the admin service must be set to, and what require_google_oidc checks the
-# token's `aud` claim against.
+# --oidc-token-audience: the route's own URL (service root + path), i.e.
+# "$ADMIN_SERVICE_URL/admin/links/sweep-expired" -- NOT the same string as
+# the ADMIN_SERVICE_URL env var set on the admin service below (that one is
+# the BARE service root; sweep_routes.py's _audience() appends this
+# route's own path to it before comparing against the token's `aud` claim,
+# so root+path together are what require_google_oidc actually checks).
 # --uri: the FULL sweep route path, not just the service root -- Cloud Run
 # accepts the OIDC token for the whole service, but the route itself only
 # ever gets called at this one path.
@@ -207,6 +210,9 @@ echo -e "${YELLOW}[NOTE]${NC}     --http-method=POST \\"
 echo -e "${YELLOW}[NOTE]${NC}     --oidc-service-account-email=\"$SCHEDULER_SA_EMAIL\" \\"
 echo -e "${YELLOW}[NOTE]${NC}     --oidc-token-audience=\"\$ADMIN_SERVICE_URL/admin/links/sweep-expired\""
 echo -e "${YELLOW}[NOTE]${NC}"
-echo -e "${YELLOW}[NOTE]${NC} Then set on the admin service (redeploy or update-env-vars):"
-echo -e "${YELLOW}[NOTE]${NC}   ADMIN_SERVICE_URL=\$ADMIN_SERVICE_URL"
-echo -e "${YELLOW}[NOTE]${NC}   SWEEP_SCHEDULER_SA_EMAIL=$SCHEDULER_SA_EMAIL"
+echo -e "${YELLOW}[NOTE]${NC} ADMIN_SERVICE_URL and SWEEP_SCHEDULER_SA_EMAIL are now set AUTOMATICALLY"
+echo -e "${YELLOW}[NOTE]${NC} by deploy-admin.sh itself on every run (bd polyglot-pdf-8vgfh finding 3) --"
+echo -e "${YELLOW}[NOTE]${NC} no separate update-env-vars step, and no risk of a later deploy wiping"
+echo -e "${YELLOW}[NOTE]${NC} a hand-set value. Just re-run ./deploy-admin.sh once after creating the"
+echo -e "${YELLOW}[NOTE]${NC} scheduler job above, so this deploy's env vars include ADMIN_SERVICE_URL"
+echo -e "${YELLOW}[NOTE]${NC} (unset on the very first deploy, before the service has a URL at all)."
