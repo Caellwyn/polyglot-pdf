@@ -50,8 +50,54 @@ its own exit criterion 3 -- a revoked link must be refused at open.
   `test_sweep_routes.py` and `test_firm_routes.py` already use.
 - `backend/tests/integration/test_revoked_link_open.py` (NEW) -- the
   bead's OTHER exit-criterion-3 half, over the REAL `backend.main.app`'s
-  `POST /api/links/open`. See "Lessons" below: this file is deliberately
-  RED right now, for a documented and legitimate reason.
+  `POST /api/links/open`. Marked `@pytest.mark.xfail(strict=True)` on its
+  one A3-dependent assertion (see "Cross-surface review round" below) --
+  no longer "deliberately red", now a documented, CI-green, strict xfail.
+
+## Cross-surface review round
+
+Opus outer review returned GAPS-FOUND(1): one blocker, two filed-not-blocking.
+
+- **ADOPT (fixed inline).** Finding 1: `test_revoked_link_open.py`'s
+  A3-dependent test was committed plainly red (unmarked), which per
+  `.github/workflows/ci.yml`'s documented policy turns CI red for every
+  unrelated PR until #749 (A3) merges. Fixed by marking the one assertion
+  `@pytest.mark.xfail(strict=True, reason=...)`, matching the two existing
+  repo precedents (`test_pricing_tables.py`'s Chirp3-HD-rate gate,
+  `test_usage_event_coverage.py`'s per-site emit gate). Mutation-verified
+  three ways: (1) confirmed the test failed plainly before the marker: 1
+  failed, 1 passed; (2) confirmed the marked file is green: 1 passed, 1
+  xfailed, exit 0; (3) proved `strict=True` is not a no-op by temporarily
+  replacing the real assertion with `assert True` (simulating A3 having
+  landed) and observing pytest report a hard FAILURE (XPASS) with exit 1,
+  then restored the real assertion and re-confirmed green.
+- **DEFER (filed, not fixed here -- correctly out of this bead's surfaces).**
+  Finding 2: `_mirror_budget_exhausted`
+  (`backend/routes/websocket_routes.py:1248-1253`) has no terminal-state
+  guard, so once A3 lands a revoke can be silently stomped back open by a
+  budget-exhaustion mirror on a still-live socket. Filed as
+  `polyglot-pdf-b554d` (P1, opus/cross-surface tier), wired `DEPENDS ON`
+  this bead so it cannot be picked before B4 (the first non-mint status
+  writer) actually lands. The fix belongs to the status-writer *set*
+  (CLAUDE.md scar #8), not to a single overwrite site, which is why B4
+  does not fix it inline -- B4's own route already has the correct guard
+  and is the model the fix should copy.
+  Finding 3: revoking a minted link forfeits its credit with no ledger
+  entry and no maintainer decision on record. Filed as `polyglot-pdf-bjyp6`
+  (P2, opus/needs-plan tier) -- a product/pricing call the maintainer owns,
+  not on the plan's existing maintainer-calls list, so B4 does not
+  implement a guess at the answer.
+- **REJECT.** None -- both filed findings were confirmed via the reviewer's
+  own cited line numbers and queries; nothing was refuted.
+- **Deliberately not re-flagged as nits** (reviewer's own "did NOT flag"
+  list, re-checked and left alone): the four-way `KNOWN_CHANNELS` tuple
+  duplication (pre-existing convention, reproduces unchanged on
+  `origin/dev`), the N+1 per-jti redemption read in `_do_list_links`
+  (bounded by bead ik7e's minting meter, same shape already accepted
+  elsewhere), and the A3-closed-but-unmerged process gap (already covered
+  by the existing `polyglot-pdf-rbkrx`). No new nits bead filed -- all
+  three were pre-existing/already-tracked, not new observations needing
+  one.
 
 ## Lessons
 

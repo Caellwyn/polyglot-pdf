@@ -131,6 +131,17 @@ def _seed_mint_record(monkeypatch, jti, status, channel="demo"):
     return records
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "A3's open-gate change (bd polyglot-pdf-jecrl, PR #749) has not "
+        "merged to origin/dev yet (tracked by bd polyglot-pdf-rbkrx) -- "
+        "backend/routes/link_routes.py does not read links_store.get_link "
+        "on this branch's base, so the revoke check this test pins cannot "
+        "fire. STRICT -- once #749 merges this XPASSes, which is the "
+        "prompt to delete this marker."
+    ),
+)
 def test_a_revoked_link_is_refused_at_open_with_the_uniform_404(
         client, monkeypatch):
     """THE bead's exit criterion: a subsequent A3 open of a revoked jti is
