@@ -180,6 +180,83 @@ was restored and confirmed green) before this round closed. Full backend
 suite (3530 passed, 72 skipped) and root suite (1442 passed, 46 skipped)
 both green after the round.
 
+### Cross-surface review round 2 (fixes)
+
+The Opus outer cross-surface review returned `GAPS-FOUND (2)` on the
+second pass. Both blockers ADOPTED (fixed inline); four other findings
+FILED (none blocking, per the reviewer's own classification), no
+maintainer decision needed for any of them.
+
+- **ADOPTED (blocker) -- the 401-vs-503 transport-failure classifier was
+  unreachable in production; every real certs-fetch outage misclassified
+  as 401.** `_verify_google_id_token`'s classifier caught only builtin
+  `(ConnectionError, TimeoutError)`, but `google.auth.transport.requests.
+  Request.__call__` wraps every real transport failure (a DNS failure, a
+  non-200 certs response, or a wrapped raw `requests.exceptions.
+  ConnectionError`) as `google.auth.exceptions.TransportError`, which
+  chains from `GoogleAuthError -> Exception`, NOT from builtin
+  `ConnectionError` -- and a raw `requests.exceptions.RequestException`
+  chains from `OSError`, also not builtin `ConnectionError`. So an outage
+  in Google's certs endpoint was returned to Cloud Scheduler as 401
+  "Invalid or expired sign-in" instead of 503 "identity verification
+  unavailable," contradicting the code's own docstring, `docs/components/
+  admin-service.md`, and the bead's design intent (Cloud Scheduler retries
+  a 503 on its own backoff; retrying a 401 forever never succeeds). Fixed:
+  the classifier now also catches `google.auth.exceptions.TransportError`
+  and `requests.exceptions.RequestException`/`OSError` explicitly. Two new
+  tests in `test_google_oidc_gate.py` monkeypatch the REAL
+  `google.oauth2.id_token.verify_oauth2_token` call (one level deeper than
+  the existing `_fake_verify` seam) to raise each real exception shape and
+  assert `OidcVerificationUnavailable`; a third test guards the other
+  side, confirming a genuine `ValueError` (bad signature/audience) still
+  maps to 401 and was not swallowed by the widened catch. Mutation-verified:
+  reverting the classifier tuple to `(ConnectionError, TimeoutError)`
+  reddened both new positive tests while the guard test stayed green;
+  restoring the fix returned all 16 gate tests to green.
+- **ADOPTED (blocker) -- `docs/components/config-deployment.md` still said
+  `require_google_oidc` "is still ahead," a fact this same bead falsifies.**
+  The file's gate-inventory paragraph said three of the four gates existed
+  and `require_google_oidc` was not yet shipped; this bead ships it with
+  its first consuming route, so all four now exist. `admin_backend/main.py`'s
+  docstring and `docs/components/admin-service.md` were both already
+  correct ("ALL FOUR now exist"); this third restatement of the same fact
+  (CLAUDE.md scar #8 shape) was the one left stale. Fixed: corrected to
+  "ALL FOUR now exist," named the sweep route as the first consumer, and
+  cross-referenced `admin-service.md` for the route table rather than
+  duplicating it. Grepped the repo for any other "still ahead" / "Three now
+  exist" restatement of this fact -- none found, so this was the only
+  instance.
+- **FILED, not fixed here** -- `admin_backend/routes/sweep_routes.py`'s
+  module docstring says its two env vars are read at IMPORT time; they are
+  actually read PER-REQUEST via callables, as the module's own inline
+  comment two hundred lines down already states correctly. A doc-only
+  self-contradiction with no behavior at stake. Filed bd `polyglot-pdf-dct3a`.
+- **FILED, not fixed here** -- the sweep route's audit row hardcodes
+  `actor_email=None` even though `require_google_oidc` has already
+  verified and returned the caller's service-account email; every other
+  mutating admin route passes `actor.email`. The one route whose gate
+  exists specifically to establish which machine identity called is the
+  one route that then drops it from its own audit trail. Filed bd
+  `polyglot-pdf-qrkps`.
+- **FILED, not fixed here** -- `deploy-admin.sh`'s env-var enumeration is
+  missing from `docs/components/config-deployment.md`'s own list (an
+  incomplete list, not a false claim, so not a blocker). Filed bd
+  `polyglot-pdf-mzd48`.
+- **FILED, not fixed here (unverified, not confirmed broken)** --
+  `email_verified is True` is asserted only against hand-built mock
+  claims in every existing test; whether a REAL Cloud Scheduler-minted
+  OIDC token actually carries that claim was not settled (the reviewer's
+  local `gcloud` auth was a user account, which service-account
+  impersonation for a probe rejects). Likely fine (Google's documented SA
+  ID tokens do carry it) but unverified, and the exact scar #7 shape (a
+  mock proves the code checks, not that the issuer sends). Filed bd
+  `polyglot-pdf-v5ee9` with the impersonation command to settle it before
+  the first real deploy of this route.
+
+Both blocker fixes were mutation-verified. Full backend suite
+(3530 passed, 72 skipped), root suite (1442 passed, 46 skipped), and the
+full admin_backend suite (260 passed) all green after this round.
+
 ## Lessons
 
 **A shared helper's `extra_writes` hook is the load-bearing seam for
@@ -218,6 +295,9 @@ route level) are the pattern to copy.
 
 ## Doc freshness
 
+- `docs/components/config-deployment.md` -- round 2 fix: gate-inventory
+  paragraph corrected to "ALL FOUR now exist" (was falsified by this same
+  bead); stamp bumped to 2026-09-08.
 - `docs/components/admin-service.md` -- Tracks line gains
   `admin_backend/routes/sweep_routes.py`; new dated entry; routes table
   row; new `require_google_oidc` section (mirroring the `require_app_
@@ -288,5 +368,21 @@ route level) are the pattern to copy.
   comment; removed the now-unnecessary manual update-env-vars NOTE.
 - `docs/technical_guide.md` -- sweep route's audience description
   corrected (service root + path, not the bare env var).
+
+**Cross-surface review round 2 additions:**
+
+- `admin_backend/services/admin_auth.py` -- `_verify_google_id_token`'s
+  classifier now catches `google.auth.exceptions.TransportError` and
+  `requests.exceptions.RequestException`/`OSError` alongside the builtin
+  `ConnectionError`/`TimeoutError`, so a real certs-fetch transport failure
+  is classified as `OidcVerificationUnavailable` (503) instead of falling
+  through to `ValueError` (401); docstring corrected to match.
+- `admin_backend/tests/unit/test_google_oidc_gate.py` -- three new tests
+  against the real `google.oauth2.id_token.verify_oauth2_token` seam:
+  `TransportError` and a raw `requests.exceptions.ConnectionError` both
+  pin `OidcVerificationUnavailable`; a genuine `ValueError` still pins 401.
+- `docs/components/config-deployment.md` -- gate-inventory paragraph
+  corrected from "three of four, `require_google_oidc` still ahead" to
+  "all four now exist," naming the sweep route as the first consumer.
 
 Review outcomes recorded in the closeout ping.

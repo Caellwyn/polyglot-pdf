@@ -416,15 +416,18 @@ def _verify_google_id_token(token: str, audience: str) -> dict:
 
     Isolated from require_google_oidc() below so a unit test can monkeypatch
     ONE seam (this function) rather than reaching into google.auth's own
-    HTTP transport. Raises ValueError / google.auth.exceptions.GoogleAuthError
-    (ValueError's parent chain covers both -- google-auth raises ValueError
-    directly for a bad signature or a wrong audience) for an invalid token,
-    and OidcVerificationUnavailable if the library itself is missing or the
-    certs fetch cannot complete.
+    HTTP transport. Raises ValueError for an invalid token (bad signature,
+    expired, wrong audience -- what google-auth itself raises directly),
+    and OidcVerificationUnavailable if the library itself is missing, or a
+    TRANSPORT-layer failure (google.auth.exceptions.TransportError, a raw
+    requests.exceptions.RequestException/OSError) kept the certs fetch from
+    completing at all.
     """
     try:
         from google.auth.transport import requests as google_requests
         from google.oauth2 import id_token as google_id_token
+        import google.auth.exceptions as google_auth_exceptions
+        import requests.exceptions as requests_exceptions
     except ImportError as exc:  # pragma: no cover -- google-auth is a
         # pinned direct dependency (backend/requirements.txt); this only
         # fires if the deployed image's dependency install is broken.
@@ -440,12 +443,33 @@ def _verify_google_id_token(token: str, audience: str) -> dict:
         # network failure is a transport.Request exception) -- narrowing
         # to "the token itself is malformed/wrong" vs. "we could not reach
         # Google's certs endpoint" would require re-deriving that
-        # hierarchy here. Treated as OidcVerificationUnavailable only when
-        # the message names a transport problem; everything else is a
-        # 401-shaped verification failure, since a forged or expired token
-        # is by far the common case and must not be mistaken for a 503 an
-        # attacker could induce simply by presenting garbage.
-        if isinstance(exc, (ConnectionError, TimeoutError)):
+        # hierarchy here. Treated as OidcVerificationUnavailable when the
+        # exception is a TRANSPORT-layer failure rather than a verification
+        # failure, and everything else is a 401-shaped verification
+        # failure, since a forged or expired token is by far the common
+        # case and must not be mistaken for a 503 an attacker could induce
+        # simply by presenting garbage.
+        #
+        # NOTE: builtin ConnectionError/TimeoutError are NOT what the real
+        # transport raises. google.auth.transport.requests.Request.__call__
+        # wraps every failure (including a raw requests.exceptions.
+        # ConnectionError) as google.auth.exceptions.TransportError, which
+        # chains from GoogleAuthError -> Exception, NOT from builtin
+        # ConnectionError; _fetch_certs raises the same type on a non-200
+        # certs response. And requests.exceptions.RequestException itself
+        # chains from OSError, not builtin ConnectionError. Verified
+        # against the installed google-auth 2.53.0 sources (bd
+        # polyglot-pdf-8vgfh cross-surface review finding 1): catching only
+        # builtin (ConnectionError, TimeoutError) left this branch
+        # unreachable in production, misclassifying every real certs-fetch
+        # outage as a 401 "bad token" instead of a 503 "could not check".
+        if isinstance(exc, (
+            google_auth_exceptions.TransportError,
+            requests_exceptions.RequestException,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+        )):
             raise OidcVerificationUnavailable(str(exc)) from exc
         raise ValueError(str(exc)) from exc
 

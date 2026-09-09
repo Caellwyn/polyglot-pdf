@@ -264,3 +264,80 @@ def test_verify_raises_value_error_on_a_bad_token_via_the_real_library(
     library rejects it before any certs fetch."""
     with pytest.raises(ValueError):
         aa._verify_google_id_token("not-a-real-jwt", AUDIENCE)
+
+
+def _patch_verify_oauth2_token(monkeypatch, raises):
+    """Monkeypatch the REAL library call
+    google.oauth2.id_token.verify_oauth2_token (one level deeper than
+    _fake_verify above, which replaces admin_auth._verify_google_id_token
+    itself) so these tests exercise _verify_google_id_token's OWN
+    try/except classifier rather than bypassing it."""
+    from google.oauth2 import id_token as google_id_token
+
+    def _raise(*args, **kwargs):
+        raise raises
+
+    monkeypatch.setattr(google_id_token, "verify_oauth2_token", _raise)
+
+
+def test_a_real_transport_error_from_the_certs_fetch_is_unavailable_not_401(
+        monkeypatch):
+    """bd polyglot-pdf-8vgfh cross-surface review finding 1 (blocker).
+
+    google.auth.transport.requests.Request.__call__ wraps EVERY transport
+    failure (a DNS failure, a non-200 certs response) as
+    google.auth.exceptions.TransportError, which chains from
+    GoogleAuthError -> Exception, NOT from builtin ConnectionError. Before
+    this fix, _verify_google_id_token's classifier only caught builtin
+    (ConnectionError, TimeoutError), so this exact exception -- the one a
+    real certs-endpoint outage actually raises -- fell through to the
+    ValueError/401 branch, misclassifying "we could not check" as "the
+    token is bad" and telling Cloud Scheduler its identity was wrong rather
+    than that Google's certs endpoint was unreachable.
+
+    Mutation: revert the isinstance() tuple to
+    (ConnectionError, TimeoutError) -- this goes red (raises ValueError
+    instead of OidcVerificationUnavailable)."""
+    from google.auth import exceptions as google_auth_exceptions
+
+    _patch_verify_oauth2_token(
+        monkeypatch,
+        google_auth_exceptions.TransportError("certs fetch: 503"))
+    with pytest.raises(OidcVerificationUnavailable):
+        aa._verify_google_id_token("some-token", AUDIENCE)
+
+
+def test_a_raw_requests_connection_error_is_unavailable_not_401(monkeypatch):
+    """The transport can also surface a raw
+    requests.exceptions.ConnectionError (e.g. if a future google-auth
+    version stops wrapping it) before it ever reaches TransportError.
+    requests.exceptions.ConnectionError chains from
+    requests.exceptions.RequestException -> OSError, NOT from builtin
+    ConnectionError -- so this is a second, independently-failing shape of
+    the same finding, not a duplicate of the TransportError case above.
+
+    Mutation: revert the isinstance() tuple to
+    (ConnectionError, TimeoutError) -- this goes red."""
+    import requests.exceptions as requests_exceptions
+
+    _patch_verify_oauth2_token(
+        monkeypatch,
+        requests_exceptions.ConnectionError("DNS resolution failed"))
+    with pytest.raises(OidcVerificationUnavailable):
+        aa._verify_google_id_token("some-token", AUDIENCE)
+
+
+def test_a_genuinely_bad_token_is_still_value_error_not_unavailable(
+        monkeypatch):
+    """Guards the OTHER side of the same fix: widening the transport-error
+    catch must not swallow a real verification failure. google-auth raises
+    plain ValueError directly for a bad signature or wrong audience --
+    neither TransportError nor a requests exception -- so it must still
+    reach the ValueError/401 branch.
+
+    Mutation: change the classifier to catch bare Exception (or
+    GoogleAuthError, TransportError's own parent) -- this goes red (raises
+    OidcVerificationUnavailable instead of ValueError)."""
+    _patch_verify_oauth2_token(monkeypatch, ValueError("Wrong audience"))
+    with pytest.raises(ValueError):
+        aa._verify_google_id_token("some-token", AUDIENCE)
