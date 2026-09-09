@@ -26,12 +26,15 @@ TWO LAYERS, because they fail differently:
      registered site whose instrumentation was removed or never added.
 
 Layer 2 is where this bead stops short on purpose. bd polyglot-pdf-wio6m wires
-the emitter CONTRACT; the per-path plumbing that carries the ids into the text
-and TTS adapters is beads polyglot-pdf-cjifh (live) and polyglot-pdf-t86oz
-(text + TTS). Sites not yet wired are marked xfail(strict=True) below: strict, so
-when bead 2 or 3 wires one, this test goes RED ("unexpectedly passing") and
-forces the marker to be removed rather than letting a stale xfail hide a later
-regression.
+the emitter CONTRACT; the per-path plumbing that carries the ids into each
+adapter is beads polyglot-pdf-cjifh (live -- done) and polyglot-pdf-t86oz
+(text + TTS -- open). The live site was never xfail here (it already reached
+the emitter); what bd cjifh added was making that call's context ids real
+end to end, proven in backend/tests/unit/test_usage_event_live_plumbing.py
+rather than in this file's source-level check. The remaining two sites are
+marked xfail(strict=True) below: strict, so when bd t86oz wires one, this
+test goes RED ("unexpectedly passing") and forces the marker to be removed
+rather than letting a stale xfail hide a later regression.
 """
 
 import ast
@@ -123,8 +126,12 @@ def find_paid_call_sites():
 ALLOWED_SITES = {
     ("backend/adapters/live_ai_gemini.py", "self._client.aio.live.connect"): {
         "usage_kind": "live_voice",
-        # The live adapter already emits per-turn usage through
-        # log_gemini_api_response; bd polyglot-pdf-cjifh adds the context ids.
+        # The live adapter emits per-turn usage through log_gemini_api_response,
+        # with the firm/employee/link/kit/channel/model context ids populated
+        # end to end (bd polyglot-pdf-cjifh) -- see
+        # backend/tests/unit/test_usage_event_live_plumbing.py for the
+        # real-handshake + per-turn-emit proof this test's source-level
+        # _emits_usage check cannot drive.
         "emit_wired": True,
     },
     ("backend/adapters/text_ai_gemini.py", "self._client.aio.models.generate_content"): {

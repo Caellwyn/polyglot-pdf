@@ -2,7 +2,10 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-kvrfq: the `name_spellback` bullet
+*Last updated: 2026-09-09 (bd polyglot-pdf-cjifh: `set_session_context` gains
+five usage-event context ids -- firm/employee/link/kit/channel -- read by the
+per-turn `log_gemini_api_response` call; see the Session lifecycle bullet.)
+Also current, from bd polyglot-pdf-kvrfq: the `name_spellback` bullet
 now records the client-side stale-arrival guards and the wire-verified fact
 that holding the tool response open does NOT park the model -- see the
 [journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md).
@@ -79,9 +82,19 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   `restart_gemini_session`. A **self-call guard** downgrades a (mis)call from the
   receive task itself to `begin_graceful_shutdown()` — the y4a self-cancel can
   never be reintroduced.
-- **`set_session_context(form_session_id, form_id, current_section_id)`**: injects the
-  ids used for token logging (token events only fire when these are set — see
-  [../standards/logging-and-cost.md](../standards/logging-and-cost.md)).
+- **`set_session_context(form_session_id, form_id, current_section_id, firm_id, employee_id, link_jti, kit_id, channel)`**
+  (bd polyglot-pdf-cjifh, E3.2): injects the ids used for token logging and
+  the usage-event context (token events only fire when `form_session_id`/
+  `form_id` are set — see
+  [../standards/logging-and-cost.md](../standards/logging-and-cost.md)). The
+  five new context keywords are stored on the adapter (`self._firm_id` etc.)
+  and read by the per-turn `log_gemini_api_response` call so a live-voice
+  usage event carries them. `employee_id` is the link's employee_id for a
+  client-link session, or the STAFF UID for a staff session (both session
+  shapes attribute to a person); `link_jti` is None for a staff session.
+  `channel` comes from `link_tokens.link_channel()` (process-wide, not
+  per-session). No contextvar: one adapter instance per WebSocket already
+  scopes these correctly.
 
 ## Audio pipeline
 
