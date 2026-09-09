@@ -35,6 +35,24 @@
         { "fieldPath": "ts", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "links",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "firm_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "open_deadline", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "links_staging",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "firm_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "open_deadline", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
