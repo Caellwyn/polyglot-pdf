@@ -1,11 +1,13 @@
 # Logging & cost tracking
 
-**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
+**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
 shape for every paid call, the `usage_kind` closed set, and the text +
 TTS pricing tables. bd polyglot-pdf-cjifh: the live-voice path now threads
-firm/employee/link/kit/channel/model into every per-turn usage event.)*
+firm/employee/link/kit/channel/model into every per-turn usage event.
+bd polyglot-pdf-rd3s8: the BigQuery telemetry sink + cost/income views,
+and the three-shape sink filter the plan's prose undersold.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -229,6 +231,63 @@ actually carries them instead of six nulls.
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)
 
+## BigQuery telemetry sink + cost/income views (bd polyglot-pdf-rd3s8, E3.6)
+
+Declarative, operator-run infrastructure -- `scripts/setup-telemetry.sh` creates
+the `polyglot_telemetry` dataset (`us-central1`), a Cloud Logging sink over both
+Cloud Run services, the IAM grants the sink and `admin-backend-sa` need, and
+applies `sql/telemetry_views.sql`'s view definitions via `bq query`. Nothing here
+runs from a deploy script; an operator runs it by hand, same as
+`setup-gcp-project.sh` and `setup-admin-service.sh`.
+
+**The sink filter is three shapes ORed together, not one.** The plan's prose
+("filtered to `jsonPayload.event_type` in the usage / session / ledger_export /
+error set") reads as if every emitter carries `event_type` at the same JSON
+depth. It does not -- verified against real emitted JSON, not reconstructed from
+memory:
+
+| Event kind | Emitter | Actual JSON shape |
+|---|---|---|
+| Usage (`gemini_api_response`, `text_ai_usage`, `tts_usage`) | `StructuredLogger._emit` | **nested**: `jsonPayload.message.event_type`, and every context/cost/count field one level deeper still, under `jsonPayload.message.metadata.*` |
+| `ledger_export` | `credit_ledger.py`'s plain `structlog` call, with an explicit `event_type=` kwarg | **flat**: `jsonPayload.event_type` |
+| `form_session_started` / `form_session_ended` | `confirmation_logger.py`'s plain `structlog` calls, with **no** `event_type` kwarg | **flat, different key**: `jsonPayload.event` (structlog's positional event name, since no `event_type` was bound) |
+
+A filter checking only `jsonPayload.event_type IN (...)` would silently drop
+every session row (wrong key) and every usage row (wrong nesting depth) while
+matching only `ledger_export` -- BigQuery would return zero session/usage rows
+with no error anywhere. `scripts/setup-telemetry.sh`'s `SINK_FILTER` is an OR
+across all three shapes instead. Error events (the plan's fourth member) are
+deliberately not yet in the filter: Epic 3 bead 8 (`setup-monitoring.sh`, not
+this bead) is what first wires `StructuredLogger.log_error` to a real call
+site, and it will land under the same nested `message.event_type` shape as
+usage events when it does.
+
+**Views** (`sql/telemetry_views.sql`): `cost_by_firm_month`, `cost_by_kit_month`,
+`cost_by_employee_month` (all three read the nested usage-event shape, grouped
+by month + the relevant id + `usage_kind`, so different paid paths never sum
+into one opaque total), `hosting_cost_by_service_month` (reads the Cloud
+Billing detailed export table -- a separate maintainer console step, Epic 3
+bead 7, not retroactive -- filtered to Cloud Run + Firebase Hosting SKUs), and
+`income_month` (reads `ledger_export` rows, `type IN ('purchase',
+'subscription_grant')`, with `firm_kind = 'live'` **hard-coded in the view**
+so a caller cannot forget the mock-firm filter -- this bead inherits Epic 3's
+overall exit criterion 5, the income-filter half). Every view's referenced
+columns are pinned by `backend/tests/unit/test_telemetry_views.py` as a
+**derived** set (from `log_schemas.USAGE_CONTEXT_KEYS` and
+`credit_ledger.LEDGER_EXPORT_FIELDS`), not hand-listed, so a view that drifts
+onto a column its source event does not emit fails there instead of shipping
+a silently-null dashboard column.
+
+**IAM:** the sink's own writer identity (printed by `gcloud logging sinks
+create`, parsed at runtime) gets `roles/bigquery.dataEditor` on the dataset;
+`admin-backend-sa` gets `roles/bigquery.jobUser` (project-level, to run
+queries) and dataset-scoped `roles/bigquery.dataViewer` -- both moved out of
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s `DEFERRED_ROLES`
+set into `EXPECTED_ADMIN_SA_ROLES`, granted by `scripts/setup-telemetry.sh`
+rather than `scripts/setup-admin-service.sh`'s `PROJECT_ROLES` array (that
+script grants the admin service's non-BigQuery roles; this dataset-adjacent
+pair travels with the script that creates the dataset).
+
 ## Voice round-trip timing checkpoints (bd polyglot-pdf-cwsy)
 
 The backend logs `structlog` INFO events at every stage of the voice round trip
@@ -256,5 +315,5 @@ beads; this doc is their canonical home (migrated out of
 | 2 — Session lifecycle | `session_start`/`session_end` + WS connect/disconnect, keyed by `form_session_id` | `polyglot-pdf-g0e` |
 | 3 — Frontend `logger.ts` | batched client event emitter; keeps PHI local | `polyglot-pdf-3ae` |
 | 4 — Field + error tracking | voice attempts, manual edits, section nav, error categorization | `polyglot-pdf-ytf` |
-| 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
+| 5 — BigQuery integration | Cloud Logging → BQ sink + cost/income views | **done** (bd `polyglot-pdf-rd3s8`; older placeholder bd `polyglot-pdf-0bs` describes a superseded design and should be closed as duplicate) |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |

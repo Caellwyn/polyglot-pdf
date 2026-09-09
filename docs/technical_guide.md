@@ -1,6 +1,19 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new
+*Last updated: 2026-09-09 (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new
+Surface contract 24, the BigQuery telemetry sink + cost/income views
+(`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that
+ORs across three genuinely different `jsonPayload` shapes (contract 20's
+nested `message.event_type` for usage events, contract 18's flat
+`event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed
+`jsonPayload.event` for the two wired session events) rather than the single
+field name the plan's prose implied; five views whose referenced columns are
+pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and
+`LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind =
+'live'` filter hard-coded in the view; and `admin-backend-sa`'s two
+BigQuery roles moved out of `DEFERRED_ROLES` into
+`EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than
+`setup-admin-service.sh`.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new
 Surface contract 21, telemetry alert docs (`alerts/{id}`, new
 `backend/services/alerts.py`) with deterministic ids so a repeated trigger
 dedups onto the same document: `link_exhausted_{jti}` from
@@ -1851,3 +1864,85 @@ of those routes exists yet.
   (`link_routes.py`'s `MintRefused` detail is always a plain string); the
   page checks for one defensively (`typeof body.balance === 'number'`) so a
   future response gains the richer message with no frontend change required.
+
+### 24. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
+
+The consumer half of contract 20's usage-event shape, plus a second, genuinely
+DIFFERENT shape (`ledger_export`) that contract 18 already produces. Declarative,
+operator-run infrastructure: nothing in this contract executes against GCP from
+a deploy script.
+
+- **Producer:** `scripts/setup-telemetry.sh` creates the `polyglot_telemetry`
+  BigQuery dataset (`us-central1`) and a Cloud Logging sink over both Cloud Run
+  backend services, then applies `sql/telemetry_views.sql`'s five
+  `CREATE OR REPLACE VIEW` statements via `bq query`, substituting `${DATASET}`,
+  `${TELEMETRY_TABLE}` (read back from the sink's own destination table, not
+  hardcoded) and `${BILLING_EXPORT_TABLE}` (a required second script argument;
+  the Cloud Billing export itself is a separate maintainer console step, Epic 3
+  bead 7).
+- **Consumers:** the admin console's cost/income dashboards (a later bead) query
+  `cost_by_firm_month`, `cost_by_kit_month`, `cost_by_employee_month`,
+  `hosting_cost_by_service_month` and `income_month` directly; `admin-backend-sa`
+  is the identity that runs those queries (`roles/bigquery.jobUser` +
+  dataset-scoped `roles/bigquery.dataViewer`, both granted by this script rather
+  than `scripts/setup-admin-service.sh`).
+- **The sink filter is three DIFFERENT jsonPayload shapes ORed together, not
+  one field name.** *Breaks if collapsed to a single clause:* `jsonPayload.
+  event_type IN (...)` alone would match `ledger_export` (contract 18's
+  producer passes `event_type=` as an explicit `structlog`-bound kwarg, so
+  `JSONRenderer` puts it at the top level) but silently drop every usage event
+  (contract 20's producer, `StructuredLogger._emit`, wraps the whole envelope
+  in a `message` key, so its event type is at the NESTED
+  `jsonPayload.message.event_type`) and every session event
+  (`confirmation_logger.py`'s `log_form_session_start`/`log_form_session_end`
+  pass NO `event_type` kwarg at all, so `structlog` renders the POSITIONAL
+  event name under the plain key `jsonPayload.event`, a third shape again).
+  Verified against real emitted JSON, not the plan's prose, which describes
+  the filter as if one field covered every case. Error events (Epic 3 bead 8,
+  not yet built) are deliberately absent from the filter until
+  `StructuredLogger.log_error` has a real call site; when it does, it shares
+  contract 20's nested shape, so widening this filter is a one-line addition.
+- **Views reference ONLY columns their source event actually emits, checked by
+  a DERIVED set, not a hand list.** `backend/tests/unit/test_telemetry_views.py`
+  parses `sql/telemetry_views.sql` and asserts every
+  `jsonPayload.message.metadata.*` reference in the three cost-by-* views is a
+  member of `log_schemas.USAGE_CONTEXT_KEYS` (contract 20) plus the fixed
+  cost/count keys `StructuredLogger._emit_usage` always writes, and every flat
+  `jsonPayload.*` reference in `income_month` is a member of
+  `credit_ledger.LEDGER_EXPORT_FIELDS` (contract 18). *Breaks if a view drifts
+  onto an unemitted column:* BigQuery does not error on an unknown JSON path --
+  it returns NULL forever, so a dashboard column goes silently and permanently
+  empty.
+- **`income_month` hard-codes `firm_kind = 'live'` in the view definition, not
+  left to a caller's WHERE clause** -- Epic 3's overall exit criterion 5 (the
+  income-filter half this bead inherits). Income cannot filter on `channel`:
+  the admin service that writes `purchase`/`subscription_grant` ledger entries
+  has none, so the firm's `firm_kind`, snapshotted onto each `ledger_export`
+  line by `append_entry` (contract 18), is the only test-vs-real signal
+  available. `backend/tests/unit/test_telemetry_views.py` and
+  `backend/tests/unit/test_credit_ledger.py::
+  test_export_line_carries_every_column_income_month_reads` both pin this --
+  the latter closes the loop from the OTHER direction, deriving `income_month`'s
+  referenced columns from the SQL and asserting a real emitted `ledger_export`
+  payload carries every one of them.
+- **`hosting_cost_by_service_month` reads the Cloud Billing detailed export
+  table, not the telemetry sink** -- the sink carries no cost figures for
+  Cloud Run compute or Firebase Hosting bandwidth, only the application's own
+  usage/ledger events. Splits by `resource.name` (the Cloud Run service name)
+  so `polyglot-backend` and `polyglot-backend-staging` cost never mix; Firebase
+  Hosting line items carry no per-channel resource name in the export and
+  group under `NULL` rather than being misattributed to one channel. Returns
+  zero rows until the maintainer enables the export (Epic 3 bead 7) -- not
+  retroactive.
+- **IAM, four grants total:** the sink's own writer identity (parsed at
+  runtime from `gcloud logging sinks create`'s output, NOT a hardcoded
+  principal) gets `roles/bigquery.dataEditor` on the dataset; `admin-backend-sa`
+  gets project-level `roles/bigquery.jobUser` and dataset-scoped
+  `roles/bigquery.dataViewer`. The latter two were moved OUT of
+  `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s `DEFERRED_ROLES`
+  set (where Epic 1's `setup-admin-service.sh` had deliberately left them
+  ungranted) into `EXPECTED_ADMIN_SA_ROLES`, with a new
+  `TELEMETRY_GRANTED_ROLES` constant marking that `setup-telemetry.sh`, not
+  `setup-admin-service.sh`'s `PROJECT_ROLES` array, is what actually grants
+  them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
+  that constant out before comparing against `setup-admin-service.sh` alone.
