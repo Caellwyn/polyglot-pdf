@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { VerifyFieldModal } from './VerifyFieldModal';
 import { VERIFY_FIELD_TRANSLATIONS } from './verifyFieldTranslations';
 
@@ -150,17 +150,27 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
     ).toBe(false);
   });
 
-  it('ENTER on the Cancel button dismisses -- it is not a silent dead end', () => {
-    // The dialog's Enter handler used to intercept EVERY Enter, including one
-    // aimed at a button -- so tabbing to "Not yet" and pressing Enter did nothing
-    // at all. A button activates natively; the handler must let it. Fresh-eyes
-    // finding, medium-confidence there, confirmed here.
-    const props = renderModal();
+  it('ENTER on a BUTTON is left alone, so its native activation still works', () => {
+    // The dialog used to intercept EVERY Enter, so tabbing to "Not yet" and
+    // pressing Enter was a silent dead end -- the native button activation was
+    // suppressed and nothing else handled it.
+    //
+    // Asserted on the EVENT, not via a corroborating click. My first version
+    // fired keyDown and THEN a manual click, and asserted onCancel -- which
+    // passes whether or not the guard exists, because the click fires onClick
+    // independently. jsdom does not synthesize Enter-activates-button, so the
+    // only observable contract here is that the dialog does NOT swallow the
+    // keystroke. Mutation-verified: removing the guard reddens this.
+    renderModal();
 
-    fireEvent.keyDown(screen.getByTestId('verify-field-cancel'), { key: 'Enter' });
-    fireEvent.click(screen.getByTestId('verify-field-cancel')); // what Enter triggers natively
+    const evt = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    act(() => {
+      screen.getByTestId('verify-field-cancel').dispatchEvent(evt);
+    });
 
-    expect(props.onCancel).toHaveBeenCalled();
-    expect(props.onVerify, 'cancelling must never verify').not.toHaveBeenCalled();
+    expect(
+      evt.defaultPrevented,
+      "the dialog must not swallow a button Enter -- the button activates natively"
+    ).toBe(false);
   });
 });

@@ -955,7 +955,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           </React.Suspense>
         </PdfViewErrorBoundary>
       ) : (
-      <form className="schema-form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown}>
+      <form className="schema-form" onSubmit={handleSubmit}>
 
         {/* Form Header */}
         <div className="schema-form__header">
