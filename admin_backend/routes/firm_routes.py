@@ -17,15 +17,25 @@ this surface under the app-admin-only routes. (Link listing, which a
 manager DOES reach, is Track B bead B4's require_app_admin_or_owning_manager
 route, not this one.)
 
-WRITES REUSE backend/services/firms.py::upsert_firm RATHER THAN A SECOND
-WRITER. upsert_firm() is the ONE home for the firms/{firm_id} document shape
-(CLAUDE.md scar #8) -- it already carries the create/update idempotency
-rule (balance_credits initialized to 0 on first create only, never touched
-on a re-run) that a second hand-rolled Firestore write here would have to
-duplicate or drift from. The three PATCH routes below therefore read the
-existing doc, compute the ONE field that changes, and re-call upsert_firm
-with the rest of the doc's current values -- never a partial merge of their
-own, since upsert_firm has no partial-update API by design.
+WRITES MATCH backend/services/firms.py::upsert_firm's FIELD SHAPE BUT DO NOT
+CALL IT. upsert_firm() is still the operator-bootstrap writer and the ONE
+place that 0-initializes balance_credits/balance_updated_at on first create
+(CLAUDE.md scar #8 covers that half unchanged). But upsert_firm() does its
+own non-transactional get()-then-set() -- it is not @firestore.transactional
+and takes no `transaction` argument -- while every write in THIS module must
+share one Firestore transaction with its audit_log.record_in_transaction
+call (exit criterion 1). Firestore requires all reads in a transaction
+before any write; a transactional caller invoking upsert_firm would trigger
+upsert_firm's OWN untransacted get() as a second, transaction-illegal read.
+So create_firm() and _apply_firm_patch() each do their own read-patch-write
+against firm_ref directly, inside their own @firestore.transactional body,
+deliberately mirroring upsert_firm's payload shape (name, contact_email,
+allowed_kits, status, kind, updated_at; balance fields only on first
+create) by hand rather than delegating to it -- two writers of the SAME
+shape, not sharing one function, because the transactional and
+non-transactional callers cannot compose. Nothing today couples the two
+copies other than this docstring and each function's own; a change to one
+payload shape must be mirrored in the other by hand.
 
 EVERY MUTATION IS A FIRESTORE WRITE, so every one uses
 audit_log.record_in_transaction INSIDE a @firestore.transactional body,
@@ -54,10 +64,21 @@ documents named filters up front and ships a composite index per filter
 (test_firestore_indexes.py). Adding an equality filter here later needs the
 same index discipline; this bead ships none, so none is owed.
 
+SYNC HELPER, ASYNC ROUTE: every route's Firestore/credit_ledger work is a
+private `_do_*` function, and every handler runs its `_do_*` under
+asyncio.to_thread -- matching credit_routes.py's own explicit design rule in
+the SAME diff (its docstring: "both handlers run it under asyncio.to_thread,
+matching every other admin-service call into a synchronous Firestore/Auth
+helper") and user_routes.py's asyncio.to_thread(user_admin....) precedent.
+Cheap, DB-free request validation (kind/status/reason membership checks)
+stays inline in the async handler, before the to_thread call, so a bad
+request 422s without ever touching a thread.
+
 ASCII only.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any, Optional
 
 import structlog
@@ -260,43 +281,24 @@ def _apply_firm_patch(
                             detail="firm write failed") from exc
 
 
-@router.post("/admin/firms")
-async def create_firm(
-    body: CreateFirmRequest,
-    actor: Annotated[AdminActor, Depends(require_app_admin)],
-) -> dict:
-    """Create a firm via backend/services/firms.py::upsert_firm.
+def _do_create_firm(*, firm_id: str, body: CreateFirmRequest,
+                    actor: AdminActor, request_id: str) -> dict:
+    """Synchronous body of create_firm(), run under asyncio.to_thread.
 
-    `kind` is REQUIRED by the request schema (no default value on the
-    field) -- an omitted kind 422s before this handler ever runs, which is
-    the write-layer backstop upsert_firm's own required parameter already
-    provides, restated at the HTTP boundary so the error is a clean 422
-    rather than upsert_firm's ValueError surfacing as a 500.
+    Writes the same field shape as backend/services/firms.py::upsert_firm
+    (see the module docstring for why this does not call upsert_firm
+    itself).
 
     AUDITED IN-TRANSACTION, not through upsert_firm (which has no
     transaction of its own and is also the operator-bootstrap path that
-    must keep working with no admin service running at all). This route
-    does its own transactional create so the audit row shares the same
-    commit, mirroring _apply_firm_patch's shape for the update routes.
+    must keep working with no admin service running at all). This does its
+    own transactional create so the audit row shares the same commit,
+    mirroring _apply_firm_patch's shape for the update routes.
     """
-    firm_id = _validated_firm_id(body.firm_id)
-    if body.kind not in _FIRM_KINDS:
-        raise HTTPException(
-            status_code=422,
-            detail="kind must be one of {}".format(", ".join(_FIRM_KINDS)),
-        )
-    if body.status not in _FIRM_STATUSES:
-        raise HTTPException(
-            status_code=422,
-            detail="status must be one of {}".format(
-                ", ".join(_FIRM_STATUSES)),
-        )
-
     db = _db()
     from firebase_admin import firestore
 
     firm_ref = _firm_ref(db, firm_id)
-    request_id = audit_log.new_request_id()
     created_holder: dict[str, Any] = {}
 
     @firestore.transactional
@@ -344,22 +346,54 @@ async def create_firm(
         raise HTTPException(status_code=500,
                             detail="firm write failed") from exc
 
+    return {"created": created_holder["created"]}
+
+
+@router.post("/admin/firms")
+async def create_firm(
+    body: CreateFirmRequest,
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+) -> dict:
+    """Create a firm (see _do_create_firm for the write shape and the
+    audit-in-transaction rationale).
+
+    `kind` is REQUIRED by the request schema (no default value on the
+    field) -- an omitted kind 422s before this handler ever runs, which is
+    the write-layer backstop upsert_firm's own required parameter already
+    provides, restated at the HTTP boundary so the error is a clean 422
+    rather than upsert_firm's ValueError surfacing as a 500.
+    """
+    firm_id = _validated_firm_id(body.firm_id)
+    if body.kind not in _FIRM_KINDS:
+        raise HTTPException(
+            status_code=422,
+            detail="kind must be one of {}".format(", ".join(_FIRM_KINDS)),
+        )
+    if body.status not in _FIRM_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail="status must be one of {}".format(
+                ", ".join(_FIRM_STATUSES)),
+        )
+
+    request_id = audit_log.new_request_id()
+    result = await asyncio.to_thread(
+        _do_create_firm, firm_id=firm_id, body=body, actor=actor,
+        request_id=request_id,
+    )
+
     _log.info("admin_firm_created", firm_id=firm_id, kind=body.kind,
-              created=created_holder["created"], actor_uid=actor.uid,
+              created=result["created"], actor_uid=actor.uid,
               request_id=request_id)
     return {
         "firm_id": firm_id,
-        "created": created_holder["created"],
+        "created": result["created"],
         "request_id": request_id,
     }
 
 
-@router.get("/admin/firms")
-async def list_firms(
-    actor: Annotated[AdminActor, Depends(require_app_admin)],
-) -> dict:
-    """Every firm, with kind/balance/status -- unfiltered (see module
-    docstring). A read, so no audit row."""
+def _do_list_firms() -> list[dict]:
+    """Synchronous body of list_firms(), run under asyncio.to_thread."""
     db = _db()
     try:
         docs = list(db.collection(_FIRMS_COLLECTION).stream())
@@ -371,16 +405,21 @@ async def list_firms(
         _public_firm_view(snap.id, snap.to_dict() or {}) for snap in docs
     ]
     firms_view.sort(key=lambda f: f["firm_id"])
+    return firms_view
+
+
+@router.get("/admin/firms")
+async def list_firms(
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+) -> dict:
+    """Every firm, with kind/balance/status -- unfiltered (see module
+    docstring). A read, so no audit row."""
+    firms_view = await asyncio.to_thread(_do_list_firms)
     return {"firms": firms_view}
 
 
-@router.get("/admin/firms/{firm_id}")
-async def get_firm(
-    firm_id: str,
-    actor: Annotated[AdminActor, Depends(require_app_admin)],
-    ledger_limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> dict:
-    """One firm's profile, balance, and a page of ledger rows.
+def _do_get_firm(*, firm_id: str, ledger_limit: int) -> dict:
+    """Synchronous body of get_firm(), run under asyncio.to_thread.
 
     RECONCILES FIRST (exit criterion 3): reconcile_expired_for_firm runs as
     ITS OWN transaction per expired link, once per KNOWN_CHANNELS entry,
@@ -392,8 +431,6 @@ async def get_firm(
     tolerance: an operator viewing a firm's balance must not be blocked by
     an unrelated Firestore hiccup on the OTHER channel's link collection.
     """
-    firm_id = _validated_firm_id(firm_id)
-
     for channel in KNOWN_CHANNELS:
         try:
             credit_ledger.reconcile_expired_for_firm(firm_id, channel=channel)
@@ -414,6 +451,34 @@ async def get_firm(
     }
 
 
+@router.get("/admin/firms/{firm_id}")
+async def get_firm(
+    firm_id: str,
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+    ledger_limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict:
+    """One firm's profile, balance, and a page of ledger rows (see
+    _do_get_firm for the reconcile-before-read rationale)."""
+    firm_id = _validated_firm_id(firm_id)
+    return await asyncio.to_thread(
+        _do_get_firm, firm_id=firm_id, ledger_limit=ledger_limit)
+
+
+def _do_set_firm_status(*, firm_id: str, body: SetStatusRequest,
+                        actor: AdminActor, request_id: str) -> dict:
+    """Synchronous body of set_firm_status(), run under asyncio.to_thread."""
+    db = _db()
+    doc = _get_firm_or_404(db, firm_id)
+    before_status = doc.get("status")
+    _apply_firm_patch(
+        db=db, firm_id=firm_id, doc=doc, patch={"status": body.status},
+        actor=actor, action=ACTION_FIRM_STATUS,
+        before={"status": before_status}, after={"status": body.status},
+        request_id=request_id,
+    )
+    return {"before_status": before_status}
+
+
 @router.patch("/admin/firms/{firm_id}/status")
 async def set_firm_status(
     firm_id: str,
@@ -427,22 +492,35 @@ async def set_firm_status(
             detail="status must be one of {}".format(
                 ", ".join(_FIRM_STATUSES)),
         )
-    db = _db()
-    doc = _get_firm_or_404(db, firm_id)
-    before_status = doc.get("status")
     request_id = audit_log.new_request_id()
-    _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc, patch={"status": body.status},
-        actor=actor, action=ACTION_FIRM_STATUS,
-        before={"status": before_status}, after={"status": body.status},
+    result = await asyncio.to_thread(
+        _do_set_firm_status, firm_id=firm_id, body=body, actor=actor,
         request_id=request_id,
     )
     _log.info("admin_firm_status_set", firm_id=firm_id, status=body.status,
               actor_uid=actor.uid, request_id=request_id)
     return {
         "firm_id": firm_id, "status": body.status,
-        "before_status": before_status, "request_id": request_id,
+        "before_status": result["before_status"], "request_id": request_id,
     }
+
+
+def _do_set_firm_allowed_kits(*, firm_id: str, body: SetAllowedKitsRequest,
+                              actor: AdminActor, request_id: str) -> None:
+    """Synchronous body of set_firm_allowed_kits(), run under
+    asyncio.to_thread."""
+    db = _db()
+    doc = _get_firm_or_404(db, firm_id)
+    before_kits = doc.get("allowed_kits") if isinstance(
+        doc.get("allowed_kits"), list) else []
+    _apply_firm_patch(
+        db=db, firm_id=firm_id, doc=doc,
+        patch={"allowed_kits": list(body.allowed_kits)},
+        actor=actor, action=ACTION_FIRM_ALLOWED_KITS,
+        before={"allowed_kits": before_kits},
+        after={"allowed_kits": list(body.allowed_kits)},
+        request_id=request_id,
+    )
 
 
 @router.patch("/admin/firms/{firm_id}/allowed_kits")
@@ -452,17 +530,9 @@ async def set_firm_allowed_kits(
     actor: Annotated[AdminActor, Depends(require_app_admin)],
 ) -> dict:
     firm_id = _validated_firm_id(firm_id)
-    db = _db()
-    doc = _get_firm_or_404(db, firm_id)
-    before_kits = doc.get("allowed_kits") if isinstance(
-        doc.get("allowed_kits"), list) else []
     request_id = audit_log.new_request_id()
-    _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc,
-        patch={"allowed_kits": list(body.allowed_kits)},
-        actor=actor, action=ACTION_FIRM_ALLOWED_KITS,
-        before={"allowed_kits": before_kits},
-        after={"allowed_kits": list(body.allowed_kits)},
+    await asyncio.to_thread(
+        _do_set_firm_allowed_kits, firm_id=firm_id, body=body, actor=actor,
         request_id=request_id,
     )
     _log.info("admin_firm_allowed_kits_set", firm_id=firm_id,
@@ -472,6 +542,23 @@ async def set_firm_allowed_kits(
         "firm_id": firm_id, "allowed_kits": list(body.allowed_kits),
         "request_id": request_id,
     }
+
+
+def _do_set_firm_kind(*, firm_id: str, body: SetKindRequest,
+                      actor: AdminActor, request_id: str) -> dict:
+    """Synchronous body of set_firm_kind(), run under asyncio.to_thread."""
+    db = _db()
+    doc = _get_firm_or_404(db, firm_id)
+    before_kind = doc.get("kind") if doc.get("kind") in _FIRM_KINDS else \
+        firms.FIRM_KIND_LIVE
+    _apply_firm_patch(
+        db=db, firm_id=firm_id, doc=doc, patch={"kind": body.kind},
+        actor=actor, action=ACTION_FIRM_KIND,
+        before={"kind": before_kind, "reason": None},
+        after={"kind": body.kind, "reason": body.reason},
+        request_id=request_id,
+    )
+    return {"before_kind": before_kind}
 
 
 @router.patch("/admin/firms/{firm_id}/kind")
@@ -491,21 +578,14 @@ async def set_firm_kind(
         )
     if not body.reason or not body.reason.strip():
         raise HTTPException(status_code=422, detail="reason is required")
-    db = _db()
-    doc = _get_firm_or_404(db, firm_id)
-    before_kind = doc.get("kind") if doc.get("kind") in _FIRM_KINDS else \
-        firms.FIRM_KIND_LIVE
     request_id = audit_log.new_request_id()
-    _apply_firm_patch(
-        db=db, firm_id=firm_id, doc=doc, patch={"kind": body.kind},
-        actor=actor, action=ACTION_FIRM_KIND,
-        before={"kind": before_kind, "reason": None},
-        after={"kind": body.kind, "reason": body.reason},
+    result = await asyncio.to_thread(
+        _do_set_firm_kind, firm_id=firm_id, body=body, actor=actor,
         request_id=request_id,
     )
     _log.info("admin_firm_kind_set", firm_id=firm_id, kind=body.kind,
               reason=body.reason, actor_uid=actor.uid, request_id=request_id)
     return {
-        "firm_id": firm_id, "kind": body.kind, "before_kind": before_kind,
-        "request_id": request_id,
+        "firm_id": firm_id, "kind": body.kind,
+        "before_kind": result["before_kind"], "request_id": request_id,
     }

@@ -49,6 +49,47 @@ Grants to mock firms are allowed by design (plan: "Grants to mock firms are
 allowed" -- staging needs credits to test); neither route checks `firm.kind`
 at all, since kind only ever gates minting, never granting or adjusting.
 
+### Fresh-eyes round: adopt/reject/defer
+
+The pre-PR fresh-eyes review raised four findings (STATUS: GAPS-FOUND (2)).
+Rubric verdict was PASS on all three named exit criteria either way; the two
+GAPS were blockers against the diff's own internal consistency, not the
+rubric.
+
+- **ADOPTED -- doc/docstring accuracy (blocker).** `docs/technical_guide.md`,
+  `docs/components/admin-service.md`, and `firm_routes.py`'s own module and
+  `create_firm` docstrings claimed `POST /admin/firms` creates via
+  `backend/services/firms.py::upsert_firm`. It never did -- `create_firm` and
+  `_apply_firm_patch` each do their own transactional read-patch-write,
+  because `upsert_firm`'s get()-then-set() is not transactional and cannot be
+  called from inside a transaction without a second, transaction-illegal
+  read. Rewrote all three doc/docstring sites to state this accurately, and
+  added `test_apply_firm_patch_merged_dict_matches_upsert_firm_payload_keys`
+  (AST-derived, not hand-listed, per CLAUDE.md scar #8) pinning that the two
+  independent writers' non-first-create field-key sets stay in sync --
+  mutation-verified by dropping `status` from `_apply_firm_patch`'s payload
+  and confirming the new test goes red.
+- **ADOPTED -- missing asyncio.to_thread (blocker).** Every route in
+  `firm_routes.py` was `async def` but called synchronous Firestore
+  operations directly, inconsistent with `credit_routes.py`'s own explicit
+  design rule in the same diff ("both handlers run it under
+  asyncio.to_thread"). Restructured all six routes into a thin `async def`
+  handler (keeps cheap DB-free validation, so a bad request still 422s
+  without touching a thread) plus a private synchronous `_do_*` helper
+  carrying the actual Firestore/credit_ledger work, run via
+  `asyncio.to_thread` -- matching `credit_routes.py`'s `_run_append_entry`
+  shape. `test_admin_audit_coverage.py`'s in-transaction guard walks the
+  whole module for `@firestore.transactional`-decorated functions, so moving
+  the transactional bodies into `_do_*` helpers needed no change there.
+- **DEFERRED (nit) -- `_public_firm_view`'s balance fallback and
+  `get_firm`'s unbounded ledger read.** Both are real but small-scale,
+  low-confidence observations (a malformed non-int balance reports `0` with
+  no distinguishing flag; `read_entries(limit=None)` reads a firm's whole
+  ledger into memory on every profile view). Filed as
+  `polyglot-pdf-0w13i` ("chore(nits): deferred review nits from
+  polyglot-pdf-zopqq") rather than fixed inline, since the reviewer did not
+  file one.
+
 ### The extra_writes gap in the audit coverage guard
 
 `admin_backend/tests/unit/test_admin_audit_coverage.py` derives, per route,

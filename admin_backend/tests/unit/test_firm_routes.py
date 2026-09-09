@@ -683,3 +683,102 @@ def test_every_firm_route_is_reachable_only_through_require_app_admin():
             "{} carries {} instead of exactly require_app_admin".format(
                 route.path, names))
     assert seen == firm_paths
+
+
+# --------------------------------------------------------------------------
+# Coupling check: this module's two hand-rolled writers vs. upsert_firm's
+# payload shape (module docstring: "WRITES MATCH ... BUT DO NOT CALL IT").
+# --------------------------------------------------------------------------
+
+def _dict_literal_keys(tree, *, func_name, var_name):
+    """The string keys of the FIRST dict literal assigned to `var_name`
+    inside function `func_name`, found via an AST walk (not a source grep --
+    see test_credit_ledger.py's identical rationale: a grep pins one
+    spelling, an AST walk pins the actual shape).
+    """
+    import ast
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Assign)
+                        and len(inner.targets) == 1
+                        and isinstance(inner.targets[0], ast.Name)
+                        and inner.targets[0].id == var_name
+                        and isinstance(inner.value, ast.Dict)):
+                    return {
+                        key.value for key in inner.value.keys
+                        if isinstance(key, ast.Constant)
+                        and isinstance(key.value, str)
+                    }
+    return None
+
+
+def test_apply_firm_patch_merged_dict_matches_upsert_firm_payload_keys():
+    """Scar #8: pin the SET, not the instance. _apply_firm_patch's `merged`
+    dict (admin_backend/routes/firm_routes.py) and upsert_firm's `payload`
+    dict (backend/services/firms.py) are two INDEPENDENT writers of the
+    firms/{firm_id} document that must agree on which non-timestamp,
+    non-balance fields a firm document carries -- the module docstring
+    explains why they cannot be merged into one function (upsert_firm's
+    read+write is not transactional, so a transactional caller cannot call
+    it without a second, transaction-illegal read). Nothing else ties the
+    two together, so a field added to one payload and not the other would
+    silently drift: a PATCH route would either drop a real field on every
+    re-write, or upsert_firm's bootstrap path would omit a field this
+    service depends on.
+
+    Compares the key sets, not the dict contents or ordering -- `merged`
+    also carries `updated_at` (added right after this literal, mirroring
+    upsert_firm's own `updated_at` key), so both sides are widened by that
+    one key before comparing, keeping the assertion about the FIELD SET
+    upsert_firm's docstring calls "the known non-balance fields", not about
+    incidental literal placement.
+
+    Mutation-verified: dropping "status" from _apply_firm_patch's `merged`
+    literal turns this red (2026-09-08); restored after confirming the
+    failure.
+    """
+    import ast
+    import pathlib
+
+    firm_routes_path = pathlib.Path(firm_routes.__file__)
+    firms_path = pathlib.Path(firms.__file__)
+
+    routes_tree = ast.parse(firm_routes_path.read_text(encoding="utf-8"))
+    firms_tree = ast.parse(firms_path.read_text(encoding="utf-8"))
+
+    merged_keys = _dict_literal_keys(
+        routes_tree, func_name="_apply_firm_patch", var_name="merged")
+    payload_keys = _dict_literal_keys(
+        firms_tree, func_name="upsert_firm", var_name="payload")
+
+    assert merged_keys is not None, (
+        "_apply_firm_patch's `merged` dict literal was not found -- update "
+        "this test's AST walk if the write was restructured")
+    assert payload_keys is not None, (
+        "upsert_firm's `payload` dict literal was not found -- update this "
+        "test's AST walk if the write was restructured")
+
+    # upsert_firm's payload additionally carries the FIRST-CREATE-only keys
+    # (created_at, balance_credits, balance_updated_at) added conditionally
+    # after this literal -- those are deliberately NOT part of
+    # _apply_firm_patch's re-write set (a PATCH route never re-creates a
+    # firm), so they are excluded from the comparison rather than asserted
+    # equal.
+    first_create_only = {
+        "created_at", "balance_credits", "balance_updated_at"}
+    # _apply_firm_patch adds "updated_at" via `**merged` spread right after
+    # this literal (mirroring upsert_firm's own inline "updated_at" key) --
+    # add it here so the comparison is over the FIELD SET both writers
+    # produce, not over which line each happens to add updated_at on.
+    merged_keys = merged_keys | {"updated_at"}
+    assert payload_keys - first_create_only == merged_keys, (
+        "backend/services/firms.py::upsert_firm's payload keys and "
+        "admin_backend/routes/firm_routes.py::_apply_firm_patch's merged "
+        "keys have drifted apart -- these are two independent writers of "
+        "the SAME firms document shape (see the firm_routes.py module "
+        "docstring) and must be updated together. upsert_firm (minus "
+        "first-create-only fields): {} -- _apply_firm_patch: {}".format(
+            sorted(payload_keys - first_create_only), sorted(merged_keys))
+    )
