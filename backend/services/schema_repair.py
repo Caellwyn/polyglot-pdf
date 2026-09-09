@@ -223,6 +223,13 @@ def _strip_spoken_name_disambiguation(
 # Step 1: option-value slugs.
 # --------------------------------------------------------------------------- #
 
+def _has_on_value(o: Any) -> bool:
+    """A non-empty string pdf_on_value: the option already names its widget
+    state, so its value must never be treated as the export code."""
+    v = o.get("pdf_on_value") if isinstance(o, dict) else None
+    return isinstance(v, str) and v.strip() != ""
+
+
 def _mint_slugs(
     fields: List[dict], repairs: List[dict], dump: Optional[dict] = None
 ) -> Dict[str, Dict[str, str]]:
@@ -258,15 +265,12 @@ def _mint_slugs(
             else:
                 res[key] = slug
 
-        # A dropdown's option.value is written verbatim into the PDF widget
-        # (pdf_fill_routes.fill_widget; no pdf_on_value channel on that path),
-        # and PyMuPDF does not validate the write against /Opt -- so minting a
-        # slug over a PDF-sanctioned export code silently makes the form PRINT
-        # WRONG ('WY' -> 'wyoming_wy' renders clipped in a 36pt box). Values
-        # the PDF itself declares legal are therefore NOT invalid here, even
-        # though they fail the slug pattern; mirrors schema_lint's carve-out
-        # via the shared helper. Dumpless repair sees an empty set and keeps
-        # the old behaviour exactly (bd polyglot-pdf-g2fpr).
+        # The dump's /Opt list for a dropdown is the EVIDENCE that a value is
+        # a real PDF export code -- which, since g2fpr.4, is what repair
+        # CONVERTS (the code moves into pdf_on_value, the value is minted),
+        # never what it keeps. Dumpless repair sees an empty set: it cannot
+        # tell a code from junk, so it mints and leaves pdf_on_value for the
+        # author (lint's select-on-value-missing says so once a dump exists).
         pdf_choices: FrozenSet[str] = frozenset()
         if f.get("type") == "select":
             pdf_choices = pdf_choice_values(dump, f.get("pdf_field_name"))
@@ -274,10 +278,13 @@ def _mint_slugs(
         needs_mint = False
         if _is_choice_field(f):
             values = [str(o.get("value")) for o in dict_opts if o.get("value") is not None]
-            invalid = any(
-                v not in pdf_choices and not vocab.is_valid_option_slug(v)
-                for v in values
-            )
+            # No /Opt exemption since g2fpr.4: a PDF export code sitting in a
+            # select's value is not valid, it is the pre-migration shape --
+            # and repair CONVERTS it below (the code moves into pdf_on_value,
+            # the value is minted), exactly as scripts/migrate_select_on_values
+            # does for a whole kit. pdf_choices is still the evidence that a
+            # value IS such a code (dumpless repair cannot tell and mints).
+            invalid = any(not vocab.is_valid_option_slug(v) for v in values)
             # NOTE: a select's empty value still sets `missing` and so still
             # TRIGGERS this branch -- that is deliberate. Suppressing the
             # trigger would also suppress the repair of any real defect
@@ -286,24 +293,28 @@ def _mint_slugs(
             # are still repaired while it stays empty (bd polyglot-pdf-ot284).
             missing = any(o.get("value") in (None, "") for o in dict_opts)
             dupes = len(set(values)) != len(values)
-            needs_mint = invalid or missing or dupes
+            # A dropdown choice whose value is a real /Opt code with no (or a
+            # stale) pdf_on_value needs the CONVERSION even when the code is
+            # slug-shaped ("5"): the cross-surface pass found the height
+            # dropdowns un-repairable -- lint blocked them, repair no-op-ed --
+            # because nothing below triggered on a value that passes the
+            # slug test (bd polyglot-pdf-kch40).
+            unconverted = f.get("type") == "select" and any(
+                str(o.get("value")) in pdf_choices
+                and (not _has_on_value(o) or o["pdf_on_value"] not in pdf_choices)
+                for o in dict_opts if o.get("value") is not None)
+            needs_mint = invalid or missing or dupes or unconverted
 
         if needs_mint:
-            # Never mint over a PDF-sanctioned export code: minting is
-            # triggered per-FIELD, so without this an unrelated defect
-            # elsewhere in the same dropdown (one duplicate, one missing
-            # value) would rewrite ALL the good codes and break printing for
-            # every option. Preserved codes are held aside and re-registered
-            # as their own alias so conditions still resolve.
-            #
-            # Preserve at most ONE option per code: uniqueness outranks
-            # preservation. Two options sharing a code cannot both keep it --
-            # the PDF widget holds a single value, so the duplicate is a real
-            # defect either way -- and preserving both would let this branch
-            # no-op on the very duplicate it exists to repair, leaving the
-            # schema stuck (repair reports nothing to fix while lint still
-            # blocks on option-value-duplicate). First occurrence keeps the
-            # code; the rest fall through to minting.
+            # Since g2fpr.4 nothing in a select is PRESERVED for being a PDF
+            # export code: a code in value is CONVERTED (moved into
+            # pdf_on_value, the value minted from the label with the shared
+            # select minter), so one unrelated defect in the dropdown never
+            # leaves the good codes half-migrated. Two options sharing a code
+            # both convert (both keep the code in pdf_on_value; lint reports
+            # the duplicate code) and their VALUES come out unique. The
+            # minter reserves the held-aside values so a converted sibling
+            # cannot collide with them.
             #
             # A SELECT's EMPTY value is likewise held aside (bd
             # polyglot-pdf-ot284). Minting invents a slug, and a dropdown's
@@ -319,15 +330,13 @@ def _mint_slugs(
             # carry widget identity in pdf_field_name/pdf_on_value, so a
             # minted slug is the correct repair for them.
             is_select = f.get("type") == "select"
-            seen_codes: set = set()
             keep = []
+            converted: List[int] = []   # option indexes whose code moved into pdf_on_value
             for o in dict_opts:
                 v = o.get("value")
                 v = str(v) if v is not None else None
-                is_code = v is not None and v in pdf_choices and v not in seen_codes
-                if is_code:
-                    seen_codes.add(v)
-                elif is_select and (v is None or v.strip() == ""):
+                held = False
+                if is_select and (v is None or v.strip() == ""):
                     # Hold aside; do NOT mint a fake code. The blank test
                     # MATCHES schema_lint's own definition of a missing option
                     # value (`value is None or value.strip() == ""`,
@@ -335,8 +344,24 @@ def _mint_slugs(
                     # here would let a whitespace-only value be minted over,
                     # clearing the very lint ERROR this guard exists to keep
                     # standing.
-                    is_code = True
-                keep.append(is_code)
+                    held = True
+                elif is_select and v in pdf_choices and (
+                        not _has_on_value(o) or o["pdf_on_value"] not in pdf_choices):
+                    # THE CONVERSION (g2fpr.4, replacing the g2fpr.1 "preserve
+                    # the code in value" branch): a PDF-sanctioned export code
+                    # in a select's value moves into pdf_on_value, verbatim,
+                    # and the value is minted from the label below -- the same
+                    # rule scripts/migrate_select_on_values applies to a kit.
+                    # It also OVERWRITES a stale pdf_on_value the PDF does not
+                    # declare: fresh-eyes (g2fpr.4) showed the real code in
+                    # value being minted away while the stale one stayed --
+                    # the one shape a mid-hand-edit kit is likely to be in.
+                    # The code is registered as an alias so a condition that
+                    # named it still resolves (the tail loop registers
+                    # pdf_on_value -> current value).
+                    o["pdf_on_value"] = v
+                    converted.append(len(keep))
+                keep.append(held)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
             # can otherwise equal a code kept on another option and
@@ -362,10 +387,21 @@ def _mint_slugs(
                 str(o.get("label") or o.get("value") or "option")
                 for o, k in zip(dict_opts, keep) if not k
             ]
-            minted = vocab.mint_unique_slugs(reserved + labels)[len(reserved):]
+            if is_select:
+                # ONE minter for every select producer (extractor, editor,
+                # migration, repair): a trailing "(CODE)" never leaks into the
+                # slug, a slug-shaped code ('5') IS the value, and values
+                # already slug-shaped are reserved so a converted sibling
+                # cannot collide with them.
+                to_mint = [o for o, k in zip(dict_opts, keep) if not k]
+                codes = [o.get("pdf_on_value") if isinstance(o.get("pdf_on_value"), str) else None
+                         for o in to_mint]
+                minted = vocab.mint_select_slugs(labels, codes, reserved=reserved)
+            else:
+                minted = vocab.mint_unique_slugs(reserved + labels)[len(reserved):]
             slug_iter = iter(minted)
             renames = []
-            for o, k in zip(dict_opts, keep):
+            for idx, (o, k) in enumerate(zip(dict_opts, keep)):
                 old = o.get("value")
                 if k:
                     # Only a REAL value is its own alias. A held-aside empty
@@ -378,6 +414,13 @@ def _mint_slugs(
                 slug = next(slug_iter)
                 if old is not None and str(old) != slug:
                     renames.append(f"{old!r} -> {slug!r}")
+                elif idx in converted:
+                    # The value stayed ('5' is already a slug) but the export
+                    # code moved into pdf_on_value: a real write, so it is
+                    # REPORTED like the migration tool's kept_codes -- a silent
+                    # schema change on Repair is what the report exists to
+                    # prevent (cross-surface, bd polyglot-pdf-j12it).
+                    renames.append(f"{old!r}: export code -> pdf_on_value")
                 if old is not None:
                     _register(str(old), slug)
                 o["value"] = slug

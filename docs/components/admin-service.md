@@ -1,8 +1,43 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/sweep_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-z4y91: the console's Users tab
+*Last updated: 2026-09-09 (bd polyglot-pdf-8vgfh: the hourly expired-link
+refund sweep, `POST /admin/links/sweep-expired`
+(`admin_backend/routes/sweep_routes.py`) -- the fourth and last gate,
+`require_google_oidc(audience, allowed_caller_emails)`
+(`admin_backend/services/admin_auth.py`), lands with it. Per channel (or
+every `KNOWN_CHANNELS` channel when `?channel=` is omitted), queries
+`links[_<channel>]` for `status == minted AND open_deadline < now` and
+calls bead A5's `credit_ledger.refund_expired_link()` once per hit; each
+committed refund's audit row rides the SAME Firestore transaction via that
+function's `extra_writes` parameter (this bead's extension to A5's
+helper) -- the SAME extra_writes-delegated shape of `MUTATION_KIND_
+FIRESTORE` bd polyglot-pdf-zopqq's `credit_routes.py` uses with `append_
+entry`, both now recognized by `test_admin_audit_coverage.py`'s
+`_EXTRA_WRITES_TRANSACTION_OPENERS`. `scripts/setup-admin-
+service.sh` gains the `cloudscheduler.googleapis.com` API enable, a
+dedicated `admin-sweep-scheduler-sa` (a caller identity kept separate from
+`admin-backend-sa`, the service's own callee identity), and the
+hourly-job `gcloud scheduler jobs create http` command as an operator NOTE
+to run once after the admin service's first deploy -- the job needs that
+deploy's own Cloud Run URL, which this script cannot know ahead of time.)
+(bd polyglot-pdf-zopqq: firm CRUD
+(`admin_backend/routes/firm_routes.py`: `POST`/`GET /admin/firms`,
+`GET /admin/firms/{firm_id}`, `PATCH .../status`, `PATCH .../allowed_kits`,
+`PATCH .../kind`) and credit grant/adjust
+(`admin_backend/routes/credit_routes.py`: `POST .../credits/grant`,
+`POST .../credits/adjust`), all behind `require_app_admin` and all audited
+in-transaction -- firm writes open their OWN transaction (mirrors
+`config_routes.py`'s shape); credit writes join
+`credit_ledger.append_entry`'s transaction via its `extra_writes` hook
+instead of opening a second one, which is now a documented, mechanically-
+checked shape in `test_admin_audit_coverage.py`
+(`_EXTRA_WRITES_TRANSACTION_OPENERS`). `GET /admin/firms/{firm_id}` runs
+`credit_ledger.reconcile_expired_for_firm` once per known channel before
+reading the balance, so a dead sweep cannot leave the console's balance
+view stale. Neither surface checks `firm.kind` -- grants to mock firms are
+allowed by design.) (bd polyglot-pdf-z4y91: the console's Users tab
 (`admin-console/src/pages/UsersPage.tsx`) -- the first console page under a
 `pages/` directory rather than `components/`, since it is the console's
 first CRUD page rather than a read-mostly or single-write one; list a
@@ -87,21 +122,31 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/users/{uid}/disable` | PATCH | `require_app_admin_or_owning_manager` | Disable or re-enable a staff account (`{disabled, firm_id?}`). An explicit value, not a toggle, so a retry is idempotent. Claims are untouched -- disabling is not deleting, and the account keeps its audit history. 404 for a uid outside the resolved firm, the SAME 404 as a uid that does not exist. |
 | `/admin/users/{uid}/role` | PATCH | `require_app_admin_or_owning_manager` | Move an account between `manager` and `employee` (`{firm_role, firm_id?}`), merging over every other claim. Same 404 scoping rule as disable. |
 | `/admin/users` | GET | `require_app_admin_or_owning_manager` | The firm's staff pool (`?firm_id=` for an app admin; a manager sends none). `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth cannot query custom claims, which is affordable only because the pool is staff, editors and devs and clients never get accounts. Response rows are an explicit key allowlist. A read, so no audit row. |
+| `/admin/firms` | POST | `require_app_admin` | Create a firm (bd polyglot-pdf-zopqq). Body `{firm_id, name, contact_email, kind, allowed_kits?, status?}` -- `kind` is REQUIRED with no default (422 if missing or invalid). Writes the same field shape as `backend/services/firms.py::upsert_firm` but does not call it (that helper's read+write is not transactional, so this route's transactional create/audit body writes the doc itself). Audited in its own Firestore transaction. |
+| `/admin/firms` | GET | `require_app_admin` | Every firm, with `kind`/`balance_credits`/`status`, unfiltered. A read, so no audit row. |
+| `/admin/firms/{firm_id}` | GET | `require_app_admin` | One firm's profile, balance, and a page of ledger rows. **Reconciles expired unopened links across BOTH known channels (via `credit_ledger.reconcile_expired_for_firm`) before reading the balance** -- a lazy catch-up for what the hourly sweep (bd polyglot-pdf-8vgfh, below) has not reached. A read, so no audit row. |
+| `/admin/firms/{firm_id}/status` | PATCH | `require_app_admin` | Set `active`\|`suspended` (`{status}`). Audited in-transaction. |
+| `/admin/firms/{firm_id}/allowed_kits` | PATCH | `require_app_admin` | Replace the private-kit allowlist (`{allowed_kits}`, full replace). Audited in-transaction. |
+| `/admin/firms/{firm_id}/kind` | PATCH | `require_app_admin` | Reclassify `mock`<->`live` (`{kind, reason}`) -- `reason` REQUIRED; the confirm-twice UI control is the console's job, not this route's. Audited in-transaction. |
+| `/admin/firms/{firm_id}/credits/grant` | POST | `require_app_admin` | Grant credits (`{type, amount, usd_amount?, kit_id?}`; `type` in `subscription_grant`\|`purchase`\|`promo_grant`, `usd_amount` required for the first two and refused otherwise). Calls `backend/services/credit_ledger.py::append_entry` -- the ONE writer of a firm's balance. Grants to `kind=mock` firms are allowed. Audited via `append_entry`'s `extra_writes` hook, joined to its own transaction. |
+| `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED, `amount` may be either sign). Same writer and audit form as `grant`. |
+| `/admin/links/sweep-expired` | POST | `require_google_oidc` | The hourly expired-link refund sweep (bd polyglot-pdf-8vgfh). Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every `KNOWN_CHANNELS` channel. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit -- see Surface contract 18 in [technical_guide.md](../technical_guide.md) for that helper. Returns counts only (`{results, total_refunded, total_skipped}`); the ledger entry and the extra_writes-delegated audit row (joined via the same `_EXTRA_WRITES_TRANSACTION_OPENERS` shape as the credit routes above) are the durable record. |
 
-`channel` is always an explicit path parameter (validated against
-`("demo", "staging")`), never derived from the environment -- the admin
-service has no channel of its own, since it serves both channels' data from
-one deployment.
+`channel` is always an explicit path parameter or query parameter
+(validated against `("demo", "staging")`), never derived from the
+environment -- the admin service has no channel of its own, since it serves
+both channels' data from one deployment.
 
 This is the COMPLETE route set as of this doc's stamp, and it is pinned
 mechanically: `admin_backend/tests/unit/test_admin_route_auth.py` derives
 the live route set off `admin_backend.main.app` and fails if a route is
 added without exactly one of four gate names
 (`require_app_admin`; `require_firm_manager`;
-`require_app_admin_or_owning_manager`; `require_google_oidc` -- only the
-last does not exist yet, and it ships with its first consuming route in
-Epic 2 B5 / Epic 4 4.3). Read that test, not this table, for the
-authoritative set the day a new route lands.
+`require_app_admin_or_owning_manager`; `require_google_oidc`). ALL FOUR now
+exist; `require_google_oidc` shipped with its first consuming route above
+(bd polyglot-pdf-8vgfh) -- Epic 4 4.3's Pub/Sub push route will be its
+second. Read that test, not this table, for the authoritative set the day a
+new route lands.
 
 ## `require_app_admin` (`admin_backend/services/admin_auth.py`)
 
@@ -192,6 +237,57 @@ existence to protect. It is unit-tested directly rather than left untested,
 and the route-auth set test keeps the name in its vocabulary of legal
 gates.
 
+## `require_google_oidc` (the machine-caller gate, bd polyglot-pdf-8vgfh)
+
+The fourth and last gate, for Google-managed service callers (Cloud
+Scheduler today; Pub/Sub push in Epic 4) rather than a human sign-in. A
+**FACTORY**, not a plain dependency: `require_google_oidc(audience,
+allowed_caller_emails)` returns the actual FastAPI dependency, because both
+arguments vary per route and per deployment -- the route's own URL (unknown
+until after its first deploy) and the specific caller identity it should
+accept. A route wires it as
+`Depends(require_google_oidc(audience=..., allowed_caller_emails=...))`.
+
+**Both arguments accept a zero-arg callable as well as a plain value**,
+resolved fresh on every request rather than once at import time. This
+matters because the sweep route's real values come from environment
+variables (`ADMIN_SERVICE_URL`, `SWEEP_SCHEDULER_SA_EMAIL`) set at DEPLOY
+time, and the route module imports at process START -- reading `os.environ`
+eagerly would freeze in whatever value (or absence) existed before a real
+deployment finished configuring the service.
+
+**Why audience alone does not prove the caller.** On a public
+(`--allow-unauthenticated`) Cloud Run service, the audience claim is simply
+this route's own URL -- not a secret. Anyone who can read this source file,
+or simply guess the URL, can mint a Google-signed token carrying that SAME
+audience from their OWN GCP project (`gcloud auth print-identity-token
+--audiences=...`). A valid signature and matching audience together prove
+only "Google vouches this token was minted for this URL", never "this
+specific caller is the job we created". So the gate ALSO pins the token's
+`email` claim against `allowed_caller_emails`, and additionally requires
+`email_verified is True` -- a Google service account's email is always
+verified by construction, so a token claiming otherwise is not one this
+gate should ever accept.
+
+**The status-code split:** 401 for a token that fails verification outright
+(bad signature, expired, wrong audience -- retrying with a fresh token might
+help); 403 for a token that verifies but whose email is not allowlisted (a
+real Google-signed token, just the wrong caller -- retrying will never
+help); 503 when the verification machinery itself could not run (a broken
+`google-auth` install, or the certs endpoint unreachable) OR when the
+route's own configuration is incomplete (an empty audience or empty
+allowlist must never be read as "nothing to check against, allow it" --
+fail CLOSED).
+
+**The factory's returned closure is renamed to `require_google_oidc`
+itself.** `admin_backend/tests/unit/test_admin_route_auth.py`'s route/gate
+set pin reads a dependency's bare `__name__` to learn which of the four
+known gates a route carries; left as Python's default inner-function name
+(`_dependency`), a route wired through this factory would look ungated to
+that test. `admin_auth.py` sets `_dependency.__name__ = "require_google_
+oidc"` before returning it, which is what keeps detection uniform across
+all four gates despite this one being the only factory.
+
 ## Granting access: `scripts/bootstrap_admin_user.py`
 
 The ONLY way to grant (or revoke) `app_admin` -- there is no self-serve
@@ -231,7 +327,23 @@ Provisioned by `scripts/setup-admin-service.sh <PROJECT_ID> [FORM_KITS_BUCKET]`
 public backend's narrow SA). NOT run by any deploy script -- an operator runs
 it by hand, once per project or whenever the role set changes. It also
 enables the `identitytoolkit` API (every Firebase Auth admin call needs it;
-the public backend never touches it).
+the public backend never touches it) and, since bd polyglot-pdf-8vgfh,
+`cloudscheduler.googleapis.com`.
+
+**The sweep's caller identity, `admin-sweep-scheduler-sa`, is a SEPARATE
+service account from `admin-backend-sa`** (bd polyglot-pdf-8vgfh), also
+created by this script. `admin-backend-sa` is the admin service's own
+CALLEE identity; `require_google_oidc`'s whole point is pinning a DIFFERENT
+identity as the CALLER, so reusing `admin-backend-sa` for both directions
+would let one compromised credential both act as the admin service and
+trigger it. This account gets no IAM role grants of its own beyond what
+Cloud Scheduler needs to mint an OIDC token in its name (`--oidc-service-
+account-email` at job-creation time; no extra binding required for that).
+The script prints, but does not run, the `gcloud scheduler jobs create
+http admin-sweep-expired-links` command that wires this account to the
+hourly job -- it needs the admin service's own Cloud Run URL, unknown until
+after that service's first deploy. See the route table above and
+`admin_backend/routes/sweep_routes.py`'s own docstring for the job's shape.
 
 Roles, each justified inline in the script and pinned by
 `admin_backend/tests/unit/test_admin_sa_iam_envelope.py` (which parses the
@@ -397,8 +509,16 @@ route/gate set pin above), `test_admin_health.py` (`/health`/`/version`),
 `test_admin_sa_iam_envelope.py` (the role-list pin, and the
 `admin_backend` -/-> `backend.routes` import-direction guard -- Surface
 contract 13), `test_audit_log.py` + `test_admin_audit_coverage.py` (the
-audit forms and coverage pin), `test_config_routes.py` (the config route's
-validation and transactional write), `test_firestore_indexes.py` (the audit
-route's filter/index pin). `admin-console/src/components/*.test.tsx` and
-`admin-console/src/pages/*.test.tsx` cover the console pages (Vitest, same
-harness as `schema-editor/`).
+audit forms and coverage pin, including `MUTATION_KIND_DELEGATED_
+FIRESTORE`), `test_config_routes.py` (the config route's validation and
+transactional write), `test_firestore_indexes.py` (the audit route's
+filter/index pin), `test_google_oidc_gate.py` (`require_google_oidc`'s own
+contract: lazy config resolution, the 401/403/503 split, the closure
+rename), `test_sweep_routes.py` (the sweep route end to end through a fake
+Firestore, including the forced-audit-failure atomicity pin). The sibling
+root-level `tests/test_setup_admin_service_scheduler.py` pins
+`setup-admin-service.sh`'s Cloud Scheduler declaration by its shipped
+script TEXT, the same operator-script pattern as
+`tests/test_setup_firestore_ttl_script.py`. `admin-console/src/components/
+*.test.tsx` and `admin-console/src/pages/*.test.tsx` cover the console
+pages (Vitest, same harness as `schema-editor/`).

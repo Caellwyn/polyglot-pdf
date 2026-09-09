@@ -54,7 +54,10 @@ def _kit_root() -> Path:
 
 
 _KIT_ROOT = _kit_root()
-_SCHEMA = _KIT_ROOT / "schema_edited.json"
+# The kit's schema.json -- what the editor publishes and the filler reads
+# (a stale "schema_edited.json" name made this guard skip for months while
+# reading as green: bd polyglot-pdf-eeyqg).
+_SCHEMA = _KIT_ROOT / "schema.json"
 
 pytestmark = pytest.mark.skipif(
     not (_KIT_ROOT / "form.pdf").exists() or not _SCHEMA.exists(),
@@ -184,7 +187,8 @@ def test_source_state_widget_is_a_combobox_that_cannot_hold_a_full_name():
 def test_every_state_option_prints_its_code_in_full():
     """The headline property, over the WHOLE option set rather than a sample.
 
-    Each option's stored value is written verbatim, so every one of them must
+    Each option's stored value resolves to its pdf_on_value, the export code,
+    which is what is written -- so every one of them must
     render intact. A carve-out regression that let a minted slug
     ('wyoming_wy') back into .value shows up here as clipped output.
     """
@@ -193,10 +197,13 @@ def test_every_state_option_prints_its_code_in_full():
 
     clipped = []
     for opt in options:
-        value = opt["value"]
-        printed = _rendered_text(_fill({_STATE_FIELD: value}), _STATE_SUFFIX)
-        if printed != value:
-            clipped.append((value, printed))
+        # Post-migration shape (g2fpr): the stored value is the slug; the
+        # filler resolves it and writes the option's pdf_on_value, the export
+        # code, which is what must print intact.
+        assert opt.get("pdf_on_value"), opt
+        printed = _rendered_text(_fill({_STATE_FIELD: opt["value"]}), _STATE_SUFFIX)
+        if printed != opt["pdf_on_value"]:
+            clipped.append((opt["value"], opt["pdf_on_value"], printed))
     assert not clipped, (
         "these dropdown values did not print intact (stored fine, rendered "
         "wrong -- the silent failure mode): %r" % clipped[:10]
@@ -208,8 +215,11 @@ def test_a_spelled_out_state_name_would_print_clipped():
     vacuous: if the box ever grew wide enough to hold 'wyoming', the test
     above would stop proving anything and this one goes red to say so.
     """
-    printed = _rendered_text(_fill({_STATE_FIELD: "wyoming"}), _STATE_SUFFIX)
-    assert printed != "wyoming", (
+    # A value that is NOT an option takes the filler's verbatim fallback (with
+    # a loud warning), so the string reaches the box unresolved -- the shape
+    # the two-slot design exists to keep from ever being an option.
+    printed = _rendered_text(_fill({_STATE_FIELD: "wyoming_wy"}), _STATE_SUFFIX)
+    assert printed != "wyoming_wy", (
         "the state box now fits a full name; the export-code requirement (and "
         "the test above) no longer proves what it claims -- re-derive it"
     )
@@ -269,11 +279,17 @@ def test_ignored_field_selects_would_also_pass_the_gate_if_promoted():
 
     from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
     dump = json.loads(_dump_path().read_text(encoding="utf-8"))
+    # Scoped to the OPTION rules this guard exists for: a quarantined field can
+    # also carry a show_if naming another quarantined field (interp_state ->
+    # applicant_used_interpreter), which is a ref-unresolved-field finding about
+    # the quarantine, not about dropdown values.
+    option_rules = {"option-value-slug", "option-value-duplicate", "option-value-missing",
+                    "select-on-value-missing", "select-on-value-not-in-pdf"}
     errors = [f for f in lint_schema(promoted, dump)
-              if f.severity == SEVERITY_ERROR]
+              if f.severity == SEVERITY_ERROR and f.rule in option_rules]
     assert not errors, (
-        "promoting the ignored selects would block the publish gate: %r"
-        % [(f.rule, f.path) for f in errors[:5]]
+        "promoting the ignored selects would block the publish gate on their "
+        "option values: %r" % [(f.rule, f.path) for f in errors[:5]]
     )
 
 
@@ -287,8 +303,34 @@ def test_height_dropdowns_print_their_codes():
         options = _options(field_id)
         assert options, f"{field_id} has no options"
         for opt in options:
-            value = opt["value"]
-            printed = _rendered_text(_fill({field_id: value}), suffix)
-            assert printed == value, (
-                f"{field_id}={value!r} printed as {printed!r}"
+            printed = _rendered_text(_fill({field_id: opt["value"]}), suffix)
+            assert printed == opt["pdf_on_value"], (
+                f"{field_id}={opt['value']!r} printed as {printed!r}, "
+                f"expected the export code {opt['pdf_on_value']!r}"
             )
+
+
+def test_one_repair_on_the_pre_migration_archive_reproduces_the_migrated_kit():
+    """The editor's Repair and scripts/migrate_select_on_values must agree on
+    the real kit (bd kch40): repairing the pre-migration archive with the
+    kit's dump yields exactly the migrated schema's select options -- values
+    AND codes -- for the four LIVE dropdowns. Repair walks fields[] only; the
+    two quarantined selects are the migration tool's job (PR 3a), and a
+    second Repair after un-ignore converts them the same way."""
+    from backend.services.schema_repair import repair
+    archive = _KIT_ROOT / "_schema_pre_select_migration.json"
+    if not archive.exists():
+        pytest.skip("no pre-migration archive beside the kit")
+    legacy = json.loads(archive.read_text(encoding="utf-8"))
+    dump = json.loads(_dump_path().read_text(encoding="utf-8"))
+    repaired, _ = repair(legacy, dump)
+    migrated = _schema()
+
+    def selects(schema):
+        out = {}
+        for f in schema.get("fields", []):
+            if isinstance(f, dict) and f.get("type") == "select":
+                out[f["id"]] = [(o.get("value"), o.get("pdf_on_value")) for o in f["options"]]
+        return out
+    assert selects(repaired) == selects(migrated)
+    assert len(selects(migrated)) == 4

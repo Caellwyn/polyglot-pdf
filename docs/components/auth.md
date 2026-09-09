@@ -413,9 +413,12 @@ producer of the per-firm ledger subcollection. Subscription grants, prepaid
 purchases, promotional grants, mint debits, expiry refunds and operator
 adjustments all go through it, so the invariant `balance_credits ==
 sum(amount)` holds by construction. Nothing recomputes the balance from the
-ledger on a read, so a second writer would break it silently -- the one
-deliberate other site is `firms.upsert_firm()`, which 0-initializes the
-field on first create only, and a set-derived test fails on any third.
+ledger on a read, so an unlisted writer would break it silently -- the two
+deliberate other sites are `firms.upsert_firm()` and
+`admin_backend/routes/firm_routes.py`'s create route, each of which
+0-initializes the field on first create only, and a set-derived test
+(walking both `backend/` and `admin_backend/`) fails on any writer outside
+that set.
 
 **The entry.** `type` (one of `subscription_grant`, `purchase`,
 `promo_grant`, `mint_debit`, `expiry_refund`, `adjustment`), signed

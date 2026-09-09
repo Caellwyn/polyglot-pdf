@@ -75,10 +75,13 @@ gap, but never shadows a distinct real field that happens to lack its own
   its option and writes that option's `pdf_on_value` (the PDF export code)
   through the scalar TEXT path (`resolve_select_fill_value`): a combobox is one
   widget with an `/Opt` list and a plain `/V`, not a radio with per-kid
-  states. An option with no `pdf_on_value` (a kit not yet migrated) writes its
-  `value` verbatim, so a working kit never regresses mid-rollout. The read
-  side inverts it: `/resume-form` maps the code back to `option.value`
-  (`resolve_select_resume_value`). See the gotcha below (bd `polyglot-pdf-g2fpr`).
+  states. An option with no `pdf_on_value` writes its `value` verbatim with a
+  loud `select_option_without_pdf_on_value` warning (and a value matching no
+  option at all, `select_value_not_an_option`) -- shapes the publish gate no
+  longer lets through (see the gotcha below), kept only so a hand-edited kit
+  fills rather than crashes. The read side inverts it: `/resume-form` maps the
+  code back to `option.value` (`resolve_select_resume_value`) (bd
+  `polyglot-pdf-g2fpr`).
 - **checkbox / checkbox_group** -- a `bool` fills one widget; a `list` is a
   checkbox *group* (fill each selected option's widget). The v2
   `checkbox_group` TYPE (bd `h76m.17`) shares this branch -- it is the same
@@ -120,18 +123,19 @@ gap, but never shadows a distinct real field that happens to lack its own
   the COMB gotcha below. So the filler writes the option's `pdf_on_value` (the
   export code) and `schema_lint` checks it against the acroform dump's `/Opt`
   in BOTH directions (`select-on-value-not-in-pdf`; and `select-on-value-missing`
-  for a slug value with no code, which is the shape that printed the old i-90
-  clipped -- bd `polyglot-pdf-g2fpr`). Both are evidence-based (shared helper
-  `schema_repair.pdf_choice_values`) and are no-ops without a dump.
-  TRANSITION: a kit not yet migrated still carries the code in `option.value`
-  with no `pdf_on_value`; the filler writes that verbatim, and the
-  option-slug carve-out (bd `polyglot-pdf-4we6j`) keeps it lint-clean until the
-  migration lands (epic `polyglot-pdf-ps4hf`).
-  The same exemption exists at the MODEL gate
-  (`form_models._collect_v2_problems`), which runs BEFORE lint on the
-  publish route and validates a schema with no dump -- so it defers the
-  legitimacy call to lint rather than guessing. Fixing only one of the
-  two left the kit exactly as unpublishable, with a 422 instead of a 409.
+  for ANY dropdown choice with no `pdf_on_value`, which is the shape that
+  printed the old i-90 clipped -- bd `polyglot-pdf-g2fpr`). Both are
+  evidence-based (shared helper `schema_repair.pdf_choice_values`) and are
+  no-ops without a dump. The value itself is a plain slug, checked by
+  `option-value-slug` with no dropdown exemption, at the MODEL gate
+  (`form_models._collect_v2_problems`, which runs BEFORE lint on the publish
+  route) and at lint alike; a code-shaped value is the pre-migration shape and
+  both remedies name `scripts/migrate_select_on_values.py`, which moves the
+  code into `pdf_on_value` and mints the value. The editor's Repair does the
+  same conversion per field (`schema_repair._mint_slugs`) when a dump proves
+  the value is a real code. The 4we6j carve-outs that let a dropdown keep its
+  code in `value` while the filler wrote it verbatim were retired once the
+  shipped kits were migrated (epic `polyglot-pdf-ps4hf`).
 - **COMB widgets truncate on RENDER, not on read-back.** A text widget with the
   Comb flag (`field_flags & 1<<24`) splits its box into exactly `MaxLen` cells and
   prints ONE glyph per cell -- there is no cell `MaxLen+1`. PyMuPDF stores and

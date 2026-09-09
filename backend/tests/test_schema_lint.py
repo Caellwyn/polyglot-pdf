@@ -156,54 +156,56 @@ def _combo(options, fid="mail_state", ftype="select", claim=_COMBO_CLAIM):
              "options": list(options)}]
 
 
-def test_pdf_sanctioned_dropdown_codes_are_exempt_from_slug_rule():
-    """A dropdown's option.value is written VERBATIM into the PDF widget, and
-    PyMuPDF does not validate it against /Opt -- so a slug prints wrong
-    ('wyoming' clips to 'wyomin' in the 36pt I-90 state box). Values the PDF
-    itself declares legal are therefore exempt (bd polyglot-pdf-g2fpr).
 
-    Pins the whole exemption PROPERTY, not one code: every /Opt value must be
-    accepted, so a carve-out that special-cases a subset fails here.
+def test_a_pdf_sanctioned_code_in_a_dropdowns_VALUE_is_no_longer_exempt():
+    """The 4we6j carve-out let a select keep the PDF export code in value
+    because the filler wrote value verbatim. Since g2fpr the filler writes
+    pdf_on_value, the kits are migrated, and the carve-out is RETIRED
+    (g2fpr.4): every /Opt code sitting in value is a slug-rule finding whose
+    remedy names the migration. Pins the whole set, not one code.
     """
     codes = [c["value"] for c in _COMBO_DUMP["fields"][0]["widgets"][0]["choices"]
              if c["value"].strip()]
     assert len(codes) >= 3, "fixture must exercise more than one code"
     opts = [{"value": c, "label": "State %s" % c} for c in codes]
-    findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
-    assert [f.rule for f in findings if f.rule == "option-value-slug"] == []
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule == "option-value-slug"]
+    assert len(findings) == len(codes)
+    for f in findings:
+        assert "migrate_select_on_values" in f.message
+        assert "do NOT regenerate" not in f.message
+
 
 
 @pytest.mark.parametrize("bad", ["Wyoming!!", "NOT_A_CODE", "WYO", "Wy oming"])
-def test_dropdown_values_absent_from_pdf_choices_still_trip_slug_rule(bad):
-    """The carve-out is EVIDENCE-based: only values the widget declares are
-    exempt. Anything else is exactly what prints wrong, so the rule must still
-    bite -- otherwise this becomes a blanket type exemption.
+def test_dropdown_values_absent_from_pdf_choices_trip_the_slug_rule_and_rule_b(bad):
+    """A junk value with no pdf_on_value gets BOTH findings now: it is not a
+    slug (option-value-slug) and, with a dump resolving the widget, the
+    choice has no export code for the filler (select-on-value-missing). Two
+    findings, one fix each, no contradiction between them.
     """
     findings = _lint_structural(
         _schema(_combo([{"value": bad, "label": "X"}]), version="2"), _COMBO_DUMP)
-    assert _rules(findings) == ["option-value-slug"]
+    assert sorted(_rules(findings)) == ["option-value-slug", "select-on-value-missing"]
 
 
-def test_dumpless_dropdown_finding_does_not_prescribe_the_harmful_remedy():
-    """A dropdown linted with NO dump cannot be judged -- and the generic
-    remedy ("regenerate it from the label") is the one action that silently
-    breaks the printed form, since a select's value is written verbatim into
-    the combobox. The dumpless POST /lint route has no kit identity and so can
-    never supply a dump, and the editor renders this text to a human.
 
-    Asserts the SANCTIONED remedy is present and the harmful instruction is
-    absent -- an allowlist, not a banned-word check, so a reworded version of
-    the same bad advice still fails.
+def test_dumpless_dropdown_finding_names_the_two_slot_shape_never_verbatim_codes():
+    """A dropdown linted with NO dump still trips the slug rule on a code-shaped
+    value (no exemption survives), and the remedy must describe the two-slot
+    shape -- the code belongs in pdf_on_value -- never "keep the code as the
+    value" or "do NOT regenerate", which was the pre-migration advice.
+    Allowlist, not banned words: the sanctioned phrases must be present.
     """
     opts = [{"value": "WY", "label": "Wyoming (WY)"},
             {"value": "AL", "label": "Alabama (AL)"}]
     findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), None)
                 if f.rule == "option-value-slug"]
-    assert findings, "a dumpless dropdown lint must still report the value"
+    assert len(findings) == 2, "a dumpless dropdown lint must still report the values"
     for f in findings:
-        assert "export code" in f.message
-        assert "do NOT regenerate it from the label" in f.message
-
+        assert "pdf_on_value" in f.message
+        assert "regenerate it from the label" in f.message
+        assert "do NOT regenerate" not in f.message
     # A non-select choice field keeps the plain remedy, which is correct there.
     radio = _combo([{"value": "Bad Value", "label": "x", "pdf_on_value": "1"},
                     {"value": "ok", "label": "y", "pdf_on_value": "2"}],
@@ -211,31 +213,37 @@ def test_dumpless_dropdown_finding_does_not_prescribe_the_harmful_remedy():
     rf = [f for f in _lint_structural(_schema(radio, version="2"), None)
           if f.rule == "option-value-slug"]
     assert rf and all("regenerate it from the label" in f.message
-                      and "export code" not in f.message for f in rf)
+                      and "pdf_on_value" not in f.message for f in rf)
 
 
-def test_dropdown_code_exemption_requires_the_dump():
-    """No dump means no evidence -- the linter must NOT start exempting values
-    it cannot verify (a dumpless lint keeps the old, stricter behaviour).
+
+def test_no_dump_no_exemption_and_no_channel_finding():
+    """Without a dump the slug rule still fires on a code-shaped value (there
+    is no exemption to withhold any more), and the evidence-based channel
+    rule stays silent -- no evidence never reads as "nothing is legal".
     """
     opts = [{"value": "WY", "label": "Wyoming (WY)"}]
     assert _rules(_lint_structural(
         _schema(_combo(opts), version="2"), None)) == ["option-value-slug"]
 
 
-def test_dropdown_code_exemption_requires_the_matching_widget():
-    """The exemption is keyed on THIS field's pdf_field_name: claiming some
-    other widget must not borrow its choice list.
+
+def test_the_channel_rule_is_keyed_on_THIS_fields_widget():
+    """Claiming some other widget must not borrow its choice list: with the
+    dump resolving no widget for this field, only the slug rule fires.
     """
     opts = [{"value": "WY", "label": "Wyoming (WY)"}]
     findings = _lint_structural(
         _schema(_combo(opts, claim="P9_Other[0]"), version="2"), _COMBO_DUMP)
-    assert "option-value-slug" in _rules(findings)
+    rules = _rules(findings)
+    assert "option-value-slug" in rules
+    assert "select-on-value-missing" not in rules      # no evidence for THIS widget
 
 
-def test_radio_options_are_not_exempted_by_dropdown_choices():
-    """Radios carry widget identity in pdf_on_value, so their values have a
-    second channel and stay pure slugs -- the carve-out is select-only.
+
+def test_radio_options_follow_the_same_slug_rule():
+    """Radios and selects now share one rule: value is a slug, identity in
+    pdf_on_value. A code in a radio's value is a slug-rule finding.
     """
     opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"}]
     findings = _lint_structural(
@@ -243,13 +251,16 @@ def test_radio_options_are_not_exempted_by_dropdown_choices():
     assert "option-value-slug" in _rules(findings)
 
 
-def test_duplicate_dropdown_codes_still_trip():
-    """Exempting a value from the SLUG rule must not exempt it from the
-    uniqueness rule.
+
+def test_duplicate_dropdown_codes_trip_uniqueness_AND_the_retired_carve_outs_rules():
+    """Uniqueness still bites; and since the carve-out is gone each duplicate
+    code-in-value option is also a slug-rule and a missing-code finding.
     """
     opts = [{"value": "WY", "label": "a"}, {"value": "WY", "label": "b"}]
     findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
-    assert _rules(findings) == ["option-value-duplicate"]
+    assert "option-value-duplicate" in _rules(findings)
+    assert _rules(findings).count("option-value-slug") == 2
+    assert _rules(findings).count("select-on-value-missing") == 2
 
 
 def test_ref_unresolved_field_trips_once():
@@ -1655,7 +1666,7 @@ def test_hidden_with_show_if_stays_quiet_on_every_legitimate_shape(kw):
 # The select's SECOND channel: pdf_on_value (bd polyglot-pdf-g2fpr)
 # ---------------------------------------------------------------------------
 
-_SELECT_RULES = {"select-value-not-slug", "select-on-value-not-in-pdf",
+_SELECT_RULES = { "select-on-value-not-in-pdf",
                  "select-on-value-missing"}
 
 
@@ -1674,9 +1685,18 @@ def test_the_v2_select_shape_lints_clean():
             if f.rule in _SELECT_RULES | {"option-value-slug"}] == []
 
 
-def test_rule_a_a_code_valued_option_with_pdf_on_value_must_become_a_slug():
+
+def test_a_code_valued_option_with_pdf_on_value_is_a_slug_rule_finding_once():
+    """The former select-value-not-slug rule restated the slug rule for the
+    code-in-both shape and was retired with the carve-out (g2fpr.4): one
+    finding, from option-value-slug, whose remedy knows the code lives in
+    pdf_on_value. The channel rule stays silent (the code IS in /Opt)."""
     opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"}]
-    assert [f.rule for f in _select_findings(_combo(opts))] == ["select-value-not-slug"]
+    assert _select_findings(_combo(opts)) == []
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule in _SELECT_RULES | {"option-value-slug"}]
+    assert [f.rule for f in findings] == ["option-value-slug"]
+    assert "pdf_on_value" in findings[0].message
 
 
 def test_rule_a_numeric_values_are_already_slugs():
@@ -1706,19 +1726,27 @@ def test_rule_b_a_slug_with_no_pdf_on_value_is_THE_HOLE_and_now_errors():
     assert [f.rule for f in _select_findings(_combo(opts))] == ["select-on-value-missing"]
 
 
-def test_rule_b_does_not_double_report_a_non_slug_junk_value():
-    """Junk ('Bad Slug') already trips option-value-slug; rule (b) is scoped to
-    the SLUG case so the author gets one finding, not two."""
+
+def test_rule_b_reports_a_junk_value_with_no_code_alongside_the_slug_rule():
+    """Junk ('Bad Slug') trips option-value-slug; since g2fpr.4 the channel
+    rule ALSO fires, because whatever the value looks like, the choice has
+    no export code for the filler. Two findings, two distinct fixes."""
     opts = [{"value": "Bad Slug", "label": "x"}]
-    assert _select_findings(_combo(opts)) == []
+    assert [f.rule for f in _select_findings(_combo(opts))] == ["select-on-value-missing"]
 
 
-def test_rule_b_leaves_the_legacy_code_shape_alone():
-    """A not-yet-migrated kit (code in value, no pdf_on_value) is the carve-out
-    case and stays clean under the new rules -- it is retired in a later bead,
-    not this one."""
+
+def test_the_legacy_code_shape_is_an_ERROR_with_a_dump_present():
+    """EXIT CRITERION 2 (g2fpr.4): a select option lacking pdf_on_value is an
+    ERROR with a dump present -- no legacy path survives. The pre-migration
+    shape (code in value, no pdf_on_value) gets the channel finding whose
+    remedy names the migration tool, plus the slug-rule finding."""
     opts = [{"value": "WY", "label": "Wyoming"}]
-    assert _select_findings(_combo(opts)) == []
+    channel = _select_findings(_combo(opts))
+    assert [f.rule for f in channel] == ["select-on-value-missing"]
+    assert channel[0].severity == SEVERITY_ERROR
+    assert "migrate_select_on_values" in channel[0].message
+    assert "pre-migration" in channel[0].message
 
 
 def test_the_channel_rules_are_evidence_based_no_dump_no_finding():
@@ -1754,22 +1782,22 @@ def test_a_junk_value_with_pdf_on_value_gets_ONE_finding_and_the_right_remedy():
     assert "pdf_on_value" in findings[0].message
 
 
-def test_the_legacy_select_remedy_still_says_do_not_regenerate_WITHOUT_pdf_on_value():
-    """The other side of the same remedy: an option with NO pdf_on_value is in
-    the legacy shape, where regenerating from the label is exactly what
-    breaks the printed form. That sentence must survive."""
-    opts = [{"value": "Alabama (AL)", "label": "Alabama (AL)"}]
-    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
-                if f.rule == "option-value-slug"]
-    assert len(findings) == 1
-    assert "do NOT regenerate" in findings[0].message
+
+def test_no_remedy_anywhere_says_do_not_regenerate_any_more():
+    """The pre-migration advice ("do NOT regenerate from the label, the value
+    must stay the PDF's code") was correct only while the filler wrote value
+    verbatim. It must not survive anywhere in lint's select output."""
+    shapes = [
+        [{"value": "Alabama (AL)", "label": "Alabama (AL)"}],
+        [{"value": "AL", "label": "Alabama (AL)"}],
+        [{"value": "alabama", "label": "Alabama (AL)"}],
+    ]
+    for opts in shapes:
+        for dump in (_COMBO_DUMP, None):
+            for f in _lint_structural(_schema(_combo(opts), version="2"), dump):
+                assert "do NOT regenerate" not in f.message, (opts, dump, f.rule)
 
 
-def test_rule_a_fires_ONLY_on_the_code_in_both_shape():
-    """select-value-not-slug is scoped to value-is-a-legal-code AND
-    pdf_on_value-set. A junk value is option-value-slug's finding (above), so
-    this rule must stay silent on it -- no double report."""
-    junk = [{"value": "Alabama (AL)", "label": "x", "pdf_on_value": "AL"}]
-    assert "select-value-not-slug" not in [f.rule for f in _select_findings(_combo(junk))]
-    both = [{"value": "AL", "label": "x", "pdf_on_value": "AL"}]
-    assert [f.rule for f in _select_findings(_combo(both))] == ["select-value-not-slug"]
+
+
+

@@ -35,7 +35,6 @@ export const RULE_LABELS: Record<string, string> = {
   'option-value-duplicate': 'Duplicate answer value',
   'option-value-comma': 'Comma in answer value',
   'option-value-slug': 'Answer value in wrong format',
-  'select-value-not-slug': 'Dropdown value must be a plain slug',
   'select-on-value-not-in-pdf': 'Dropdown export code not in the PDF',
   'select-on-value-missing': 'Dropdown choice has no PDF export code',
   'ref-unresolved-field': 'Points at a missing field',
@@ -106,13 +105,13 @@ export const RULE_REMEDIES: Record<string, string> = {
   'option-value-missing': 'Set a stored value for this answer choice.',
   'option-value-duplicate': 'Give each answer choice its own unique value.',
   'option-value-comma': 'Remove the comma from the answer value.',
-  // Deliberately NOT "Regenerate the value from the label." -- this rule fires
-  // on dropdowns too, and for a dropdown the value is written verbatim into the
-  // PDF box, so regenerating it from the label is what makes the form print
-  // wrong ('Alabama (AL)' -> alabama_al -> prints clipped). The backend message
-  // beside this line carries the type-specific detail (bd polyglot-pdf-4we6j).
-  'option-value-slug': 'Fix the stored value as the message describes -- for a dropdown it must stay the PDF\'s own export code.',
-  'select-value-not-slug': 'This choice already carries its PDF export code in pdf_on_value, so regenerate the value from the label; the code is what the form prints.',
+  // The backend message beside this line carries the type-specific detail.
+  // For a dropdown, since g2fpr.4, the value is a plain slug and the PDF
+  // export code lives in pdf_on_value (what the filler writes); a code-shaped
+  // value is the pre-migration shape and the fix is the migration tool, not a
+  // hand edit (the earlier 'must stay the PDF's own export code' advice was
+  // for the filler that wrote the value verbatim, retired with the carve-out).
+  'option-value-slug': 'Fix the stored value as the message describes -- for a dropdown, the PDF export code belongs in pdf_on_value and the value is a plain slug (a pre-migration kit: run the select migration).',
   'select-on-value-not-in-pdf': 'Set the export code to one that the dropdown list in the PDF accepts -- anything else prints wrong.',
   'select-on-value-missing': 'Enter the PDF export code for this choice so the form prints the code, not the slug.',
   'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
