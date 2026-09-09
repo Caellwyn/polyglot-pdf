@@ -518,7 +518,16 @@
     // survives the reload a retry does, so without this a rerun could read the old
     // filled+confirmed value and false-pass before any new audio (Codex, PR #123).
     clearFieldState(fieldId);
-    report.steps.push({ step: 'clear-state', cleared: readField(fieldId).digits === '' });
+    // Check the VALUE, not `digits`. digits strips non-numerics, so for a
+    // radio/checkbox group (values like "m"/"f"/"reason_a") it is ALWAYS '' --
+    // picked or not -- and this line would report cleared:true even when the
+    // clear silently failed. domValue is null when a group has nothing checked
+    // and '' when a single control is empty, so both shapes read as cleared.
+    var clearSnap = readField(fieldId);
+    report.steps.push({
+      step: 'clear-state',
+      cleared: !clearSnap.domValue && !clearSnap.ssValue,
+    });
 
     // Reset the thinking-indicator observer (bd polyglot-pdf-fa4x) so report.thinking
     // reflects ONLY this cycle's agent_processing events. report.thinking is read off
