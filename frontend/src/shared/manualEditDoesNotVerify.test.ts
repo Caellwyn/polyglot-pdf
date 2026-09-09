@@ -565,6 +565,22 @@ describe('an id/name COLLISION must not redirect the notify (bd polyglot-pdf-96u
     expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
   })
 
+  it('an AI FILL also reaches the text field, not the colliding radios', () => {
+    // The THIRD consumer of the name-based resolution. I gated the listener and
+    // the edit path, then enumerated the consumers rather than assuming two was
+    // all of them -- applyUpdates was still hijacked, and an AI fill of this
+    // field landed NOWHERE. Measured: the field stayed empty.
+    document.body.innerHTML = `
+      <input id="sex" name="sex_text" type="text" value="" />
+      <input name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    const fm = createFieldManager({ schema: TEXT_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'Maria' } as any])
+
+    expect((document.getElementById('sex') as HTMLInputElement).value).toBe('Maria')
+  })
+
   it('and the same field notifies identically with NO colliding group present', () => {
     // The control: proves the assertion above is about the collision, not about
     // text fields being broken generally.

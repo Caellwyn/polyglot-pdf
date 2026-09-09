@@ -56,6 +56,28 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * there -- two sites holding one rule is precisely the shape that cost this
 	 * bead two regressions already.
 	 */
+	/**
+	 * Whether an id-resolved element rules OUT the group path.
+	 *
+	 * Ids and names share NO namespace in HTML, so a text field with id="sex"
+	 * legally coexists with a radio group named "sex" -- and resolving a group by
+	 * NAME alone let that collision hijack the text field at every consumer of
+	 * groupInputsFor: its listener bound the OTHER field's radios, its edits
+	 * reported their selection, and an AI fill landed nowhere.
+	 *
+	 * Shared by all three consumers deliberately. Gating them one at a time is
+	 * how this bug survived two rounds of fixing.
+	 */
+	function idResolvesToNonGroup(
+		element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+	): boolean {
+		if (element === null) return false
+		if (element instanceof HTMLInputElement) {
+			return element.type !== 'radio' && element.type !== 'checkbox'
+		}
+		return true
+	}
+
 	function groupInputsFor(fieldId: string): HTMLInputElement[] {
 		const bracketed = document.querySelectorAll(`input[name="${fieldId}[]"]`)
 		if (bracketed.length) return Array.from(bracketed) as HTMLInputElement[]
@@ -170,11 +192,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// (id="sex" vs a radio group name="sex") otherwise bound the OTHER
 			// field's radios and `continue`d, leaving the text field with NO
 			// listener at all -- so typing in it never reached the model.
-			const idIsNonGroup =
-				element instanceof HTMLInputElement
-					? element.type !== 'radio' && element.type !== 'checkbox'
-					: element !== null
-			const groupEls = idIsNonGroup ? [] : groupInputsFor(fieldId)
+			const groupEls = idResolvesToNonGroup(element) ? [] : groupInputsFor(fieldId)
 			if (groupEls.length) {
 				groupEls.forEach(input => setupEditListener(input as HTMLElement, fieldId))
 				continue
@@ -249,7 +267,15 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// handleSingleRadio returns false and a voice fill selects NOTHING.
 			// Measured: filling 'Female' checked it TRUE before the id existed and
 			// FALSE after, on 14 radio fields in i-90_v2 alone.
-			if (groupInputsFor(update.fieldId).length) element = null
+			// Gated the SAME way (see idResolvesToNonGroup): without it, an AI fill
+			// of a text field whose id collides with a group's name nulled `element`
+			// and the fill landed NOWHERE. Measured: the field stayed empty.
+			if (
+				!idResolvesToNonGroup(element) &&
+				groupInputsFor(update.fieldId).length
+			) {
+				element = null
+			}
 
 		// Special handling for radio buttons, checkbox groups, and comboboxes which may not have IDs
 		if (!element) {
