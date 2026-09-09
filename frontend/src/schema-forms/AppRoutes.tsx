@@ -21,6 +21,7 @@ import { Route, Routes } from "react-router-dom";
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { ClientLinkEntry } from "./ClientLinkEntry";
 import { MintLinkPage } from "../console/MintLinkPage";
+import { EmployeesPage } from "../console/EmployeesPage";
 import { AuthProvider } from "../contexts/AuthContext";
 import { ProtectedRoute } from "../components/layout/ProtectedRoute";
 
@@ -36,6 +37,16 @@ export const CLIENT_LINK_PATH = "/f";
 
 /** Where staff mint a client link (bd polyglot-pdf-gob8l, first console slice). */
 export const MINT_PATH = "/console/links";
+
+/** Where a firm manager runs their own staff account management (bd
+ * polyglot-pdf-krbol, Epic 2 Track C bead C4). Any signed-in staffer can
+ * REACH this route (ProtectedRoute gates on sign-in only, same as MINT_PATH
+ * above) -- EmployeesPage itself hides its content unless the token's
+ * firm_role claim is "manager", and the admin service enforces the same
+ * rule independently on every request the page sends. See EmployeesPage.tsx's
+ * module docstring for why the route-level gate is deliberately no
+ * stricter than sign-in. */
+export const EMPLOYEES_PATH = "/console/employees";
 
 export function AppRoutes() {
   return (
@@ -62,6 +73,20 @@ export function AppRoutes() {
           <AuthProvider>
             <ProtectedRoute>
               <MintLinkPage />
+            </ProtectedRoute>
+          </AuthProvider>
+        }
+      />
+      {/* CONSOLE -- firm-console employee management (bd polyglot-pdf-krbol).
+          Same auth-gate shape as MINT_PATH: any signed-in staffer reaches
+          the route, EmployeesPage's own manager-only check (UX) and the
+          admin service's gate (enforcement) are what actually restrict it. */}
+      <Route
+        path={EMPLOYEES_PATH}
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <EmployeesPage />
             </ProtectedRoute>
           </AuthProvider>
         }
