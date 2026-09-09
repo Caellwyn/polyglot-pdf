@@ -73,10 +73,11 @@ runtime SA. Your principal needs Firestore write access on the target
 project.
 
 Exit codes: 0 = every kit was seeded (or, with --dry-run, would be); 1 = one
-or more kits failed to write (named on stderr) -- fix and re-run, re-runs
-are idempotent; 2 = NOTHING was attempted: bad arguments (including the
-missing required --default-credit-cost), a dead or mismatched project, or
-no kits found under --kits-root.
+or more kits failed to write, OR were skipped for unparseable metadata.json
+(both named on stderr) -- fix and re-run, re-runs are idempotent; 2 =
+NOTHING was attempted: bad arguments (including the missing required
+--default-credit-cost), a dead or mismatched project, or no kits found
+under --kits-root.
 
 ASCII only (repo rule).
 """
@@ -274,12 +275,14 @@ def main(argv=None) -> int:
     actor = _actor(args.actor)
 
     failures: list[str] = []
+    skipped: list[str] = []
     seeded = 0
 
     for kit_dir in kit_dirs:
         kit_id = kit_dir.name
         metadata = _load_metadata(kit_dir)
         if metadata is None:
+            skipped.append(kit_id)
             print(
                 "SKIPPED {}: metadata.json missing or unparseable".format(
                     kit_id),
@@ -302,6 +305,7 @@ def main(argv=None) -> int:
         }
 
         if args.dry_run:
+            seeded += 1
             print("DRY RUN: kits/{} would be set to {}".format(kit_id, doc))
             continue
 
@@ -316,18 +320,33 @@ def main(argv=None) -> int:
             print("FAILED kits/{}: {}".format(kit_id, e), file=sys.stderr)
 
     if args.dry_run:
+        # Count only kits whose metadata actually parsed -- kit_dirs itself
+        # only requires metadata.json to EXIST (_iter_kit_dirs), not parse,
+        # so a kit skipped above for unparseable metadata must not inflate
+        # this total: a real run would not seed it either.
         print(
             "DRY RUN: {} kit(s) would be seeded; nothing was written.".format(
-                len(kit_dirs))
+                seeded)
         )
-        return 0
+        # Mirror the real-run rule: a skip alongside kits that WOULD be
+        # seeded is a partial, non-fatal preview; every kit skipped means
+        # a real run would seed nothing -- exit 1, not the same clean 0 a
+        # fully-parseable --kits-root gets.
+        return 1 if seeded == 0 else 0
 
     print(
-        "seed complete: {} kit(s) seeded, {} failure(s)".format(
-            seeded, len(failures)
+        "seed complete: {} kit(s) seeded, {} failure(s), {} skipped".format(
+            seeded, len(failures), len(skipped)
         )
     )
-    return 1 if failures else 0
+    # A skip alongside at least one real write is a partial, non-fatal
+    # sweep (warned on stderr, matching the module docstring's "one
+    # malformed kit must not block seeding every other one"). But
+    # `seeded == 0` here means NOTHING was written even though kit_dirs
+    # was non-empty (either every kit failed to write, or every kit's
+    # metadata.json was unparseable) -- that must not report the same
+    # clean exit 0 as a fully successful run.
+    return 1 if failures or seeded == 0 else 0
 
 
 if __name__ == "__main__":

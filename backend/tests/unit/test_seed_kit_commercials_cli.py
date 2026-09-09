@@ -414,3 +414,63 @@ def test_one_failing_kit_does_not_abort_the_sweep(
     assert rc == 1
     assert "bad-kit" in capsys.readouterr().err
     assert "good-kit" in wired_db.kits
+
+
+# --------------------------------------------- resilience: ALL kits skipped
+
+
+def test_all_kits_with_unparseable_metadata_is_not_a_clean_exit(
+        firebase_stub, wired_db, tmp_path, capsys):
+    """A --kits-root where EVERY kit's metadata.json exists but fails to
+    parse must NOT report the same clean exit 0 as a fully successful run
+    -- nothing was written, so this must fail loud (exit 1), matching the
+    module docstring's exit-code contract ("1 = one or more kits failed to
+    write ... or were skipped"). Mutation: drop the `seeded == 0` half of
+    the final return's condition -- would report exit 0 with zero kits
+    seeded."""
+    broken_one = _make_kit(tmp_path, "broken-one", None)
+    (broken_one / "metadata.json").write_text("{not valid json", encoding="utf-8")
+    broken_two = _make_kit(tmp_path, "broken-two", None)
+    (broken_two / "metadata.json").write_text("[]", encoding="utf-8")  # not a dict
+
+    rc = seed_kit_commercials.main(_argv(kits_root=tmp_path))
+
+    assert rc == 1
+    assert wired_db.kits == {}
+    err = capsys.readouterr().err
+    assert "broken-one" in err
+    assert "broken-two" in err
+
+
+def test_dry_run_all_kits_with_unparseable_metadata_is_not_a_clean_exit(
+        firebase_stub, wired_db, tmp_path, capsys):
+    """Same as above but for --dry-run: a --kits-root where every kit's
+    metadata.json fails to parse must exit 1, not 0 -- a real run would
+    seed nothing. Mutation: drop the `seeded == 0` check in the dry-run
+    return -- would report exit 0."""
+    broken = _make_kit(tmp_path, "broken-kit", None)
+    (broken / "metadata.json").write_text("{not valid json", encoding="utf-8")
+
+    rc = seed_kit_commercials.main(_argv("--dry-run", kits_root=tmp_path))
+
+    assert rc == 1
+    assert "broken-kit" in capsys.readouterr().err
+
+
+def test_dry_run_summary_count_excludes_unparseable_kits(
+        firebase_stub, wired_db, tmp_path, capsys):
+    """--dry-run's summary count of "kit(s) would be seeded" must count
+    only kits whose metadata actually parsed -- a kit with unparseable
+    metadata is listed by _iter_kit_dirs (it only checks metadata.json
+    EXISTS) but is skipped before ever reaching the dry-run print, so it
+    must not inflate the total. Mutation: use len(kit_dirs) instead of the
+    per-kit `seeded` counter -- would print "2" instead of "1" here."""
+    _make_kit(tmp_path, "w7", {"label": "W-7"})
+    broken = _make_kit(tmp_path, "broken-kit", None)
+    (broken / "metadata.json").write_text("{not valid json", encoding="utf-8")
+
+    rc = seed_kit_commercials.main(_argv("--dry-run", kits_root=tmp_path))
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "DRY RUN: 1 kit(s) would be seeded" in out

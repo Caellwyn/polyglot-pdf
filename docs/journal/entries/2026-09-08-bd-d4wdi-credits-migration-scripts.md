@@ -112,6 +112,56 @@ adopted as real rubric-fail gaps, no refutations:
 Backend suite (3470 passed) and root tests (1432 passed) both re-run green
 after the fix, from the worktree with `PYTHONPATH` set to it.
 
+**Fresh-eyes review round 2 (outer cross-surface pass).** GAPS-FOUND(1),
+adopted as a real blocker (plus its bundled secondary), no refutations:
+- **Adopted --** `seed_kit_commercials.py` returned a clean exit 0 when
+  EVERY kit under `--kits-root` had a `metadata.json` that existed but
+  failed to parse (or wasn't a dict): `seeded` stayed 0, `failures` stayed
+  empty, and `main()` fell through both existing guards ("no kits found"
+  only fires when `_iter_kit_dirs` finds nothing at all -- a dir with a
+  present-but-broken `metadata.json` still counts as a kit dir there) to
+  report "0 kit(s) seeded, 0 failure(s)" at exit 0. This directly
+  contradicted the module docstring's own exit-code contract (0 = every
+  kit seeded) and, per the reviewer, could let an operator believe a
+  migration succeeded while every `kits/{kit_id}` doc was still unseeded.
+  Fixed: the per-kit skip loop now also appends to a new `skipped` list;
+  the real-run and dry-run exit paths both return 1 when `seeded == 0`
+  (nothing was actually written or would be, even though `kit_dirs` was
+  non-empty), while a partial skip alongside at least one real success
+  stays exit 0 (the pre-existing, still-desired
+  "one malformed kit must not block the others" behavior, still pinned by
+  the pre-existing `test_kit_with_no_metadata_json_is_skipped_not_fatal`).
+- **Adopted, bundled (same root cause) --** the `--dry-run` summary line
+  printed `len(kit_dirs)` as "would be seeded," but `kit_dirs` only
+  requires `metadata.json` to EXIST, not parse -- a kit skipped for broken
+  metadata was still counted in the dry-run total even though a real run
+  would not seed it. Fixed: the summary now prints the `seeded` counter
+  (incremented per-kit only after the metadata load succeeds), which
+  already excludes skipped kits in both dry-run and real-run modes.
+  Three new tests pin this round's fix
+  (`test_all_kits_with_unparseable_metadata_is_not_a_clean_exit`,
+  `test_dry_run_all_kits_with_unparseable_metadata_is_not_a_clean_exit`,
+  `test_dry_run_summary_count_excludes_unparseable_kits`), each mutation-
+  verified red against the specific line it claims to pin (reverting
+  `seeded == 0` -> `False` in either exit path, and reverting the dry-run
+  count from `seeded` back to `len(kit_dirs)`).
+- **Deferred (nit bead filed this round) --** two test-coverage-only gaps
+  in `test_backfill_firm_kind_cli.py`, both traced by the reviewer as
+  already-correct code with no test pinning it: a firm with `kind` already
+  set but no `balance_credits` (had-kind-no-balance schema-drift shape),
+  and `--seed-reason`'s pass-through to `credit_ledger.append_entry`. Filed
+  as `polyglot-pdf-q6128` rather than fixed here (no behavior bug, coverage
+  gap only, not a named rubric case).
+- **Already filed, not re-litigated --** the reviewer re-confirmed
+  `polyglot-pdf-b51g1` (unmatched `--mock` firm_id warning) and
+  `polyglot-pdf-e0b6x` (`docs/components/auth.md` chronological chain) are
+  both well-formed and correctly scoped; did not duplicate.
+
+Backend suite (3473 passed, 72 skipped) and root tests (1432 passed, 46
+skipped) both re-run green after this round's fix, from the worktree with
+`PYTHONPATH` set to it. All three new tests independently mutation-verified
+red before the restore.
+
 ## Lessons
 
 **A malformed-metadata parametrization catches exactly the guard
@@ -176,15 +226,21 @@ tool, not the bead-claim tool.
 
 - `scripts/backfill_firm_kind.py` (new) -- the firm kind/balance backfill +
   optional seed grant.
-- `scripts/seed_kit_commercials.py` (new) -- the `kits/{kit_id}` commercial
-  doc seed.
+- `scripts/seed_kit_commercials.py` (new, round 2 fix) -- the `kits/{kit_id}`
+  commercial doc seed; round 2 added a `skipped` list alongside `failures`
+  and made both exit paths (`--dry-run` and real) return 1 when `seeded ==
+  0`, and fixed the `--dry-run` summary count to use the `seeded` counter
+  instead of `len(kit_dirs)`.
 - `backend/tests/unit/test_backfill_firm_kind_cli.py` (new) -- the CLI
   contract: mock allowlist, never-overwrite, true-no-op re-run, seed
   scoping, dry-run, dead/mismatched project, one-bad-firm resilience.
-- `backend/tests/unit/test_seed_kit_commercials_cli.py` (new) -- the CLI
-  contract: required `--default-credit-cost`, burn_cap_usd resolution
-  (metadata vs default, parametrized over every malformed value), display
-  label fallback, dry-run, idempotent re-run, one-bad-kit resilience.
-- `docs/components/auth.md` -- Tracks line + Last-updated note, as above.
+- `backend/tests/unit/test_seed_kit_commercials_cli.py` (new, round 2 fix) --
+  the CLI contract: required `--default-credit-cost`, burn_cap_usd
+  resolution (metadata vs default, parametrized over every malformed
+  value), display label fallback, dry-run, idempotent re-run, one-bad-kit
+  resilience; round 2 added the all-kits-skipped exit-code tests and the
+  dry-run summary-count test.
+- `docs/components/auth.md` -- Tracks line + Last-updated note, as above
+  (round 1; unchanged in round 2).
 
 Review outcomes recorded in the closeout ping.
