@@ -201,9 +201,15 @@ to change one file and believe they were done.
 
 ## Doc freshness
 
-Checked at closeout. This change is confined to three frontend files plus a new
-test; no `docs/components/*` doc tracks them in a way this change falsifies.
-Nothing bumped.
+- `docs/components/schema-forms.md` -- **bumped**. Its unlock paragraph was
+  accurate on `dev` and this change falsified it; found by the outer pass, not by
+  me. Rewritten to record why the render surfaces and the write gates read the
+  same flag differently, and stamped with this bead.
+- The other stale docs the checker flags (`context-compression`, `jit-schema`,
+  `pdf-filling`, `tool-call-flow`, `voice-ai`, `websocket-routing`) track files
+  this branch never touched; `websocket-routing.md` does track
+  `webFormConnection.ts` but documents the WebSocket message flow, which this
+  change does not alter. Reviewed and left.
 
 ## Files touched
 
@@ -288,6 +294,41 @@ pre-existing dead code, not this diff's to remove, but it is the reason the
 integration layer -- `isFieldReadOnly` reached through `webFormConnection`, which
 IS live -- is the one that carries the weight.
 
+### The outer pass: three findings, none of them in the diff
+
+Six fresh-eyes rounds cleared the diff. The Opus cross-surface pass then found
+three things in files the diff never touches -- which is the whole argument for
+the two layers doing different jobs.
+
+**A tier-2 doc now said the opposite of the code.**
+`docs/components/schema-forms.md` stated the unlock "is driven by that flag alone
+(visibility is a separate `show_if` decision)". True on `dev`; false the moment
+the write gates started requiring the field to be shown. It sits directly after a
+sentence about `conditionalFieldCheck.ts`, so it reads as surface-wide. Rewritten
+to record the real split: the render surfaces key on the flag alone because they
+only run on a rendered field; the write gates additionally require SHOWN because
+they are called on any field. Fixed here, because a wrong claim in a current-state
+doc is a blocker.
+
+**The editor's remedy line drifted from the message I rewrote.**
+`schema-editor/src/utils/lintFindings.ts` renders a one-line remedy beside each
+lint finding. Mine still said only "Set the unlock method to flip_readonly_bit" --
+omitting the `pdf_field_flag_change` pairing the message now warns about, which is
+the exact trap that message exists to prevent. That file already carries a comment
+about keeping a remedy in step with `schema_lint.py` for a different rule, so this
+was a known failure mode repeating. Fixed here.
+
+**The write gate and the PDF filler disagree about what an unlock needs.**
+`isFieldReadOnly` opens on `unlock_method` alone; `apply_field_flag_changes`
+early-returns without a `pdf_field_flag_change`. Before this bead the combination
+was inert for voice -- the AI was refused anyway. Now the AI fills the field, it
+confirms, the section validates, the form reads complete, and the box prints
+blank. Measured before deferring: all 16 unlockable fields on the i-90 carry the
+companion, and w7/f1040 have zero unlockable fields, so nothing shipped is
+affected. Filed as `polyglot-pdf-6out1` rather than fixed, because closing it
+means changing a lint severity or a publish gate -- a change to what the editor
+refuses to publish, which is not this bead's call to make.
+
 ### Exit criterion 2 is not satisfied by this PR, deliberately
 
 Worth stating plainly rather than burying. Criterion 2 asks for a test pinning
@@ -308,6 +349,10 @@ paragraph that says so.
 
 - `polyglot-pdf-6sfal` -- fold `FieldRenderer` and `FieldEditPopover` onto
   `declaresShownUnlock` so the rule lives in one file rather than three.
+- `polyglot-pdf-6out1` -- the write gate opens on `unlock_method` alone while the
+  PDF filler needs a `pdf_field_flag_change`; measured clean on every kit today.
+- `polyglot-pdf-qb713` / `polyglot-pdf-eyw6j` -- the outer reviewer's backstop
+  beads for the doc and editor-remedy drift, both FIXED here; close them at merge.
 - `polyglot-pdf-cgb5a` -- the required+read_only guard (already in `dev`, not
   this diff) never inspects `show_if`, and its `require_if` half is
   mutation-blind on both tracked kits. Pre-existing, so filed rather than fixed

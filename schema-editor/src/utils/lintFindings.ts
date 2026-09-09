@@ -124,7 +124,13 @@ export const RULE_REMEDIES: Record<string, string> = {
   'dump-widget-unclaimed': 'Add a field for this PDF box, or map it onto an existing field.',
   'field-claim-unresolvable': 'Reconnect this field to a real PDF box.',
   'field-unbacked': 'Connect this field to a PDF box, or mark it ignored.',
-  'readonly-conditional-no-unlock': 'Set the unlock method to flip_readonly_bit.',
+  // Kept in step with schema_lint.py's readonly-conditional-no-unlock message
+  // (bd polyglot-pdf-38p0y). That message now offers TWO remedies and warns
+  // that an unlock without a pdf_field_flag_change never reaches the printed
+  // form; prescribing only the unlock steers the author into that trap.
+  'readonly-conditional-no-unlock':
+    'Set the unlock method to flip_readonly_bit AND add a pdf_field_flag_change, '
+    + 'or clear read-only if the form does not lock this box.',
   'unlock-missing-flag-change': 'Add a pdf_field_flag_change next to the unlock method.',
   'required-top-level': 'Move the required setting into the field\'s validation rules.',
   'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
