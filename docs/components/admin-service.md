@@ -1,6 +1,6 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-r8z9g: Epic 2 Track C bead C2 --
 the console's Firms tab (`admin-console/src/pages/FirmsPage.tsx`,
@@ -37,7 +37,25 @@ Firms always returns to the list. `adminApi.ts` gains `listFirms`,
 `createFirm`, `getFirm`, `setFirmStatus`, `setFirmAllowedKits`,
 `setFirmKind`, `grantCredits`, `adjustCredits`, `listFirmLinks`,
 `revokeLink`.)*
-*Last updated: 2026-09-09 (bd polyglot-pdf-jmiys: link listing and revoke,
+*Last updated: 2026-09-09 (bd polyglot-pdf-f0kuu: kit commercial settings,
+Track B bead B3 -- `GET /admin/kits` (every kit in the form-kit store,
+joined with its resolved commercial or the global defaults),
+`GET /admin/kits/{kit_id}/commercial` (calls
+`backend/services/kit_commercials.py::resolve_commercial` -- the SAME
+reader bead A3's mint transaction uses, so this bead adds NO second
+reader), and `PUT /admin/kits/{kit_id}/commercial` (`{credit_cost,
+burn_cap_usd, display}`, `credit_cost` a positive int, `burn_cap_usd` a
+positive finite float -- bool, NaN and +-inf all refused explicitly, since
+bool is an int subclass and an unguarded check would price a form at 1
+credit on a stray `true` -- refused with 422 BEFORE any write, deliberately
+STRICTER than the read side's defensive fallback: a bad edit must never
+reach the store as a "successful" write the fallback then papers over).
+All three behind `require_app_admin` -- kit pricing has no firm-manager
+counterpart. PUT audits in ONE `@firestore.transactional` body (mirrors
+`firm_routes.py`'s `_apply_firm_patch` shape); there is no other writer's
+transaction to join via `extra_writes`, since this route is the only
+writer of `kits/{kit_id}`.)
+(bd polyglot-pdf-jmiys: link listing and revoke,
 Track B bead B4 -- `GET /admin/firms/{firm_id}/links`
 (`?channel=` REQUIRED, `?status=`/`?employee_id=` optional filters) joins a
 firm's `links[_<channel>]` mint records (bead A1) with their
@@ -192,6 +210,9 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/firms/{firm_id}/links` | GET | `require_app_admin_or_owning_manager` | The firm's links (bd polyglot-pdf-jmiys, Track B bead B4), joining `links[_<channel>]` mint records with `link_redemptions[_<channel>]` detail. `?channel=` REQUIRED (422 if missing/unknown); `?status=`/`?employee_id=` optional equality filters. A manager reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Response rows are an explicit key allowlist. A read, so no audit row. |
 | `/admin/links/{jti}/revoke` | POST | `require_app_admin_or_owning_manager` | Revoke a minted link (bd polyglot-pdf-jmiys). `?channel=` REQUIRED. Sets `status=revoked` with `revoked_by`/`revoked_at` in one transaction with an in-transaction audit row; only a `minted` link may be revoked (409 otherwise, naming the current status). A manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti). |
 | `/admin/links/sweep-expired` | POST | `require_google_oidc` | The hourly expired-link refund sweep (bd polyglot-pdf-8vgfh). Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every `KNOWN_CHANNELS` channel. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit -- see Surface contract 18 in [technical_guide.md](../technical_guide.md) for that helper. Returns counts only (`{results, total_refunded, total_skipped}`); the ledger entry and the extra_writes-delegated audit row (joined via the same `_EXTRA_WRITES_TRANSACTION_OPENERS` shape as the credit routes above) are the durable record. |
+| `/admin/kits` | GET | `require_app_admin` | Every kit in the form-kit store (bd polyglot-pdf-f0kuu, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the same reader the single-kit GET below and the mint transaction use. A read, so no audit row. |
+| `/admin/kits/{kit_id}/commercial` | GET | `require_app_admin` | One kit's resolved `credit_cost`/`cap_usd` (bd polyglot-pdf-f0kuu), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24 in [technical_guide.md](../technical_guide.md)); this bead adds no second reader. `source` is `"kit"` when a commercial doc exists, `"default"` otherwise. A read, so no audit row. |
+| `/admin/kits/{kit_id}/commercial` | PUT | `require_app_admin` | Set a kit's `credit_cost`/`burn_cap_usd`/`display` (bd polyglot-pdf-f0kuu). Refuses BEFORE any write on a malformed `credit_cost` (must be a positive int), `burn_cap_usd` (must be a positive finite float) or `display` (a small string map) -- 422, deliberately stricter than the read side's fallback: a bad edit must never reach the store as a "successful" write. Audited in the same `@firestore.transactional` body as the write. |
 
 `channel` is always an explicit path parameter or query parameter
 (validated against `("demo", "staging")`), never derived from the
@@ -619,7 +640,13 @@ rename), `test_sweep_routes.py` (the sweep route end to end through a fake
 Firestore, including the forced-audit-failure atomicity pin),
 `test_admin_link_routes.py` (bd polyglot-pdf-jmiys: link listing's allowlist
 and firm-scoping, and revoke's atomicity and 409/404 refusals, over the
-same fake-Firestore shape `test_sweep_routes.py` uses). The PUBLIC backend's
+same fake-Firestore shape `test_sweep_routes.py` uses), `test_kit_routes.py`
+(bd polyglot-pdf-f0kuu: PUT's in-transaction audit atomicity, the
+parametrized 422 refusal over every malformed `credit_cost`/`burn_cap_usd`/
+`display` shape -- including bool-as-number and NaN/+-inf sent as raw JSON
+body bytes, since httpx's own client-side encoder cannot serialize a
+Python `float("nan")` -- GET's shared-reader import pin, and the list
+route's join over a faked `FormKitStore`). The PUBLIC backend's
 `backend/tests/integration/test_revoked_link_open.py` pins the OTHER half
 of B4's exit criterion 3 -- a revoked link's subsequent open is refused with
 the uniform 404 -- over the real `POST /api/links/open` route; that
