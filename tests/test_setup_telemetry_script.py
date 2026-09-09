@@ -258,3 +258,90 @@ def test_sql_file_exists_and_is_applied_by_the_script():
         "scripts/setup-telemetry.sh never runs `bq query ... "
         "--use_legacy_sql=false` against sql/telemetry_views.sql")
     assert "telemetry_views.sql" in text
+
+
+def test_script_discovers_both_stdout_and_stderr_tables_separately():
+    """bd polyglot-pdf-ih428: the sink writes usage events to a
+    run_googleapis_com_stdout table and ledger_export/session events to a
+    SEPARATE run_googleapis_com_stderr table (see the script's own section-6
+    comment for why). The script must discover BOTH table names from `bq
+    ls`, not `head -1` a single one and reuse it for every view. Mutation:
+    collapse TELEMETRY_TABLE_STDOUT/TELEMETRY_TABLE_STDERR back into one
+    TELEMETRY_TABLE variable fed by a single `bq ls | ... | head -1` -- red.
+    """
+    text = _script_text()
+    # A single `bq ls` call populates a shared CSV variable that both
+    # TELEMETRY_TABLE_STDOUT and TELEMETRY_TABLE_STDERR are then filtered
+    # from -- so the traceable requirement is that `bq ls` feeds a variable
+    # that BOTH assignments read from, and each assignment greps for its
+    # own distinct stream name.
+    csv_source = re.search(r'(\w+)=\$\(bq ls[^\n]*\)', text)
+    assert csv_source, "no variable is populated directly from `bq ls`"
+    csv_var = csv_source.group(1)
+    stdout_line = re.search(
+        r'TELEMETRY_TABLE_STDOUT=\$\([^\n]*\$' + re.escape(csv_var) + r'[^\n]*\)', text)
+    stderr_line = re.search(
+        r'TELEMETRY_TABLE_STDERR=\$\([^\n]*\$' + re.escape(csv_var) + r'[^\n]*\)', text)
+    assert stdout_line, (
+        "TELEMETRY_TABLE_STDOUT is not populated from the `bq ls` output "
+        "variable ({!r})".format(csv_var))
+    assert stderr_line, (
+        "TELEMETRY_TABLE_STDERR is not populated from the `bq ls` output "
+        "variable ({!r})".format(csv_var))
+    # The two discovery pipelines must filter on DIFFERENT stream names, not
+    # the same "stdout" grep reused twice.
+    stdout_grep = re.search(r'grep -i "([^"]*)"', stdout_line.group(0))
+    stderr_grep = re.search(r'grep -i "([^"]*)"', stderr_line.group(0))
+    assert stdout_grep and stderr_grep, (
+        "could not find the grep filters for the two table-discovery lines")
+    assert "stdout" in stdout_grep.group(1).lower()
+    assert "stderr" in stderr_grep.group(1).lower()
+    assert stdout_grep.group(1) != stderr_grep.group(1), (
+        "the stdout and stderr table-discovery greps use the same filter -- "
+        "they must select different rows from `bq ls`")
+
+
+def test_script_substitutes_both_telemetry_table_placeholders_independently():
+    """The sed pipeline applying sql/telemetry_views.sql must substitute
+    ${TELEMETRY_TABLE_STDOUT} and ${TELEMETRY_TABLE_STDERR} with their own
+    discovered table names, not the same single ${TELEMETRY_TABLE}
+    placeholder for both (the exact bug bd polyglot-pdf-ih428 pins: a
+    single substituted table left either the three cost views or
+    income_month permanently and silently empty). Mutation: change the
+    TELEMETRY_TABLE_STDERR sed clause to substitute
+    $TELEMETRY_TABLE_STDOUT instead of $TELEMETRY_TABLE_STDERR -- red."""
+    text = _script_text()
+    assert re.search(
+        r'-e "s\|\\\$\{TELEMETRY_TABLE_STDOUT\}\|\$PROJECT_ID\.\$DATASET\.\$TELEMETRY_TABLE_STDOUT\|g"',
+        text), (
+        "the sed pipeline does not substitute ${TELEMETRY_TABLE_STDOUT} "
+        "with $TELEMETRY_TABLE_STDOUT")
+    assert re.search(
+        r'-e "s\|\\\$\{TELEMETRY_TABLE_STDERR\}\|\$PROJECT_ID\.\$DATASET\.\$TELEMETRY_TABLE_STDERR\|g"',
+        text), (
+        "the sed pipeline does not substitute ${TELEMETRY_TABLE_STDERR} "
+        "with $TELEMETRY_TABLE_STDERR")
+    # And the negative half: the old single-table placeholder must be gone
+    # entirely, not left behind as a third, unused substitution.
+    assert "${TELEMETRY_TABLE}" not in text.replace(
+        "${TELEMETRY_TABLE_STDOUT}", "").replace("${TELEMETRY_TABLE_STDERR}", ""), (
+        "a bare ${TELEMETRY_TABLE} placeholder (the pre-fix single-table "
+        "name) is still referenced somewhere in the script")
+
+
+def test_script_requires_both_tables_before_applying_views():
+    """If either the stdout or the stderr table is missing (sink has not
+    yet produced a row of that kind), the script must skip view creation
+    for BOTH rather than applying with one placeholder left as a literal
+    empty string. Mutation: change the guard from `||` to `&&` (only skip
+    when BOTH are missing) -- red."""
+    text = _script_text()
+    guard = re.search(
+        r'if \[ -z "\$TELEMETRY_TABLE_STDOUT" \] (\|\||&&) '
+        r'\[ -z "\$TELEMETRY_TABLE_STDERR" \]', text)
+    assert guard, "no guard found checking both TELEMETRY_TABLE_STDOUT/STDERR"
+    assert guard.group(1) == "||", (
+        "the both-tables guard uses {!r}, expected '||' -- with '&&' the "
+        "script would proceed to substitute an EMPTY table name into the "
+        "SQL when only one of the two tables exists yet".format(guard.group(1))
+    )

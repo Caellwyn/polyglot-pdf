@@ -262,13 +262,26 @@ this bead) is what first wires `StructuredLogger.log_error` to a real call
 site, and it will land under the same nested `message.event_type` shape as
 usage events when it does.
 
+**The sink lands rows in TWO destination tables, not one** (bd
+polyglot-pdf-ih428): a Cloud Logging -> BigQuery sink names its destination
+table per LOG ID, and this sink's filter matches both the
+`run.googleapis.com/stdout` stream (usage events -- `StructuredLogger._emit`
+prints them directly to stdout) and the `run.googleapis.com/stderr` stream
+(`ledger_export` and the session events -- plain `structlog` calls that reach
+stdlib logging's root handler, which `backend/utils/logging.py`'s
+`configure_logging()` leaves at Python's default stream, stderr, having never
+passed `stream=`). `scripts/setup-telemetry.sh` discovers both table names
+with `bq ls` on the dataset and substitutes them into two separate SQL
+placeholders, `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}`.
+
 **Views** (`sql/telemetry_views.sql`): `cost_by_firm_month`, `cost_by_kit_month`,
-`cost_by_employee_month` (all three read the nested usage-event shape, grouped
-by month + the relevant id + `usage_kind`, so different paid paths never sum
-into one opaque total), `hosting_cost_by_service_month` (reads the Cloud
-Billing detailed export table -- a separate maintainer console step, Epic 3
-bead 7, not retroactive -- filtered to Cloud Run + Firebase Hosting SKUs), and
-`income_month` (reads `ledger_export` rows, `type IN ('purchase',
+`cost_by_employee_month` (all three read the nested usage-event shape from
+`${TELEMETRY_TABLE_STDOUT}`, grouped by month + the relevant id +
+`usage_kind`, so different paid paths never sum into one opaque total),
+`hosting_cost_by_service_month` (reads the Cloud Billing detailed export
+table -- a separate maintainer console step, Epic 3 bead 7, not retroactive --
+filtered to Cloud Run + Firebase Hosting SKUs), and `income_month` (reads
+`ledger_export` rows from `${TELEMETRY_TABLE_STDERR}`, `type IN ('purchase',
 'subscription_grant')`, with `firm_kind = 'live'` **hard-coded in the view**
 so a caller cannot forget the mock-firm filter -- this bead inherits Epic 3's
 overall exit criterion 5, the income-filter half). Every view's referenced

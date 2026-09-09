@@ -34,24 +34,40 @@
 --      rather than hand-listing them here, so this file and those constants
 --      cannot silently drift apart.
 --
--- The Cloud Logging -> BigQuery sink lands each event_type as ONE table
--- under the dataset (sink default: one table per log ID / resource type,
--- partitioned by timestamp -- exact table names are assigned by the sink at
--- creation and are NOT hand-picked here). Because a usage event's
--- event_type ("gemini_api_response" / "text_ai_usage" / "tts_usage") sits at
--- jsonPayload.message.event_type (not jsonPayload.event_type -- see
--- scripts/setup-telemetry.sh's sink-filter comment for the full three-shape
--- story), and because all THREE usage event_types plus ledger_export land in
--- the SAME sink destination, every usage view below filters explicitly on
--- `jsonPayload.message.event_type` so a future usage_kind or a stray
--- ledger_export row in the same table cannot silently join the aggregate.
+-- THE SINK LANDS ROWS IN TWO TABLES, NOT ONE (bd polyglot-pdf-ih428). A
+-- Cloud Logging -> BigQuery sink names its destination table per LOG ID
+-- (with --use-partitioned-tables, one partitioned table per log ID) -- NOT
+-- per resource type or event_type -- and this dataset's sink filter matches
+-- TWO different Cloud Run log streams:
 --
--- `${TELEMETRY_TABLE}` is substituted by setup-telemetry.sh with the actual
--- sink destination table (`` `PROJECT.polyglot_telemetry.run_googleapis_com_stdout` ``
--- or whatever name the sink assigns -- the script greps it from the sink's
--- own `gcloud logging sinks describe` output rather than hardcoding it, so a
--- Cloud Logging naming change cannot silently orphan these views). See the
--- script for the substitution mechanics.
+--   - Usage events (gemini_api_response / text_ai_usage / tts_usage) are
+--     printed directly to STDOUT by
+--     backend/utils/structured_logger.py:118
+--     (`print(json.dumps(log_entry), file=sys.stdout, flush=True)`),
+--     landing under Cloud Run's `run.googleapis.com/stdout` log and
+--     therefore the sink's run_googleapis_com_stdout table.
+--   - ledger_export (backend/services/credit_ledger.py) and the two
+--     session events form_session_started / form_session_ended
+--     (backend/utils/confirmation_logger.py) go through plain structlog
+--     calls, which reach stdlib logging's root StreamHandler --
+--     backend/utils/logging.py's configure_logging() calls
+--     `logging.basicConfig(level=..., format="%(message)s")` with NO
+--     `stream=` argument, so that handler defaults to Python's stdlib
+--     default of STDERR. These land under `run.googleapis.com/stderr` and
+--     therefore the sink's run_googleapis_com_stderr table.
+--
+-- So the three cost views below (which filter on the NESTED
+-- jsonPayload.message.event_type shape, i.e. usage events) read
+-- `${TELEMETRY_TABLE_STDOUT}`, and income_month (which filters on the flat
+-- jsonPayload.event_type = 'ledger_export' shape) reads
+-- `${TELEMETRY_TABLE_STDERR}` -- substituting the same single table into
+-- both would leave one set of views permanently and silently empty (no
+-- BigQuery error; the JSON path simply never matches). setup-telemetry.sh
+-- discovers both table names with `bq ls` on the dataset (there is no
+-- `gcloud logging sinks describe` call involved -- that command reports the
+-- sink's config, not its destination tables) and substitutes each
+-- placeholder independently. See that script for the substitution
+-- mechanics.
 --
 -- `${BILLING_EXPORT_TABLE}` is substituted with the detailed Cloud Billing
 -- export table (`` `BILLING_PROJECT.BILLING_DATASET.gcp_billing_export_resource_v1_XXXXXX` ``).
@@ -71,7 +87,7 @@ SELECT
   JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
   COUNT(*) AS call_count,
   SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
-FROM `${TELEMETRY_TABLE}`
+FROM `${TELEMETRY_TABLE_STDOUT}`
 WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
@@ -88,7 +104,7 @@ SELECT
   JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
   COUNT(*) AS call_count,
   SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
-FROM `${TELEMETRY_TABLE}`
+FROM `${TELEMETRY_TABLE_STDOUT}`
 WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
@@ -107,7 +123,7 @@ SELECT
   JSON_VALUE(jsonPayload.message.metadata.usage_kind) AS usage_kind,
   COUNT(*) AS call_count,
   SUM(CAST(JSON_VALUE(jsonPayload.message.metadata.cost_estimate_usd) AS FLOAT64)) AS cost_usd
-FROM `${TELEMETRY_TABLE}`
+FROM `${TELEMETRY_TABLE_STDOUT}`
 WHERE JSON_VALUE(jsonPayload.message.event_type) IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
@@ -154,7 +170,7 @@ SELECT
   JSON_VALUE(jsonPayload.channel) AS channel,
   COUNT(*) AS entry_count,
   SUM(CAST(JSON_VALUE(jsonPayload.usd_amount) AS FLOAT64)) AS usd_amount
-FROM `${TELEMETRY_TABLE}`
+FROM `${TELEMETRY_TABLE_STDERR}`
 WHERE JSON_VALUE(jsonPayload.event_type) = 'ledger_export'
   AND JSON_VALUE(jsonPayload.type) IN ('purchase', 'subscription_grant')
   AND JSON_VALUE(jsonPayload.firm_kind) = 'live'

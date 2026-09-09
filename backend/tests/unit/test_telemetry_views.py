@@ -243,28 +243,88 @@ def test_cost_views_group_by_month_and_do_not_double_count_usage_kinds():
 
 def test_hosting_cost_view_reads_the_billing_export_table_not_the_sink():
     """hosting_cost_by_service_month is the one view that does NOT read the
-    telemetry sink table -- it reads the Cloud Billing export instead.
-    Mutation: point it at ${TELEMETRY_TABLE} -- red (there is no cost data
-    in the logging sink; Cloud Run/Hosting cost only exists in the billing
-    export)."""
+    telemetry sink tables -- it reads the Cloud Billing export instead.
+    Mutation: point it at ${TELEMETRY_TABLE_STDOUT} or
+    ${TELEMETRY_TABLE_STDERR} -- red (there is no cost data in the logging
+    sink; Cloud Run/Hosting cost only exists in the billing export)."""
     text = _sql_text()
     body = _view_body(text, "hosting_cost_by_service_month")
     assert "${BILLING_EXPORT_TABLE}" in body
-    assert "${TELEMETRY_TABLE}" not in body
+    assert "${TELEMETRY_TABLE_STDOUT}" not in body
+    assert "${TELEMETRY_TABLE_STDERR}" not in body
     assert "Cloud Run" in body and "Firebase Hosting" in body
 
 
-def test_views_that_read_the_sink_use_the_telemetry_table_placeholder():
-    """The four sink-backed views reference ${TELEMETRY_TABLE}, and none of
-    them accidentally reads the billing export table. Mutation: change one
-    view's FROM clause to ${BILLING_EXPORT_TABLE} -- red."""
+def test_usage_views_read_the_stdout_table_not_the_stderr_table():
+    """cost_by_firm_month / cost_by_kit_month / cost_by_employee_month read
+    the usage events StructuredLogger._emit prints to STDOUT
+    (backend/utils/structured_logger.py:118), which the sink lands in a
+    DIFFERENT destination table from the one ledger_export/session events
+    (plain structlog, defaulting to stderr) land in -- see this file's
+    header and bd polyglot-pdf-ih428. Substituting the same single table
+    into both would leave one set of views permanently and silently empty.
+    Mutation: change one of these views' FROM clause to
+    ${TELEMETRY_TABLE_STDERR} -- red."""
     text = _sql_text()
-    for name in ("cost_by_firm_month", "cost_by_kit_month",
-                 "cost_by_employee_month", "income_month"):
+    for name in ("cost_by_firm_month", "cost_by_kit_month", "cost_by_employee_month"):
         body = _view_body(text, name)
-        assert "${TELEMETRY_TABLE}" in body, (
-            "{} does not read FROM ${{TELEMETRY_TABLE}}".format(name)
+        assert "${TELEMETRY_TABLE_STDOUT}" in body, (
+            "{} does not read FROM ${{TELEMETRY_TABLE_STDOUT}}".format(name)
+        )
+        assert "${TELEMETRY_TABLE_STDERR}" not in body, (
+            "{} incorrectly reads FROM the stderr-backed table -- usage "
+            "events land on stdout".format(name)
         )
         assert "${BILLING_EXPORT_TABLE}" not in body, (
             "{} incorrectly references the billing export table".format(name)
+        )
+
+
+def test_income_month_reads_the_stderr_table_not_the_stdout_table():
+    """income_month reads ledger_export rows, which reach BigQuery through
+    plain structlog -> stdlib logging's default STDERR stream (backend/
+    utils/logging.py's configure_logging() passes no stream= to
+    logging.basicConfig) -- a DIFFERENT sink destination table from the
+    usage views' stdout table. Mutation: change income_month's FROM clause
+    to ${TELEMETRY_TABLE_STDOUT} -- red (this is the exact bug bd
+    polyglot-pdf-ih428 pins: a single substituted table left income_month
+    or the cost views permanently empty)."""
+    text = _sql_text()
+    body = _view_body(text, "income_month")
+    assert "${TELEMETRY_TABLE_STDERR}" in body, (
+        "income_month does not read FROM ${TELEMETRY_TABLE_STDERR}"
+    )
+    assert "${TELEMETRY_TABLE_STDOUT}" not in body, (
+        "income_month incorrectly reads FROM the stdout-backed table -- "
+        "ledger_export lands on stderr"
+    )
+    assert "${BILLING_EXPORT_TABLE}" not in body, (
+        "income_month incorrectly references the billing export table"
+    )
+
+
+def test_usage_views_and_income_month_do_not_share_a_table_placeholder():
+    """THE headline pin for bd polyglot-pdf-ih428: the usage-shape views
+    (stdout) and income_month (stderr) must reference DIFFERENT
+    ${TELEMETRY_TABLE_*} placeholders, never the same one. Mutation:
+    collapse both placeholders back to a single ${TELEMETRY_TABLE} name
+    used by all four sink-backed views -- red."""
+    text = _sql_text()
+    usage_placeholders = set()
+    for name in ("cost_by_firm_month", "cost_by_kit_month", "cost_by_employee_month"):
+        body = _view_body(text, name)
+        found = set(re.findall(r"\$\{TELEMETRY_TABLE_\w+\}", body))
+        assert found, "{} references no TELEMETRY_TABLE_* placeholder".format(name)
+        usage_placeholders |= found
+
+    income_body = _view_body(text, "income_month")
+    income_placeholders = set(re.findall(r"\$\{TELEMETRY_TABLE_\w+\}", income_body))
+    assert income_placeholders, "income_month references no TELEMETRY_TABLE_* placeholder"
+
+    assert usage_placeholders.isdisjoint(income_placeholders), (
+        "the usage views and income_month reference the SAME "
+        "TELEMETRY_TABLE_* placeholder ({}) -- usage events land on stdout "
+        "and ledger_export lands on stderr, two different sink destination "
+        "tables, so they must use two different placeholders (see bd "
+        "polyglot-pdf-ih428)".format(usage_placeholders & income_placeholders)
         )

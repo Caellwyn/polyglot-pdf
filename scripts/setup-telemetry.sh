@@ -187,16 +187,26 @@ bq add-iam-policy-binding \
     "$DATASET" > /dev/null
 
 # 6. Apply the view definitions (sql/telemetry_views.sql), substituting the
-#    dataset, the sink's destination table, and the Cloud Billing export
-#    table into the SQL's ${...} placeholders.
+#    dataset, the sink's TWO destination tables, and the Cloud Billing
+#    export table into the SQL's ${...} placeholders.
 #
-# TELEMETRY_TABLE: the sink's own destination table. The Cloud Logging ->
-# BigQuery sink assigns this name itself (one table per monitored resource
-# type under the dataset, e.g. run_googleapis_com_stdout) -- it is not
-# hand-picked here, so it is read back from the dataset rather than
-# hardcoded. It may not exist yet on a freshly created sink (BigQuery views
-# are late-bound, so this is fine); if no table is found yet, the operator
-# is told to re-run this step once the sink has produced its first row.
+# TELEMETRY_TABLE_STDOUT / TELEMETRY_TABLE_STDERR: the sink writes to TWO
+# destination tables, not one (bd polyglot-pdf-ih428) -- a Cloud Logging ->
+# BigQuery sink names its destination table per LOG ID, and this sink's
+# filter matches both the `run.googleapis.com/stdout` stream (usage events,
+# printed directly by backend/utils/structured_logger.py) and the
+# `run.googleapis.com/stderr` stream (ledger_export and the session events,
+# which reach stdlib logging's default stream via
+# backend/utils/logging.py's configure_logging() -- see that function and
+# sql/telemetry_views.sql's header for the full split). Neither name is
+# hand-picked here: both are read back from the dataset with `bq ls`
+# (NOT `gcloud logging sinks describe`, which reports the sink's own config,
+# not its destination tables). Either or both may not exist yet on a
+# freshly created sink (BigQuery views are late-bound, so applying a view
+# against a not-yet-existent table is fine) -- if EITHER is missing, the
+# operator is told to re-run this step once the sink has produced a row of
+# the corresponding kind, since running with only one of the two present
+# would leave the other stream's views permanently empty and silently so.
 #
 # BILLING_EXPORT_TABLE: the detailed Cloud Billing export table. Enabling
 # that export is a MAINTAINER console step (plan: Epic 3 bead 7, NOT this
@@ -211,22 +221,28 @@ if [ -z "$BILLING_EXPORT_TABLE" ]; then
     exit 0
 fi
 
-TELEMETRY_TABLE=$(bq ls --project_id="$PROJECT_ID" --format=csv "$DATASET" 2>/dev/null \
-    | tail -n +2 | grep -i "stdout\|run_googleapis" | head -1 | cut -d',' -f1)
+TELEMETRY_TABLES_CSV=$(bq ls --project_id="$PROJECT_ID" --format=csv "$DATASET" 2>/dev/null | tail -n +2)
 
-if [ -z "$TELEMETRY_TABLE" ]; then
-    echo -e "${YELLOW}[NOTE]${NC} No sink destination table found yet under $DATASET."
-    echo -e "${YELLOW}[NOTE]${NC} The sink has not written its first row -- re-run this script after the"
-    echo -e "${YELLOW}[NOTE]${NC} next deploy generates at least one usage or ledger_export event."
+TELEMETRY_TABLE_STDOUT=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stdout" | head -1 | cut -d',' -f1)
+TELEMETRY_TABLE_STDERR=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stderr" | head -1 | cut -d',' -f1)
+
+if [ -z "$TELEMETRY_TABLE_STDOUT" ] || [ -z "$TELEMETRY_TABLE_STDERR" ]; then
+    echo -e "${YELLOW}[NOTE]${NC} Not both sink destination tables exist yet under $DATASET."
+    echo -e "${YELLOW}[NOTE]${NC}   stdout table (usage events): ${TELEMETRY_TABLE_STDOUT:-not found}"
+    echo -e "${YELLOW}[NOTE]${NC}   stderr table (ledger_export/session events): ${TELEMETRY_TABLE_STDERR:-not found}"
+    echo -e "${YELLOW}[NOTE]${NC} The sink has not written a first row of one or both kinds -- re-run this"
+    echo -e "${YELLOW}[NOTE]${NC} script after the next deploy generates at least one usage AND one"
+    echo -e "${YELLOW}[NOTE]${NC} ledger_export/session event."
     echo -e "${GREEN}[INFO]${NC} Telemetry sink + dataset + IAM setup complete for $PROJECT_ID (views pending)!"
     exit 0
 fi
 
-echo -e "${GREEN}[INFO]${NC} Applying sql/telemetry_views.sql (table: $DATASET.$TELEMETRY_TABLE)..."
+echo -e "${GREEN}[INFO]${NC} Applying sql/telemetry_views.sql (stdout table: $DATASET.$TELEMETRY_TABLE_STDOUT, stderr table: $DATASET.$TELEMETRY_TABLE_STDERR)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sed \
     -e "s|\${DATASET}|$PROJECT_ID.$DATASET|g" \
-    -e "s|\${TELEMETRY_TABLE}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE|g" \
+    -e "s|\${TELEMETRY_TABLE_STDOUT}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDOUT|g" \
+    -e "s|\${TELEMETRY_TABLE_STDERR}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDERR|g" \
     -e "s|\${BILLING_EXPORT_TABLE}|$BILLING_EXPORT_TABLE|g" \
     "$SCRIPT_DIR/../sql/telemetry_views.sql" \
     | bq query --project_id="$PROJECT_ID" --use_legacy_sql=false

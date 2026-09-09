@@ -1876,9 +1876,17 @@ a deploy script.
   BigQuery dataset (`us-central1`) and a Cloud Logging sink over both Cloud Run
   backend services, then applies `sql/telemetry_views.sql`'s five
   `CREATE OR REPLACE VIEW` statements via `bq query`, substituting `${DATASET}`,
-  `${TELEMETRY_TABLE}` (read back from the sink's own destination table, not
-  hardcoded) and `${BILLING_EXPORT_TABLE}` (a required second script argument;
-  the Cloud Billing export itself is a separate maintainer console step, Epic 3
+  `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}` (read back from
+  `bq ls` on the dataset, not hardcoded -- the sink writes TWO destination
+  tables, not one: usage events print to stdout
+  (`structured_logger.py`'s `print(..., file=sys.stdout)`) while
+  `ledger_export` and the session events go through plain `structlog` calls
+  that reach stdlib logging's default stream, which `backend/utils/logging.py`
+  never overrides to stdout, so those land on stderr instead -- the three
+  cost views read `${TELEMETRY_TABLE_STDOUT}` and `income_month` reads
+  `${TELEMETRY_TABLE_STDERR}`; see bd polyglot-pdf-ih428) and
+  `${BILLING_EXPORT_TABLE}` (a required second script argument; the Cloud
+  Billing export itself is a separate maintainer console step, Epic 3
   bead 7).
 - **Consumers:** the admin console's cost/income dashboards (a later bead) query
   `cost_by_firm_month`, `cost_by_kit_month`, `cost_by_employee_month`,

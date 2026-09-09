@@ -87,6 +87,47 @@ emitter cannot silently drift apart in either direction.
 All new tests were mutation-verified: the production behavior (or script
 text) each test pins was reverted, the test observed to fail, then restored.
 
+**Cross-surface review, round 1 (2026-09-09) -- 2 adopted, 1 deferred to a
+filed bead.** The outer review found the sink filter's THREE key shapes
+were correct but traced one layer beneath them: the same filter matches
+TWO different Cloud Run log STREAMS (usage events print directly to
+stdout; `ledger_export` and the two session events go through plain
+`structlog`, which reaches stdlib logging's default stream --
+`backend/utils/logging.py`'s `configure_logging()` never overrides it to
+stdout, so it stays stderr). A Cloud Logging -> BigQuery sink names one
+destination table per log stream, so the sink actually writes TWO tables,
+and the script's original `bq ls | head -1` picked exactly one, silently
+leaving either the three cost views or `income_month` permanently empty.
+**Adopted (blocker):** filed as bd `polyglot-pdf-ih428`; fixed by splitting
+the single `${TELEMETRY_TABLE}` SQL placeholder into
+`${TELEMETRY_TABLE_STDOUT}` (the three usage-shape cost views) and
+`${TELEMETRY_TABLE_STDERR}` (`income_month`), having
+`scripts/setup-telemetry.sh` discover and substitute both independently
+(requiring both to exist before applying any view), and adding five new
+tests across `backend/tests/unit/test_telemetry_views.py` and
+`tests/test_setup_telemetry_script.py` -- including a headline
+"do-not-share-a-placeholder" pin -- all mutation-verified. The three docs
+that inherited the same single-table assumption
+(`sql/telemetry_views.sql`'s header, `scripts/setup-telemetry.sh`'s own
+comments, `docs/technical_guide.md`'s Surface contract 22, and
+`docs/standards/logging-and-cost.md`'s BigQuery section) were corrected in
+the same pass, including the header's incorrect claim that the table name
+comes from `gcloud logging sinks describe` (it comes from `bq ls`).
+**Adopted (blocker):** `docs/components/admin-service.md` still listed
+`roles/bigquery.jobUser` + dataset-scoped `roles/bigquery.dataViewer` as
+"deferred, deliberately absent" -- true on `origin/dev`, but this bead moved
+both roles into `EXPECTED_ADMIN_SA_ROLES` and granted them from
+`setup-telemetry.sh`. Fixed by adding both roles as their own rows in the
+roles table (noting they're granted by `setup-telemetry.sh`, not this
+script) and removing them from the deferred list. **Deferred (nit, filed
+as its own bead):** `scripts/setup-telemetry.sh`'s two usage strings
+document only the required `PROJECT_ID` argument, not the optional second
+`BILLING_EXPORT_TABLE` argument the script silently skips view creation
+without -- filed as bd `polyglot-pdf-un0es` rather than fixed inline, since
+the reviewer classified it a nit (cosmetic usage-string gap, not a
+behavioral break) and the fix rules reserve inline fixes for
+rubric-fails/blockers.
+
 ## Lessons
 
 A plan or bead description that names a single log field as a filter target
@@ -131,5 +172,31 @@ views); top-of-file changelog annotation extended.
   criterion 3).
 - `docs/standards/logging-and-cost.md`, `docs/technical_guide.md` -- see Doc
   freshness above.
+
+**Review round 1 fixes (bd `polyglot-pdf-ih428`, blocker; plus the
+`docs/components/admin-service.md` doc fix, blocker):**
+
+- `sql/telemetry_views.sql` -- splits `${TELEMETRY_TABLE}` into
+  `${TELEMETRY_TABLE_STDOUT}` (the three cost views) and
+  `${TELEMETRY_TABLE_STDERR}` (`income_month`); rewrites the header comment
+  to describe the two-table split and the `bq ls` discovery mechanism.
+- `scripts/setup-telemetry.sh` -- discovers and substitutes both table
+  names independently, requiring both before applying any view; rewrites
+  the section-6 comment.
+- `backend/tests/unit/test_telemetry_views.py` -- replaces the single-table
+  pin with `test_usage_views_read_the_stdout_table_not_the_stderr_table`,
+  `test_income_month_reads_the_stderr_table_not_the_stdout_table`, and the
+  headline `test_usage_views_and_income_month_do_not_share_a_table_placeholder`.
+- `tests/test_setup_telemetry_script.py` -- adds three tests pinning the
+  script's dual-table discovery, the independent sed substitutions, and the
+  both-tables-required guard.
+- `docs/technical_guide.md`, `docs/standards/logging-and-cost.md` -- Surface
+  contract 22 / the BigQuery telemetry section updated for the two-table
+  split.
+- `docs/components/admin-service.md` -- `roles/bigquery.jobUser` +
+  dataset-scoped `roles/bigquery.dataViewer` moved from the deferred-roles
+  list into their own rows in the roles table.
+- `polyglot-pdf-un0es` filed (nit, not fixed here): the script's usage
+  strings do not name the optional `BILLING_EXPORT_TABLE` argument.
 
 Review outcomes recorded in the closeout ping.
