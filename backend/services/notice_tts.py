@@ -39,6 +39,7 @@ import structlog
 
 from backend.services.intro_tts import INTRO_GAIN_DB
 from backend.services.spellback_tts import (
+    _log_tts_usage_event,
     _synthesize_sync,
     resolve_spellback_voice,
 )
@@ -353,13 +354,22 @@ _cache_lock = threading.Lock()
 
 
 async def synthesize_notice(
-    language_name: Optional[str], notice_key: str, settings
+    language_name: Optional[str],
+    notice_key: str,
+    settings,
+    session_ctx: dict | None = None,
 ) -> tuple[bytes, str]:
     """Synthesize (or serve from cache) a fixed safety notice. Returns
     (mp3_bytes, etag).
 
     Raises ValueError on an unknown key -- the route maps that to a 400 before
     anything reaches the TTS backend.
+
+    session_ctx (bd polyglot-pdf-t86oz): the route's own claims-derived
+    context, forwarded to the usage_kind="tts_notice" event -- emitted ONLY
+    on an actual synthesis (below), never on a cache hit: a cache hit calls
+    Cloud TTS zero times, so a usage event there would record cost that was
+    never billed.
     """
     # Resolve ONCE, use the SAME value for the text lookup and the cache key
     # (bd polyglot-pdf-see5j, Opus cross-surface finding 1) -- resolving
@@ -378,11 +388,11 @@ async def synthesize_notice(
         # Same voice resolution and gain as the intro clip, so a notice does
         # not arrive noticeably louder or quieter than the app's other speech.
         voice_name, locale = resolve_spellback_voice(settings, language)
-        return _synthesize_sync(text, voice_name, locale, gain_db=INTRO_GAIN_DB)
+        return _synthesize_sync(text, voice_name, locale, gain_db=INTRO_GAIN_DB), voice_name
 
     # Off the event loop: voice resolution is a network RPC on first use, and
     # synthesis is blocking. Same discipline as the intro and spellback paths.
-    audio = await asyncio.to_thread(_resolve_and_synthesize)
+    audio, voice_name = await asyncio.to_thread(_resolve_and_synthesize)
 
     etag = '"notice-%s"' % hashlib.sha256(audio).hexdigest()[:24]
     with _cache_lock:
@@ -400,4 +410,5 @@ async def synthesize_notice(
         # shape as intro_tts.synthesize_intro).
         bytes=len(hit[0]),
     )
+    _log_tts_usage_event("tts_notice", text, voice_name, session_ctx)
     return hit

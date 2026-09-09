@@ -1,9 +1,31 @@
-"""Client magic-link routes: mint + open (bd polyglot-pdf-ugm6).
+"""Client magic-link routes: mint + open (bd polyglot-pdf-ugm6, extended by
+Epic 2 bead A3 polyglot-pdf-jecrl).
 
 `/open` is the only UNAUTHENTICATED endpoint that starts a paid session, so
 its refusal behavior is the security surface: every rejection must be
 indistinguishable, or the endpoint becomes an oracle for probing which links
 and firms exist.
+
+BEAD A3 ADDED MONEY TO BOTH HALVES, and the two rules are one invariant seen
+from each end:
+
+  MINT reserves BEFORE signing. The debit, the ledger entry and the
+  links/{jti} mint record commit in ONE transaction, and only then is a
+  token signed. A refusal (402 out of credits, 403 live firm off the demo
+  channel) therefore leaves NO token, NO ledger entry and NO record.
+
+  OPEN requires that record. A token with no mint record, or one whose
+  record is revoked/refunded, gets the same uniform 404 as every other
+  refusal.
+
+Consequently the fixture below now carries a REAL fake Firestore (shared
+with test_credit_ledger.py, see _fake_firestore.py) rather than only a
+redemption stub: a mint that does not actually write a firm's balance cannot
+be asserted against, and an open whose mint record was never written would
+pass a test that stubbed the gate out.
+
+Each test's docstring names the mutation that must turn it red
+(docs/standards/testing.md#test-the-tests).
 
 ASCII only.
 """
@@ -12,10 +34,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import backend.routes.link_routes as lr
+import backend.services.links_store as links_store
 from backend.services.link_redemptions import (
     LinkAlreadyUsed,
     RedemptionUnavailable,
 )
+from backend.tests.unit._fake_firestore import _FakeDb, _FakeFirestoreModule
 
 _SECRET = "s" * 40
 
@@ -28,6 +52,13 @@ _TOKENS = {
 }
 
 _ALLOWED = {"firm-a": ["firm-a-intake"], "firm-b": ["firm-b-intake"]}
+
+# The default fixture firm is MOCK on purpose. Every pre-A3 test in this file
+# mints with LINK_CHANNEL unset, and A3's gate refuses a LIVE firm on any
+# channel that is not explicitly "demo" -- so a live default would have made
+# the whole file about the new gate rather than about the routes. The gate's
+# own eight cases get their own firm docs, below.
+_START_BALANCE = 50
 
 
 class _Redemptions:
@@ -54,15 +85,38 @@ class _Redemptions:
         return rec
 
 
+def _wire_db(monkeypatch, db):
+    """Point every Firestore consumer on the mint/open path at one fake db.
+
+    THREE call sites, not one, and they are patched separately on purpose:
+    link_routes imported get_db at module load (the mint transaction's
+    client), while links_store and kit_commercials import it LAZILY inside
+    their functions. Patching only the module-level name would leave the
+    mint record and the kit price reading a real (absent) client, which is
+    exactly the shape of failure that looks like "the feature works" in a
+    test and 503s in production.
+    """
+    monkeypatch.setattr(lr, "get_db", lambda: db)
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: db)
+    import firebase_admin
+    monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
+                        raising=False)
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("LINK_TOKEN_SECRET", _SECRET)
     monkeypatch.setenv("LINK_BASE_URL", "https://forms.example.com")
     monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
     # LINK_MINTING_ENABLED moved off os.getenv to runtime_config (bd
     # polyglot-pdf-bg313): patch the resolver these tests actually exercise
-    # rather than an env var the route no longer reads.
+    # rather than an env var the route no longer reads. CREDITS_ENFORCED
+    # (bd polyglot-pdf-jecrl) is patched the same way and defaults ON here,
+    # because the enforced path is the one with the interesting refusals --
+    # test_credits_enforced_flag_gates_refusal drives the off case.
     monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: True)
+    monkeypatch.setattr(lr, "_rc_credits_enforced", lambda: True)
 
     def _verify(token):
         claims = _TOKENS.get(token)
@@ -73,16 +127,28 @@ def client(monkeypatch):
     monkeypatch.setattr("backend.services.auth.verify_token", _verify)
     monkeypatch.setattr(lr, "get_allowed_kits",
                         lambda firm_id: list(_ALLOWED.get(firm_id, [])))
+    db = _FakeDb({
+        ("firms", "firm-a"): {"name": "Firm A", "status": "active",
+                              "kind": "mock",
+                              "balance_credits": _START_BALANCE},
+        ("firms", "firm-b"): {"name": "Firm B", "status": "active",
+                              "kind": "mock",
+                              "balance_credits": _START_BALANCE},
+    })
+    _wire_db(monkeypatch, db)
     store = _Redemptions()
     # /open now goes through enforce_link_redemption, which calls open_link
     # inside link_redemptions -- patch it THERE so these tests exercise the
     # REAL gate (completion-window check included) rather than standing in
-    # for the whole thing.
+    # for the whole thing. The MINT-RECORD half of that gate is deliberately
+    # NOT stubbed: it reads the fake db above, so an open only succeeds when
+    # the mint actually wrote a record.
     monkeypatch.setattr("backend.services.link_redemptions.open_link",
                         store.open_link)
 
     app = FastAPI()
     app.include_router(lr.router)
+    store.db = db
     return TestClient(app), store
 
 
@@ -487,3 +553,603 @@ def test_a_link_from_ANOTHER_CHANNEL_is_a_404_at_the_route(client, monkeypatch):
     # The channel name must NOT leak into the response -- the diagnosis is
     # logged for the operator, never returned to the caller.
     assert "staging" not in resp.text
+
+
+# --- Epic 2 bead A3: reserve before signing ----------------------------------
+
+
+def _ledger(store, firm_id="firm-a"):
+    return store.db.ledger_rows(firm_id)
+
+
+def _balance(store, firm_id="firm-a"):
+    return store.db.firm(firm_id)["balance_credits"]
+
+
+def test_a_funded_mint_debits_the_ledger_and_writes_the_record(client):
+    """EXIT CRITERION 1, the happy half: one mint costs exactly credit_cost,
+    writes exactly one mint_debit entry, and leaves exactly one links/{jti}
+    record naming the same jti the caller was handed.
+
+    Mutation: drop extra_writes=_extra_writes from _reserve_mint's
+    append_entry call -- red (the record is gone while the debit stands).
+    """
+    c, store = client
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    jti = resp.json()["jti"]
+    assert _balance(store) == _START_BALANCE - 1
+    rows = _ledger(store)
+    assert len(rows) == 1
+    assert rows[0]["type"] == "mint_debit"
+    assert rows[0]["amount"] == -1
+    assert rows[0]["link_jti"] == jti
+    assert rows[0]["kit_id"] == "firm-a-intake"
+    assert rows[0]["actor"] == "u-emp-a"
+    records = store.db.link_rows()
+    assert set(records) == {jti}
+    assert records[jti]["status"] == "minted"
+    assert records[jti]["credit_cost"] == 1
+    assert records[jti]["firm_id"] == "firm-a"
+
+
+def test_mint_refuses_at_zero_balance(client):
+    """EXIT CRITERION 1. A firm with nothing left cannot mint: 402, the
+    staff-facing status (this door is authenticated, so it may say why --
+    the uniform-404 oracle rule guards the UNAUTHENTICATED /open).
+
+    Mutation: pass require_sufficient_balance=False unconditionally in
+    _reserve_mint -- red (the mint succeeds and the balance goes to -1).
+    """
+    c, store = client
+    store.db.docs[("firms", "firm-a")]["balance_credits"] = 0
+
+    resp = _mint(c)
+
+    assert resp.status_code == 402
+
+
+def test_refused_mint_leaves_no_openable_token(client):
+    """EXIT CRITERION 1, and the WHOLE POINT of reserve-before-sign: a
+    refused mint leaves NO signed token, NO ledger entry and NO mint record.
+
+    The assertions are separate on purpose. A version that signed first and
+    refused second would return a token in the body (caught by the first),
+    and a version that wrote the debit outside the transaction would leave
+    an entry behind a refusal (caught by the second) -- both are ways of
+    failing that "nothing was reserved" alone would not catch.
+
+    Mutation: move the mint_link_token call ABOVE the _reserve_mint call and
+    return its url on refusal -- red.
+    """
+    c, store = client
+    store.db.docs[("firms", "firm-a")]["balance_credits"] = 0
+
+    resp = _mint(c)
+
+    assert resp.status_code == 402
+    assert "url" not in resp.json(), "a refused mint must not return a token"
+    assert _ledger(store) == [], "a refused mint must write no ledger entry"
+    assert store.db.link_rows() == {}, "a refused mint must write no record"
+    assert _balance(store) == 0, "a refused mint must not move the balance"
+
+
+def test_credits_enforced_flag_gates_refusal(client, monkeypatch):
+    """EXIT CRITERION 1's third test. With CREDITS_ENFORCED OFF the debit is
+    STILL written and the balance may go negative -- the metered soft-launch
+    mode that runs until seeds are granted (Epic 2 bead A6). Turning the flag
+    on is what makes a zero balance a 402.
+
+    Both halves are asserted in one test because the flag's whole meaning is
+    the DIFFERENCE between them: a test of the off case alone would pass
+    against a route that never enforced at all.
+
+    Mutation: hard-code enforced=True in mint_link -- the off half goes red.
+    Mutation: hard-code enforced=False -- the on half goes red.
+    """
+    c, store = client
+    store.db.docs[("firms", "firm-a")]["balance_credits"] = 0
+
+    # OFF: the mint succeeds, the debit is written, the balance goes negative.
+    monkeypatch.setattr(lr, "_rc_credits_enforced", lambda: False)
+    off = _mint(c)
+    assert off.status_code == 200
+    assert _balance(store) == -1
+    assert len(_ledger(store)) == 1
+    assert _ledger(store)[0]["amount"] == -1
+
+    # ON: the same negative balance now refuses, and writes nothing more.
+    monkeypatch.setattr(lr, "_rc_credits_enforced", lambda: True)
+    on = _mint(c)
+    assert on.status_code == 402
+    assert _balance(store) == -1, "the refused mint must not move it again"
+    assert len(_ledger(store)) == 1, "the refused mint must add no entry"
+
+
+@pytest.mark.parametrize(
+    "channel, kind, expect_ok",
+    [
+        # channel demo -- the ONE deployment a live firm may be charged from
+        ("demo", "mock", True),
+        ("demo", "live", True),
+        ("demo", None, True),
+        # channel staging -- never a live firm, never a kindless firm
+        ("staging", "mock", True),
+        ("staging", "live", False),
+        # channel UNSET -- link_channel() would call this "demo"; the gate
+        # reads the RAW env var and does not
+        (None, "mock", True),
+        (None, "live", False),
+        (None, None, False),
+    ],
+    ids=["demo-mock", "demo-live", "demo-nokind",
+         "staging-mock", "staging-live",
+         "unset-mock", "unset-live", "unset-nokind"],
+)
+def test_live_firm_mints_only_on_explicit_demo_channel(
+    client, monkeypatch, channel, kind, expect_ok
+):
+    """EXIT CRITERION 2, all eight cases (plan: "channel demo/staging/unset x
+    kind mock/live, plus demo/unset x missing kind").
+
+    THE POINT OF THE THREE UNSET ROWS: link_channel() defaults to demo
+    (services/link_tokens.py, so an unconfigured deploy keeps working), so a
+    gate asking IT would treat a laptop or a misconfigured revision as the
+    demo and let it debit a paying firm. _live_firm_channel_ok reads
+    os.environ LINK_CHANNEL raw instead, which is why unset-live and
+    unset-nokind refuse while unset-mock still mints.
+
+    A firm with NO kind is treated as live -- the fail-closed polarity
+    firms.firm_kind() uses, because a mis-defaulted mock firm merely blocks
+    staging while a mis-defaulted live firm mints for free. So demo-nokind
+    MINTS (demo is the one channel a live firm may be charged from) while
+    unset-nokind REFUSES: kindless behaves exactly like live, in both
+    directions, which is the whole content of "treated as live".
+
+    Mutation: swap os.environ.get("LINK_CHANNEL") for link_channel() in
+    _live_firm_channel_ok -- the two unset-refusing rows go red. Mutation:
+    default a missing kind to mock -- unset-nokind goes red.
+    """
+    c, store = client
+    if channel is None:
+        monkeypatch.delenv("LINK_CHANNEL", raising=False)
+    else:
+        monkeypatch.setenv("LINK_CHANNEL", channel)
+    firm = store.db.docs[("firms", "firm-a")]
+    if kind is None:
+        firm.pop("kind", None)
+    else:
+        firm["kind"] = kind
+
+    resp = _mint(c)
+
+    if expect_ok:
+        assert resp.status_code == 200, resp.text
+        assert _balance(store) == _START_BALANCE - 1
+    else:
+        assert resp.status_code == 403, resp.text
+        assert _balance(store) == _START_BALANCE, "a refused mint must not debit"
+        assert _ledger(store) == []
+        assert store.db.link_rows() == {}
+        assert store.db.link_rows("links_staging") == {}
+
+
+def test_unset_channel_still_mints_demo_audience(client, monkeypatch):
+    """EXIT CRITERION 2's other half, and the reason the gate does NOT call
+    link_channel(). Both behaviours must hold at once on an unset channel: a
+    live firm is REFUSED (the test above), and a mock firm still mints a
+    token whose aud is demo -- today's behaviour, deliberately unchanged, so
+    an unconfigured deploy keeps opening the links it already minted.
+
+    Mutation: make the gate refuse whenever LINK_CHANNEL is unset (rather
+    than only for live/kindless firms) -- red. Mutation: change
+    link_tokens.DEFAULT_CHANNEL away from demo -- red.
+    """
+    from backend.services.link_tokens import verify_link_token
+
+    c, _store = client
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    payload = verify_link_token(resp.json()["url"].split("#t=", 1)[1])
+    assert payload["aud"] == "demo"
+
+
+def test_the_signed_token_carries_the_kits_resolved_cap_usd(client):
+    """The A4 half of the same mint: burn_cap_usd is resolved ONCE, here, and
+    signed in -- so the socket needs no per-connect kit read.
+
+    Mutation: drop cap_usd=cap_usd from the mint_link_token call -- red.
+    """
+    from backend.services.link_tokens import verify_link_token
+
+    c, store = client
+    store.db.docs[("kits", "firm-a-intake")] = {
+        "credit_cost": 3, "burn_cap_usd": 4.5,
+    }
+
+    resp = _mint(c)
+
+    payload = verify_link_token(resp.json()["url"].split("#t=", 1)[1])
+    assert payload["cap_usd"] == 4.5
+    # ... and the SAME resolved numbers are snapshotted on the record, so the
+    # sweep and the console do not have to decode a token to price a link.
+    record = store.db.link_rows()[resp.json()["jti"]]
+    assert record["cap_usd"] == 4.5
+    assert record["credit_cost"] == 3
+    assert _balance(store) == _START_BALANCE - 3, "the kit's price, not 1"
+
+
+def test_an_unpriced_kit_rides_the_defaults_rather_than_minting_free(client):
+    """A kit with NO commercial doc must cost the default credit and carry
+    the global ceiling -- never zero and never no-cap. A mis-priced mint that
+    charges a credit is recoverable with an adjustment entry; one that
+    charges nothing is invisible revenue loss.
+
+    Mutation: default kit_commercials.DEFAULT_CREDIT_COST to 0 -- red (the
+    ledger refuses a zero amount, so the mint 503s). Mutation: return
+    cap_usd=None for a missing doc -- red (no cap claim on the token).
+    """
+    from backend.services.link_budget import default_cost_ceiling_usd
+    from backend.services.link_tokens import verify_link_token
+
+    c, store = client
+    assert ("kits", "firm-a-intake") not in store.db.docs
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    record = store.db.link_rows()[resp.json()["jti"]]
+    assert record["credit_cost"] == 1
+    assert record["cap_usd"] == default_cost_ceiling_usd()
+    payload = verify_link_token(resp.json()["url"].split("#t=", 1)[1])
+    assert payload["cap_usd"] == default_cost_ceiling_usd()
+
+
+def test_the_mint_record_deadline_equals_the_tokens_exp(client):
+    """The A5 expiry sweep queries Firestore on open_deadline to decide what
+    to refund. If it drifted from the token's exp the sweep would either
+    refund a link that can still open, or leave a dead link unrefunded -- so
+    the route pins both to ONE clock.
+
+    Mutation: drop now=issued from the mint_link_token call and let it read
+    time.time() again -- red whenever the two calls straddle a second.
+    """
+    from backend.services.link_tokens import verify_link_token
+
+    c, store = client
+
+    resp = _mint(c)
+    payload = verify_link_token(resp.json()["url"].split("#t=", 1)[1])
+    record = store.db.link_rows()[resp.json()["jti"]]
+
+    assert record["open_deadline"] == payload["exp"]
+
+
+def test_the_mint_record_shape_matches_links_store(client):
+    """ONE record shape, two writers. The route's transaction writes through
+    links_store.build_mint_record(); links_store.record_mint()'s plain set()
+    writes the same builder's output. A transactional copy that drifted would
+    produce records the sweep, the open gate and the console read
+    differently.
+
+    Mutation: inline a hand-built dict in _reserve_mint's _extra_writes --
+    red as soon as build_mint_record gains or loses a key.
+    """
+    c, store = client
+
+    jti = _mint(c).json()["jti"]
+
+    written = store.db.link_rows()[jti]
+    expected = links_store.build_mint_record(
+        jti=jti, firm_id="firm-a", kit_id="firm-a-intake",
+        employee_id="u-emp-a", credit_cost=written["credit_cost"],
+        cap_usd=written["cap_usd"],
+        open_deadline=written["open_deadline"],
+        now=written["minted_at"],
+    )
+    assert written == expected
+
+
+def test_a_staging_mint_writes_the_staging_collection(client, monkeypatch):
+    """Channel isolation reaches the MINT RECORD too, not just the token's
+    aud. A staging mint that wrote the demo links collection would let a
+    staging token open on the demo (the open gate reads links[_<channel>]),
+    which is the whole failure channel isolation exists to prevent.
+
+    Mutation: pass a literal "demo" as _reserve_mint's channel -- red.
+    """
+    c, store = client
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+
+    jti = _mint(c).json()["jti"]
+
+    assert set(store.db.link_rows("links_staging")) == {jti}
+    assert store.db.link_rows("links") == {}
+
+
+def test_the_reservation_runs_OFF_the_event_loop(client, monkeypatch):
+    """The reservation is a MULTI-ROUND-TRIP sync Admin-SDK transaction -- by
+    far the longest Firestore call on this route. Running it inline in the
+    coroutine would block the SHARED Cloud Run loop for the whole
+    transaction, stalling every concurrent request including in-flight audio.
+
+    Mutation: call _reserve_mint(...) directly instead of via
+    asyncio.to_thread -- red.
+    """
+    import asyncio as _asyncio
+
+    c, _store = client
+    calls = []
+    real_to_thread = _asyncio.to_thread
+
+    async def spy_to_thread(func, *a, **kw):
+        calls.append(func)
+        return await real_to_thread(func, *a, **kw)
+
+    monkeypatch.setattr(_asyncio, "to_thread", spy_to_thread)
+
+    assert _mint(c).status_code == 200
+    assert lr._reserve_mint in calls, (
+        "the mint reservation transaction was not dispatched via "
+        "asyncio.to_thread -- it blocks the shared Cloud Run event loop"
+    )
+    assert lr.resolve_commercial in calls, (
+        "the kit commercial read was not dispatched via asyncio.to_thread"
+    )
+
+
+# --- Epic 2 bead A3: open requires a mint record ------------------------------
+
+
+def test_open_refuses_without_mint_record(client):
+    """EXIT CRITERION 3. A token that verifies perfectly but has NO mint
+    record cannot open -- the deliberate one-time cutover for tokens minted
+    before the record existed, and the enforcement half of reserve-before-
+    sign (no reservation, no session).
+
+    The refusal is the UNIFORM 404, byte-identical to a forged signature, so
+    it adds no oracle.
+
+    Mutation: delete the _require_mint_record call from
+    enforce_link_redemption -- red.
+    """
+    c, store = client
+
+    token = _mint(c).json()["url"].split("#t=", 1)[1]
+    # Exactly the pre-cutover state: a valid signed token, no record.
+    jti = [k[1] for k in store.db.docs if k[0] == "links"][0]
+    del store.db.docs[("links", jti)]
+
+    resp = _open(c, token)
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "This link is not valid."
+
+
+@pytest.mark.parametrize("status", ["revoked", "refunded"])
+def test_revoked_link_cannot_open(client, status):
+    """EXIT CRITERION 3. A link an operator revoked, or one the expiry sweep
+    already refunded, is refused with the same uniform 404.
+
+    Parametrized over BOTH blocking statuses rather than just revoked,
+    because they are one rule (links_store.OPEN_BLOCKING_STATUSES) and a
+    single-status test would pass against a gate that hard-coded the other
+    one -- and a refunded link that could still open would buy a session
+    whose credit had already been given back.
+
+    Mutation: check status == "revoked" instead of the set -- the refunded
+    case goes red. Mutation: empty OPEN_BLOCKING_STATUSES -- both go red.
+    """
+    c, store = client
+
+    resp = _mint(c)
+    jti = resp.json()["jti"]
+    token = resp.json()["url"].split("#t=", 1)[1]
+    store.db.docs[("links", jti)]["status"] = status
+
+    refused = _open(c, token)
+
+    assert refused.status_code == 404
+    assert refused.json()["detail"] == "This link is not valid."
+
+
+@pytest.mark.parametrize("status", ["minted", "opened", "completed",
+                                    "budget_exhausted"])
+def test_every_other_status_falls_through_to_the_redemption_gate(client,
+                                                                 status):
+    """The complement of the rule above, and it is load-bearing: opened and
+    completed are BEST-EFFORT MIRRORS, so refusing on them would let a failed
+    mirror write lock a client out of a form they are part-way through --
+    exactly the reopen-an-unfinished-link behaviour the seven-day completion
+    window exists to provide. budget_exhausted is telemetry only (the
+    socket's own spend ceiling is what stops the spending).
+
+    Parametrized over the WHOLE remainder of links_store.ALL_STATUSES, not a
+    sample: a test of one status would say nothing about the others, and the
+    rule being pinned is precisely "every other status".
+
+    Mutation: add any of these to OPEN_BLOCKING_STATUSES -- that row goes
+    red.
+    """
+    c, store = client
+
+    resp = _mint(c)
+    jti = resp.json()["jti"]
+    token = resp.json()["url"].split("#t=", 1)[1]
+    store.db.docs[("links", jti)]["status"] = status
+
+    assert _open(c, token).status_code == 200
+
+
+def test_the_blocking_and_falling_through_sets_cover_every_status():
+    """DERIVE THE COVERAGE, do not hand-list it. The two parametrized tests
+    above split links_store.ALL_STATUSES between them; this asserts the split
+    is exhaustive, so a NEW status added to the store cannot slip in
+    untested and un-decided.
+
+    Mutation: add a seventh status to ALL_STATUSES without deciding which
+    side it belongs on -- red.
+    """
+    blocked = set(links_store.OPEN_BLOCKING_STATUSES)
+    falls_through = {"minted", "opened", "completed", "budget_exhausted"}
+
+    assert blocked | falls_through == set(links_store.ALL_STATUSES)
+    assert not (blocked & falls_through)
+
+
+def test_the_mint_record_gate_runs_BEFORE_the_redemption_write(client):
+    """ORDER MATTERS. enforce_link_redemption calls _require_mint_record
+    FIRST, before open_link() creates the redemption doc. Checking after
+    would stamp opened_at on a link about to be refused -- which for a
+    revoked link burns a redemption record for a session that never happened,
+    and for a never-minted token leaves a record for a link that never
+    existed.
+
+    Mutation: move the _require_mint_record call below the open_link call in
+    enforce_link_redemption -- red (a redemption record appears).
+    """
+    c, store = client
+
+    resp = _mint(c)
+    jti = resp.json()["jti"]
+    token = resp.json()["url"].split("#t=", 1)[1]
+    store.db.docs[("links", jti)]["status"] = "revoked"
+
+    assert _open(c, token).status_code == 404
+    assert store.records == {}, (
+        "the refused open still wrote a redemption record -- the mint-record "
+        "gate ran after open_link instead of before it"
+    )
+
+
+def test_an_unreachable_links_store_FAILS_CLOSED_at_open(client, monkeypatch):
+    """Same polarity as the redemption store: unable to confirm a credit was
+    reserved must not admit a paid session. get_link RAISES rather than
+    returning None on an outage precisely so the two cases stay
+    distinguishable in the log while both refuse.
+
+    Mutation: catch LinksStoreUnavailable in _require_mint_record and return
+    instead of raising (i.e. admit the link) -- red.
+    """
+    c, _store = client
+    token = _mint(c).json()["url"].split("#t=", 1)[1]
+
+    def _boom(jti, channel=None):
+        raise links_store.LinksStoreUnavailable("simulated outage")
+
+    monkeypatch.setattr(links_store, "get_link", _boom)
+
+    assert _open(c, token).status_code == 404
+
+
+def test_a_successful_open_mirrors_the_record_to_opened(client):
+    """The best-effort console mirror. It is a DERIVED CACHE -- the
+    authoritative "was this opened" answer is the redemption doc -- but the
+    admin console's link table reads it, so a successful open must move
+    minted -> opened.
+
+    Mutation: delete the mark_opened call in open_client_link -- red.
+    """
+    c, store = client
+
+    resp = _mint(c)
+    jti = resp.json()["jti"]
+    token = resp.json()["url"].split("#t=", 1)[1]
+    assert store.db.docs[("links", jti)]["status"] == "minted"
+
+    assert _open(c, token).status_code == 200
+
+    assert store.db.docs[("links", jti)]["status"] == "opened"
+    assert store.db.docs[("links", jti)]["opened_at"] > 0
+
+
+def test_a_FAILED_mirror_write_does_not_refuse_the_client(client, monkeypatch):
+    """The mirror is advisory and must stay that way. A Firestore hiccup on a
+    cosmetic status field must never turn a successful client open into "this
+    link is not valid" -- and (A5) must never cause a refund of a link
+    someone is filling, which is why the refund transaction reads the
+    redemption doc rather than this field.
+
+    The failure is injected at the WRITE, not at links_store._collection:
+    patching the shared collection helper would also break the mint-record
+    GATE's read, and the 404 that produced would be the gate failing closed
+    (correct) rather than the mirror leaking (the bug being pinned). Drive
+    the real mark_opened and make only its update() raise.
+
+    Mutation: drop mark_opened's try/except so the exception propagates --
+    red.
+    """
+    c, store = client
+    token = _mint(c).json()["url"].split("#t=", 1)[1]
+
+    def _boom(*a, **kw):
+        raise RuntimeError("firestore hiccup")
+
+    jti = [k[1] for k in store.db.docs if k[0] == "links"][0]
+    monkeypatch.setattr(
+        type(store.db.collection("links").document(jti)), "update", _boom)
+
+    assert _open(c, token).status_code == 200
+    # ... and the mirror genuinely did not stick, so the test is not passing
+    # because the write silently succeeded.
+    assert store.db.docs[("links", jti)]["status"] == "minted"
+
+
+def test_a_REOPEN_does_not_overwrite_a_later_status(client):
+    """The mirror only ever moves minted -> opened. Re-stamping on every
+    reconnect would walk a completed (or revoked) record backwards to opened
+    -- and the console would then show a finished link as in progress, or a
+    revoked one as live.
+
+    Mutation: drop the status == STATUS_MINTED guard in mark_opened -- red.
+    """
+    c, store = client
+
+    resp = _mint(c)
+    jti = resp.json()["jti"]
+    token = resp.json()["url"].split("#t=", 1)[1]
+    assert _open(c, token).status_code == 200
+    store.db.docs[("links", jti)]["status"] = "completed"
+
+    assert _open(c, token).status_code == 200
+
+    assert store.db.docs[("links", jti)]["status"] == "completed"
+
+
+def test_the_open_gate_reads_THIS_CHANNELS_collection(client, monkeypatch):
+    """The mint-record gate must look in links[_<channel>], not a fixed
+    links. A demo backend reading the staging collection would refuse every
+    real demo link (an outage) -- and a staging backend reading links would
+    ADMIT a demo-minted link whose credit belongs to a paying firm.
+
+    Asserted on the CHANNEL ARGUMENT the gate passes, because get_link's own
+    default resolves to the same value: a mutation that dropped the explicit
+    channel= would still pass a value-only assertion, and this is the pin
+    that survives it.
+
+    Mutation: pass a literal "demo" (or drop the argument and hard-code the
+    default) in _require_mint_record's get_link call -- red.
+    """
+    seen = []
+    real_get_link = links_store.get_link
+
+    def _spy(jti, channel=None):
+        seen.append(channel)
+        return real_get_link(jti, channel=channel)
+
+    c, _store = client
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    token = _mint(c).json()["url"].split("#t=", 1)[1]
+    monkeypatch.setattr(links_store, "get_link", _spy)
+
+    _open(c, token)
+
+    assert seen == ["staging"], (
+        "the open gate did not read the running channel's mint-record "
+        "collection: {}".format(seen)
+    )

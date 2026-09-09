@@ -82,7 +82,7 @@ async def test_handle_ask_secretary_timeout_fail_open():
     deadline resolves to status=failed -- the inner wait_for raises TimeoutError and
     is surfaced on the synchronous path (deadline >= timeout here, so the lookup is
     already done-with-timeout when the race resolves)."""
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         await asyncio.sleep(10)
         return "too late", [], True
 
@@ -238,7 +238,7 @@ async def test_handle_ask_secretary_deadline_returns_pending_then_delivers_async
     """A lookup slower than SECRETARY_DEADLINE_S (but within the hard cap) returns
     status=pending immediately, and the still-running lookup delivers its answer on a
     follow-up turn via send_client_content (jnjj.43)."""
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         await asyncio.sleep(0.2)
         return "Their previous last name was Smith.", [], True
 
@@ -268,7 +268,7 @@ async def test_handle_ask_secretary_deadline_returns_pending_then_delivers_async
 async def test_async_deliver_drops_when_session_inactive():
     """If the live session went away before the late answer landed, the deliver is
     dropped (no push into a dead session)."""
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         await asyncio.sleep(0.2)
         return "too late, nobody home", [], True
 
@@ -293,7 +293,7 @@ async def test_handle_ask_secretary_cancelled_during_sync_wait_cancels_lookup():
     lookup_started = asyncio.Event()
     lookup_cancelled = asyncio.Event()
 
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         lookup_started.set()
         try:
             await asyncio.sleep(10)  # still running when we cancel the handler
@@ -320,7 +320,7 @@ async def test_handle_ask_secretary_cancelled_during_sync_wait_cancels_lookup():
 async def test_async_deliver_drops_empty_answer():
     """A late lookup that returns empty is dropped silently (no apology turn out of
     nowhere -- the user has already moved on)."""
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         await asyncio.sleep(0.2)
         return "", [], True
 
@@ -343,7 +343,7 @@ async def test_deliver_late_false_never_voices_late_result():
     caller already degraded in-turn (bd polyglot-pdf-y76q)."""
     started = asyncio.Event()
 
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         started.set()
         await asyncio.sleep(0.2)
         # A real answer that WOULD be voiced on the normal late-deliver path.
@@ -372,7 +372,7 @@ async def test_end_session_cancels_inflight_secretary_deliver():
     late turn into a session being torn down."""
     started = asyncio.Event()
 
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         started.set()
         await asyncio.sleep(5)  # still running when end_session fires
         return "never delivered", [], True
@@ -407,7 +407,7 @@ async def test_section_switch_cancels_inflight_secretary_deliver():
     (cross-section PHI contamination, fresh-eyes finding on jnjj.43)."""
     started = asyncio.Event()
 
-    async def _slow(query, context):
+    async def _slow(query, context, session_ctx=None):
         started.set()
         await asyncio.sleep(5)  # still running when the switch fires
         return "section-1 answer that must NOT leak into section 2", [], True

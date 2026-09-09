@@ -15,6 +15,39 @@ from fastapi import WebSocket
 from backend.routes.websocket_routes import fill_form_from_schema
 
 
+def _stub_link_gates(monkeypatch, opened_at=None):
+    """Clear the two STORE gates the socket runs before the check under test.
+
+    The socket's client-link path REDEEMS (link_redemptions.open_link) and,
+    since Epic 2 bead A3, also requires a MINT RECORD
+    (links_store.get_link). Both fail closed when unstubbed, which is the
+    correct behaviour and is pinned separately -- but a test aiming at a
+    LATER gate (the kit mismatch, the spend ceiling, the completion window)
+    must clear them first or it passes for the wrong reason.
+
+    One helper rather than an inline stub per test: A3 added a second gate,
+    and eight hand-written copies of "clear the gates" is eight places for
+    the next one to be forgotten in.
+    """
+    import time as _clock
+
+    from backend.services import links_store
+
+    stamp = opened_at if opened_at is not None else int(_clock.time())
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: dict(
+            jti=jti, firm_id=firm_id, kit_id=kit_id,
+            opened_at=stamp, completed_at=None,
+        ),
+    )
+    monkeypatch.setattr(
+        links_store, "get_link",
+        lambda jti, channel=None: dict(jti=jti,
+                                       status=links_store.STATUS_MINTED),
+    )
+
+
 @pytest.fixture
 def mock_websocket():
     """Provide a WebSocket double with the methods used by the handler."""
@@ -232,13 +265,7 @@ async def test_a_client_link_CANNOT_fill_a_form_it_does_not_name(
     # Stub the store so this test proves the KIT MISMATCH refusal specifically,
     # not an unstubbed-store fail-closed that would pass for the wrong reason.
     import time as _t
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": int(_t.time()), "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch)
     hostile = dict(handshake_message)
     hostile["kit_id"] = "n-400"          # NOT the form the link names
     mock_websocket.receive_text.return_value = json.dumps(hostile)
@@ -267,13 +294,7 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     # fails closed, which is the correct behavior and is pinned separately
     # below.
     import time as _t
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": int(_t.time()), "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch)
     ok = dict(handshake_message)
     ok["kit_id"] = "i-90"
     mock_websocket.receive_text.return_value = json.dumps(ok)
@@ -325,13 +346,7 @@ async def test_a_link_at_its_SPEND_CEILING_is_refused_a_new_voice_session(
 
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
     import time as _t
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": int(_t.time()), "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch)
     # This link has already spent its whole ceiling.
     monkeypatch.setattr(
         "backend.routes.websocket_routes.check_budget",
@@ -450,13 +465,7 @@ async def test_a_link_WITH_headroom_still_connects_normally(
 
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
     import time as _t
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": int(_t.time()), "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch)
     monkeypatch.setattr(
         "backend.routes.websocket_routes.check_budget", lambda jti, *a, **k: 7.5
     )
@@ -558,13 +567,7 @@ async def test_the_COMPLETION_WINDOW_is_enforced_at_the_socket(
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7",
                                   complete_window_s=3600)
     opened_long_ago = int(_t.time()) - 10_000     # past the 1h window
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": opened_long_ago, "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch, opened_at=opened_long_ago)
     ok = dict(handshake_message)
     ok["kit_id"] = "i-90"
     mock_websocket.receive_text.return_value = json.dumps(ok)
@@ -634,13 +637,7 @@ async def test_the_TOKENS_kit_is_used_when_the_handshake_omits_one(
     from backend.services.link_tokens import mint_link_token
 
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
-    monkeypatch.setattr(
-        "backend.services.link_redemptions.open_link",
-        lambda jti, firm_id, kit_id, now=None: {
-            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": int(_t.time()), "completed_at": None,
-        },
-    )
+    _stub_link_gates(monkeypatch)
     hs = dict(handshake_message)
     if handshake_kit is None:
         hs.pop("kit_id", None)
@@ -655,3 +652,51 @@ async def test_the_TOKENS_kit_is_used_when_the_handshake_omits_one(
         "the token's kit must fill in for an absent handshake kit, or the "
         "audit trail names no form"
     )
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+@pytest.mark.parametrize("record", [None, {"jti": "x", "status": "revoked"}],
+                         ids=["never-minted", "revoked"])
+async def test_the_socket_refuses_a_link_with_no_usable_mint_record(
+    mock_fill_session, mock_websocket, mock_service, handshake_message,
+    monkeypatch, record
+):
+    """Epic 2 bead A3 AT THE SOCKET, not only at /api/links/open.
+
+    The socket is the door that actually starts the paid Gemini session, so
+    a mint-record gate that only guarded the HTTP open route would leave the
+    expensive door open: a client whose link was revoked mid-session, or a
+    pre-cutover token, could reconnect straight to the socket. This pins
+    that the socket's paid gate inherits the refusal.
+
+    It inherits it through the SHARED helper (enforce_link_redemption) and
+    through LinkNotMinted subclassing RedemptionUnavailable, which the
+    socket's except-tuple already names -- so the mechanism being pinned is
+    that no separate wiring is needed at this call site, and that it works.
+
+    Mutation: delete the _require_mint_record call in
+    enforce_link_redemption -- red. Mutation: make LinkNotMinted subclass
+    Exception directly -- red (the refusal escapes the handler).
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services import links_store
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    # The redemption store itself is HEALTHY and would admit this link --
+    # so a pass here cannot be the unstubbed-store fail-closed passing for
+    # the wrong reason.
+    _stub_link_gates(monkeypatch)
+    monkeypatch.setattr(links_store, "get_link",
+                        lambda jti, channel=None: record)
+    ok = dict(handshake_message)
+    ok["kit_id"] = "i-90"
+    mock_websocket.receive_text.return_value = json.dumps(ok)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service,
+                                token=token)
+
+    mock_websocket.close.assert_awaited()
+    assert mock_websocket.close.await_args.kwargs.get("code") == 1008
+    mock_fill_session.assert_not_awaited()

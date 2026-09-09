@@ -110,7 +110,7 @@ async def test_pro_validator_error_fails_open():
 async def test_pro_validator_timeout_fails_open(monkeypatch):
     import asyncio as _asyncio
 
-    async def _hang(_payload):
+    async def _hang(_payload, session_ctx=None):
         await _asyncio.sleep(10)
 
     svc, pro = _service()

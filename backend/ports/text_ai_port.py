@@ -5,14 +5,20 @@ class ITextAI(ABC):
     """Port for cheap text-model calls (contradiction validator + secretary)."""
 
     @abstractmethod
-    async def validate(self, payload: dict) -> dict:
+    async def validate(self, payload: dict, session_ctx: dict | None = None) -> dict:
         """Run a contradiction check over the minimal client-state payload
         (contract 2 from docs/standards/validation-delegation.md) and return
         the verdict (contract 1). Fail-open: on timeout/error returns
-        {"conflicts": []} so the caller advances unchecked."""
+        {"conflicts": []} so the caller advances unchecked.
+
+        session_ctx (bd polyglot-pdf-t86oz): optional caller session state
+        ({firm_id, employee_id, link_jti, kit_id, channel, form_session_id})
+        forwarded to the usage_kind="text_validator" event this call emits."""
         ...
 
-    async def ask(self, query: str, context: dict) -> tuple[str, list[dict], bool]:
+    async def ask(
+        self, query: str, context: dict, session_ctx: dict | None = None
+    ) -> tuple[str, list[dict], bool]:
         """Send a prose query + current-values context to the secretary agent.
         Returns (answer, sources, resolved): `answer` is the secretary's prose
         answer; `sources` is the resolved list of {"field_id", "spoken_name"} dicts
@@ -30,7 +36,11 @@ class ITextAI(ABC):
         )
 
     async def translate_labels(
-        self, labels: list, language_name: str, language_code: str
+        self,
+        labels: list,
+        language_name: str,
+        language_code: str,
+        session_ctx: dict | None = None,
     ) -> dict | None:
         """Batch-translate option labels into the session language (bd
         polyglot-pdf-ow1e, runtime option-label translation). Returns
@@ -39,7 +49,10 @@ class ITextAI(ABC):
         tells the caller not to cache, distinct from a valid empty dict.
         Non-abstract default raises so implementations without the feature
         fail loudly (the option_translation cache layer converts that to a
-        fail-open empty result)."""
+        fail-open empty result).
+
+        session_ctx (bd polyglot-pdf-t86oz): optional caller session state,
+        forwarded to the usage_kind="text_translation" event."""
         raise NotImplementedError(
             "translate_labels() is not implemented by this text-AI adapter."
         )
@@ -52,6 +65,7 @@ class ITextAI(ABC):
         *,
         form_name: str | None = None,
         glossary_context: dict | None = None,
+        session_ctx: dict | None = None,
     ) -> dict | None:
         """Context-carrying batch translation (bd polyglot-pdf-ch7j, the
         translation-gate epic): structured items {id, kind, text | options +
@@ -60,7 +74,10 @@ class ITextAI(ABC):
         str} | {"options": {source: str}}}, "ambiguous": [id, ...]} on
         success, or None on any error (the same do-not-cache fail-open
         SIGNAL as translate_labels). Non-abstract default raises so
-        implementations without the feature fail loudly."""
+        implementations without the feature fail loudly.
+
+        session_ctx (bd polyglot-pdf-t86oz): optional caller session state,
+        forwarded to the usage_kind="text_translation" event."""
         raise NotImplementedError(
             "translate_items() is not implemented by this text-AI adapter."
         )

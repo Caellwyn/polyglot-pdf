@@ -19,30 +19,17 @@ status=links_store.STATUS_REVOKED must make that jti's open attempt refuse,
 with the SAME 404 body every other open refusal already uses (bd
 polyglot-pdf-ugm6's "every failure returns the same 404" invariant).
 
-STATUS AS OF THIS BEAD (2026-09-09), READ THIS BEFORE ASSUMING A FAILURE
-HERE IS A BUG IN THIS FILE. Epic 2 Track A bead A3 (bd polyglot-pdf-jecrl,
-plan: "Mint transaction" route half + "Open requires a mint record") is the
-bead that wires backend/routes/link_routes.py's open_client_link to READ
-links_store.get_link(jti, channel=...) and refuse when the record is
-missing/revoked/refunded. bd polyglot-pdf-jecrl shows CLOSED in beads, but
-its PR (#749, branch feat/jecrl-mint-reserve-open-gate) had NOT merged to
-origin/dev as of this bead's own worktree creation -- confirmed by diffing
-this bead's origin/dev checkout against that branch, which shows the whole
-mint-reserve-then-sign + open-requires-a-mint-record change still absent
-from backend/routes/link_routes.py here. B4's own surfaces list
-(admin_backend/routes/link_routes.py, admin_backend/tests/unit/
-test_admin_link_routes.py, backend/tests/integration/
-test_revoked_link_open.py) does not include backend/routes/link_routes.py --
-wiring that open-side check is A3's job, not B4's, and duplicating a partial
-version of it here would fork the one gate the plan describes as living in
-ONE place. So: THIS TEST PINS THE CONTRACT THE BEAD REQUIRES, written to
-pass once A3's open-gate change reaches this branch (whether by a future
-merge of dev into this branch, or by A3 landing on dev before this PR does)
--- it is not expected to be green against a `backend/routes/link_routes.py`
-that predates A3. If it is red, check first whether A3 has landed in the
-base this branch is compared against, and pull it in, before assuming the
-revoke route (admin_backend/routes/link_routes.py, verified separately and
-green in test_admin_link_routes.py) is the bug.
+WHAT THIS PINS. Epic 2 Track A bead A3 (bd polyglot-pdf-jecrl, Surface
+contract 24) is the bead that wires backend/routes/link_routes.py's
+open_client_link to READ links_store.get_link(jti, channel=...) and refuse
+when the record is missing, revoked or refunded. B4's own surfaces do not
+include backend/routes/link_routes.py -- the open-side check is A3's job,
+and duplicating a partial version here would fork the one gate the plan
+describes as living in ONE place -- so this test drives the REAL open route
+and asserts the producer (B4's revoke) and the consumer (A3's gate) agree.
+It was written on B4's branch before A3 reached dev and carried a strict
+xfail until the two landed together; the companion control case below
+(a minted, unrevoked link opens normally) proves the harness is sound.
 
 ASCII only.
 """
@@ -131,17 +118,6 @@ def _seed_mint_record(monkeypatch, jti, status, channel="demo"):
     return records
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "A3's open-gate change (bd polyglot-pdf-jecrl, PR #749) has not "
-        "merged to origin/dev yet (tracked by bd polyglot-pdf-rbkrx) -- "
-        "backend/routes/link_routes.py does not read links_store.get_link "
-        "on this branch's base, so the revoke check this test pins cannot "
-        "fire. STRICT -- once #749 merges this XPASSes, which is the "
-        "prompt to delete this marker."
-    ),
-)
 def test_a_revoked_link_is_refused_at_open_with_the_uniform_404(
         client, monkeypatch):
     """THE bead's exit criterion: a subsequent A3 open of a revoked jti is

@@ -836,10 +836,10 @@ class _DryRunTextAI:
     def __init__(self, *a, **kw):
         self._log = __import__("structlog").get_logger()
 
-    async def ask(self, query, context):
+    async def ask(self, query, context, session_ctx=None):
         return "The answer is 123456789."
 
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         return {"conflicts": []}
 
 
@@ -853,7 +853,7 @@ class _DryRunTextAIOneConflict(_DryRunTextAI):
         super().__init__(*a, **kw)
         self._calls = 0
 
-    async def validate(self, payload):
+    async def validate(self, payload, session_ctx=None):
         self._calls += 1
         if self._calls == 1:
             return {"conflicts": [{"field_ids": ["a_number",

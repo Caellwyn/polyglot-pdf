@@ -255,6 +255,7 @@ class ValidatorService:
         today: datetime.date | str | None = None,
         si: str | None = None,
         steered_field_ids: list | None = None,
+        session_ctx: dict | None = None,
     ) -> dict:
         """Run the contradiction check over the contract-2 `fields` payload and
         return the contract-1 verdict {"conflicts": [...]}.
@@ -263,6 +264,13 @@ class ValidatorService:
         WHOLE_FORM_PRO_SI for the pro pass); `steered_field_ids` fills the pro SI's
         already-adjudicated slot so it does not re-report resolved fields. Both are
         ignored by the default lite SI (no {adjudicated} slot).
+
+        session_ctx (bd polyglot-pdf-t86oz): the caller's own
+        {firm_id, employee_id, link_jti, kit_id, channel, form_session_id}
+        session state, forwarded unchanged to ITextAI.validate() so the
+        resulting usage_kind="text_validator" event carries them. This
+        service holds no session state itself (stateless-by-design) -- see
+        FormFillingService._text_ai_session_ctx for where it comes from.
 
         FAIL-OPEN (contract 6): on ANY non-verdict outcome -- the adapter's own
         fail-open, a bad shape, or an unexpected error here -- return the
@@ -284,7 +292,7 @@ class ValidatorService:
 
         field_count = payload.get("field_count", 0)
         try:
-            verdict = await self._text_ai.validate(payload)
+            verdict = await self._text_ai.validate(payload, session_ctx=session_ctx)
         except Exception as exc:  # noqa: BLE001 -- adapter should fail-open, but
             # belt-and-suspenders: a raising adapter must still not block advance.
             self._log.warning(

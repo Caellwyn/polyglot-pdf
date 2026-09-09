@@ -57,13 +57,27 @@ def handshake_message():
 
 
 def _stub_open_link(monkeypatch):
-    """Every gate before check_budget must clear for this test to reach it."""
+    """Every gate before check_budget must clear for this test to reach it.
+
+    That now includes the MINT-RECORD gate (Epic 2 bead A3): the socket's
+    redemption path refuses a link with no links[_<channel>]/{jti} record,
+    so these tests supply one. Its own refusal is pinned in
+    test_link_redemptions.py and test_link_routes.py -- here it is simply
+    another gate that must clear before the spend ceiling is reached.
+    """
     monkeypatch.setattr(
         "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {
             "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
             "opened_at": int(time.time()), "completed_at": None,
         },
+    )
+    from backend.services import links_store
+
+    monkeypatch.setattr(
+        links_store, "get_link",
+        lambda jti, channel=None: {"jti": jti,
+                                   "status": links_store.STATUS_MINTED},
     )
 
 

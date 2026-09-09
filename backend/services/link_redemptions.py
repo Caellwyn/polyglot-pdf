@@ -23,6 +23,21 @@ read (services/firms.py), which fails closed by returning an EMPTY list. Here
 we must not let it through, because the failure we are guarding against is a
 replayed link starting a second paid session.
 
+OPEN NOW REQUIRES A MINT RECORD (Epic 2 bead A3). Before any of the
+redemption bookkeeping below runs, enforce_link_redemption() reads
+links[_<channel>]/{jti} (services/links_store.py) and refuses a token with
+NO record, or one whose status is `revoked` or `refunded`. That is the other
+half of the mint route's reserve-before-sign order: a signed token exists
+only because a credit was reserved for it, and this gate is what makes that
+true from the client's side too -- a forged-but-somehow-valid token, or a
+token whose link an operator has since revoked, cannot buy a session.
+
+CONSEQUENCE, DELIBERATE: a token minted BEFORE the mint record existed
+cannot open. There are few or no live client links today, the same reasoning
+the `aud`-claim cutover used, and the maintainer re-mints any outstanding
+link at cutover (plan: docs/sprint_22_admin-console_plan.md, maintainer
+calls).
+
 ASCII only.
 """
 import os
@@ -94,6 +109,28 @@ _ENABLED_ENV = "LINK_REDEMPTIONS_FIRESTORE_ENABLED"
 
 class RedemptionUnavailable(Exception):
     """The store could not be reached or read. Callers MUST refuse the open."""
+
+
+class LinkNotMinted(RedemptionUnavailable):
+    """No usable mint record backs this link (Epic 2 bead A3).
+
+    Raised when links[_<channel>]/{jti} is missing, or its status is
+    `revoked` or `refunded`.
+
+    A SUBCLASS OF RedemptionUnavailable ON PURPOSE, belt and braces. Every
+    door that spends already catches RedemptionUnavailable and fails closed
+    on it -- /api/links/open, the WebSocket gate, and
+    require_paid_client_work -- so a NEW exception type could not slip past
+    one of them unhandled and turn a refusal into a 500 (or worse, into an
+    admitted session). The three doors also name this class explicitly, so
+    the refusal reads correctly in their logs; the subclassing is what makes
+    a door someone adds LATER, catching only the base class, still safe.
+
+    All three doors already return the SAME uniform 404/1008 refusal for
+    every redemption failure, so this adds no new oracle: "never minted",
+    "revoked", "already completed", and "store unreachable" remain
+    indistinguishable from outside.
+    """
 
 
 class LinkAlreadyUsed(Exception):
@@ -195,6 +232,47 @@ def complete_link(jti: str, now: Optional[float] = None) -> None:
         _log.error("link_complete_failed", jti=jti, error=str(exc))
 
 
+def _require_mint_record(jti) -> dict:
+    """Refuse unless links[_<channel>]/{jti} says this link may open.
+
+    Returns the mint record. Raises LinkNotMinted when there is no record at
+    all, or when its status is one of links_store.OPEN_BLOCKING_STATUSES
+    (`revoked` / `refunded`). Raises RedemptionUnavailable when the store
+    cannot be read -- fail closed, the same polarity the rest of this module
+    uses, because "cannot confirm a credit was reserved" must not admit a
+    paid session.
+
+    EVERY OTHER STATUS FALLS THROUGH. `opened` and `completed` are
+    best-effort mirrors, and a link that is genuinely finished is refused by
+    the redemption gate below on the AUTHORITATIVE record, not by this
+    cache. Refusing on `opened` here would break the reopen-an-unfinished-
+    link behaviour the seven-day completion window exists to provide.
+    """
+    from backend.services import links_store
+    from backend.services.link_tokens import link_channel
+
+    if not isinstance(jti, str) or not jti:
+        # A claims dict with no jti cannot be looked up at all, and the
+        # verifier type-checks the field -- so this is an internal caller
+        # bug, refused rather than admitted.
+        raise LinkNotMinted("no jti on the claims")
+    try:
+        record = links_store.get_link(jti, channel=link_channel())
+    except links_store.LinksStoreUnavailable as exc:
+        _log.error("link_mint_record_unavailable", jti=jti, error=str(exc))
+        raise RedemptionUnavailable(str(exc)) from exc
+    if record is None:
+        # Either a token from before the cutover (the maintainer re-mints
+        # those) or a token whose reservation never committed. Both refuse.
+        _log.info("link_open_refused_no_mint_record", jti=jti)
+        raise LinkNotMinted("no mint record for " + jti)
+    status = record.get("status")
+    if status in links_store.OPEN_BLOCKING_STATUSES:
+        _log.info("link_open_refused_status", jti=jti, status=status)
+        raise LinkNotMinted("mint record status " + repr(status))
+    return record
+
+
 def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     """THE ONE redemption gate, called by every door that can SPEND.
 
@@ -225,10 +303,21 @@ def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     dict from verify_link_token / require_auth and get the redemption record
     back; anything else raises.
 
-    Raises LinkAlreadyUsed, RedemptionUnavailable (unreachable store -- fail
-    closed), or LinkWindowElapsed.
+    Raises LinkNotMinted (no usable mint record), LinkAlreadyUsed,
+    RedemptionUnavailable (unreachable store -- fail closed), or
+    LinkWindowElapsed.
     """
     stamp = int(now if now is not None else time.time())
+
+    # THE MINT-RECORD GATE (Epic 2 bead A3), and it runs FIRST -- before
+    # open_link(), which CREATES the redemption doc. Order matters: checking
+    # after the redemption write would stamp `opened_at` on a link we are
+    # about to refuse, which for a revoked link burns the reopen window of a
+    # replacement link sharing nothing but bad luck, and for a never-minted
+    # token would leave a redemption record for a link that never existed.
+    # Refuse before writing anything.
+    _require_mint_record(claims.get("jti"))
+
     # Forward `now`: honoring it for the deadline math but not for the OPEN
     # would make the two halves disagree about what time it is -- the first
     # open would stamp wall-clock while the comparison used the injected

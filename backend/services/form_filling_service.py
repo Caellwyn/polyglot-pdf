@@ -1705,6 +1705,32 @@ class FormFillingService:
         
         return await self._request_coordinator.request_form_state(field_ids)
 
+    def _text_ai_session_ctx(self) -> dict:
+        """This session's usage-event context for a text-model call (bd
+        polyglot-pdf-t86oz).
+
+        TextAIGemini is a per-process singleton (backend/dependencies.py), so
+        the firm/employee/link/kit/channel ids must NOT live on it -- they
+        would leak across concurrent sessions. This service, in contrast, IS
+        per-session, so it can hold them on self (the same ids
+        set_session_context threads into the live adapter, bd
+        polyglot-pdf-cjifh) and hand them to each text_ai call as a plain
+        dict. channel is process-wide (link_channel() reads the LINK_CHANNEL
+        env var, the same helper the live path and the mint/redeem paths use)
+        -- not per-session, but included here so every text usage event
+        carries it the same way a live-voice one does.
+        """
+        from backend.services.link_tokens import link_channel
+
+        return {
+            "form_session_id": self._form_session_id,
+            "firm_id": self._firm_id,
+            "employee_id": self._employee_id,
+            "link_jti": self._link_jti,
+            "kit_id": self._kit_id,
+            "channel": link_channel(),
+        }
+
     async def handle_ask_secretary(
         self, query: str, deliver_late: bool = True
     ) -> Dict[str, Any]:
@@ -1793,7 +1819,10 @@ class FormFillingService:
         # shorter sync deadline. If the deadline wins, we DETACH the same task (no
         # second call -- never double-bill the model) to deliver the answer later.
         lookup = asyncio.ensure_future(
-            asyncio.wait_for(self._text_ai.ask(query, context), timeout=timeout_s)
+            asyncio.wait_for(
+                self._text_ai.ask(query, context, self._text_ai_session_ctx()),
+                timeout=timeout_s,
+            )
         )
         # If THIS handler is cancelled during the sync wait (e.g. a WS disconnect in
         # the ~2.5s window -> end_session -> finalize -> receive-task cancel), the
@@ -2026,7 +2055,9 @@ class FormFillingService:
         safe_fields = window_fields if isinstance(window_fields, list) else []
         try:
             verdict = await asyncio.wait_for(
-                ValidatorService(self._text_ai).validate(safe_fields),
+                ValidatorService(self._text_ai).validate(
+                    safe_fields, session_ctx=self._text_ai_session_ctx()
+                ),
                 timeout=self._settings.VALIDATOR_TIMEOUT_SEC,
             )
         except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001 -- fail-OPEN
@@ -2175,7 +2206,8 @@ class FormFillingService:
         try:
             verdict = await asyncio.wait_for(
                 ValidatorService(self._text_ai_pro).validate(
-                    safe_fields, si=WHOLE_FORM_PRO_SI, steered_field_ids=steered_ids
+                    safe_fields, si=WHOLE_FORM_PRO_SI, steered_field_ids=steered_ids,
+                    session_ctx=self._text_ai_session_ctx(),
                 ),
                 timeout=self._settings.VALIDATOR_PRO_TIMEOUT_SEC,
             )
