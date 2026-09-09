@@ -8,8 +8,8 @@ _routes_depending_on-derived set pins: the set is read off the LIVE app
 object, never hand-maintained, so a route added without a gate fails HERE
 instead of shipping reachable by anyone with the URL.
 
-The four gates, per the plan ("Admin service" gating section). THREE now
-exist (bd polyglot-pdf-dmjl5):
+The four gates, per the plan ("Admin service" gating section). ALL FOUR now
+exist (bd polyglot-pdf-8vgfh lands the last one):
   - require_app_admin -- shipped with GET /admin/whoami (bd
     polyglot-pdf-7w17m).
   - require_app_admin_or_owning_manager -- the composite, shipped with the
@@ -23,7 +23,9 @@ exist (bd polyglot-pdf-dmjl5):
     below regardless -- these four are the VOCABULARY of legal gates, and
     dropping one would make a route carrying it look ungated here.
   - require_google_oidc(audience, allowed_caller_emails) -- Cloud Scheduler /
-    Pub/Sub push callers (Epic 4 4.3). The one still ahead.
+    Pub/Sub push callers. Shipped here with its first consuming route, POST
+    /admin/links/sweep-expired (bd polyglot-pdf-8vgfh); Epic 4 4.3's Pub/Sub
+    push route will be its second.
 
 /health and /version are the deliberate exception (pinned separately in
 test_admin_health.py): the unauthenticated liveness/identity probe.
@@ -31,20 +33,26 @@ test_admin_health.py): the unauthenticated liveness/identity probe.
 from admin_backend.main import app
 from admin_backend.services.admin_auth import require_app_admin
 
-# THREE of the four gates now exist. require_app_admin shipped with
-# /admin/whoami (bd polyglot-pdf-7w17m); require_app_admin_or_owning_manager
-# ships with the user routes below and require_firm_manager with the retire
-# route it moved into backend/services/auth.py (bd polyglot-pdf-dmjl5). Only
-# require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3), and it stays a
-# STRING rather than an import: importing a name that does not exist would
-# fail at COLLECTION, which is a worse failure mode than this test failing
-# with a clear message the day it is expected to exist.
+# require_app_admin shipped with /admin/whoami (bd polyglot-pdf-7w17m);
+# require_app_admin_or_owning_manager ships with the user routes and
+# require_firm_manager with the retire route it moved into
+# backend/services/auth.py (bd polyglot-pdf-dmjl5); require_google_oidc
+# ships with the sweep route below (bd polyglot-pdf-8vgfh) -- see that
+# route's own module for why its FACTORY-returned dependency is named
+# "require_google_oidc" rather than an inner closure's own name, which is
+# what makes matching on this bare name work identically to the other three.
+#
+# All four are kept as STRINGS here (not imports) uniformly, even though
+# every one is now importable: this file's job is checking WHICH NAME a
+# route's dependency graph carries, and importing all four just to compare
+# __name__ strings would add nothing test_whoami_is_gated_by_require_app_
+# admin_specifically (below) does not already prove for the identity case.
 #
 # require_firm_manager appears in the known set even though no route on THIS
 # service declares it (its consumer is the public backend's retire route):
 # the four names are the vocabulary of legal gates, and dropping one from the
 # set would silently make a route carrying it look ungated here.
-_FUTURE_GATE_NAMES = (
+_OTHER_GATE_NAMES = (
     "require_firm_manager",
     "require_app_admin_or_owning_manager",
     "require_google_oidc",
@@ -84,7 +92,7 @@ def test_every_business_route_carries_exactly_one_of_the_four_gates():
     """THE SET PIN. Mutation: register a route with no Depends(require_*) --
     red; register one with two of the four -- red (ambiguous authorization is
     itself a bug, per CLAUDE.md scar #8: the rule must have ONE home)."""
-    known_gate_names = {"require_app_admin", *_FUTURE_GATE_NAMES}
+    known_gate_names = {"require_app_admin", *_OTHER_GATE_NAMES}
 
     offenders = []
     for route in _business_routes():
@@ -122,6 +130,7 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/users"),
         (("PATCH",), "/admin/users/{uid}/disable"),
         (("PATCH",), "/admin/users/{uid}/role"),
+        (("POST",), "/admin/links/sweep-expired"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
@@ -145,6 +154,24 @@ def test_whoami_is_gated_by_require_app_admin_specifically():
     assert any(sub.call is require_app_admin for sub in dependant.dependencies)
 
 
+def test_sweep_route_is_gated_by_require_google_oidc_specifically():
+    """Pins WHICH gate the sweep route carries (bd polyglot-pdf-8vgfh).
+
+    require_google_oidc is a FACTORY -- the callable FastAPI actually wired
+    is the inner closure it returns, not the module-level require_google_
+    oidc function object itself, so this cannot assert `sub.call is
+    require_google_oidc` the way test_whoami_... does above for a plain
+    dependency. What CAN be pinned, and is: the closure's __name__ is
+    exactly "require_google_oidc" (the rename that makes the bare-name set
+    pin above see it as this gate at all). Mutation: remove the
+    `_dependency.__name__ = "require_google_oidc"` line in admin_auth.py --
+    this test goes red (the name reverts to the closure's own
+    "_dependency"), and so does the set pin above."""
+    route = next(
+        r for r in app.routes if r.path == "/admin/links/sweep-expired")
+    assert _dependency_names_for(route) == {"require_google_oidc"}
+
+
 def test_a_route_added_without_a_gate_is_caught():
     """PROVES the set pin actually fails on a real omission (exit criterion
     2), rather than trusting the assertion shape by inspection. Registers a
@@ -163,7 +190,7 @@ def test_a_route_added_without_a_gate_is_caught():
     before = list(app.routes)
     app.include_router(throwaway)
     try:
-        known_gate_names = {"require_app_admin", *_FUTURE_GATE_NAMES}
+        known_gate_names = {"require_app_admin", *_OTHER_GATE_NAMES}
         offenders = [
             route.path for route in _business_routes()
             if len(_dependency_names_for(route) & known_gate_names) != 1

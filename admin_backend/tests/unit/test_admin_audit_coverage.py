@@ -10,8 +10,29 @@ one:
 
   * MUTATION_KIND_FIRESTORE -> audit_log.record_in_transaction must be
     called, and it must be called INSIDE a @firestore.transactional body
-    (a call outside one is not in the mutation's transaction, whatever it
-    is named).
+    IN THIS SAME MODULE (a call outside one is not in the mutation's
+    transaction, whatever it is named).
+  * MUTATION_KIND_DELEGATED_FIRESTORE -> the same in-transaction guarantee,
+    but for a route whose Firestore transaction is opened by ANOTHER
+    module's helper (bd polyglot-pdf-8vgfh: the sweep route joins bead A5's
+    refund_expired_link transaction in backend/services/credit_ledger.py,
+    which this admin-service test file must not import just to prove an
+    audit route). The static proxy for "my audit call actually runs inside
+    that helper's transaction" is: the route module defines a closure that
+    calls record_in_transaction, AND passes that closure BY NAME as an
+    extra_writes= keyword argument at a call site in the SAME module.
+    extra_writes is this repo's one documented seam for joining a second
+    write to a transaction someone else opened (backend/services/credit_
+    ledger.py's append_entry AND refund_expired_link both take it, with the
+    identical contract: called (tx, firm_snapshot) from INSIDE the body,
+    after the reads); a closure that is never handed to extra_writes= is
+    just a function sitting unused, whatever it contains. The GENUINE
+    in-transaction guarantee (does the callback actually run before
+    commit, atomically with the refund) is proven by a real test exercising
+    the real call path, not by AST alone -- see
+    test_sweep_routes.py::test_a_forced_audit_failure_leaves_the_refund_
+    uncommitted, this kind's equivalent of the Firestore kind's own
+    "forced audit failure leaves the mutation unapplied" pin.
   * MUTATION_KIND_EXTERNAL  -> audit_log.record_pending must be called, AND
     at least one of mark_committed / mark_failed must close the row out.
     A pending row nothing ever closes is worse than no row: every action
@@ -48,6 +69,7 @@ from admin_backend.main import app
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 MUTATION_KIND_FIRESTORE = "firestore"
+MUTATION_KIND_DELEGATED_FIRESTORE = "delegated_firestore"
 MUTATION_KIND_EXTERNAL = "external"
 
 # THE DECLARATION. Every mutating route on this service, and which audit form
@@ -66,11 +88,17 @@ MUTATION_KINDS = {
     ("POST", "/admin/users"): MUTATION_KIND_EXTERNAL,
     ("PATCH", "/admin/users/{uid}/disable"): MUTATION_KIND_EXTERNAL,
     ("PATCH", "/admin/users/{uid}/role"): MUTATION_KIND_EXTERNAL,
+    # The sweep route joins bead A5's refund_expired_link transaction in
+    # backend/services/credit_ledger.py via that function's extra_writes
+    # seam -- DELEGATED, not FIRESTORE, because the @firestore.transactional
+    # body itself lives in a different module (bd polyglot-pdf-8vgfh).
+    ("POST", "/admin/links/sweep-expired"): MUTATION_KIND_DELEGATED_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
 _REQUIRED_CALLS = {
     MUTATION_KIND_FIRESTORE: ("record_in_transaction",),
+    MUTATION_KIND_DELEGATED_FIRESTORE: ("record_in_transaction",),
     MUTATION_KIND_EXTERNAL: ("record_pending",),
 }
 _CLOSEOUT_CALLS = ("mark_committed", "mark_failed")
@@ -155,6 +183,47 @@ def _calls_inside_transactional_bodies(tree) -> set:
     return names
 
 
+def _names_passed_as_extra_writes(tree) -> set:
+    """Every function/closure NAME passed as an `extra_writes=` keyword
+    argument anywhere in this module.
+
+    The static proxy for MUTATION_KIND_DELEGATED_FIRESTORE: this module has
+    no @firestore.transactional body of its own to look inside (that lives
+    in whichever helper module actually opens the transaction), so "is this
+    audit call really joined to a transaction" is answered instead by "is
+    the closure that makes the call handed to the ONE documented seam for
+    joining a second write to someone else's transaction"
+    (backend/services/credit_ledger.py's extra_writes parameter, on both
+    append_entry and refund_expired_link).
+    """
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "extra_writes" and isinstance(kw.value, ast.Name):
+                names.add(kw.value.id)
+    return names
+
+
+def _delegated_firestore_ok(tree) -> bool:
+    """MUTATION_KIND_DELEGATED_FIRESTORE's two-part check: a closure defined
+    in this module both CALLS record_in_transaction and is PASSED as
+    extra_writes= at some call site in this same module. Either half
+    missing means the audit call is not actually wired into a transaction
+    this module can prove joins the mutation.
+    """
+    extra_writes_names = _names_passed_as_extra_writes(tree)
+    if not extra_writes_names:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and node.name in extra_writes_names:
+            if "record_in_transaction" in _called_names(node):
+                return True
+    return False
+
+
 def test_every_mutating_route_declares_its_required_audit_form():
     """A new mutating route must SAY which form it needs.
 
@@ -200,8 +269,13 @@ def test_a_mutating_route_uses_the_audit_form_its_mutation_requires(
     @firestore.transactional body into the enclosing function -- ALSO red,
     which is the half a presence check would miss.
 
-    Mutation (external routes, once one exists): delete record_pending --
-    red; delete both mark_committed and mark_failed -- red.
+    Mutation (delegated-Firestore routes, e.g. the sweep route): rename the
+    audit closure without updating the extra_writes= call site -- red (the
+    closure is no longer found by name). Stop passing it as extra_writes= at
+    all -- red.
+
+    Mutation (external routes): delete record_pending -- red; delete both
+    mark_committed and mark_failed -- red.
     """
     endpoint = next(e for m, p, e in _mutating_routes()
                     if (m, p) == (method, path))
@@ -230,6 +304,14 @@ def test_a_mutating_route_uses_the_audit_form_its_mutation_requires(
             "{} {}'s @firestore.transactional body writes nothing -- the "
             "audit row is inside a transaction the mutation is not in".format(
                 method, path))
+    elif kind == MUTATION_KIND_DELEGATED_FIRESTORE:
+        assert _delegated_firestore_ok(tree), (
+            "{} {} calls audit_log.record_in_transaction, but no closure "
+            "calling it is passed as extra_writes= anywhere in {} -- see "
+            "backend/services/credit_ledger.py's extra_writes parameter, "
+            "the one documented seam for joining a second write to a "
+            "transaction opened by ANOTHER module's helper.".format(
+                method, path, source_file))
     else:
         assert any(name in module_calls for name in _CLOSEOUT_CALLS), (
             "{} {} writes a pending audit row but never closes it out with "
@@ -274,6 +356,62 @@ def handler():
     _txn(db.transaction())
     audit_log.record_in_transaction(None, db)
 """
+
+_DELEGATED_ROUTE_OK = """
+from admin_backend.services import audit_log
+from backend.services import credit_ledger
+
+def handler():
+    def _audit_write(tx, firm):
+        audit_log.record_in_transaction(tx, db)
+    credit_ledger.refund_expired_link(db, jti, extra_writes=_audit_write)
+"""
+
+_DELEGATED_ROUTE_NO_AUDIT = """
+from backend.services import credit_ledger
+
+def handler():
+    def _audit_write(tx, firm):
+        pass
+    credit_ledger.refund_expired_link(db, jti, extra_writes=_audit_write)
+"""
+
+_DELEGATED_ROUTE_AUDIT_NEVER_WIRED = """
+from admin_backend.services import audit_log
+from backend.services import credit_ledger
+
+def handler():
+    def _audit_write(tx, firm):
+        audit_log.record_in_transaction(tx, db)
+    credit_ledger.refund_expired_link(db, jti)
+"""
+
+
+def _delegated_verdict(source: str) -> bool:
+    """The SAME check the delegated-Firestore branch above applies."""
+    tree = ast.parse(source)
+    if "record_in_transaction" not in _called_names(tree):
+        return False
+    return _delegated_firestore_ok(tree)
+
+
+@pytest.mark.parametrize("source,expected,why", [
+    (_DELEGATED_ROUTE_OK, True, "the closure is wired via extra_writes="),
+    (_DELEGATED_ROUTE_NO_AUDIT, False, "the closure never audits at all"),
+    (_DELEGATED_ROUTE_AUDIT_NEVER_WIRED, False,
+     "the audit closure exists but is never passed as extra_writes="),
+], ids=["correct-form", "no-audit-call", "closure-never-wired"])
+def test_the_delegated_check_goes_red_on_an_unwired_audit_closure(
+        source, expected, why):
+    """EXIT CRITERION 2 for MUTATION_KIND_DELEGATED_FIRESTORE (bd
+    polyglot-pdf-8vgfh). Runs the real derivation against hand-built route
+    shapes: a route whose audit closure is genuinely wired via
+    extra_writes=, one whose closure does nothing, and -- the case a bare
+    "does this module define a closure calling record_in_transaction"
+    presence check would wave through -- one where the closure exists but
+    is never actually handed to the transaction-opening call."""
+    assert _delegated_verdict(source) is expected, why
+
 
 _EXTERNAL_ROUTE_OK = """
 from admin_backend.services import audit_log

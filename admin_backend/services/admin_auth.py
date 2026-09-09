@@ -24,13 +24,15 @@ machine-readable prefix on the "no access at all" 403), same reasons:
 
 This is the FIRST of the four gates the plan names
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
-manager; require_google_oidc). THREE now exist: require_app_admin_or_owning_
-manager is the composite defined at the bottom of this module (bd
+manager; require_google_oidc). ALL FOUR now exist: require_app_admin_or_
+owning_manager is the composite defined further down this module (bd
 polyglot-pdf-dmjl5), shipping with the four /admin/users routes;
 require_firm_manager lives on the PUBLIC backend (backend/services/auth.py)
 over the shared rule backend/services/firms.py::manager_firm_id, and no
-route declares it yet for the reason documented there. Only
-require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3). See
+route declares it yet for the reason documented there;
+require_google_oidc(audience, allowed_caller_emails) is defined at the
+bottom of this module (bd polyglot-pdf-8vgfh), shipping with its first
+consuming route, POST /admin/links/sweep-expired. See
 admin_backend/tests/unit/test_admin_route_auth.py, which derives the
 registered route set and asserts each route carries exactly one of the four
 names.
@@ -356,3 +358,205 @@ def resolve_target_firm(actor: CompositeActor,
             detail="firm_id is required when acting as an app admin",
         )
     return body_firm_id
+
+
+# ---------------------------------------------------------------------------
+# require_google_oidc: the gate for Cloud Scheduler / Pub/Sub push callers
+# (bd polyglot-pdf-8vgfh)
+# ---------------------------------------------------------------------------
+#
+# The fourth and last gate the plan names. No human signs in here -- the
+# caller is a Google-managed service (Cloud Scheduler today; Pub/Sub push in
+# Epic 4) presenting a Google-signed OIDC ID token in its own Authorization
+# header, minted by attaching a service account to the job/subscription and
+# letting Google sign the token, never a credential this repo issues or
+# stores.
+#
+# WHY AUDIENCE ALONE DOES NOT PROVE THE CALLER. On a PUBLIC Cloud Run service
+# (--allow-unauthenticated, same as every other admin route), the audience
+# claim is not a secret: it is simply this route's own URL, and anyone who
+# can read this source file -- or simply guess the URL -- can mint a request
+# with a Google-signed token carrying that SAME audience from their OWN GCP
+# project (Cloud Scheduler, a Cloud Function, `gcloud auth print-identity-
+# token --audiences=...` from any account). A valid signature and a matching
+# audience together prove only "Google vouches this token was minted for
+# this URL", never "this specific caller is the scheduler job we created".
+# So the gate ALSO pins the token's `email` claim (the service account that
+# minted it) against an explicit allowlist -- the same two-factor shape
+# require_admin_or_owning_manager's callers get from a firm_id, applied here
+# to a machine identity instead of a human one.
+class GoogleServiceActor(BaseModel):
+    """WHO is acting, as a Google-managed service caller.
+
+    email is never None here (unlike AdminActor's) -- an OIDC token with no
+    email claim can never pass the allowlist check below, so by the time
+    this is constructed the field is always populated.
+    """
+
+    email: str
+
+    def label(self) -> str:
+        return self.email
+
+
+class OidcVerificationUnavailable(Exception):
+    """google-auth could not be imported, or its own request transport
+    failed (DNS, network) while fetching Google's signing certs.
+
+    Raised rather than silently treated as "token invalid": a caller must be
+    able to tell "this token is bad" (401 -- retrying with a fresh token
+    would not help) apart from "we could not check" (503 -- retrying might).
+    Cloud Scheduler retries a 503 on its own backoff; retrying a 401 forever
+    would never succeed and would paper over a real misconfiguration.
+    """
+
+
+def _verify_google_id_token(token: str, audience: str) -> dict:
+    """The raw claims of a Google-signed ID token for `audience`, or raise.
+
+    Isolated from require_google_oidc() below so a unit test can monkeypatch
+    ONE seam (this function) rather than reaching into google.auth's own
+    HTTP transport. Raises ValueError / google.auth.exceptions.GoogleAuthError
+    (ValueError's parent chain covers both -- google-auth raises ValueError
+    directly for a bad signature or a wrong audience) for an invalid token,
+    and OidcVerificationUnavailable if the library itself is missing or the
+    certs fetch cannot complete.
+    """
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token as google_id_token
+    except ImportError as exc:  # pragma: no cover -- google-auth is a
+        # pinned direct dependency (backend/requirements.txt); this only
+        # fires if the deployed image's dependency install is broken.
+        raise OidcVerificationUnavailable(
+            "google-auth is not importable: {}".format(exc)) from exc
+
+    try:
+        return google_id_token.verify_oauth2_token(
+            token, google_requests.Request(), audience=audience)
+    except Exception as exc:  # noqa: BLE001
+        # google-auth's own exception hierarchy is not uniform across
+        # failure modes (a bad signature is ValueError; a certs-fetch
+        # network failure is a transport.Request exception) -- narrowing
+        # to "the token itself is malformed/wrong" vs. "we could not reach
+        # Google's certs endpoint" would require re-deriving that
+        # hierarchy here. Treated as OidcVerificationUnavailable only when
+        # the message names a transport problem; everything else is a
+        # 401-shaped verification failure, since a forged or expired token
+        # is by far the common case and must not be mistaken for a 503 an
+        # attacker could induce simply by presenting garbage.
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            raise OidcVerificationUnavailable(str(exc)) from exc
+        raise ValueError(str(exc)) from exc
+
+
+def require_google_oidc(audience, allowed_caller_emails):
+    """Build a FastAPI dependency gating a route to specific Google service
+    identities: require_google_oidc(audience="https://...", allowed_caller_
+    emails=("scheduler-sa@project.iam.gserviceaccount.com",)).
+
+    A FACTORY, not a dependency itself -- unlike the other three gates,
+    which need no per-route configuration, this one needs the route's OWN
+    URL (the expected audience) and the specific caller(s) it should accept,
+    both of which vary per route and per deployment. A route wires it as
+    Depends(require_google_oidc(audience=..., allowed_caller_emails=...)).
+
+    EACH ARGUMENT MAY BE THE VALUE ITSELF OR A ZERO-ARG CALLABE returning
+    it, resolved FRESH ON EVERY REQUEST rather than once when the route
+    module is imported. This matters because both values come from
+    deploy-time environment variables (the admin service's own Cloud Run
+    URL is not known until its first deploy; the scheduler job's service-
+    account email is set by an operator): a route module imports at process
+    START, and reading os.environ at IMPORT time would freeze in whatever
+    value existed before a real deployment finished configuring the
+    service -- and would make a test that wants to exercise "unconfigured"
+    vs. "configured" unable to do so without reloading the module. Passing
+    a callable defers the read to request time, exactly where it belongs.
+
+    allowed_caller_emails resolves to a tuple (not a single string) because
+    Epic 4's Pub/Sub push route will need to pin a DIFFERENT service-account
+    email than the scheduler route does, and a future route could
+    legitimately accept either of two identities (e.g. during a service-
+    account rotation) -- a single-string parameter would need a breaking
+    signature change for that case.
+
+    401 for a token that fails verification outright (bad signature,
+    expired, wrong audience -- retrying with a fresh token might help); 403
+    for a token that verifies but whose email is not on the allowlist (a
+    real Google-signed token, just not from a caller this route accepts --
+    retrying will never help, the caller is wrong); 503 when the
+    verification machinery itself could not run OR when this route's own
+    configuration is incomplete (fail CLOSED: an empty audience or an empty
+    allowlist must never be read as "nothing to check against, allow it").
+    """
+    def _resolve(value):
+        return value() if callable(value) else value
+
+    async def _dependency(
+        authorization: Annotated[Optional[str], Header()] = None,
+    ) -> GoogleServiceActor:
+        resolved_audience = _resolve(audience)
+        resolved_allowed_emails = _resolve(allowed_caller_emails)
+        if not resolved_audience or not resolved_allowed_emails:
+            _log.error(
+                "google_oidc_route_not_configured",
+                has_audience=bool(resolved_audience),
+                has_allowed_emails=bool(resolved_allowed_emails),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="this route is not yet configured for scheduler access",
+            )
+
+        token = None
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization[7:]
+        if not token:
+            raise HTTPException(status_code=401,
+                                detail="Sign-in required")
+
+        try:
+            claims = _verify_google_id_token(token, resolved_audience)
+        except OidcVerificationUnavailable as exc:
+            _log.error("google_oidc_verification_unavailable", error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail="identity verification unavailable") from exc
+        except ValueError:
+            raise HTTPException(status_code=401,
+                                detail="Invalid or expired sign-in")
+
+        email = claims.get("email")
+        # email_verified matters here in a way it does not for a human
+        # sign-in flow: a Google SERVICE ACCOUNT's email is always
+        # verified by construction (there is no email-confirmation step
+        # for a service account), so a token claiming email_verified is
+        # not True is either a non-service-account token or malformed --
+        # either way, not a caller this gate should ever accept.
+        if not email or claims.get("email_verified") is not True \
+                or email not in resolved_allowed_emails:
+            _log.warning(
+                "google_oidc_caller_not_allowed",
+                email=email, audience=resolved_audience,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=(NO_ADMIN_ACCESS_PREFIX
+                        + " This caller is not authorized for this route"),
+            )
+
+        return GoogleServiceActor(email=email)
+
+    # RENAMED to the FACTORY's own name, not left as "_dependency". FastAPI's
+    # dependant graph records a dependency by ITS CALLABLE, and
+    # test_admin_route_auth.py's route/gate set pin reads sub.call.__name__
+    # to learn which of the four known gates a route carries -- an inner
+    # closure named "_dependency" would make every route wired through this
+    # factory look like it carries a gate called "_dependency", which is not
+    # in the four-name vocabulary and would flag a correctly-gated route as
+    # ungated. Every other gate in this module IS its own name (require_app_
+    # admin, etc. are not factories); this is the one exception, so its
+    # returned closure must present as require_google_oidc for that
+    # detection to keep working uniformly across all four.
+    _dependency.__name__ = "require_google_oidc"
+    return _dependency

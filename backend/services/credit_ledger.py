@@ -541,7 +541,7 @@ class LinkNotRefundable(Exception):
 
 def refund_expired_link(
     db, jti: str, *, actor: str, channel: Optional[str] = None,
-    now: Optional[float] = None,
+    now: Optional[float] = None, extra_writes=None,
 ) -> dict:
     """Refund the mint debit for ONE unopened, expired link. Returns the
     committed ledger entry (the SAME shape append_entry() returns).
@@ -586,10 +586,22 @@ def refund_expired_link(
     closed: an unreachable store must not be read as "no record, refund"),
     and LedgerError if the links record's firm_id does not exist as a firm.
 
+    extra_writes (bd polyglot-pdf-8vgfh): an OPTIONAL second write joined to
+    the SAME transaction as the balance/entry/status-flip writes above,
+    callable as (tx, firm_snapshot_dict) -> None, identical contract to
+    append_entry()'s own extra_writes. This is the sweep endpoint's seam for
+    writing its admin_audit_log row in-transaction (Epic 2 criterion 5:
+    "every mutating admin route audits in the required form") without this
+    module depending on admin_backend/ -- the sweep route builds the
+    closure, this function only runs it. Composed AFTER the internal
+    _mark_refunded write (both run inside _apply_entry_writes's single
+    extra_writes call), so a caller-supplied write can never race the
+    status flip within this transaction; any exception it raises aborts
+    the whole commit, same as _mark_refunded's own contract.
+
     SYNC (Admin SDK), like append_entry. Callers on an async path --
     websocket_routes.py's teardown is the only caller who might reach this
-    directly rather than through a channel query, and even that is Track B's
-    sweep endpoint's job, not this bead's -- must wrap it in
+    directly rather than through a channel query -- must wrap it in
     asyncio.to_thread.
     """
     if db is None:
@@ -652,7 +664,7 @@ def refund_expired_link(
 
         entry_ref = firm_ref.collection(LEDGER_SUBCOLLECTION).document()
 
-        def _mark_refunded(tx, _firm):
+        def _mark_refunded_and_extra(tx, firm_snapshot):
             # Runs inside _apply_entry_writes, AFTER the balance + entry
             # writes are queued -- joining the links record's status flip to
             # the SAME transaction so a refund that credits the firm but
@@ -661,13 +673,20 @@ def refund_expired_link(
             tx.set(links_ref, {
                 "status": _links_store.STATUS_REFUNDED,
             }, merge=True)
+            # The CALLER's write (if any), e.g. the sweep route's audit
+            # row -- composed here rather than passed to _apply_entry_writes
+            # directly, since that function accepts only ONE extra_writes
+            # callable and this module's own status flip must always run.
+            if extra_writes is not None:
+                extra_writes(tx, firm_snapshot)
 
         _apply_entry_writes(
             tx, firm_ref, entry_ref, firm, firm_id, stamp,
             entry_type=TYPE_EXPIRY_REFUND, amount=credit_cost,
             usd_amount=None, actor=actor, channel=channel, reason=None,
             link_jti=jti, kit_id=link.get("kit_id"),
-            require_sufficient_balance=False, extra_writes=_mark_refunded,
+            require_sufficient_balance=False,
+            extra_writes=_mark_refunded_and_extra,
             captured=captured,
         )
 
