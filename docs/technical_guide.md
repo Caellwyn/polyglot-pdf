@@ -1059,8 +1059,9 @@ write forms BIND the row to the mutation rather than firing it alongside.
   - **`record_pending(db, ...)` then `mark_committed(ref, ...)` /
     `mark_failed(ref, error=...)`** for mutations Firestore cannot wrap
     (`firebase_admin.auth` user create/disable, claim stamps, Cloud Build
-    triggers -- Epic 1's user routes and Epic 4's build triggers are its
-    first consumers). Note the deliberate ASYMMETRY: `record_pending` RAISES
+    triggers). Its FIRST consumers are the three mutating `/admin/users`
+    routes (bd `polyglot-pdf-dmjl5`, contract 19); Epic 4's build triggers
+    follow. Note the deliberate ASYMMETRY: `record_pending` RAISES
     (if the intent cannot be recorded, the action must not happen), while
     both closeouts are best-effort (the action already happened; raising
     would surface an error for a success, and a caller that retried on it

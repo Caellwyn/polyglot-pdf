@@ -8,14 +8,22 @@ _routes_depending_on-derived set pins: the set is read off the LIVE app
 object, never hand-maintained, so a route added without a gate fails HERE
 instead of shipping reachable by anyone with the URL.
 
-The four gates, per the plan ("Admin service" gating section):
-  - require_app_admin -- the only one that exists after this bead.
-  - require_firm_manager -- ships with its first consuming route
-    (backend/services/auth.py; Epic 2 B-track).
-  - require_app_admin_or_owning_manager -- the composite for revoke/link
-    listing (Epic 2 B5).
+The four gates, per the plan ("Admin service" gating section). THREE now
+exist (bd polyglot-pdf-dmjl5):
+  - require_app_admin -- shipped with GET /admin/whoami (bd
+    polyglot-pdf-7w17m).
+  - require_app_admin_or_owning_manager -- the composite, shipped with the
+    four /admin/users routes; also the gate Epic 2 B4's link listing and
+    revoke will carry.
+  - require_firm_manager -- exists in backend/services/auth.py over the
+    shared rule backend/services/firms.py::manager_firm_id. NO ROUTE
+    declares it yet, deliberately: the retire route consumes the RULE
+    instead (its refusals must be 404s, not the dependency's 403), and the
+    admin user routes need the composite. The name stays in the known set
+    below regardless -- these four are the VOCABULARY of legal gates, and
+    dropping one would make a route carrying it look ungated here.
   - require_google_oidc(audience, allowed_caller_emails) -- Cloud Scheduler /
-    Pub/Sub push callers (Epic 4 4.3).
+    Pub/Sub push callers (Epic 4 4.3). The one still ahead.
 
 /health and /version are the deliberate exception (pinned separately in
 test_admin_health.py): the unauthenticated liveness/identity probe.

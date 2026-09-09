@@ -4,8 +4,12 @@ The app, CORS, /health and /version were the skeleton stage (bd
 polyglot-pdf-pnoik). bd polyglot-pdf-7w17m adds the first gate
 (require_app_admin, admin_backend/services/admin_auth.py) and the first
 route (GET /admin/whoami); bd polyglot-pdf-li9x0 adds the audit log and its
-first consumers (GET/PUT /admin/config/{channel}, GET /admin/audit) -- every
-OTHER route added to this service from
+first consumers (GET/PUT /admin/config/{channel}, GET /admin/audit); bd
+polyglot-pdf-dmjl5 adds the four staff-account routes (POST + GET
+/admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the
+composite gate require_app_admin_or_owning_manager, and with them the first
+consumers of the audit log's pending-then-committed form. Every route added
+to this service from
 here on must carry one of the four gates named in the plan
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
 manager; require_google_oidc), which admin_backend/tests/unit/

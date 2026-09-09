@@ -187,7 +187,10 @@ gates.
 ## Granting access: `scripts/bootstrap_admin_user.py`
 
 The ONLY way to grant (or revoke) `app_admin` -- there is no self-serve
-signup and no in-console user management yet. Mirrors
+signup, and the console's own `/admin/users` routes (bd
+`polyglot-pdf-dmjl5`) deliberately CANNOT write this claim: they are
+allowlisted to `firm_id` and `firm_role`, so a compromised console could not
+mint its own admins. Mirrors
 `scripts/bootstrap_editor_user.py`'s shape (`--email`, `--revoke`, `--list`,
 merges claims rather than replacing them) plus `scripts/bootstrap_firm.py`'s
 `--project` machinery (a REQUIRED flag; the script asserts the resolved
