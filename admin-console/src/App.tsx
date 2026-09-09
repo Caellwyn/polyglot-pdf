@@ -4,16 +4,18 @@ import { WhoAmIPage } from './components/WhoAmIPage';
 import { AuditLogPage } from './components/AuditLogPage';
 import { ConfigEditorPage } from './components/ConfigEditorPage';
 import { UsersPage } from './pages/UsersPage';
+import { KitCommercialsPage } from './pages/KitCommercialsPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
-type Tab = 'whoami' | 'audit' | 'config' | 'users';
+type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits';
 
 /**
- * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91):
- * the sign-in gate, then a simple tabbed shell over the console's pages --
- * who-am-I, the audit log list, the per-channel runtime-config editor, and
- * staff-account management (users).
+ * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91
+ * and polyglot-pdf-mzblw): the sign-in gate, then a simple tabbed shell over
+ * the console's pages -- who-am-I, the audit log list, the per-channel
+ * runtime-config editor, staff-account management (users), and kit
+ * commercials (per-form credit price and USD spend ceiling).
  *
  * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
  * state is simple enough that a router would be pure ceremony for this
@@ -79,6 +81,7 @@ export const App: React.FC = () => {
             { id: 'audit', label: 'Audit log' },
             { id: 'config', label: 'Runtime config' },
             { id: 'users', label: 'Users' },
+            { id: 'kits', label: 'Kit commercials' },
           ] as const
         ).map((item) => (
           <button
@@ -102,6 +105,7 @@ export const App: React.FC = () => {
         {tab === 'audit' && <AuditLogPage onAuthExpired={handleAuthExpired} />}
         {tab === 'config' && <ConfigEditorPage onAuthExpired={handleAuthExpired} />}
         {tab === 'users' && <UsersPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'kits' && <KitCommercialsPage onAuthExpired={handleAuthExpired} />}
       </main>
     </div>
   );
