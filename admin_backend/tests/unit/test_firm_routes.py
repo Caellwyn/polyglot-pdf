@@ -78,23 +78,52 @@ class _DocRef:
         existing.update(data)
 
 
+_OPS = {
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+    "<": lambda a, b: a is not None and a < b,
+    "<=": lambda a, b: a is not None and a <= b,
+    ">": lambda a, b: a is not None and a > b,
+    ">=": lambda a, b: a is not None and a >= b,
+}
+
+
 class _Query:
-    def __init__(self, store, path, order_field=None):
+    """Supports the ONE query shape credit_ledger.reconcile_expired_for_firm
+    issues: chained equality/less-than .where() filters, no order_by/limit
+    (that combination belongs to read_entries, handled separately above).
+    """
+
+    def __init__(self, store, path, order_field=None, filters=None):
         self._store = store
         self._path = path
         self._order = order_field
+        self._filters = list(filters or [])
 
     def order_by(self, field, direction="ASCENDING"):
-        return _Query(self._store, self._path, field)
+        return _Query(self._store, self._path, field, self._filters)
 
     def limit(self, n):
         return self  # unused by this file's routes; read_entries takes None
+
+    def where(self, *args, filter=None):
+        if filter is not None:
+            field, op, value = (
+                filter.field_path, filter.op_string, filter.value)
+        else:
+            field, op, value = args
+        return _Query(
+            self._store, self._path, self._order,
+            self._filters + [(field, op, value)])
 
     def stream(self):
         rows = [
             (path, data) for path, data in self._store.docs.items()
             if path[:-1] == self._path
         ]
+        for field, op, value in self._filters:
+            fn = _OPS[op]
+            rows = [(p, d) for p, d in rows if fn(d.get(field), value)]
         if self._order:
             rows.sort(key=lambda kv: kv[1].get(self._order))
         return [_Snap(path, data) for path, data in rows]
@@ -113,6 +142,9 @@ class _Collection:
 
     def order_by(self, field):
         return _Query(self._store, self._path).order_by(field)
+
+    def where(self, *args, filter=None):
+        return _Query(self._store, self._path).where(*args, filter=filter)
 
     def stream(self):
         return _Query(self._store, self._path).stream()
@@ -158,6 +190,10 @@ class _FakeDb:
     # test helpers ---------------------------------------------------
     def firm(self, firm_id):
         return self.docs.get(("firms", firm_id))
+
+    def ledger_rows(self, firm_id):
+        return [data for path, data in self.docs.items()
+                if path[:3] == ("firms", firm_id, "ledger")]
 
     def audit_rows(self):
         return [v for path, v in self.docs.items()
@@ -340,6 +376,68 @@ def test_get_firm_returns_profile_balance_and_ledger(client, fake_db):
     assert len(body["ledger"]) == 1
     assert body["ledger"][0]["type"] == "promo_grant"
     assert body["ledger_truncated"] is False
+
+
+def test_get_firm_reconciles_a_real_expired_mint_record_end_to_end(
+        client, fake_db):
+    """EXIT CRITERION 3, LITERALLY: 'test with one expired mint record' --
+    unlike the mocked-reconcile test below, this drives the REAL
+    credit_ledger.reconcile_expired_for_firm -> refund_expired_link ->
+    append_entry chain against one genuinely expired, unopened links/{jti}
+    record on the demo channel, with no link_redemptions doc (so the link
+    was never opened). The balance the route returns must be the PRE-
+    refund balance plus the record's credit_cost, and the mint record's
+    status must have flipped to refunded.
+
+    Mutation: delete the reconcile_expired_for_firm call from get_firm --
+    this goes red because the balance would then read 100 (the credit_cost
+    is never refunded) instead of 105, and the mint record would still show
+    status=minted."""
+    _seed_firm(fake_db, "acme", balance_credits=100)
+    fake_db.docs[("links", "jti-expired-1")] = {
+        "jti": "jti-expired-1", "firm_id": "acme", "kit_id": "w7",
+        "employee_id": "emp-1", "credit_cost": 5, "cap_usd": 3.0,
+        "minted_at": 100, "open_deadline": 200, "status": "minted",
+        "revoked_by": None, "revoked_at": None,
+    }
+    # now (module default time.time()) is far past open_deadline=200, so
+    # the query's `open_deadline < now` always matches this fixture.
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["balance_credits"] == 105
+
+    link_doc = fake_db.docs[("links", "jti-expired-1")]
+    assert link_doc["status"] == "refunded"
+
+    rows = fake_db.ledger_rows("acme")
+    assert len(rows) == 1
+    assert rows[0]["type"] == "expiry_refund"
+    assert rows[0]["amount"] == 5
+    assert rows[0]["link_jti"] == "jti-expired-1"
+
+
+def test_get_firm_does_not_refund_an_expired_link_that_was_opened(
+        client, fake_db):
+    """The redemption doc's existence alone refuses the refund (module
+    contract of credit_ledger.refund_expired_link), even though the mint
+    record itself is expired and still shows status=minted."""
+    _seed_firm(fake_db, "acme", balance_credits=100)
+    fake_db.docs[("links", "jti-expired-2")] = {
+        "jti": "jti-expired-2", "firm_id": "acme", "kit_id": "w7",
+        "employee_id": "emp-1", "credit_cost": 5, "cap_usd": 3.0,
+        "minted_at": 100, "open_deadline": 200, "status": "minted",
+        "revoked_by": None, "revoked_at": None,
+    }
+    fake_db.docs[("link_redemptions", "jti-expired-2")] = {
+        "opened_at": 150, "form_session_id": "fs-1",
+    }
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["balance_credits"] == 100
+    assert fake_db.docs[("links", "jti-expired-2")]["status"] == "minted"
+    assert fake_db.ledger_rows("acme") == []
 
 
 def test_get_firm_runs_reconciliation_before_reading_the_balance(
