@@ -82,6 +82,7 @@ ASCII only.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Annotated, Any
 
 import structlog
@@ -114,6 +115,23 @@ _FIRM_STATUSES = (firms.FIRM_STATUS_ACTIVE, firms.FIRM_STATUS_SUSPENDED)
 _FIRM_KINDS = (firms.FIRM_KIND_MOCK, firms.FIRM_KIND_LIVE)
 
 _FIRMS_COLLECTION = "firms"
+
+# Same slug rule as scripts/bootstrap_firm.py's FIRM_ID_RE and
+# admin_backend/routes/user_routes.py's own copy of it, restated here for
+# the same reason both of those give: importing backend.* / running a
+# cross-module constant at collection time is more fragile than a literal
+# regex three places agree on, and test_credit_ledger.py's set-derived scar
+# #8 shape (walk every firm-naming site, assert the SET, not one instance)
+# is exactly the guard that would have caught this route skipping the rule
+# (cross-surface review finding 1 on bd polyglot-pdf-zopqq: this route
+# 201'd "Acme", "ACME Corp", "acme/../x", "-lead", a 200-char id and
+# "acme\n" -- all of which the other two sites already refuse, and a firm
+# created under one of the case-colliding or embedded-newline spellings is
+# then unreachable from POST /admin/users, which enforces this same regex).
+# Lowercase-only on purpose: Firestore doc IDs are case-sensitive, so
+# Acme/acme would be two different firms -- an operator error this rule
+# makes impossible.
+FIRM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 
 # Sentinel for "the stored firm doc never had this key" -- distinct from any
 # real stored value (None included), so _apply_firm_patch can drop a field
@@ -198,15 +216,29 @@ def _public_firm_view(firm_id: str, doc: dict) -> dict:
 
 
 def _validated_firm_id(firm_id: str) -> str:
-    """Reject an empty/blank path segment before it reaches Firestore as a
-    document id nothing else would ever create.
+    """Reject a firm_id that is not a valid slug, on EVERY route this
+    module has -- create (body.firm_id) and every path-segment {firm_id}
+    alike.
 
-    FastAPI's path converter already refuses an empty {firm_id} segment (it
-    would not match the route at all), so this exists for the whitespace-only
-    case a client could still send.
+    fullmatch, not match: a $-anchored .match still accepts a trailing
+    newline ("acme\\n"), the exact bug class _KIT_ID_RE was fixed for
+    (backend/routes/form_kit_routes.py, bd polyglot-pdf-sbfk) and that
+    scripts/bootstrap_firm.py and user_routes.py's own copies of this same
+    check both already guard against.
+
+    Applying this to the path-segment call sites too (not just create) is
+    deliberate, not incidental: a firm that somehow exists under a
+    non-conforming id (case, embedded slash/newline, over-length) must not
+    be reachable for status/allowed_kits/kind mutation or its own detail
+    page either -- reachability under an invalid id is exactly the
+    "unusable once created" failure mode this rule exists to prevent
+    (cross-surface review finding 1 on bd polyglot-pdf-zopqq).
     """
-    if not firm_id or not firm_id.strip():
-        raise HTTPException(status_code=422, detail="firm_id is required")
+    if not firm_id or not FIRM_ID_RE.fullmatch(firm_id):
+        raise HTTPException(
+            status_code=422,
+            detail="firm_id {!r} is not a valid firm slug".format(firm_id),
+        )
     return firm_id
 
 

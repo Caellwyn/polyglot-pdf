@@ -217,6 +217,54 @@ GAPS-FOUND (1)).
   (`polyglot-pdf-d0jan`); `polyglot-pdf-0w13i` from the prior round already
   covers the two nits deferred earlier and needed no update.
 
+### Third cross-surface round: firm_id slug validation was set-incomplete
+
+A third outer cross-surface review traced `POST /admin/firms` and the
+path-segment `{firm_id}` routes against the repo's two OTHER firm-slug-
+validating sites and found this module had joined that set without
+actually enforcing the shared rule (STATUS: GAPS-FOUND (1)).
+
+- **ADOPTED -- `_validated_firm_id` checked only non-blank, defeating the
+  case-collision rule scripts/bootstrap_firm.py and
+  admin_backend/routes/user_routes.py both enforce (blocker, finding 1).**
+  Confirmed by the reviewer's 7/7 probe: "Acme", "ACME Corp", "acme/../x",
+  "-lead", a 200-char id, and "acme\n" all 201'd through this route while
+  both other sites already refuse them via `FIRM_ID_RE =
+  ^[a-z0-9][a-z0-9_-]{0,127}$`. A firm created under a case-colliding or
+  embedded-newline spelling is then unreachable from `POST /admin/users`
+  (same regex, same 422), so no staff account could ever be attached to
+  it. Fix: added the same `FIRM_ID_RE` constant (restated, not imported --
+  matching the reasoning both other sites already give for restating
+  rather than cross-importing) to `firm_routes.py`, and changed
+  `_validated_firm_id` to `FIRM_ID_RE.fullmatch(...)` instead of the old
+  blank-only check. Applied uniformly to EVERY call site -- create's
+  `body.firm_id` and every path-segment route's `{firm_id}` alike -- since
+  a firm that somehow already exists under a non-conforming id must not be
+  reachable for status/allowed_kits/kind mutation or its detail page
+  either. Added a set-derived test
+  (`test_every_firm_id_validating_site_applies_the_same_slug_rule`) that
+  AST-walks all three `FIRM_ID_RE` definitions and asserts they are
+  identical, plus asserts `firm_routes.py` calls `.fullmatch` (not
+  `.match`) -- so a future fourth site, or a drift in any of the three
+  existing ones, fails CI instead of a future review round (CLAUDE.md
+  scar #8: pin the SET, not the instance). Also added two behavioral
+  parametrized tests covering the reviewer's own 7 cases against both the
+  create route and the four path-segment routes. Mutation-verified:
+  reverting `_validated_firm_id` to the blank-only check turned all three
+  new tests red across every non-empty case (6/6 create-body cases, 5/5
+  reachable path-segment cases, plus the set-derived parity test); restored
+  after confirming.
+
+  One case ("acme/../x") could not be driven through the path-segment
+  routes as a literal single-segment value: an un-encoded "/" splits the
+  URL into multiple path segments before FastAPI's router ever matches a
+  route, and percent-encoding it as "%2F" is rejected by Starlette's own
+  router with a bare 404 before ANY route -- including this one -- can
+  match, so this route cannot be the thing that lets that specific
+  spelling through via a path segment. The create-body test (where the id
+  arrives as a JSON string field, not a URL path) still covers it, which
+  is the actual reachable surface for that case.
+
 ## Lessons
 
 A route that joins an EXISTING shared transaction via a documented
@@ -271,5 +319,15 @@ one the guard's own module happens to live in.
   `credit_routes.py`)
 - `docs/components/auth.md` (second cross-surface round: corrected the
   "one deliberate other site" / "fails on any third" sentences)
+- `admin_backend/routes/firm_routes.py` (third cross-surface round:
+  `_validated_firm_id` now enforces `FIRM_ID_RE.fullmatch`, matching
+  scripts/bootstrap_firm.py and user_routes.py)
+- `admin_backend/tests/unit/test_firm_routes.py` (third cross-surface
+  round: two behavioral parametrized tests plus the set-derived
+  `test_every_firm_id_validating_site_applies_the_same_slug_rule`)
+
+Nit findings from the third round (`polyglot-pdf-y1t68`,
+`polyglot-pdf-4bchr`) were filed by the reviewer and left unfixed here per
+the deferred-nit convention.
 
 Review outcomes recorded in the closeout ping.

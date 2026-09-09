@@ -270,6 +270,73 @@ def test_create_firm_refuses_an_invalid_kind(client, fake_db, kind):
     assert fake_db.docs == {}
 
 
+@pytest.mark.parametrize("bad_firm_id", [
+    "Acme", "ACME Corp", "acme/../x", "-lead", "a" * 200, "acme\n", "",
+])
+def test_create_firm_refuses_a_firm_id_the_other_two_naming_sites_refuse(
+        client, fake_db, bad_firm_id):
+    """Cross-surface review finding 1 on bd polyglot-pdf-zopqq: this route
+    used to accept every one of these seven cases (confirmed by probe,
+    7/7) while scripts/bootstrap_firm.py and POST /admin/users both refuse
+    them via the same FIRM_ID_RE. A firm created under one of these
+    spellings is then unreachable from POST /admin/users (which 422s on
+    the identical id), so no staff account could ever be attached to it --
+    and "Acme" vs "acme" would silently create two Firestore documents for
+    what an operator believes is one firm.
+
+    Mutation: revert _validated_firm_id to the blank-only check -- every
+    case here goes from 422 to 201/200."""
+    resp = client.post("/admin/firms", json={
+        "firm_id": bad_firm_id, "name": "Bad", "contact_email": "a@b.com",
+        "kind": "live",
+    })
+    assert resp.status_code == 422, resp.text
+    assert fake_db.docs == {}
+
+
+@pytest.mark.parametrize("bad_firm_id", [
+    # "acme/../x" is deliberately excluded here: a literal "/" splits a URL
+    # path into multiple segments (so it never reaches this route as ONE
+    # {firm_id} value), and percent-encoding it as "%2F" is rejected by
+    # Starlette's router itself with a bare 404 before any route --
+    # including this one -- ever matches, so this route cannot be the
+    # thing that lets it through. The create-body test above (where the
+    # id arrives as a JSON string field, not a URL path) still covers it.
+    "Acme", "ACME Corp", "-lead", "a" * 200, "acme\n",
+])
+def test_path_segment_firm_id_routes_refuse_the_same_bad_slugs(
+        client, fake_db, bad_firm_id):
+    """The same rule must hold on every OTHER route naming a firm by path
+    segment, not just create -- a firm that somehow already exists under a
+    non-conforming id must not be reachable for status/allowed_kits/kind
+    mutation or its detail page either. GET is included: a 404 (unknown
+    firm) and a 422 (invalid slug) are different signals, and a
+    non-conforming id must never reach the "unknown firm" branch.
+
+    Mutation: revert _validated_firm_id to the blank-only check -- every
+    case here goes from 422 to 404/200."""
+    # Percent-encode so a trailing newline arrives intact as part of the
+    # single path segment rather than being stripped/rejected by the HTTP
+    # client layer first.
+    import urllib.parse
+    quoted = urllib.parse.quote(bad_firm_id, safe="")
+    cases = [
+        ("get", "/admin/firms/{}".format(quoted), None),
+        ("patch", "/admin/firms/{}/status".format(quoted),
+         {"status": "active"}),
+        ("patch", "/admin/firms/{}/allowed_kits".format(quoted),
+         {"allowed_kits": []}),
+        ("patch", "/admin/firms/{}/kind".format(quoted),
+         {"kind": "live", "reason": "test"}),
+    ]
+    for method, path, json_body in cases:
+        resp = getattr(client, method)(path, json=json_body) \
+            if json_body is not None else client.get(path)
+        assert resp.status_code == 422, "{} {} -> {}".format(
+            method.upper(), path, resp.text)
+    assert fake_db.docs == {}
+
+
 def test_create_firm_writes_the_doc_and_exactly_one_audit_row(client, fake_db):
     resp = client.post("/admin/firms", json={
         "firm_id": "newco", "name": "NewCo", "contact_email": "a@b.com",
@@ -874,4 +941,102 @@ def test_apply_firm_patch_merged_dict_matches_upsert_firm_payload_keys():
         "docstring) and must be updated together. upsert_firm (minus "
         "first-create-only fields): {} -- _apply_firm_patch: {}".format(
             sorted(payload_keys - first_create_only), sorted(merged_keys))
+    )
+
+
+# --------------------------------------------------------------------
+# Scar #8, set-derived: every site that validates a firm_id slug must
+# apply the SAME rule (cross-surface review finding 1 on bd
+# polyglot-pdf-zopqq -- this module's own copy of the check was missing
+# entirely until this fix; a future fourth site could just as easily skip
+# it again unless the SET, not one instance, is pinned).
+# --------------------------------------------------------------------
+
+_FIRM_ID_VALIDATING_MODULES = {
+    "admin_backend/routes/firm_routes.py",
+    "admin_backend/routes/user_routes.py",
+    "scripts/bootstrap_firm.py",
+}
+
+
+def _module_firm_id_re_source(repo_root, rel_path):
+    """The RHS source text of that module's `FIRM_ID_RE = re.compile(...)`
+    assignment, via an AST walk (not a source grep, for the same reason
+    the balance_credits scar #8 guard uses ast.walk: a grep pins one
+    spelling, not the assignment itself)."""
+    import ast
+
+    path = repo_root / rel_path
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "FIRM_ID_RE"
+                   for t in node.targets):
+            continue
+        return ast.dump(node.value)
+    return None
+
+
+def test_every_firm_id_validating_site_applies_the_same_slug_rule():
+    """Pin the SET, not the instance (scar #8). This bead's own review
+    found firm_routes.py had joined the set of modules that name a firm by
+    caller-supplied id WITHOUT actually enforcing the shared rule
+    (_validated_firm_id checked only non-blank) -- a set-derived test is
+    the guard the reviewer asked for so the next such site cannot skip it
+    silently the same way.
+
+    Three things are pinned together:
+      1. Every module in _FIRM_ID_VALIDATING_MODULES actually DEFINES a
+         FIRM_ID_RE (catches a rename/refactor that drops the constant
+         instead of just weakening its pattern).
+      2. All three definitions are IDENTICAL by AST comparison, not string
+         equality on source text (whitespace/formatting must not matter,
+         but the actual regex must).
+      3. firm_routes.py's _validated_firm_id calls FIRM_ID_RE.fullmatch --
+         not .match (bd polyglot-pdf-sbfk's trailing-newline bug class) --
+         mirroring the AST check test_bootstrap_firm_cli.py already runs
+         for the script's own call site.
+
+    Mutation: change firm_routes.py's FIRM_ID_RE pattern (or its
+    fullmatch call) without updating the other two sites -- red.
+    """
+    import ast
+    import pathlib
+
+    repo_root = pathlib.Path(firm_routes.__file__).resolve().parents[2]
+
+    sources = {}
+    for rel_path in sorted(_FIRM_ID_VALIDATING_MODULES):
+        dumped = _module_firm_id_re_source(repo_root, rel_path)
+        assert dumped is not None, (
+            "{} no longer defines FIRM_ID_RE -- either restore it or "
+            "remove it from _FIRM_ID_VALIDATING_MODULES here (and confirm "
+            "that module no longer validates a firm_id at all)".format(
+                rel_path)
+        )
+        sources[rel_path] = dumped
+
+    distinct = set(sources.values())
+    assert len(distinct) == 1, (
+        "FIRM_ID_RE has drifted apart across the firm-slug-validating "
+        "sites -- every site must enforce the identical rule: {}".format(
+            {k: v for k, v in sources.items()})
+    )
+
+    # firm_routes.py's own call site: fullmatch, not match.
+    firm_routes_path = repo_root / "admin_backend/routes/firm_routes.py"
+    tree = ast.parse(firm_routes_path.read_text(encoding="utf-8"))
+    calls_fullmatch = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "fullmatch"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "FIRM_ID_RE"
+        for node in ast.walk(tree)
+    )
+    assert calls_fullmatch, (
+        "admin_backend/routes/firm_routes.py must call "
+        "FIRM_ID_RE.fullmatch(...), not .match(...) -- a $-anchored "
+        ".match still accepts a trailing newline (bd polyglot-pdf-sbfk)"
     )
