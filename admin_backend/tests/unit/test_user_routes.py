@@ -759,3 +759,92 @@ def test_every_user_route_carries_the_composite_gate_specifically(
     names = {sub.call.__name__ for sub in route.dependant.dependencies
              if getattr(sub.call, "__name__", None)}
     assert "require_app_admin_or_owning_manager" in names
+
+
+# ==========================================================================
+# The staff-pool walk itself (list_firm_users)
+# ==========================================================================
+
+class _MultiPage:
+    """A pager that hands back a chain of pages, like the real SDK.
+
+    list_users() returns ONE page and the walk follows get_next_page(). A
+    single-page fake would leave the loop's continuation untested, which is
+    the half that decides whether a firm's second page of staff is visible
+    at all.
+    """
+
+    def __init__(self, pages):
+        self._pages = list(pages)
+
+    @property
+    def users(self):
+        return self._pages[0]
+
+    def get_next_page(self):
+        rest = self._pages[1:]
+        return _MultiPage(rest) if rest else None
+
+
+def _rec(uid, firm_id):
+    return _UserRecord(uid, "{}@x.example".format(uid), {"firm_id": firm_id})
+
+
+def test_the_walk_follows_every_page(fake_auth, monkeypatch):
+    """Mutation: return after the first page (drop the get_next_page loop)
+    -- red, and a firm whose staff spill onto page two silently lose half
+    their list."""
+    pages = [[_rec("u1", "acme"), _rec("u2", "other")],
+             [_rec("u3", "acme")],
+             [_rec("u4", "acme"), _rec("u5", "other")]]
+    monkeypatch.setattr(fake_auth, "list_users",
+                        lambda: _MultiPage(pages), raising=False)
+    result = user_admin.list_firm_users("acme")
+    assert [u["uid"] for u in result["users"]] == ["u1", "u3", "u4"]
+    assert result["truncated"] is False
+
+
+def test_the_walk_is_BOUNDED_and_says_when_it_stopped_early(
+        fake_auth, monkeypatch):
+    """max_results bounds accounts EXAMINED, not accounts returned, so a
+    pathological pool cannot hang a console request. It must report the
+    truncation: a silently short list is a firm that looks like it has
+    fewer staff than it has.
+
+    Mutation: return the rows without the truncated flag, or never set it
+    -- red."""
+    pages = [[_rec("u{}".format(i), "acme") for i in range(4)],
+             [_rec("u9", "acme")]]
+    monkeypatch.setattr(fake_auth, "list_users",
+                        lambda: _MultiPage(pages), raising=False)
+
+    bounded = user_admin.list_firm_users("acme", max_results=3)
+    assert bounded["truncated"] is True
+    assert len(bounded["users"]) == 3
+
+    whole = user_admin.list_firm_users("acme")
+    assert whole["truncated"] is False
+    assert len(whole["users"]) == 5
+
+
+def test_a_directory_failure_raises_rather_than_returning_an_empty_firm(
+        fake_auth, monkeypatch):
+    """FAIL LOUD here, unlike the firms store's fail-CLOSED reads. An empty
+    list would read to an operator as "this firm has no staff", which is a
+    different and actionable fact; the route turns this into a 502."""
+    def _boom():
+        raise RuntimeError("directory down")
+
+    monkeypatch.setattr(fake_auth, "list_users", _boom, raising=False)
+    with pytest.raises(user_admin.UserAdminError):
+        user_admin.list_firm_users("acme")
+
+
+def test_a_directory_failure_surfaces_as_502_not_an_empty_list(
+        fake_auth, fake_db, manager_client, monkeypatch):
+    def _boom():
+        raise RuntimeError("directory down")
+
+    monkeypatch.setattr(fake_auth, "list_users", _boom, raising=False)
+    resp = manager_client.get("/admin/users")
+    assert resp.status_code == 502
