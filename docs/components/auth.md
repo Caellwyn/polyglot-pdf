@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/credit_ledger.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/credit_ledger.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4 -- the token payload gains an OPTIONAL `cap_usd` per-link spend ceiling, signed in only for a real finite positive number; `link_tokens.py` gains `new_jti()` and a caller-supplied `jti=` on `mint_link_token` so Epic 2 bead A3 can reserve a credit before signing; new `link_budget.cost_ceiling_usd_for_claims(claims)` resolves the socket's spend ceiling with the same defensive parsing as `cost_ceiling_usd_for_kit`; the socket's client-link gate now calls `check_budget` with that resolved ceiling instead of the bare global.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-dmjl5: the firm-manager rule gets ONE home -- `backend/services/firms.py`'s `manager_firm_id(claims)` predicate, consumed by the new `require_firm_manager` dependency in `backend/services/auth.py` (403) and by the retire route's `_require_firm_owns_private_kit` (which keeps its 404); the admin service gains `require_app_admin_or_owning_manager`, its `resolve_target_firm` two-actor rule, and the four staff-account routes that write ONLY `firm_id` and `firm_role`.) (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4 -- the token payload gains an OPTIONAL `cap_usd` per-link spend ceiling, signed in only for a real finite positive number; `link_tokens.py` gains `new_jti()` and a caller-supplied `jti=` on `mint_link_token` so Epic 2 bead A3 can reserve a credit before signing; new `link_budget.cost_ceiling_usd_for_claims(claims)` resolves the socket's spend ceiling with the same defensive parsing as `cost_ceiling_usd_for_kit`; the socket's client-link gate now calls `check_budget` with that resolved ceiling instead of the bare global.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -233,8 +233,11 @@ the same idiom `editor_auth.NO_EDITOR_ACCESS_PREFIX` uses, so a client can
 route that specific 403 to a refused screen without string-matching prose.
 
 **Granting access:** `scripts/bootstrap_admin_user.py --email <addr>
---project <p>` is the ONLY way to stamp the claim -- there is no self-serve
-signup and no in-console user management yet. It mirrors
+--project <p>` is the ONLY way to stamp `app_admin` -- there is no
+self-serve signup, and the console's own staff-account routes (bd
+`polyglot-pdf-dmjl5`) deliberately CANNOT write this claim: they are
+allowlisted to `firm_id` and `firm_role` only, so a console that was
+compromised could not mint its own admins. It mirrors
 `scripts/bootstrap_editor_user.py`'s `--email`/`--revoke`/`--list` shape and
 borrows `scripts/bootstrap_firm.py`'s REQUIRED `--project` (the script
 asserts the resolved Firebase project matches it and aborts otherwise,
@@ -466,7 +469,7 @@ further checks all have to hold, and each refuses a different real attacker:
 
 | Check | Refuses |
 |-------|---------|
-| `firm_role == "manager"` | An EMPLOYEE of the owning firm. Per the four-level access model, employees send links and track status; they never take a form out of service. |
+| `manager_firm_id(claims)` returns a firm | An EMPLOYEE of the owning firm. Per the four-level access model, employees send links and track status; they never take a form out of service. The check is no longer written here: it calls the shared rule (bd `polyglot-pdf-dmjl5`, see "The manager rule" below). |
 | `owner_firm_id == <caller's firm_id>` | Another firm -- including one whose allowlist legitimately NAMES this kit. **Visibility is not authorization:** bd `polyglot-pdf-vccy` lets a firm read and fill kits it does not own. |
 | `visibility == "private"` | A shared/government form (the maintainer's 2026-08-07 line: a firm retires its own proprietary intake forms, never the shared ones). |
 
@@ -506,6 +509,78 @@ matrix, and the gated-read SET itself (every client-tier
 `load_pdf_bytes`/`load_schema` site must run the gate) are pinned by test so
 a blanket-auth sweep — a widening — or a FIFTH ungated read site is a
 deliberate decision, not an accident.
+
+### The manager rule -- ONE home, two refusal shapes (bd `polyglot-pdf-dmjl5`)
+
+"Is this caller a manager, and of which firm?" is decided in exactly one
+place: **`backend/services/firms.py`'s `manager_firm_id(claims)`**. It
+returns the `firm_id` only when `firm_role` is exactly `"manager"` AND
+`firm_id` is a non-empty string; an employee, a dev with no firm, an app
+admin, and a client link all get `None`.
+
+**It decides authorization, not authentication.** Handed an unverified dict
+it will happily report a manager -- deciding whether the claims are real is
+the verifier's job, and doing it twice in two places is how the two
+disagree. Every caller passes claims it has already verified.
+
+**Why `firms.py` and not `auth.py`.** Both surfaces need the rule, and
+`admin_backend/services/admin_auth.py` may not import
+`backend/services/auth.py` -- that module is deliberately liftable, pinned
+by
+`test_admin_auth.py::test_admin_auth_does_not_import_the_other_two_auth_modules`.
+`firms.py` is neither surface's verifier: it is the module that already owns
+what a firm IS, and the predicate is pure and side-effect free.
+`backend/services/auth.py` **re-exports** the name, so the voice app's own
+callers still read it from their own auth module.
+
+**Two consumers, two refusal shapes -- deliberately:**
+
+| Consumer | Form | Refusal |
+|----------|------|---------|
+| `auth.require_firm_manager` (FastAPI dependency, layered on `require_auth`) | the dependency | **403** -- there is no other firm's resource whose existence a refusal could leak, and a manager-only console page must be able to tell an employee "not your role" |
+| `form_kit_routes._require_firm_owns_private_kit` (the retire path) | the predicate | **404** -- a 403 would confirm to a firm that another firm's kit exists |
+| `admin_auth.require_app_admin_or_owning_manager` (the composite gate) | the predicate | **403** with the `NO_ADMIN_ACCESS:` prefix, for an account that is neither an admin nor any firm's manager |
+
+The rule is shared; the refusal shape is each caller's own.
+
+**Pinned as a SET, not an instance** (CLAUDE.md scar #8).
+`backend/tests/unit/test_require_firm_manager.py` walks every non-test
+module under `backend/`, `admin_backend/` and `scripts/` and fails on any
+comparison against the literal `"manager"` outside a short justified
+allowlist (`firms.py`, which defines it; `bootstrap_firm.py` and
+`user_admin.py`, which restate it as a wire contract and are pinned against
+the home). So the next route that hand-writes
+`claims.get("firm_role") == "manager"` fails CI instead of drifting for a
+release.
+
+### Staff-account management on the admin service (bd `polyglot-pdf-dmjl5`)
+
+`POST /admin/users`, `PATCH /admin/users/{uid}/disable`, `PATCH
+.../role` and `GET /admin/users` let an **app admin** or a **firm manager**
+manage a firm's staff accounts. The gate is
+`require_app_admin_or_owning_manager`; the firm comes from the **body/query
+for an admin** (required -- 422 if omitted) and from the **verified token
+for a manager** (a request that names a firm at all, even their own, is
+**403**). Route inventory and the full rationale are in
+[admin-service.md](admin-service.md).
+
+**The claims allowlist.** These routes write **only** `firm_id` and
+`firm_role` -- never `app_admin`, `schema_editor_role` or `vff_dev`. It is a
+property rather than a promise: `user_admin.merge_firm_claims()` builds its
+output from `WRITABLE_CLAIMS` plus the account's **existing** claims, so no
+request value can reach any other key, and every pre-existing claim survives
+(`set_custom_user_claims` **replaces** the whole claims object -- the same
+trap `scripts/bootstrap_firm.py` documents as its highest-risk line).
+`app_admin` is still granted only by `scripts/bootstrap_admin_user.py`,
+under an operator's own credentials.
+
+Creating an account returns a Firebase **password-reset link** for the
+console to display; the generated password is never returned or logged, and
+**no email is sent** in this epic (planner decision). Every mutation writes
+a `pending` audit row before the Firebase Auth call and marks it `committed`
+or `failed` after -- Auth mutations cannot join a Firestore transaction, so
+a row stuck at `pending` is the signal that the action may have taken
+effect.
 
 ## Firm identity (`firms/{firm_id}` + custom claims)
 
@@ -551,7 +626,12 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
   voice path's telemetry: the `/ws/fill` gate keeps its decoded claims and
   keys session + confirmation records on `firm_id` (bd `polyglot-pdf-xwlt`;
   the claim is read from the TOKEN, never the client-controlled handshake).
-  `firm_role` is still a future consumer. A stamped claim appears in decoded tokens only on the next
+  **`firm_role` is consumed** by the manager rule,
+  `backend/services/firms.py`'s `manager_firm_id(claims)` (bd
+  `polyglot-pdf-dmjl5`) -- the ONE home for "which firm does this caller
+  manage", read by the retire route and by the admin service's staff-account
+  routes (see "The manager rule" below). A stamped claim appears in decoded
+  tokens only on the next
   token refresh (up to ~1h; force via sign-out/in or `getIdToken(true)`).
 
 **The admin step** (creates/updates the firm record and stamps staff claims;
