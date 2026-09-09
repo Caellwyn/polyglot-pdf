@@ -7,22 +7,31 @@
 // /console/links rendered as a bare browser form. Nothing failed -- the page
 // worked, it just looked unfinished, which no behavioral test can see.
 //
-// DERIVED FROM THE FILES, never a typed list of class names -- that goes
-// stale the moment someone adds a class. The PAGE_FILES list below is still a
-// short hand-written list, but it is the set of *files*, not classes -- each
-// new console page adds one line here, not a fragile per-class enumeration.
+// DERIVED FROM ALL FILES, never a typed list. A hand-written list of page
+// names is the same bug one level up: it goes stale the moment someone adds
+// a page, which is exactly what happened here -- this test named only
+// MintLinkPage.tsx until LinkHistoryPage.tsx shipped a second consumer of
+// console.css with no guard covering it (x22hm cross-surface review finding
+// 2). Glob src/console/*.tsx instead of hand-listing so the NEXT page is
+// covered the moment it exists, with no edit to this file required
+// (bd polyglot-pdf-x22hm).
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(process.cwd(), 'src/console');
 const CSS = readFileSync(resolve(ROOT, 'styles/console.css'), 'utf-8');
 
-/** Every console page that renders className markup and must therefore be
- * checked against the shared stylesheet. */
-const PAGE_FILES = ['MintLinkPage.tsx', 'EmployeesPage.tsx'];
+/** Every page component in src/console/ -- every top-level *.tsx that is not
+ * itself a test file. Test files (*.test.tsx) never emit production
+ * className markup and would only add noise (or false failures) here. */
+function consolePageFiles(): string[] {
+  return readdirSync(ROOT)
+    .filter((name) => name.endsWith('.tsx') && !name.endsWith('.test.tsx'))
+    .sort();
+}
 
-/** Class names the PAGE actually emits, from its className attributes. */
+/** Class names a PAGE actually emits, from its className attributes. */
 function emittedClasses(source: string): string[] {
   const found = new Set<string>();
   for (const match of source.matchAll(/className="([^"]+)"/g)) {
@@ -44,11 +53,18 @@ function definedClasses(css: string): Set<string> {
   return found;
 }
 
-describe.each(PAGE_FILES)('console styles: %s', (fileName) => {
-  const page = readFileSync(resolve(ROOT, fileName), 'utf-8');
+describe('console styles', () => {
+  const pageFiles = consolePageFiles();
 
-  it('defines every class the page emits', () => {
-    const emitted = emittedClasses(page);
+  it('guards more than zero pages', () => {
+    // Guard the guard: if the directory listing or filter breaks, every
+    // per-page check below passes vacuously over an empty set.
+    expect(pageFiles.length).toBeGreaterThan(0);
+  });
+
+  it.each(pageFiles)('%s: defines every class it emits', (fileName) => {
+    const source = readFileSync(resolve(ROOT, fileName), 'utf-8');
+    const emitted = emittedClasses(source);
     // Guard the guard: if the extractor stops finding classes, the assertion
     // below passes vacuously over an empty list.
     expect(emitted.length).toBeGreaterThan(0);
@@ -58,10 +74,11 @@ describe.each(PAGE_FILES)('console styles: %s', (fileName) => {
     expect(undefinedClasses).toEqual([]);
   });
 
-  it('is imported by the page, so it cannot mount unstyled', () => {
-    // The page is the only consumer. Wiring the import at an entry point
-    // instead would let the page be mounted somewhere that forgot it -- the
-    // shape of the original bug.
-    expect(page).toMatch(/import\s+['"]\.\/styles\/console\.css['"]/);
+  it.each(pageFiles)('%s: imports the stylesheet, so it cannot mount unstyled', (fileName) => {
+    const source = readFileSync(resolve(ROOT, fileName), 'utf-8');
+    // Imported IN THE PAGE, not at an entry point: a page mounted elsewhere
+    // must not silently pull this CSS in without also importing it (the
+    // shape of the original bug).
+    expect(source).toMatch(/import\s+['"]\.\/styles\/console\.css['"]/);
   });
 });

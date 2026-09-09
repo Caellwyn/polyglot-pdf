@@ -295,3 +295,81 @@
   border-radius: 4px;
   color: #611a15;
 }
+
+/* LinkHistoryPage (bd polyglot-pdf-x22hm). Reuses .mint-page for the page
+   shell (same reasoning MintLinkPage's own header comment gives for lifting
+   values from schema-form.css: one palette per product, not one per page) --
+   these two rules are the ones the mint page has no analogue for: a manager's
+   filter row and the link table itself. */
+.link-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.link-history-filters label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.link-history-filters select,
+.link-history-filters input {
+  padding: 0.5rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.link-history-filters button {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: #333;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.link-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.link-history-table th,
+.link-history-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.link-history-table th {
+  color: #555;
+  font-weight: 600;
+}
+
+.link-history-table button {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #fff;
+  background-color: #d32f2f;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.link-history-table button:hover:not(:disabled) {
+  background-color: #b71c1c;
+}
+
+.link-history-table button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}

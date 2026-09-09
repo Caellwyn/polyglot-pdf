@@ -8,9 +8,10 @@
  * passed all 1589 frontend tests -- wrapping the client route in
  * ProtectedRoute, and renaming its path. ClientLinkEntry has 15 tests of its
  * own; the COMPONENT was never the risk. The door it is mounted behind was.
- * Every console page added since (the mint route, now the employees route)
- * pins the SAME class of failure: which door it sits behind, not what it
- * renders once mounted -- each page's own tests cover its content.
+ * Every console page added since (the mint route, the employees route, now
+ * the link-history route) pins the SAME class of failure: which door it sits
+ * behind, not what it renders once mounted -- each page's own tests cover
+ * its content.
  *
  * These assert BEHAVIOR (what a signed-out visitor sees at each path), not
  * shape.
@@ -21,7 +22,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import { AppRoutes, CLIENT_LINK_PATH, MINT_PATH, EMPLOYEES_PATH } from "./AppRoutes";
+import {
+  AppRoutes,
+  CLIENT_LINK_PATH,
+  MINT_PATH,
+  EMPLOYEES_PATH,
+  LINK_HISTORY_PATH,
+} from "./AppRoutes";
 
 // Firebase initializes at IMPORT time and throws without an API key, so the
 // config must be stubbed before anything in the auth chain loads (the same
@@ -70,6 +77,13 @@ vi.mock("../console/MintLinkPage", () => ({
 // whether the component MOUNTS behind the right door.
 vi.mock("../console/EmployeesPage", () => ({
   EmployeesPage: () => <div data-testid="employees-page">employees page</div>,
+}));
+
+// LinkHistoryPage's own behavior (manager vs. employee, filters, revoke) is
+// covered by console/LinkHistoryPage.test.tsx; the route table only cares
+// whether the component MOUNTS behind the right door.
+vi.mock("../console/LinkHistoryPage", () => ({
+  LinkHistoryPage: () => <div data-testid="link-history-page">link history</div>,
 }));
 
 vi.mock("./SchemaFormDemo", () => ({
@@ -207,5 +221,45 @@ describe("the client link route", () => {
 
   it("pins the employees path so a rename cannot silently orphan the console", () => {
     expect(EMPLOYEES_PATH).toBe("/console/employees");
+  });
+
+  // --- The link-history route (bd polyglot-pdf-x22hm, Epic 2 Track C bead C5)
+  // Same failure mode as the mint and employees routes above:
+  // /console/links/history must NOT be reachable signed out, and deleting the
+  // whole <Route> must not stay green because the catch-all silently
+  // swallows the path.
+
+  it("does NOT show link history to a signed-out visitor", () => {
+    // The real regression this guards against: dropping ProtectedRoute from
+    // this route. Link history shows a firm's spend and revoke controls --
+    // exactly the kind of page that must never be reachable anonymously.
+    render(
+      <MemoryRouter initialEntries={[LINK_HISTORY_PATH]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("link-history-page")).toBeNull();
+  });
+
+  it("MOUNTS link history for a signed-in user, not the staff app", async () => {
+    // Without ProtectedRoute (or with the <Route> deleted entirely) the
+    // catch-all "*" route swallows this path and renders the voice app --
+    // a working page that is simply the WRONG one. This is the only test
+    // that would catch that: from outside, a gated link-history page and a
+    // gated staff app look identical.
+    signedIn = true;
+    render(
+      <MemoryRouter initialEntries={[LINK_HISTORY_PATH]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("link-history-page")).toBeTruthy();
+    expect(screen.queryByTestId("staff-app")).toBeNull();
+  });
+
+  it("pins the link-history path", () => {
+    expect(LINK_HISTORY_PATH).toBe("/console/links/history");
   });
 });
