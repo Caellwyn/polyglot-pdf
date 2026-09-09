@@ -570,14 +570,15 @@ def test_a_committed_refund_writes_exactly_one_audit_row(
 
 def test_a_forced_audit_failure_leaves_the_refund_uncommitted(
         client, fake_db, scheduler_env):
-    """THE ATOMICITY PIN for MUTATION_KIND_DELEGATED_FIRESTORE (see
-    test_admin_audit_coverage.py's module docstring): the audit row this
-    route writes shares ONE transaction with A5's refund -- credit_ledger.
-    refund_expired_link's own transaction, joined via extra_writes -- so a
-    forced audit failure must leave the WHOLE refund uncommitted: no
-    balance change, no ledger entry, and the links record still `minted`
-    (not `refunded`). This is the delegated-form's equivalent of
-    test_config_routes.py's own forced-audit-failure pin.
+    """THE ATOMICITY PIN for the extra_writes-delegated shape of
+    MUTATION_KIND_FIRESTORE (see test_admin_audit_coverage.py's module
+    docstring): the audit row this route writes shares ONE transaction with
+    A5's refund -- credit_ledger.refund_expired_link's own transaction,
+    joined via extra_writes -- so a forced audit failure must leave the
+    WHOLE refund uncommitted: no balance change, no ledger entry, and the
+    links record still `minted` (not `refunded`). This is the
+    extra_writes-delegated form's equivalent of test_config_routes.py's own
+    forced-audit-failure pin.
 
     Mutation: move the extra_writes(tx, firm_snapshot) call in credit_
     ledger.refund_expired_link's _mark_refunded_and_extra OUTSIDE the

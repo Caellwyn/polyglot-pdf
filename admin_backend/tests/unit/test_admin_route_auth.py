@@ -130,6 +130,14 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/users"),
         (("PATCH",), "/admin/users/{uid}/disable"),
         (("PATCH",), "/admin/users/{uid}/role"),
+        (("POST",), "/admin/firms"),
+        (("GET",), "/admin/firms"),
+        (("GET",), "/admin/firms/{firm_id}"),
+        (("PATCH",), "/admin/firms/{firm_id}/status"),
+        (("PATCH",), "/admin/firms/{firm_id}/allowed_kits"),
+        (("PATCH",), "/admin/firms/{firm_id}/kind"),
+        (("POST",), "/admin/firms/{firm_id}/credits/grant"),
+        (("POST",), "/admin/firms/{firm_id}/credits/adjust"),
         (("POST",), "/admin/links/sweep-expired"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
