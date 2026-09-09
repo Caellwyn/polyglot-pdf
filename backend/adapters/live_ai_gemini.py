@@ -3025,13 +3025,11 @@ class LiveAIGemini(ILiveAI):
                                                                         "response": response_payload,
                                                                     })
                                                                 except Exception as e:
-                                                                    # The verbose traceback (which prints str(e) -- and an
-                                                                    # exception string can embed the field value the callback
-                                                                    # was handling) is DEV-ONLY: print_exc/str(e) reach
-                                                                    # stderr -> Cloud Run -> Cloud Logging in production, where
-                                                                    # PII must never go (bd polyglot-pdf-p84m). Gate it on the
-                                                                    # same flag the dev file log uses; production keeps only the
-                                                                    # PII-free structured line below.
+                                                                    # The verbose print block writes str(e) -- which can embed
+                                                                    # the field value the callback was handling -- straight to
+                                                                    # stderr, BYPASSING structlog and therefore bypassing the
+                                                                    # PII-safe processor. It stays DEV-ONLY (bd
+                                                                    # polyglot-pdf-p84m).
                                                                     if DEV_LOGGING_ENABLED:
                                                                         import traceback
                                                                         print(f"\n{'='*80}")
@@ -3039,17 +3037,19 @@ class LiveAIGemini(ILiveAI):
                                                                         print(f"{'='*80}")
                                                                         traceback.print_exc()
                                                                         print(f"{'='*80}\n")
-                                                                        # Full traceback (rendered by format_exc_info) is DEV-ONLY.
-                                                                        self._log.exception("tool_callback_error", tool=tool_name)
-                                                                    else:
-                                                                        # Production: NEVER self._log.exception here -- structlog's
-                                                                        # format_exc_info processor (backend/utils/logging.py) renders
-                                                                        # the traceback AND the exception message into the JSON
-                                                                        # "exception" field, and that message can embed the field value
-                                                                        # the callback was handling (bd polyglot-pdf-p84m; Codex PR #141
-                                                                        # P0). Log the tool name + exception TYPE only -- no str(e),
-                                                                        # no exc_info.
-                                                                        self._log.error("tool_callback_error", tool=tool_name, error_type=type(e).__name__)
+                                                                    # The STRUCTLOG line runs in production too (bd
+                                                                    # polyglot-pdf-e4dt8). What made .exception() unsafe here was
+                                                                    # structlog's stock format_exc_info processor rendering the
+                                                                    # exception MESSAGE; backend/utils/logging.py now runs
+                                                                    # pii_safe_exception_processor instead, which emits the
+                                                                    # exception TYPE plus FRAMES (file, line, function) and no
+                                                                    # message, no locals, no source text. That is the shape Cloud
+                                                                    # Error Reporting GROUPS on -- the previous PII-free
+                                                                    # error_type-only line was safe but invisible to Error
+                                                                    # Reporting, leaving an operator grepping Cloud Logging by
+                                                                    # hand. error_type is kept as its own field by the processor,
+                                                                    # so nothing that queried it needs to change.
+                                                                    self._log.exception("tool_callback_error", tool=tool_name)
 
                                                                     # Dev logging: Log tool errors
                                                                     dev_logger = get_dev_logger()
@@ -3197,9 +3197,10 @@ class LiveAIGemini(ILiveAI):
                                                         "response": response_payload,
                                                     })
                                                 except Exception as e:
-                                                    # Verbose traceback (prints str(e), which can embed the
-                                                    # field value) is DEV-ONLY -- in production it would reach
-                                                    # Cloud Logging (bd polyglot-pdf-p84m). Gate on the dev flag.
+                                                    # The verbose print block writes str(e) (which can embed the
+                                                    # field value) straight to stderr, BYPASSING structlog and so
+                                                    # bypassing the PII-safe processor. DEV-ONLY (bd
+                                                    # polyglot-pdf-p84m).
                                                     if DEV_LOGGING_ENABLED:
                                                         import traceback
                                                         print(f"\n{'='*80}")
@@ -3207,14 +3208,13 @@ class LiveAIGemini(ILiveAI):
                                                         print(f"{'='*80}")
                                                         traceback.print_exc()
                                                         print(f"{'='*80}\n")
-                                                        # Full traceback (rendered by format_exc_info) is DEV-ONLY.
-                                                        self._log.exception("tool_callback_error", tool=tool_name)
-                                                    else:
-                                                        # Production: NEVER self._log.exception here -- format_exc_info renders
-                                                        # the exception MESSAGE (which can embed a field value) into the JSON
-                                                        # "exception" field -> Cloud Logging (bd polyglot-pdf-p84m; Codex PR
-                                                        # #141 P0). Tool name + exception TYPE only.
-                                                        self._log.error("tool_callback_error", tool=tool_name, error_type=type(e).__name__)
+                                                    # The STRUCTLOG line runs in production too (bd
+                                                    # polyglot-pdf-e4dt8): backend/utils/logging.py's
+                                                    # pii_safe_exception_processor renders exception TYPE + FRAMES
+                                                    # and never the message, which is both PII-safe and the shape
+                                                    # Cloud Error Reporting groups on. Same reasoning as the
+                                                    # model_turn.parts path above -- see the fuller comment there.
+                                                    self._log.exception("tool_callback_error", tool=tool_name)
                                                     # Structured error body, not the silent {} (bd
                                                     # polyglot-pdf-wpw.1) -- same as the model_turn.parts
                                                     # path above, so the model re-asks on a callback raise.
@@ -3560,6 +3560,49 @@ class LiveAIGemini(ILiveAI):
                                           close_code=close_code,
                                           event_count=event_count,
                                           intentional_shutdown=self._intentional_shutdown)
+                            # COUNTED close event for the 1011/1006 family (bd
+                            # polyglot-pdf-e4dt8 / E3.8). The line above is the
+                            # debugging record; this is the one Cloud
+                            # Monitoring's ws_close_1011_count log-based metric
+                            # matches (scripts/setup-monitoring.sh), so the
+                            # 1011 alert policy fires on a real rate rather
+                            # than on a hand-grep.
+                            #
+                            # WHY HERE AND NOT IN websocket_routes.py. 1011 and
+                            # 1006 are GEMINI-side closes: the route's own
+                            # closes (1007/1008/1013, wired through
+                            # _close_ws there) are refusals it decides, while
+                            # this is a drop it only ever learns about second
+                            # hand. This except block is the single place the
+                            # code is actually read off the wire, so counting
+                            # anywhere else would be counting a copy.
+                            #
+                            # ONLY the spontaneous-drop family is counted. A
+                            # normal end (1000) and a GoAway expiry come
+                            # through this same block, and counting those would
+                            # make the metric fire on every healthy session.
+                            if close_code in _SPONTANEOUS_DROP_CLOSE_CODES:
+                                try:
+                                    get_structured_logger().log_ws_close(
+                                        close_code=close_code,
+                                        reason_token="gemini_session_dropped",
+                                        form_session_id=self._form_session_id,
+                                        metadata={
+                                            "event_count": event_count,
+                                            "intentional_shutdown":
+                                                self._intentional_shutdown,
+                                            # The exception TYPE, never
+                                            # str(exc): the Gemini close reason
+                                            # is not user data, but the type is
+                                            # what a metric groups on.
+                                            "error_type": type(exc).__name__,
+                                        },
+                                    )
+                                except Exception:
+                                    # Best-effort telemetry on a teardown path.
+                                    self._log.warning(
+                                        "ws_close_event_emit_failed",
+                                        close_code=close_code)
                             # Record the drop + its close code (bd polyglot-pdf-ppfy)
                             # so _was_spontaneous_drop() can tell a real error-drop
                             # (1011/1006) apart from a clean no-events end or a benign
