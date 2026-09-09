@@ -14,7 +14,10 @@ grant/adjust (admin_backend/routes/credit_routes.py), both behind
 require_app_admin and both auditing in-transaction, reusing
 backend/services/firms.py::upsert_firm and
 backend/services/credit_ledger.py::append_entry rather than adding a second
-writer of either. Every route added to this service from
+writer of either. bd polyglot-pdf-8vgfh adds the fourth and last gate,
+require_google_oidc, with its first consuming route (POST
+/admin/links/sweep-expired, the hourly Cloud Scheduler expired-link
+refund sweep). Every route added to this service from
 here on must carry one of the four gates named in the plan
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
 manager; require_google_oidc), which admin_backend/tests/unit/
@@ -57,7 +60,8 @@ from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
 from admin_backend.routes import (
-    audit_routes, config_routes, credit_routes, firm_routes, user_routes,
+    audit_routes, config_routes, credit_routes, firm_routes, sweep_routes,
+    user_routes,
 )
 from admin_backend.routes import whoami as whoami_routes
 
@@ -152,3 +156,4 @@ app.include_router(audit_routes.router)
 app.include_router(user_routes.router)
 app.include_router(firm_routes.router)
 app.include_router(credit_routes.router)
+app.include_router(sweep_routes.router)

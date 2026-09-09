@@ -26,6 +26,20 @@ single-field index merging does NOT cover. The guard below is the same
 AST-read-the-real-query-and-check-the-shipped-index pattern, extended to a
 second collection family.
 
+ALSO COVERS sweep_routes._sweep_channel's links[_<channel>] QUERY (bd
+polyglot-pdf-8vgfh cross-surface review finding 1). This is a SECOND,
+DIFFERENT query against the SAME two collections: `status == minted AND
+open_deadline < now`, with NO firm_id filter (the sweep is deliberately
+cross-firm -- see sweep_routes.py's own module docstring). Firestore serves
+a composite query only from an index whose fields are a PREFIX match of the
+query's constrained fields; the (firm_id, status, open_deadline) index above
+cannot serve a query that constrains no firm_id at all, so this needs its
+OWN (status, open_deadline) index per collection. Because two DIFFERENT
+queries now share a collectionGroup, the guard below identifies each
+shipped index by its FIELD-NAME SET, not merely by collectionGroup --
+`len(matches) == 1` per collectionGroup would break the moment a second,
+legitimately-different query joined the same collection.
+
 ASCII only.
 """
 import ast
@@ -39,6 +53,7 @@ INDEXES_FILE = REPO_ROOT / "firestore.indexes.json"
 FIREBASE_JSON = REPO_ROOT / "firebase.json"
 AUDIT_ROUTES = REPO_ROOT / "admin_backend" / "routes" / "audit_routes.py"
 CREDIT_LEDGER = REPO_ROOT / "backend" / "services" / "credit_ledger.py"
+SWEEP_ROUTES = REPO_ROOT / "admin_backend" / "routes" / "sweep_routes.py"
 
 # The collection GET /admin/audit queries. Kept as a literal (not imported)
 # so a rename of audit_log.COLLECTION that forgets the index artifact is
@@ -96,24 +111,25 @@ def _shipped_indexes():
     return data.get("indexes", [])
 
 
-def _reconcile_query_filters():
-    """The (field, operator) pairs reconcile_expired_for_firm's Firestore
-    query actually chains, IN ORDER, read from credit_ledger.py's AST rather
-    than typed here (same rationale as _route_filter_fields() above: the
-    guard must track the query, not a copy of it).
+def _query_filters_in_function(path, function_name):
+    """The (field, operator) pairs a named function's Firestore query
+    actually chains, IN ORDER, read from `path`'s AST rather than typed
+    here (same rationale as _route_filter_fields() above: the guard must
+    track the query, not a copy of it).
 
-    The function builds its query as a chain of
-    `.where(filter=FieldFilter(<field>, <op>, <value>))` calls inside the
+    Shared by reconcile_expired_for_firm (credit_ledger.py) and
+    _sweep_channel (sweep_routes.py) -- both build their query as a chain
+    of `.where(filter=FieldFilter(<field>, <op>, <value>))` calls inside a
     `try:` branch (the `google.cloud.firestore_v1.base_query.FieldFilter`
     import succeeds on every SDK version this repo runs; the `except
-    ImportError:` branch is a positional-args fallback for an older SDK and
-    repeats the SAME field/operator pairs, so reading either branch gives
-    the same answer -- this reads the try branch).
+    ImportError:` branch in each is a positional-args fallback for an older
+    SDK and repeats the SAME field/operator pairs, so reading either branch
+    gives the same answer -- this reads the try branch).
     """
-    tree = ast.parse(CREDIT_LEDGER.read_text(encoding="utf-8"))
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if not (isinstance(node, ast.FunctionDef)
-                and node.name == "reconcile_expired_for_firm"):
+                and node.name == function_name):
             continue
         pairs = []
         for call in ast.walk(node):
@@ -140,10 +156,38 @@ def _reconcile_query_filters():
         if pairs:
             return tuple(pairs)
     raise AssertionError(
-        "could not find a FieldFilter .where() chain in "
-        "reconcile_expired_for_firm() -- if the query stopped building its "
-        "filters via FieldFilter, this extractor needs updating, NOT "
-        "deleting: the links index guard depends on it")
+        "could not find a FieldFilter .where() chain in {}() ({}) -- if the "
+        "query stopped building its filters via FieldFilter, this extractor "
+        "needs updating, NOT deleting: the links index guard depends on "
+        "it".format(function_name, path.name))
+
+
+def _reconcile_query_filters():
+    return _query_filters_in_function(CREDIT_LEDGER,
+                                       "reconcile_expired_for_firm")
+
+
+def _sweep_query_filters():
+    return _query_filters_in_function(SWEEP_ROUTES, "_sweep_channel")
+
+
+def _index_field_names(index):
+    return tuple(f["fieldPath"] for f in index.get("fields", []))
+
+
+def _matching_indexes(collection, field_names):
+    """Shipped indexes for `collection` whose field-NAME SET (order-
+    independent) matches `field_names` exactly. Used to pick out ONE of
+    several legitimately-different queries sharing a collectionGroup, so a
+    second query joining the collection doesn't make `len(matches) == 1`
+    collectionGroup-only assertions ambiguous.
+    """
+    wanted = set(field_names)
+    return [
+        index for index in _shipped_indexes()
+        if index.get("collectionGroup") == collection
+        and set(_index_field_names(index)) == wanted
+    ]
 
 
 def test_indexes_file_is_wired_into_firebase_json():
@@ -261,71 +305,130 @@ def test_reconcile_query_needs_a_range_filter_the_audit_queries_do_not():
         "re-evaluated, not silently kept")
 
 
-@pytest.mark.parametrize("collection", LINKS_COLLECTIONS)
-def test_reconcile_query_has_a_composite_index(collection):
-    """THE SET GUARD for the links query, mirroring
-    test_every_audit_filter_has_a_composite_index above.
+def _assert_composite_index_for_query(collection, filters, *, query_label,
+                                       reason_extra=""):
+    """Shared shape assertion: exactly one shipped index, on `collection`,
+    whose field-NAME SET matches `filters` exactly, with the equality
+    fields (in any order) ahead of the single range field and every field
+    ASCENDING (neither query being guarded here has an order_by).
 
-    Firestore composite indexes require the equality fields (in any order)
-    ahead of the range field, in the field order the index itself declares
-    -- so this asserts the SHAPE (equality fields first, `open_deadline`
-    last, ASCENDING throughout since the query has no order_by), not merely
-    that some index exists on the collection.
+    Factored out of the old per-query test bodies so reconcile_expired_
+    for_firm's and _sweep_channel's queries -- two DIFFERENT filter shapes
+    that now share the same two collections -- get byte-identical shape
+    checking instead of one being a copy that could drift from the other.
     """
-    filters = _reconcile_query_filters()
     equality_fields = [f for f, op in filters if op != "<"]
     range_fields = [f for f, op in filters if op == "<"]
     assert len(range_fields) == 1, (
-        "expected exactly one range filter in reconcile_expired_for_firm's "
-        "query, found {}".format(range_fields))
+        "expected exactly one range filter in {}'s query, found {}".format(
+            query_label, range_fields))
 
-    matches = [
-        index for index in _shipped_indexes()
-        if index.get("collectionGroup") == collection
-    ]
+    field_names = equality_fields + range_fields
+    matches = _matching_indexes(collection, field_names)
     assert len(matches) == 1, (
         "expected exactly one composite index for the {} collection "
-        "(reconcile_expired_for_firm's firm_id/status/open_deadline query), "
-        "found {}. Without it the query fails in production with "
-        "FAILED_PRECONDITION while every local test stays green (the test "
-        "fake filters in Python) -- see "
-        "backend/utils/confirmation_logger.py:995-1004 for why the "
-        "ALL-EQUALITY sibling query needs no index and this one, which adds "
-        "a range filter, does.".format(collection, len(matches)))
+        "matching {}'s field set {}, found {}. Without it the query fails "
+        "in production with FAILED_PRECONDITION while every local test "
+        "stays green (the test fake filters in Python).{}".format(
+            collection, query_label, sorted(field_names), len(matches),
+            reason_extra))
 
     fields = matches[0].get("fields", [])
     assert matches[0].get("queryScope") == "COLLECTION"
     assert len(fields) == len(filters), (
-        "index for {} has {} fields but the query filters on {}".format(
-            collection, len(fields), len(filters)))
+        "index for {} ({}) has {} fields but the query filters on {}".format(
+            collection, query_label, len(fields), len(filters)))
     shipped_field_names = [f["fieldPath"] for f in fields]
     assert set(shipped_field_names[:-1]) == set(equality_fields), (
-        "index for {} does not lead with the query's equality fields {}: "
-        "got {}".format(collection, equality_fields, shipped_field_names))
+        "index for {} ({}) does not lead with the query's equality fields "
+        "{}: got {}".format(collection, query_label, equality_fields,
+                             shipped_field_names))
     assert shipped_field_names[-1] == range_fields[0], (
-        "index for {} must end with the range field {} (Firestore composite "
-        "indexes require the range field last): got {}".format(
-            collection, range_fields[0], shipped_field_names))
+        "index for {} ({}) must end with the range field {} (Firestore "
+        "composite indexes require the range field last): got {}".format(
+            collection, query_label, range_fields[0], shipped_field_names))
     assert all(f["order"] == "ASCENDING" for f in fields), (
-        "index for {} has a non-ASCENDING field; "
-        "reconcile_expired_for_firm's query has no order_by, so every field "
-        "must be ASCENDING: {}".format(collection, fields))
+        "index for {} ({}) has a non-ASCENDING field; the query has no "
+        "order_by, so every field must be ASCENDING: {}".format(
+            collection, query_label, fields))
+
+
+@pytest.mark.parametrize("collection", LINKS_COLLECTIONS)
+def test_reconcile_query_has_a_composite_index(collection):
+    """THE SET GUARD for reconcile_expired_for_firm's links query, mirroring
+    test_every_audit_filter_has_a_composite_index above. See
+    _assert_composite_index_for_query's docstring for the shape rationale;
+    see backend/utils/confirmation_logger.py:995-1004 for why the
+    ALL-EQUALITY sibling query needs no index and this one, which adds a
+    range filter, does.
+    """
+    _assert_composite_index_for_query(
+        collection, _reconcile_query_filters(),
+        query_label="reconcile_expired_for_firm")
+
+
+@pytest.mark.parametrize("collection", LINKS_COLLECTIONS)
+def test_sweep_query_has_a_composite_index(collection):
+    """THE SET GUARD for _sweep_channel's links query (bd
+    polyglot-pdf-8vgfh cross-surface review finding 1).
+
+    This is a DIFFERENT query than reconcile_expired_for_firm's on the SAME
+    collection -- `status == minted AND open_deadline < now`, with no
+    firm_id filter (the sweep is deliberately cross-firm). The
+    (firm_id, status, open_deadline) index that serves reconcile's query
+    cannot serve this one: Firestore only serves a query from an index
+    whose fields are a PREFIX match of the query's constrained fields, and
+    this query constrains no firm_id at all. It needs its OWN
+    (status, open_deadline) index per collection.
+    """
+    _assert_composite_index_for_query(
+        collection, _sweep_query_filters(),
+        query_label="_sweep_channel",
+        reason_extra=" See sweep_routes.py's module docstring for why this "
+                      "query has no firm_id filter and therefore cannot "
+                      "reuse reconcile_expired_for_firm's index.")
+
+
+def test_reconcile_and_sweep_queries_are_a_different_shape():
+    """Sanity-check on the two extractors together: if the two queries ever
+    end up with the SAME field set, the two-index-per-collection premise
+    above is gone (one index would serve both) and this whole block should
+    be re-derived, not silently kept with a redundant second index."""
+    reconcile_fields = {f for f, _op in _reconcile_query_filters()}
+    sweep_fields = {f for f, _op in _sweep_query_filters()}
+    assert reconcile_fields != sweep_fields, (
+        "reconcile_expired_for_firm's query fields {} now match "
+        "_sweep_channel's {} -- one composite index would serve both; "
+        "drop the redundant one rather than leaving two".format(
+            sorted(reconcile_fields), sorted(sweep_fields)))
 
 
 def test_no_unused_links_indexes():
     """The set is CLOSED in both directions, same as the audit-log guard.
 
     An index on a links collectionGroup nothing queries (a stale channel
-    name, a leftover from a renamed collection) is a silent write-
-    amplification cost on every mint/refund write to that collection.
+    name, a leftover from a renamed collection, a field-shape no query
+    matches) is a silent write-amplification cost on every mint/refund
+    write to that collection. Checks the FULL (collection, field-set) pair,
+    not just the collectionGroup name, since two live queries now share
+    each links collectionGroup with different field shapes.
     """
-    shipped_links_groups = {
-        index["collectionGroup"]
-        for index in _shipped_indexes()
-        if index.get("collectionGroup") in LINKS_COLLECTIONS
-    }
-    assert shipped_links_groups == set(LINKS_COLLECTIONS), (
-        "shipped links index collectionGroups {} do not match the expected "
-        "channel set {} -- add or remove an index, do not let them "
-        "diverge".format(
-            sorted(shipped_links_groups), sorted(LINKS_COLLECTIONS)))
+    reconcile_fields = tuple(f for f, _op in _reconcile_query_filters())
+    sweep_fields = tuple(f for f, _op in _sweep_query_filters())
+    expected = set()
+    for collection in LINKS_COLLECTIONS:
+        expected.add((collection, frozenset(reconcile_fields)))
+        expected.add((collection, frozenset(sweep_fields)))
+
+    shipped = set()
+    for index in _shipped_indexes():
+        collection = index.get("collectionGroup")
+        if collection not in LINKS_COLLECTIONS:
+            continue
+        shipped.add((collection, frozenset(_index_field_names(index))))
+
+    assert shipped == expected, (
+        "shipped links indexes {} do not match the expected "
+        "(collection, field-set) pairs {} -- add or remove an index, do "
+        "not let them diverge".format(
+            sorted(shipped, key=str), sorted(expected, key=str)))

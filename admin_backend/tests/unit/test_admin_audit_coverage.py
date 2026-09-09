@@ -10,8 +10,25 @@ one:
 
   * MUTATION_KIND_FIRESTORE -> audit_log.record_in_transaction must be
     called, and it must be called INSIDE a @firestore.transactional body
-    (a call outside one is not in the mutation's transaction, whatever it
-    is named).
+    IN THIS SAME MODULE (a call outside one is not in the mutation's
+    transaction, whatever it is named) -- OR, for a route whose Firestore
+    transaction is opened by ANOTHER module's helper (bd polyglot-pdf-zopqq's
+    credit_routes.py joining backend/services/credit_ledger.py's
+    append_entry; bd polyglot-pdf-8vgfh's sweep route joining that same
+    module's refund_expired_link), inside a closure passed BY NAME as an
+    extra_writes= keyword argument at a call site in the SAME module to one
+    of _EXTRA_WRITES_TRANSACTION_OPENERS. extra_writes is this repo's one
+    documented seam for joining a second write to a transaction someone else
+    opened (both helpers take it, with the identical contract: called (tx,
+    firm_snapshot) from INSIDE the body, after the reads); a closure that is
+    never handed to extra_writes= is just a function sitting unused,
+    whatever it contains. The GENUINE in-transaction guarantee (does the
+    callback actually run before commit, atomically with the mutation) is
+    proven by a real test exercising the real call path, not by AST alone --
+    see test_sweep_routes.py::test_a_forced_audit_failure_leaves_the_refund_
+    uncommitted and test_credit_routes.py's sibling, the extra_writes shape's
+    equivalent of the plain-transactional kind's own "forced audit failure
+    leaves the mutation unapplied" pin.
   * MUTATION_KIND_EXTERNAL  -> audit_log.record_pending must be called, AND
     at least one of mark_committed / mark_failed must close the row out.
     A pending row nothing ever closes is worse than no row: every action
@@ -78,6 +95,12 @@ MUTATION_KINDS = {
     ("PATCH", "/admin/firms/{firm_id}/kind"): MUTATION_KIND_FIRESTORE,
     ("POST", "/admin/firms/{firm_id}/credits/grant"): MUTATION_KIND_FIRESTORE,
     ("POST", "/admin/firms/{firm_id}/credits/adjust"): MUTATION_KIND_FIRESTORE,
+    # The sweep route joins bead A5's refund_expired_link transaction in
+    # backend/services/credit_ledger.py via that function's extra_writes
+    # seam (bd polyglot-pdf-8vgfh) -- the identical delegated-write shape
+    # credit_routes.py uses with append_entry, so it is FIRESTORE too; see
+    # _EXTRA_WRITES_TRANSACTION_OPENERS below.
+    ("POST", "/admin/links/sweep-expired"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
@@ -265,13 +288,19 @@ def test_a_mutating_route_uses_the_audit_form_its_mutation_requires(
         method, path):
     """THE COVERAGE PIN, one parametrization per mutating route.
 
-    Mutation (Firestore routes): delete the record_in_transaction call from
-    config_routes._apply_config_write -- red. Move that call OUT of the
-    @firestore.transactional body into the enclosing function -- ALSO red,
-    which is the half a presence check would miss.
+    Mutation (Firestore routes, own transaction): delete the
+    record_in_transaction call from config_routes._apply_config_write --
+    red. Move that call OUT of the @firestore.transactional body into the
+    enclosing function -- ALSO red, which is the half a presence check
+    would miss.
 
-    Mutation (external routes, once one exists): delete record_pending --
-    red; delete both mark_committed and mark_failed -- red.
+    Mutation (Firestore routes, extra_writes-delegated, e.g. credit_
+    routes.py or the sweep route): rename the audit closure without
+    updating the extra_writes= call site -- red (the closure is no longer
+    found by name). Stop passing it as extra_writes= at all -- red.
+
+    Mutation (external routes): delete record_pending -- red; delete both
+    mark_committed and mark_failed -- red.
     """
     endpoint = next(e for m, p, e in _mutating_routes()
                     if (m, p) == (method, path))
@@ -529,4 +558,21 @@ def test_the_shipped_credit_routes_pass_the_synthetic_extra_writes_check():
         inspect.getsourcefile(credit_routes)).read_text(encoding="utf-8")
     assert _firestore_verdict(source), (
         "credit_routes.py does not satisfy the same extra_writes-delegated "
+        "in-transaction check the synthetic cases are graded against")
+
+
+def test_the_shipped_sweep_routes_pass_the_synthetic_extra_writes_check():
+    """The sweep_routes.py counterpart of the tie-back above (bd
+    polyglot-pdf-8vgfh): sweep_routes.py never opens its own transaction
+    either -- it joins credit_ledger.refund_expired_link's via extra_writes,
+    the OTHER name in _EXTRA_WRITES_TRANSACTION_OPENERS -- so this ties
+    THAT shape, specifically, to the real file rather than only to the
+    synthetic _FIRESTORE_ROUTE_EXTRA_WRITES_OK source above (which exercises
+    append_entry)."""
+    from admin_backend.routes import sweep_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(sweep_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "sweep_routes.py does not satisfy the same extra_writes-delegated "
         "in-transaction check the synthetic cases are graded against")

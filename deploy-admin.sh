@@ -67,6 +67,42 @@ echo -e "${GREEN}[INFO]${NC}    project: $PROJECT   service: $ADMIN_SERVICE_NAME
 
 export POLYGLOT_PROJECT_NAME="$PROJECT"
 
+# ADMIN_SERVICE_URL / SWEEP_SCHEDULER_SA_EMAIL (bd polyglot-pdf-8vgfh cross-
+# surface review finding 3, Epic 2 bead B5's sweep-route OIDC gate). These
+# used to be set ONLY by an operator's one-time, hand-run `gcloud run
+# services update ... --update-env-vars` (scripts/setup-admin-service.sh's
+# own printed NOTE) -- but --set-env-vars below REPLACES the service's
+# ENTIRE env block (this script's own comment on --set-secrets makes
+# exactly this point about that flag; --set-env-vars behaves the same way),
+# so the very next run of THIS script silently wiped that hand-set
+# binding, fail-closing the sweep route (503) with no test or alert able to
+# notice. Both values are now folded into BACKEND_EXTRA_ENV below so every
+# deploy re-asserts them instead of erasing them.
+#
+# SWEEP_SCHEDULER_SA_EMAIL is fully knowable ahead of time: scripts/setup-
+# admin-service.sh's SCHEDULER_SA_NAME is a fixed literal
+# ("admin-sweep-scheduler-sa"), so its email is constructible with no
+# gcloud lookup, mirroring SA_EMAIL immediately above.
+SWEEP_SCHEDULER_SA_EMAIL="admin-sweep-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
+
+# ADMIN_SERVICE_URL is NOT knowable before the service's FIRST deploy (it is
+# assigned by Google at deploy time -- the same reason ADMIN_URL below is
+# read only AFTER deploy-all.sh runs). On every deploy AFTER the first,
+# though, the URL is already stable, so this lookup succeeds if run BEFORE
+# deploying (unlike ADMIN_URL below, which must be read after) and can be
+# folded into THIS SAME deploy's env vars -- durable across every later
+# deploy, instead of a separate hand-run step this script keeps erasing.
+# `2>/dev/null || true` makes a not-yet-existing service (the true first
+# deploy) resolve to an empty string rather than aborting the script
+# (`set -e`) -- on that one run ADMIN_SERVICE_URL stays unset exactly as it
+# does today, and the sweep route correctly stays fail-closed (503) until an
+# operator re-runs this script once more after the service exists.
+ADMIN_SERVICE_URL=$(gcloud run services describe "$ADMIN_SERVICE_NAME" \
+    --platform managed --region us-central1 --project "$PROJECT" \
+    --format 'value(status.url)' 2>/dev/null || true)
+SWEEP_ENV="SWEEP_SCHEDULER_SA_EMAIL=$SWEEP_SCHEDULER_SA_EMAIL"
+[ -n "$ADMIN_SERVICE_URL" ] && SWEEP_ENV="$SWEEP_ENV,ADMIN_SERVICE_URL=$ADMIN_SERVICE_URL"
+
 # CORS_EXTRA_ORIGINS (admin_backend/main.py): the admin CONSOLE is a separate
 # Vite app on its own Hosting site(s) (bead 1.7 -- polyglot-admin-demo and the
 # polyglot-admin-candidate staging site), always cross-origin from this
@@ -84,7 +120,7 @@ export POLYGLOT_PROJECT_NAME="$PROJECT"
 ADMIN_CORS_ORIGINS="https://polyglot-admin-demo.web.app;https://polyglot-admin-demo.firebaseapp.com;https://polyglot-admin-candidate.web.app;https://polyglot-admin-candidate.firebaseapp.com;https://polyglot-app-staging.web.app;https://polyglot-app-staging.firebaseapp.com;https://$PROJECT.web.app;https://$PROJECT.firebaseapp.com"
 
 BACKEND_NO_TRAFFIC_TAG="candidate" \
-    BACKEND_EXTRA_ENV="CORS_EXTRA_ORIGINS=$ADMIN_CORS_ORIGINS" \
+    BACKEND_EXTRA_ENV="CORS_EXTRA_ORIGINS=$ADMIN_CORS_ORIGINS,$SWEEP_ENV" \
     BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
     BACKEND_SERVICE_NAME="$ADMIN_SERVICE_NAME" \
     APP_MODULE="admin_backend.main:app" \

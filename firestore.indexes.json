@@ -53,6 +53,22 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "open_deadline", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "links",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "open_deadline", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "links_staging",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "open_deadline", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
