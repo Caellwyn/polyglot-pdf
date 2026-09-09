@@ -18,6 +18,7 @@ from pydantic import BaseModel
 import structlog
 
 from backend.services.auth import (
+    manager_firm_id,
     require_auth,
     require_signin,
     resolve_client_link_credential,
@@ -496,27 +497,34 @@ def _require_firm_owns_private_kit(
     2026-08-07 decision plus the four-level access model from the 02ye
     addendum):
 
-      1. firm_role == "manager". Retirement is FIRM MANAGEMENT, not employee
-         level -- an employee sends links and tracks status, and must not be
-         able to take a form out of service.
+      1. The caller MANAGES a firm. Retirement is FIRM MANAGEMENT, not
+         employee level -- an employee sends links and tracks status, and
+         must not be able to take a form out of service. That rule now has
+         ONE home (bd polyglot-pdf-dmjl5, CLAUDE.md scar #8): the rule is
+         backend.services.firms.manager_firm_id, imported here through
+         backend.services.auth, which re-exports it. It lives in the
+         firm-identity module rather than in auth.py because the admin
+         service's user routes need the same rule and may not import
+         backend.services.auth. Two hand-written copies of "firm_role ==
+         manager and firm_id is a non-empty string" is how one of them
+         drifts.
       2. owner_firm_id == the caller's firm. Visibility is not authorization:
          bd vccy lets a firm SEE and use a kit its allowlist names, which
          includes kits it does not own.
       3. visibility == "private". A firm must never retire a shared or
          government form, even one it can see and fill.
 
-    EVERY refusal is FormKitNotFound -> 404, never 403: a 403 would confirm
-    the kit exists to a firm that cannot see it, which is exactly the
-    existence leak the read gates are built to prevent (exit criterion 2 --
-    "the refusal does not reveal whether the other kit exists").
+    WHY THE PREDICATE AND NOT THE DEPENDENCY. auth.require_firm_manager is
+    the FastAPI form of the same rule and raises 403. This path must not:
+    EVERY refusal here is FormKitNotFound -> 404, never 403, because a 403
+    would confirm the kit exists to a firm that cannot see it, which is
+    exactly the existence leak the read gates are built to prevent (exit
+    criterion 2 -- "the refusal does not reveal whether the other kit
+    exists"). The rule is shared; the refusal shape is each caller's own.
     """
-    claims = user if isinstance(user, dict) else {}
-    firm_id = claims.get("firm_id")
-    firm_role = claims.get("firm_role")
+    firm_id = manager_firm_id(user)
     if (
-        not isinstance(firm_id, str)
-        or not firm_id
-        or firm_role != "manager"
+        not firm_id
         or not isinstance(meta, dict)
         or _kit_visibility(meta) != "private"
         or meta.get("owner_firm_id") != firm_id

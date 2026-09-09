@@ -59,6 +59,13 @@ MUTATION_KIND_EXTERNAL = "external"
 # 4's build triggers are external.
 MUTATION_KINDS = {
     ("PUT", "/admin/config/{channel}"): MUTATION_KIND_FIRESTORE,
+    # Firebase Auth mutations (bd polyglot-pdf-dmjl5). EXTERNAL, and not by
+    # choice: there is no Firestore transaction for an auth.create_user or a
+    # set_custom_user_claims to join, so the pending-then-committed form is
+    # the only one available.
+    ("POST", "/admin/users"): MUTATION_KIND_EXTERNAL,
+    ("PATCH", "/admin/users/{uid}/disable"): MUTATION_KIND_EXTERNAL,
+    ("PATCH", "/admin/users/{uid}/role"): MUTATION_KIND_EXTERNAL,
 }
 
 # The helper names each form requires, by kind.
@@ -335,12 +342,11 @@ def test_the_firestore_check_goes_red_on_a_dropped_in_transaction_call(
 ], ids=["correct-form", "no-pending-row", "pending-row-never-closed"])
 def test_the_external_check_goes_red_on_a_skipped_pending_row(
         source, expected, why):
-    """EXIT CRITERION 2, direction two. The external form has no consuming
-    route yet (Epic 1's user routes and Epic 4's build triggers are its first
-    consumers), so its check is proven against the same synthetic shapes
-    rather than shipped untested -- the same reasoning
-    test_admin_route_auth.py applies to the three gates that do not exist
-    yet."""
+    """EXIT CRITERION 2, direction two. The synthetic shapes stay even now
+    that the external form HAS consuming routes (the three user routes, bd
+    polyglot-pdf-dmjl5): the real routes prove the form is USED, these prove
+    the CHECK still goes red when it is skipped -- which no live route can
+    demonstrate without being broken on purpose."""
     assert _external_verdict(source) is expected, why
 
 
@@ -356,3 +362,18 @@ def test_the_shipped_config_route_passes_the_synthetic_firestore_check():
     assert _firestore_verdict(source), (
         "config_routes.py does not satisfy the same in-transaction check the "
         "synthetic cases are graded against")
+
+
+def test_the_shipped_user_routes_pass_the_synthetic_external_check():
+    """The external counterpart of the tie-back above (bd polyglot-pdf-dmjl5).
+
+    Without it the external branch would be graded only against toy sources
+    while the live derivation ran different code -- the exact asymmetry the
+    Firestore tie-back exists to close. Same function, real file."""
+    from admin_backend.routes import user_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(user_routes)).read_text(encoding="utf-8")
+    assert _external_verdict(source), (
+        "user_routes.py does not satisfy the same pending-then-committed "
+        "check the synthetic cases are graded against")

@@ -8,14 +8,22 @@ _routes_depending_on-derived set pins: the set is read off the LIVE app
 object, never hand-maintained, so a route added without a gate fails HERE
 instead of shipping reachable by anyone with the URL.
 
-The four gates, per the plan ("Admin service" gating section):
-  - require_app_admin -- the only one that exists after this bead.
-  - require_firm_manager -- ships with its first consuming route
-    (backend/services/auth.py; Epic 2 B-track).
-  - require_app_admin_or_owning_manager -- the composite for revoke/link
-    listing (Epic 2 B5).
+The four gates, per the plan ("Admin service" gating section). THREE now
+exist (bd polyglot-pdf-dmjl5):
+  - require_app_admin -- shipped with GET /admin/whoami (bd
+    polyglot-pdf-7w17m).
+  - require_app_admin_or_owning_manager -- the composite, shipped with the
+    four /admin/users routes; also the gate Epic 2 B4's link listing and
+    revoke will carry.
+  - require_firm_manager -- exists in backend/services/auth.py over the
+    shared rule backend/services/firms.py::manager_firm_id. NO ROUTE
+    declares it yet, deliberately: the retire route consumes the RULE
+    instead (its refusals must be 404s, not the dependency's 403), and the
+    admin user routes need the composite. The name stays in the known set
+    below regardless -- these four are the VOCABULARY of legal gates, and
+    dropping one would make a route carrying it look ungated here.
   - require_google_oidc(audience, allowed_caller_emails) -- Cloud Scheduler /
-    Pub/Sub push callers (Epic 4 4.3).
+    Pub/Sub push callers (Epic 4 4.3). The one still ahead.
 
 /health and /version are the deliberate exception (pinned separately in
 test_admin_health.py): the unauthenticated liveness/identity probe.
@@ -23,12 +31,19 @@ test_admin_health.py): the unauthenticated liveness/identity probe.
 from admin_backend.main import app
 from admin_backend.services.admin_auth import require_app_admin
 
-# The other three gates do not exist yet -- each ships with its first
-# consuming route, proven against a real route rather than shipped untested
-# (plan, "Admin service" gating). Named here as STRINGS, not imports: an
-# import of a name that does not exist would fail at COLLECTION, which is a
-# worse failure mode than this test failing with a clear message the day one
-# of them is expected to exist.
+# THREE of the four gates now exist. require_app_admin shipped with
+# /admin/whoami (bd polyglot-pdf-7w17m); require_app_admin_or_owning_manager
+# ships with the user routes below and require_firm_manager with the retire
+# route it moved into backend/services/auth.py (bd polyglot-pdf-dmjl5). Only
+# require_google_oidc is still ahead (Epic 2 B5 / Epic 4 4.3), and it stays a
+# STRING rather than an import: importing a name that does not exist would
+# fail at COLLECTION, which is a worse failure mode than this test failing
+# with a clear message the day it is expected to exist.
+#
+# require_firm_manager appears in the known set even though no route on THIS
+# service declares it (its consumer is the public backend's retire route):
+# the four names are the vocabulary of legal gates, and dropping one from the
+# set would silently make a route carrying it look ungated here.
 _FUTURE_GATE_NAMES = (
     "require_firm_manager",
     "require_app_admin_or_owning_manager",
@@ -103,6 +118,10 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/config/{channel}"),
         (("PUT",), "/admin/config/{channel}"),
         (("GET",), "/admin/audit"),
+        (("POST",), "/admin/users"),
+        (("GET",), "/admin/users"),
+        (("PATCH",), "/admin/users/{uid}/disable"),
+        (("PATCH",), "/admin/users/{uid}/role"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
