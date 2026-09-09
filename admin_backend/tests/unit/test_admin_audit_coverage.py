@@ -66,6 +66,18 @@ MUTATION_KINDS = {
     ("POST", "/admin/users"): MUTATION_KIND_EXTERNAL,
     ("PATCH", "/admin/users/{uid}/disable"): MUTATION_KIND_EXTERNAL,
     ("PATCH", "/admin/users/{uid}/role"): MUTATION_KIND_EXTERNAL,
+    # Firm CRUD + credit grant/adjust (bd polyglot-pdf-zopqq). All FIRESTORE:
+    # every one is a firms/{firm_id} or firms/{firm_id}/ledger write, audited
+    # inside the SAME @firestore.transactional body as the mutation
+    # (firm_routes.py's _apply_firm_patch / create_firm; credit_routes.py's
+    # _run_append_entry, joined to credit_ledger.append_entry's own
+    # transaction via its extra_writes hook).
+    ("POST", "/admin/firms"): MUTATION_KIND_FIRESTORE,
+    ("PATCH", "/admin/firms/{firm_id}/status"): MUTATION_KIND_FIRESTORE,
+    ("PATCH", "/admin/firms/{firm_id}/allowed_kits"): MUTATION_KIND_FIRESTORE,
+    ("PATCH", "/admin/firms/{firm_id}/kind"): MUTATION_KIND_FIRESTORE,
+    ("POST", "/admin/firms/{firm_id}/credits/grant"): MUTATION_KIND_FIRESTORE,
+    ("POST", "/admin/firms/{firm_id}/credits/adjust"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
@@ -140,17 +152,75 @@ def _is_transactional(func_node) -> bool:
     return False
 
 
-def _calls_inside_transactional_bodies(tree) -> set:
-    """Every name called inside SOME @firestore.transactional function.
+# Calls that OPEN a caller's own transaction ON THE CALLER'S BEHALF via a
+# documented `extra_writes(tx, firm)` extension point, rather than the
+# caller decorating its own function with @firestore.transactional. Both
+# are `backend/services/credit_ledger.py` helpers: append_entry() runs
+# extra_writes INSIDE its own transaction body, after its reads and
+# alongside its balance/entry writes (module docstring: "It is a callable
+# taking (tx, firm_snapshot_dict)... runs INSIDE the body, AFTER the
+# reads"), and refund_expired_link() uses the same hook internally. A
+# route that joins its audit row to ONE of these calls via extra_writes
+# gets the identical in-transaction guarantee a route that opens its own
+# transaction gets -- credit_ledger.py's own tests
+# (test_the_refund_and_the_status_flip_commit_ATOMICALLY,
+# test_a_forced_audit_failure_leaves_the_config_unchanged's sibling in
+# test_credit_routes.py) pin that the hook really does run inside the
+# commit, not alongside it. Named here (not derived from credit_ledger.py
+# itself) because this is a STATIC check over the ROUTE module's own
+# source; it does not need to re-derive credit_ledger's internals, only to
+# recognize the one extension point its public API documents.
+_EXTRA_WRITES_TRANSACTION_OPENERS = frozenset({
+    "append_entry", "refund_expired_link",
+})
 
-    This is the check that gives the Firestore form its teeth: a module can
-    call record_in_transaction from anywhere, but only a call inside a
-    transactional body is actually in the mutation's transaction.
+
+def _extra_writes_callback_names(tree) -> set:
+    """The name of the function object passed as `extra_writes=...` to a
+    call to one of _EXTRA_WRITES_TRANSACTION_OPENERS, anywhere in the
+    module -- so its body can be looked up and treated as transactional
+    below. Handles the plain `def _audit(tx, firm): ...` shape (a Name
+    reference to a function defined elsewhere in the same module); a
+    lambda or an inline call expression passed directly is out of scope
+    here because neither shape appears in this repo's routes today, and a
+    route that used one would still fail the OTHER half of this check (the
+    call inside it would not resolve to a named FunctionDef this walk can
+    find), which is a legitimate red rather than a blind spot.
     """
     names = set()
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and \
-                _is_transactional(node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        called_name = None
+        if isinstance(func, ast.Attribute):
+            called_name = func.attr
+        elif isinstance(func, ast.Name):
+            called_name = func.id
+        if called_name not in _EXTRA_WRITES_TRANSACTION_OPENERS:
+            continue
+        for kw in node.keywords:
+            if kw.arg == "extra_writes" and isinstance(kw.value, ast.Name):
+                names.add(kw.value.id)
+    return names
+
+
+def _calls_inside_transactional_bodies(tree) -> set:
+    """Every name called inside SOME @firestore.transactional function, OR
+    inside a function passed as `extra_writes=` to append_entry /
+    refund_expired_link (see _EXTRA_WRITES_TRANSACTION_OPENERS above).
+
+    This is the check that gives the Firestore form its teeth: a module can
+    call record_in_transaction from anywhere, but only a call inside a
+    transactional body -- OWN or borrowed via the documented extension
+    point -- is actually in the mutation's transaction.
+    """
+    extra_writes_names = _extra_writes_callback_names(tree)
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _is_transactional(node) or node.name in extra_writes_names:
             names |= _called_names(node)
     return names
 
@@ -225,11 +295,19 @@ def test_a_mutating_route_uses_the_audit_form_its_mutation_requires(
                 method, path, source_file))
         # And the mutation itself must be in there with it: a transactional
         # body carrying ONLY the audit row would pass the check above while
-        # the real write sat outside.
-        assert "set" in in_tx or "update" in in_tx or "delete" in in_tx, (
-            "{} {}'s @firestore.transactional body writes nothing -- the "
-            "audit row is inside a transaction the mutation is not in".format(
-                method, path))
+        # the real write sat outside. A route using the extra_writes
+        # extension point (see _EXTRA_WRITES_TRANSACTION_OPENERS) never
+        # calls tx.set itself -- append_entry / refund_expired_link do that
+        # internally -- so the module-level call to one of THOSE names is
+        # the mutation-write evidence for that shape instead.
+        writes_own_doc = "set" in in_tx or "update" in in_tx or "delete" in in_tx
+        delegates_the_write = bool(
+            module_calls & _EXTRA_WRITES_TRANSACTION_OPENERS)
+        assert writes_own_doc or delegates_the_write, (
+            "{} {}'s @firestore.transactional body writes nothing, and the "
+            "module calls none of {} either -- the audit row is inside a "
+            "transaction the mutation is not in".format(
+                method, path, sorted(_EXTRA_WRITES_TRANSACTION_OPENERS)))
     else:
         assert any(name in module_calls for name in _CLOSEOUT_CALLS), (
             "{} {} writes a pending audit row but never closes it out with "
@@ -297,9 +375,43 @@ def handler():
     do_the_auth_thing()
 """
 
+# The EXTRA_WRITES shape (bd polyglot-pdf-zopqq's credit_routes.py): the
+# route never opens its own transaction or calls tx.set -- it joins its
+# audit row to credit_ledger.append_entry's OWN transaction via the
+# documented extra_writes(tx, firm) hook.
+_FIRESTORE_ROUTE_EXTRA_WRITES_OK = """
+from admin_backend.services import audit_log
+from backend.services import credit_ledger
+
+def handler():
+    def _audit(tx, firm):
+        audit_log.record_in_transaction(tx, db)
+    credit_ledger.append_entry(db, extra_writes=_audit)
+"""
+
+# The regression this bead's extension must still catch: an audit call
+# that exists in the module but OUTSIDE the extra_writes callback -- e.g.
+# fired after append_entry returns, the exact double-apply window the
+# in-transaction form exists to close. Presence-only detection (checking
+# only that append_entry and record_in_transaction are both called
+# somewhere) would wave this through; the callback-body check must not.
+_FIRESTORE_ROUTE_EXTRA_WRITES_AUDIT_OUTSIDE_CALLBACK = """
+from admin_backend.services import audit_log
+from backend.services import credit_ledger
+
+def handler():
+    def _audit(tx, firm):
+        pass
+    credit_ledger.append_entry(db, extra_writes=_audit)
+    audit_log.record_in_transaction(None, db)
+"""
+
 
 def _firestore_verdict(source: str) -> bool:
-    """The SAME two checks the Firestore branch above applies."""
+    """The SAME two checks the Firestore branch above applies (including
+    the extra_writes extension for a route that delegates its write to
+    append_entry / refund_expired_link -- see
+    _EXTRA_WRITES_TRANSACTION_OPENERS)."""
     tree = ast.parse(source)
     module_calls = _called_names(tree)
     if "record_in_transaction" not in module_calls:
@@ -307,7 +419,9 @@ def _firestore_verdict(source: str) -> bool:
     in_tx = _calls_inside_transactional_bodies(tree)
     if "record_in_transaction" not in in_tx:
         return False
-    return bool({"set", "update", "delete"} & in_tx)
+    writes_own_doc = bool({"set", "update", "delete"} & in_tx)
+    delegates_the_write = bool(module_calls & _EXTRA_WRITES_TRANSACTION_OPENERS)
+    return writes_own_doc or delegates_the_write
 
 
 def _external_verdict(source: str) -> bool:
@@ -324,13 +438,23 @@ def _external_verdict(source: str) -> bool:
     (_FIRESTORE_ROUTE_NO_AUDIT, False, "no audit call at all"),
     (_FIRESTORE_ROUTE_AUDIT_OUTSIDE_TX, False,
      "audits, but OUTSIDE the mutation's transaction"),
-], ids=["correct-form", "no-audit-call", "audits-outside-the-transaction"])
+    (_FIRESTORE_ROUTE_EXTRA_WRITES_OK, True,
+     "the correct extra_writes-delegated form (bd polyglot-pdf-zopqq)"),
+    (_FIRESTORE_ROUTE_EXTRA_WRITES_AUDIT_OUTSIDE_CALLBACK, False,
+     "delegates the write via extra_writes, but audits OUTSIDE the callback"),
+], ids=["correct-form", "no-audit-call", "audits-outside-the-transaction",
+        "extra-writes-correct-form", "extra-writes-audit-outside-callback"])
 def test_the_firestore_check_goes_red_on_a_dropped_in_transaction_call(
         source, expected, why):
     """EXIT CRITERION 2, direction one. Runs the real derivation against
     hand-built route shapes: a Firestore route that drops the in-transaction
     call, and -- the case a presence check would wave through -- one that
-    audits outside the transaction."""
+    audits outside the transaction. The two extra-writes cases are the same
+    proof for the DELEGATED-write shape credit_routes.py uses (bd
+    polyglot-pdf-zopqq): a route that never calls tx.set itself, and whose
+    only mutation evidence is a call to append_entry/refund_expired_link,
+    must still fail when its audit call sits outside the extra_writes
+    callback that actually runs inside that helper's transaction."""
     assert _firestore_verdict(source) is expected, why
 
 
@@ -377,3 +501,32 @@ def test_the_shipped_user_routes_pass_the_synthetic_external_check():
     assert _external_verdict(source), (
         "user_routes.py does not satisfy the same pending-then-committed "
         "check the synthetic cases are graded against")
+
+
+def test_the_shipped_firm_routes_pass_the_synthetic_firestore_check():
+    """The firm_routes.py counterpart of the config tie-back (bd
+    polyglot-pdf-zopqq): firm_routes.py opens its OWN transactions (like
+    config_routes.py), so it is graded against the plain in-transaction
+    form, not the extra_writes extension."""
+    from admin_backend.routes import firm_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(firm_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "firm_routes.py does not satisfy the same in-transaction check the "
+        "synthetic cases are graded against")
+
+
+def test_the_shipped_credit_routes_pass_the_synthetic_extra_writes_check():
+    """The extra_writes counterpart of the tie-back above (bd
+    polyglot-pdf-zopqq): credit_routes.py never opens its own transaction --
+    it joins credit_ledger.append_entry's via extra_writes -- so this ties
+    THAT shape, specifically, to the real file rather than only to the
+    synthetic _FIRESTORE_ROUTE_EXTRA_WRITES_OK source above."""
+    from admin_backend.routes import credit_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(credit_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "credit_routes.py does not satisfy the same extra_writes-delegated "
+        "in-transaction check the synthetic cases are graded against")
