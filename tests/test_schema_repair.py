@@ -500,6 +500,23 @@ def test_a_slug_shaped_code_is_kept_as_the_value_and_reserved():
 
 
 
+def test_a_STALE_pdf_on_value_is_overwritten_by_the_real_code_in_value():
+    """Fresh-eyes (g2fpr.4): a value that IS a real code beside a pdf_on_value
+    the PDF does not declare skipped the conversion, so the real code was
+    minted away and the stale one stayed -- unrecoverable. Convert instead."""
+    opts = [{"value": "WY", "label": "Wyoming (WY)", "pdf_on_value": "ZZ"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _pairs(repaired) == [("wyoming", "WY"), ("alabama", "AL")]
+    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
+    # ...while a REAL pdf_on_value beside a code-shaped value is left alone by
+    # the conversion (the value is still minted, the code is not overwritten).
+    opts2 = [{"value": "WY", "label": "Wyoming (WY)", "pdf_on_value": "AL"},
+             {"value": "DC", "label": "DC"}]
+    repaired2, _ = repair(_schema(_combo(opts2)), _COMBO_DUMP)
+    assert _pairs(repaired2)[0] == ("wyoming", "AL")
+
+
 def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
     """Uniqueness outranks everything. Two options sharing a code are both
     converted (both keep the code in pdf_on_value -- the widget really does

@@ -63,6 +63,25 @@ channel finding; both name the migration. The old shape had one finding
 saying "do NOT regenerate" beside another saying "regenerate" -- that is the
 contradiction, not the count.
 
+**A conversion guard has to cover the shape a kit is most likely to be in
+mid-edit.** Round 1 found repair converting only when `pdf_on_value` was
+absent: a real code in `value` beside a STALE `pdf_on_value` (present, not in
+`/Opt`) was minted away while the stale code stayed -- the one recoverable
+fact destroyed, the broken one kept. The guard now converts when the slot is
+absent OR stale; a real code already in the slot is left alone.
+
+**"Loud" has to be true on every branch.** The doc said the filler's
+no-code fallback warns; it warned only when the value matched no option at
+all, and was silent on the common case (matched, no code). The code now
+warns on both, and the doc names both events. Making the doc true by making
+the code loud beats softening the doc.
+
+**A substring assertion can pass on a comment.** The consumer pin asserted
+the retired rule id was "in" the lint source -- it was, in a comment narrating
+its retirement. The assertion now checks the emission shape for the live
+rules and its absence for the retired one, and a mutant that re-emits the
+retired rule reddens it.
+
 ## Files touched
 
 - `backend/services/schema_lint.py`, `backend/services/schema_repair.py`,

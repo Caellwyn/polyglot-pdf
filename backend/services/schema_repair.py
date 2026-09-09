@@ -265,15 +265,12 @@ def _mint_slugs(
             else:
                 res[key] = slug
 
-        # A dropdown's option.value is written verbatim into the PDF widget
-        # (pdf_fill_routes.fill_widget; no pdf_on_value channel on that path),
-        # and PyMuPDF does not validate the write against /Opt -- so minting a
-        # slug over a PDF-sanctioned export code silently makes the form PRINT
-        # WRONG ('WY' -> 'wyoming_wy' renders clipped in a 36pt box). Values
-        # the PDF itself declares legal are therefore NOT invalid here, even
-        # though they fail the slug pattern; mirrors schema_lint's carve-out
-        # via the shared helper. Dumpless repair sees an empty set and keeps
-        # the old behaviour exactly (bd polyglot-pdf-g2fpr).
+        # The dump's /Opt list for a dropdown is the EVIDENCE that a value is
+        # a real PDF export code -- which, since g2fpr.4, is what repair
+        # CONVERTS (the code moves into pdf_on_value, the value is minted),
+        # never what it keeps. Dumpless repair sees an empty set: it cannot
+        # tell a code from junk, so it mints and leaves pdf_on_value for the
+        # author (lint's select-on-value-missing says so once a dump exists).
         pdf_choices: FrozenSet[str] = frozenset()
         if f.get("type") == "select":
             pdf_choices = pdf_choice_values(dump, f.get("pdf_field_name"))
@@ -343,12 +340,17 @@ def _mint_slugs(
                     # clearing the very lint ERROR this guard exists to keep
                     # standing.
                     held = True
-                elif is_select and v in pdf_choices and not _has_on_value(o):
+                elif is_select and v in pdf_choices and (
+                        not _has_on_value(o) or o["pdf_on_value"] not in pdf_choices):
                     # THE CONVERSION (g2fpr.4, replacing the g2fpr.1 "preserve
                     # the code in value" branch): a PDF-sanctioned export code
                     # in a select's value moves into pdf_on_value, verbatim,
                     # and the value is minted from the label below -- the same
                     # rule scripts/migrate_select_on_values applies to a kit.
+                    # It also OVERWRITES a stale pdf_on_value the PDF does not
+                    # declare: fresh-eyes (g2fpr.4) showed the real code in
+                    # value being minted away while the stale one stayed --
+                    # the one shape a mid-hand-edit kit is likely to be in.
                     # The code is registered as an alias so a condition that
                     # named it still resolves (the tail loop registers
                     # pdf_on_value -> current value).

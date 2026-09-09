@@ -146,7 +146,10 @@ def test_the_three_sites_this_bead_changed_carry_their_new_symbols():
     paint = (_ROOT / "frontend/src/pdf-view/valuePainting.ts").read_text(encoding="utf-8")
     assert "def resolve_select_fill_value(" in fill
     assert 'field_type == "select"' in fill
-    for rule in ("select-value-not-slug", "select-on-value-not-in-pdf",
-                 "select-on-value-missing"):
-        assert rule in lint, rule
+    for rule in ("select-on-value-not-in-pdf", "select-on-value-missing"):
+        assert f'"{rule}"' in lint, rule
+    # The former select-value-not-slug rule was retired in g2fpr.4: it must not
+    # be EMITTED (the emission shape, not a substring -- a comment narrating
+    # its retirement made the old substring check pass vacuously).
+    assert 'SEVERITY_ERROR, "select-value-not-slug"' not in lint
     assert "pdf_on_value" in paint and "case 'select'" in paint

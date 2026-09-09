@@ -76,7 +76,8 @@ gap, but never shadows a distinct real field that happens to lack its own
   through the scalar TEXT path (`resolve_select_fill_value`): a combobox is one
   widget with an `/Opt` list and a plain `/V`, not a radio with per-kid
   states. An option with no `pdf_on_value` writes its `value` verbatim with a
-  loud `select_value_not_an_option` warning -- a shape the publish gate no
+  loud `select_option_without_pdf_on_value` warning (and a value matching no
+  option at all, `select_value_not_an_option`) -- shapes the publish gate no
   longer lets through (see the gotcha below), kept only so a hand-edited kit
   fills rather than crashes. The read side inverts it: `/resume-form` maps the
   code back to `option.value` (`resolve_select_resume_value`) (bd

@@ -74,8 +74,10 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	substitute the STRING and let fill_widget's text branch write it -- NOT the
 	per-kid /AS appearance-state write radios use.
 
-	LEGACY: an option with no pdf_on_value (a kit not yet migrated) still writes
-	its value verbatim, so a working kit never regresses mid-rollout.
+	An option with no pdf_on_value writes its value verbatim -- LOUDLY: the
+	publish gate no longer lets that shape through (g2fpr.4), so reaching it
+	means a hand-edited or unpublished kit, and the fallback exists so such a
+	kit fills rather than crashes, not so it prints right.
 
 	Never logs the value (bd hjo).
 	"""
@@ -116,6 +118,13 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	on_value = match.get("pdf_on_value")
 	if isinstance(on_value, str) and on_value != "":
 		return on_value
+	# Matched, but the option carries no export code: the value goes in
+	# verbatim, and that is worth a warning every time -- it was silent, and
+	# the doc claimed otherwise (fresh-eyes, g2fpr.4).
+	_log.warning(
+		"select_option_without_pdf_on_value",
+		kit=kit, field_id=field_id, option_count=len(options),
+	)
 	return value
 
 
