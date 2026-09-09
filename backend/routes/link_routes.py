@@ -25,6 +25,22 @@ app_config/{channel} in Firestore (TTL-cached, with an env-default fallback
 matching the value above) instead of os.getenv directly. This lets an
 operator flip the flag from the admin console with no redeploy.
 
+RESERVE BEFORE SIGNING (bd polyglot-pdf-jecrl / Epic 2 bead A3). The mint
+route now spends a CREDIT, and the order is load-bearing: the jti is
+generated first (link_tokens.new_jti()), the reservation transaction runs
+second, and the token is signed LAST, from the jti the reservation already
+committed. Any other order leaves a signed token behind a refused
+reservation -- and a signed token that opens is a paid Gemini session
+nobody was charged for. The whole reservation (the live-firm channel gate,
+the balance check, the ledger debit, and the links/{jti} mint record) is
+ONE Firestore transaction via credit_ledger.append_entry(); if any part of
+it refuses, nothing was written and nothing was signed.
+
+The other half of the same contract lives in
+backend/services/link_redemptions.py: open now REQUIRES that mint record,
+so a token can only open if a reservation committed for it. The two rules
+are one invariant seen from both ends.
+
 ASCII only.
 """
 import asyncio
@@ -36,11 +52,20 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.services.auth import require_auth
-from backend.services.firms import get_allowed_kits
+from backend.services import links_store
+from backend.services.auth import get_db, require_auth
+from backend.services.credit_ledger import (
+    InsufficientCredits,
+    LedgerError,
+    TYPE_MINT_DEBIT,
+    append_entry,
+)
+from backend.services.firms import FIRM_KIND_MOCK, get_allowed_kits
+from backend.services.kit_commercials import resolve_commercial
 from backend.services.link_metering import record_mint
 from backend.services.link_redemptions import (
     LinkAlreadyUsed,
+    LinkNotMinted,
     LinkWindowElapsed,
     RedemptionUnavailable,
     enforce_link_redemption,
@@ -50,9 +75,12 @@ from backend.services.link_tokens import (
     DEFAULT_OPEN_WINDOW_S,
     LinkTokenError,
     completion_deadline,
+    link_channel,
     mint_link_token,
+    new_jti,
     verify_link_token,
 )
+from backend.services.runtime_config import credits_enforced as _rc_credits_enforced
 from backend.services.runtime_config import minting_enabled as _rc_minting_enabled
 
 _log = structlog.get_logger().bind(module="link_routes")
@@ -71,6 +99,150 @@ _MAX_COMPLETE_WINDOW_S = 30 * 24 * 3600
 
 def _minting_enabled() -> bool:
     return _rc_minting_enabled()
+
+
+def _credits_enforced() -> bool:
+    return _rc_credits_enforced()
+
+
+class MintRefused(Exception):
+    """A reservation refused the mint. Carries the HTTP status to return.
+
+    STAFF-FACING, so unlike the client-facing /open surface these DO
+    differentiate: an employee who cannot mint needs to know whether their
+    firm is out of credits (402, buy more) or is a live firm on a non-demo
+    channel (403, you are on the wrong deployment). The uniform-404 oracle
+    rule protects the UNAUTHENTICATED door; this door already knows exactly
+    who the caller is and which firm they belong to, so hiding the reason
+    would only cost the console a useful message.
+    """
+
+    def __init__(self, status_code: int, detail: str, reason: str):
+        self.status_code = status_code
+        self.detail = detail
+        self.reason = reason
+        super().__init__(reason)
+
+
+def _live_firm_channel_ok(firm_kind: Optional[str]) -> bool:
+    """May a firm of this kind mint on THIS process's channel?
+
+    THE RAW ENV VAR, DELIBERATELY NOT link_channel(). link_channel()'s
+    default is "demo" (services/link_tokens.py: an unconfigured deploy keeps
+    minting and opening exactly the links it does today), so asking it would
+    make an UNSET channel -- a laptop, a one-off container, a misconfigured
+    revision -- look like the demo and let it mint against a paying firm.
+    Reading os.environ directly means "demo" has to be written down
+    somewhere before a live firm can be charged.
+
+    Both halves of that are deliberate and both are pinned: an unset channel
+    still MINTS (with aud=demo, today's behaviour, for mock firms) while
+    still REFUSING live firms. A firm with no `kind` at all -- the window
+    between this code deploying and the backfill (Epic 2 bead A6) -- is
+    treated as live, the same fail-closed polarity firms.firm_kind() uses,
+    because a mis-defaulted mock firm merely blocks staging while a
+    mis-defaulted live firm mints for free.
+    """
+    if firm_kind == FIRM_KIND_MOCK:
+        return True
+    return os.environ.get("LINK_CHANNEL", "").strip() == "demo"
+
+
+def _reserve_mint(
+    jti: str,
+    firm_id: str,
+    kit_id: str,
+    employee_id: str,
+    credit_cost: int,
+    cap_usd: float,
+    open_deadline: int,
+    channel: str,
+    enforced: bool,
+    now: Optional[float] = None,
+) -> dict:
+    """Reserve one link's credit, ATOMICALLY, before any token is signed.
+
+    SYNC (Admin SDK transaction). The route runs this under
+    asyncio.to_thread, like every other Firestore call in this file.
+
+    ONE transaction writes three things or none: the firm's new balance, the
+    `mint_debit` ledger entry, and the links/{jti} mint record. It is
+    credit_ledger.append_entry() -- the repo's ONE writer of
+    balance_credits -- with the mint record passed as an `extra_writes`
+    join, so there is no second transaction and no window in which a debit
+    exists without a record (a link nobody can open, silently charged for)
+    or a record exists without a debit (a free paid session).
+
+    Raises MintRefused for the two refusals a caller must translate to HTTP:
+      403 -- a live firm (or a firm with no `kind`) on a channel that is not
+             explicitly `demo`. Checked INSIDE the transaction, off the same
+             firm snapshot the balance comes from, so a firm flipped from
+             mock to live mid-flight cannot slip a mint through between the
+             read and the write.
+      402 -- `enforced` and the balance does not cover `credit_cost`.
+
+    Raises LedgerError for anything else (no such firm, unreachable store):
+    the route turns those into a 503, because they are deployment faults,
+    not caller errors.
+
+    `enforced` is passed IN rather than read here so the route resolves it
+    once, off the event loop, alongside the minting flag -- and so a test
+    can drive both settings without patching runtime_config's cache.
+    """
+    db = get_db()
+    if db is None:
+        raise LedgerError("no firestore client")
+
+    def _extra_writes(tx, firm):
+        # Runs INSIDE append_entry's transaction body, after its reads. The
+        # gate lives here, not before the transaction, because `firm` is the
+        # transaction's own snapshot: checking a separately-read copy would
+        # let a firm flipped mock -> live between the two reads mint once on
+        # staging against real money.
+        kind = firm.get("kind")
+        if not _live_firm_channel_ok(kind):
+            raise MintRefused(
+                403,
+                "This deployment cannot mint links for a live firm.",
+                "live firm on channel " + repr(os.environ.get("LINK_CHANNEL", "")),
+            )
+        # links_store.record_mint() builds the SAME document shape, but it
+        # issues its own set() -- this write must ride the transaction, so
+        # the shape is built through the store's builder and written with
+        # tx.set(). Any drift between the two is a set difference a test
+        # catches (test_mint_record_shape_matches_links_store).
+        record = links_store.build_mint_record(
+            jti=jti,
+            firm_id=firm_id,
+            kit_id=kit_id,
+            employee_id=employee_id,
+            credit_cost=credit_cost,
+            cap_usd=cap_usd,
+            open_deadline=open_deadline,
+            now=now,
+        )
+        tx.set(links_store.mint_record_ref(db, jti, channel), record)
+
+    try:
+        return append_entry(
+            db,
+            firm_id,
+            entry_type=TYPE_MINT_DEBIT,
+            amount=-int(credit_cost),
+            actor=employee_id,
+            channel=channel,
+            link_jti=jti,
+            kit_id=kit_id,
+            require_sufficient_balance=enforced,
+            extra_writes=_extra_writes,
+            ts=now,
+        )
+    except InsufficientCredits as exc:
+        raise MintRefused(
+            402,
+            "This firm does not have enough credits to mint a link.",
+            "insufficient credits",
+        ) from exc
 
 
 class MintLinkRequest(BaseModel):
@@ -137,6 +309,20 @@ async def mint_link(
     The kit must be in the firm's allowlist. `get_allowed_kits` already folds
     in "the firm exists and is active" and fails closed to [], so a suspended
     firm mints nothing without a second status read.
+
+    RESERVE, THEN SIGN (Epic 2 bead A3). The credit is debited, the ledger
+    entry written and the links/{jti} mint record created in ONE transaction
+    BEFORE mint_link_token() is called. The token is then signed from the
+    jti that transaction committed. A refusal therefore leaves nothing
+    behind: no token, no ledger entry, no record -- and no way for the
+    caller to open a link they were not charged for.
+
+    THE REFUSALS, and why they are NOT the uniform 404 the client-facing
+    /open uses: this door is authenticated staff, so it may say what went
+    wrong. 402 -- the firm is out of credits (only when CREDITS_ENFORCED;
+    with enforcement off the debit is still written and the balance may go
+    negative, the metered soft-launch mode). 403 -- a live firm on a
+    deployment whose LINK_CHANNEL is not exactly `demo`.
     """
     # Off the event loop: _minting_enabled() now resolves runtime_config,
     # which on a cache miss is a sync Admin-SDK Firestore read (bd
@@ -172,19 +358,86 @@ async def mint_link(
         # gates: the response must not reveal which kits other firms hold.
         raise HTTPException(status_code=404, detail="Kit not available")
 
+    # --- RESERVE (before anything is signed) ----------------------------
+    # The jti comes first because the reservation writes links/{jti}: the
+    # document is keyed by an id the token does not exist to supply yet.
+    jti = new_jti()
+    open_window_s = min(body.open_window_s, _MAX_OPEN_WINDOW_S)
+    complete_window_s = min(body.complete_window_s, _MAX_COMPLETE_WINDOW_S)
+    # ONE clock for the reservation and the signature. The mint record's
+    # `open_deadline` must EQUAL the token's `exp` -- the A5 expiry sweep
+    # queries Firestore on that field to decide what to refund, and a record
+    # whose deadline drifted from the token's would either refund a link
+    # that can still open (giving back a credit for a session about to be
+    # spent) or leave a dead link unrefunded. Passing `now=issued` into
+    # mint_link_token pins both to the same second instead of letting two
+    # time.time() calls straddle a tick.
+    issued = int(time.time())
+    open_deadline = issued + open_window_s
+
+    # The kit's commercial doc. Read OUTSIDE the transaction and fail-soft
+    # (see services/kit_commercials.py): a price and a ceiling both have safe
+    # defaults, and the invariant that matters -- a signed token always has a
+    # debit and a record behind it -- is the transaction's job, not this
+    # read's.
+    commercial = await asyncio.to_thread(resolve_commercial, body.kit_id)
+    credit_cost = commercial["credit_cost"]
+    cap_usd = commercial["cap_usd"]
+
+    channel = link_channel()
+    enforced = await asyncio.to_thread(_credits_enforced)
     try:
-        token, jti = mint_link_token(
+        reservation = await asyncio.to_thread(
+            _reserve_mint,
+            jti,
+            firm_id,
+            body.kit_id,
+            employee_id,
+            credit_cost,
+            cap_usd,
+            open_deadline,
+            channel,
+            enforced,
+            issued,
+        )
+    except MintRefused as exc:
+        _log.info("link_mint_refused", firm_id=firm_id, kit_id=body.kit_id,
+                  employee_id=employee_id, reason=exc.reason,
+                  status_code=exc.status_code)
+        raise HTTPException(status_code=exc.status_code,
+                            detail=exc.detail) from exc
+    except LedgerError as exc:
+        # No such firm, or an unreachable store. A deployment/data fault, not
+        # a caller error -- and NOTHING was committed, so nothing is signed.
+        _log.error("link_mint_reserve_failed", firm_id=firm_id,
+                   kit_id=body.kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Link minting is temporarily unavailable") from exc
+
+    # --- SIGN (only now, from the jti the reservation committed) ---------
+    try:
+        token, signed_jti = mint_link_token(
             firm_id=firm_id,
             kit_id=body.kit_id,
             employee_id=employee_id,
-            open_window_s=min(body.open_window_s, _MAX_OPEN_WINDOW_S),
-            complete_window_s=min(body.complete_window_s,
-                                  _MAX_COMPLETE_WINDOW_S),
+            open_window_s=open_window_s,
+            complete_window_s=complete_window_s,
+            now=issued,
+            jti=jti,
+            cap_usd=cap_usd,
         )
     except LinkTokenError as exc:
         # The only expected cause is a missing signing secret -- a deployment
-        # fault, not a caller error.
-        _log.error("link_mint_failed", firm_id=firm_id, error=str(exc))
+        # fault, not a caller error. The reservation has already committed:
+        # the firm has been debited for a link whose token was never handed
+        # out. That is the SAFE direction of the two (the alternative order
+        # gives away free sessions) and it is recoverable -- the record is
+        # `minted` and unopened, so A5's expiry sweep refunds it at its open
+        # deadline with no operator action. Logged loudly so it is visible
+        # before then.
+        _log.error("link_mint_failed_after_reserve", firm_id=firm_id,
+                   jti=jti, error=str(exc))
         raise HTTPException(status_code=503,
                             detail="Link minting is not configured") from exc
 
@@ -204,16 +457,29 @@ async def mint_link(
 
     # AUDIT, keyed like the rest of the firm tier (bd xwlt): who minted what,
     # for which form. The jti is OUR pseudonym, never a client identifier.
+    # `credit_cost`, `balance_after` and `commercial_source` are here so an
+    # operator can see from one line what a mint cost, what it left, and
+    # whether the form is actually priced or riding kit_commercials'
+    # default. No PII, no field values -- ids and counts only.
     _log.info("link_minted", firm_id=firm_id, kit_id=body.kit_id,
-              employee_id=employee_id, jti=jti,
+              employee_id=employee_id, jti=signed_jti,
+              credit_cost=credit_cost, cap_usd=cap_usd,
+              commercial_source=commercial["source"],
+              balance_after=reservation["balance_after"],
+              credits_enforced=enforced, channel=channel,
               period=usage["period"], minted_this_period=usage["minted"],
               over_allowance=usage["over_allowance"])
 
     # The token rides in the FRAGMENT (#t=), which browsers do not send to
     # servers -- so it stays out of access logs, referrers, and proxy logs.
+    # signed_jti, not the local `jti`: they are the same string by
+    # construction (mint_link_token was handed `jti=jti`), and returning the
+    # one the TOKEN actually carries means a future change to that
+    # parameter's handling cannot silently hand the firm a join key their
+    # client's link does not use.
     return MintLinkResponse(
         url=_link_base_url() + "/f#t=" + token,
-        jti=jti,
+        jti=signed_jti,
         expires_at=payload["exp"],
     )
 
@@ -224,9 +490,10 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
     credential.
 
     EVERY failure returns the SAME 404. A bad signature, an expired window, a
-    replayed link, a suspended firm, and a kit the firm no longer holds must
-    be indistinguishable, or the differences become an oracle for probing
-    which links and firms exist. The specific cause is logged, never returned.
+    replayed link, a suspended firm, a kit the firm no longer holds, and (bd
+    polyglot-pdf-jecrl) a link with no mint record or a revoked one must be
+    indistinguishable, or the differences become an oracle for probing which
+    links and firms exist. The specific cause is logged, never returned.
     """
     generic = HTTPException(status_code=404, detail="This link is not valid.")
 
@@ -271,6 +538,16 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
         _log.info("link_open_refused", reason="completion window elapsed",
                   jti=payload["jti"])
         raise generic from exc
+    except LinkNotMinted as exc:
+        # NO MINT RECORD, or one that is revoked/refunded (bd
+        # polyglot-pdf-jecrl). Caught BEFORE RedemptionUnavailable because it
+        # is a SUBCLASS of it -- an except-clause order swap would swallow
+        # this branch into the store-outage branch and mislabel every
+        # cutover-era token as an outage. Same generic 404 either way; only
+        # the log line differs.
+        _log.info("link_open_refused", reason="no usable mint record",
+                  jti=payload["jti"])
+        raise generic from exc
     except RedemptionUnavailable as exc:
         # FAIL CLOSED: unable to confirm the link is unredeemed means we must
         # not admit it -- the failure being guarded is a replayed link
@@ -279,6 +556,16 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
         raise generic from exc
 
     deadline = completion_deadline(payload, record["opened_at"])
+
+    # BEST-EFFORT MIRROR (bd polyglot-pdf-jecrl): stamp the mint record
+    # `opened` for the console's link listing. Deliberately AFTER the gate
+    # and deliberately incapable of failing the request -- links_store's
+    # mark_opened() never raises, and the authoritative "was this opened"
+    # answer is the redemption doc the gate just wrote, not this cache. A
+    # failed mirror must never turn a successful client open into a refusal,
+    # and (A5) must never cause a refund of a link someone is filling: the
+    # refund transaction reads the redemption doc, not this field.
+    await asyncio.to_thread(links_store.mark_opened, payload["jti"])
 
     _log.info("link_opened_ok", firm_id=firm_id, kit_id=kit_id,
               jti=payload["jti"], employee_id=payload["employee_id"])
