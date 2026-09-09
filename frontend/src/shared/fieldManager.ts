@@ -13,7 +13,9 @@ export interface FieldUpdate {
 }
 
 export interface FieldManagerOptions {
-	onManualEdit?: (fieldId: string, value: string) => void
+	// string[] for a checkbox group -- its answer is which options are checked,
+	// not one member's constant `value` attribute. Matches FieldValue.value.
+	onManualEdit?: (fieldId: string, value: string | string[]) => void
 	schema?: any // Optional schema to set up listeners on all fields
 }
 
@@ -92,9 +94,26 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			
 			// Always notify about manual edits (even if not AI-confirmed yet)
 			if (options.onManualEdit) {
-				const value = (element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
-				if (value && value.trim()) {  // Only notify if non-empty
-					options.onManualEdit(fieldId, value)
+				// A GROUP's answer is which options are CHECKED -- never one member's
+				// `value`, which is a constant attribute. Reading .value here reported
+				// the toggled option as the whole answer, so UNCHECKING 'White' wrote
+				// race = 'White': an un-selection recorded as a selection, persisted
+				// over the real array AND sent to the model. Groups only reach this
+				// listener at all since bd polyglot-pdf-96um6 attached them.
+				const groupEls = groupInputsFor(fieldId)
+				if (groupEls.length) {
+					const picked = groupEls.filter(el => el.checked).map(el => el.value)
+					// Radio: a single string, matching what the rest of the app stores.
+					// Checkbox group: the array. An empty selection is a REAL answer
+					// change (the user cleared it), so it must notify -- unlike a blank
+					// text field, where the non-empty gate below is deliberate.
+					const isRadio = groupEls[0]?.type === 'radio'
+					options.onManualEdit(fieldId, isRadio ? (picked[0] || '') : picked)
+				} else {
+					const value = (element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
+					if (value && value.trim()) {  // Only notify if non-empty
+						options.onManualEdit(fieldId, value)
+					}
 				}
 			}
 		}

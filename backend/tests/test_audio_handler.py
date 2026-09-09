@@ -207,6 +207,36 @@ class TestManualFieldUpdate:
         assert "test@example.com" in message
     
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "value,expected,forbidden",
+        [
+            (["Asian"], "Asian", "['Asian']"),
+            (["Asian", "White"], "Asian, White", "['Asian', 'White']"),
+            ([], "(nothing selected)", "[]"),
+            ("Female", "Female", None),
+            (True, "True", None),
+        ],
+    )
+    async def test_a_group_value_is_spoken_not_printed(self, value, expected, forbidden):
+        """A checkbox group arrives as a LIST, and str() on one yields Python
+        syntax the model reads aloud -- brackets and quotes included. Every
+        shape goes through the same formatter, so this is parametrized over the
+        whole dimension rather than sampling one case."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_group")
+
+        await handler.send_manual_field_update(
+            field_id="race", field_name="Race", value=value
+        )
+
+        message = mock_live_ai.send_text_message.call_args[0][0]
+        assert expected in message
+        if forbidden is not None:
+            assert forbidden not in message, (
+                f"the model must not be handed Python list syntax: {forbidden!r}"
+            )
+
+    @pytest.mark.asyncio
     async def test_manual_field_update_with_next_hint(self):
         """Test manual field update includes next field hint."""
         mock_live_ai = AsyncMock()

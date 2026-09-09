@@ -159,7 +159,13 @@ class AudioHandler:
         # The unverified case says what to DO about it, because that is the one
         # thing the model cannot read off the state: an unverified value still
         # needs the user's assent (bd polyglot-pdf-96um6).
-        value_str = str(value)
+        # A checkbox group arrives as a LIST. str() on one yields Python
+        # syntax -- "['Asian', 'White']" -- which the model then reads aloud,
+        # brackets and quotes included. Join it into something speakable.
+        if isinstance(value, (list, tuple)):
+            value_str = ", ".join(str(v) for v in value) if value else "(nothing selected)"
+        else:
+            value_str = str(value)
         if verified:
             message = f"Field '{field_name}' now holds: {value_str}. It is verified."
         else:

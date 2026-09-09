@@ -401,3 +401,102 @@ describe('CHECKBOX GROUPS survive the option[0] id (bd polyglot-pdf-96um6)', () 
     ).toBe(1)
   })
 })
+
+describe('a GROUP edit reports the checked selection (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GRP = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+               options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  const RAD = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio',
+               options: [{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('UNCHECKING an option reports the remainder, not the toggled option', () => {
+    // handleEdit read element.value -- a group member's CONSTANT attribute -- so
+    // unchecking White reported race = "White": an un-selection recorded as a
+    // selection, persisted over the real array AND sent to the model.
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" checked />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = false
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian'])
+  })
+
+  it('CHECKING a second option reports both', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
+  })
+
+  it('clearing the LAST option still notifies -- an empty selection is a real change', () => {
+    // The non-empty gate is deliberate for a blank text field, but a cleared
+    // group is an answer the model must hear about.
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const asian = document.querySelectorAll('input')[0] as HTMLInputElement
+    asian.checked = false
+    asian.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit, 'a cleared group must not go unreported').toHaveBeenCalled()
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual([])
+  })
+
+  it('a RADIO reports a single string, not an array', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" checked />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: RAD, onManualEdit })
+
+    const female = document.querySelectorAll('input')[1] as HTMLInputElement
+    female.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Female')
+  })
+
+  it('a plain TEXT field is unchanged', () => {
+    const T = {
+      source: 'web',
+      form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+      fields: [{ id: 'name', name: 'Name', spoken_name: 'name', type: 'text' }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['name'] }],
+    } as unknown as FormSchema
+    document.body.innerHTML = `<input id="name" name="name" type="text" value="Maria" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: T, onManualEdit })
+
+    const el = document.getElementById('name') as HTMLInputElement
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Maria')
+  })
+})
