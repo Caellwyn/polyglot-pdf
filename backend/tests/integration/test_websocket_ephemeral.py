@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from backend.services.link_spend import (
@@ -433,6 +434,51 @@ async def test_a_broken_adapter_does_not_break_the_TEARDOWN(monkeypatch):
     assert await wr._bank_link_spend("jti-a", _Svc(), wr._log) == 0.0
 
 
+@pytest.mark.asyncio
+async def test_a_broken_adapter_STILL_LOGS_link_spend_record_failed():
+    """fresh-eyes finding 2 on bd polyglot-pdf-w828m.
+
+    _session_cost_usd is now SHARED with the usage-rollup call site (bd
+    polyglot-pdf-w828m), so its own internal read failure is silent by
+    default -- the rollup caller already logs its own
+    "usage_rollup_telemetry_failed" around the whole record_session_end()
+    call and does not want a second line for the same failure. But
+    _bank_link_spend's pre-existing contract, unchanged since before this
+    bead, is to log "link_spend_record_failed" whenever THIS read fails --
+    that line degrading silently would be a real (if logging-only)
+    regression on a path that feeds paid-session cost banking.
+
+    Mutation: drop the `log=log, jti=link_jti` kwargs from
+    _bank_link_spend's `_session_cost_usd(service, log=log, jti=link_jti)`
+    call (i.e. revert to the bare `_session_cost_usd(service)`) -- red,
+    because the read failure then never reaches any logger at all.
+    """
+    from backend.routes import websocket_routes as wr
+
+    class _AI:
+        def session_cost_usd(self):
+            raise RuntimeError("adapter exploded")
+
+    class _Svc:
+        live_ai = _AI()
+
+    calls = []
+
+    class _FakeLog:
+        def error(self, event, **kw):
+            calls.append((event, kw))
+
+    got = await wr._bank_link_spend("jti-a", _Svc(), _FakeLog())
+
+    assert got == 0.0
+    assert any(event == "link_spend_record_failed" for event, _ in calls), (
+        "a broken adapter read must still log link_spend_record_failed -- "
+        "see _session_cost_usd's log/jti kwargs"
+    )
+    (_, kw), = [(e, kw) for e, kw in calls if e == "link_spend_record_failed"]
+    assert kw.get("jti") == "jti-a"
+
+
 def test_the_TEARDOWN_actually_calls_the_banking_helper():
     """Pins the WIRING, not just the helper.
 
@@ -449,6 +495,193 @@ def test_the_TEARDOWN_actually_calls_the_banking_helper():
     )
     # ...and it must run BEFORE end_session finalises the adapter.
     assert body.index("await _bank_link_spend(") < body.index("await service.end_session()")
+
+
+@pytest.mark.asyncio
+async def test_TEARDOWN_passes_usage_employee_id_not_link_employee_id_to_rollup(
+    monkeypatch,
+):
+    """Drives the REAL `_handle_fill_session` teardown end-to-end and pins
+    the exact keyword wiring on the usage-rollup call site (bd
+    polyglot-pdf-w828m fresh-eyes finding 1).
+
+    The module's own comment right above the call site is explicit that
+    `usage_employee_id` (NOT `link_employee_id`) is the by_employee key:
+    the link's employee_id for a client session, the staff uid for a staff
+    session -- the two are NOT interchangeable. Every existing test for
+    record_session_end / _rollup_language_key / _session_cost_usd drives
+    them as isolated pure functions with hand-supplied arguments; none
+    drives the real teardown and asserts the actual kwargs passed at the
+    call site, so a swap of `usage_employee_id` for `link_employee_id`
+    there was invisible to the suite (verified: mutating just that one
+    keyword left all 76 usage-rollup tests plus this file green before
+    this test existed).
+
+    MUTATION HOOK: swap `employee_id=usage_employee_id` for
+    `employee_id=link_employee_id` at the real call site in
+    websocket_routes.py's `_handle_fill_session` teardown -- red, because
+    this test passes the two as DIFFERENT values and asserts on the one
+    that must win.
+    """
+    from backend.routes import websocket_routes as wr
+
+    captured = {}
+
+    def _fake_record_session_end(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        "backend.services.usage_rollups.record_session_end",
+        _fake_record_session_end,
+    )
+
+    ws = MagicMock(spec=WebSocket)
+    ws.accept = AsyncMock()
+    ws.receive = AsyncMock(return_value={"type": "websocket.disconnect"})
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+
+    service = MagicMock(name="form_filling_service")
+    service._is_resume_session = False
+    service.start_session = AsyncMock()
+    service.end_session = AsyncMock()
+    service.confirmed_field_count = MagicMock(return_value=0)
+    # No spoken_language attribute at all -> _rollup_language_key returns
+    # None cleanly; irrelevant to this test's assertion.
+    del service.spoken_language
+
+    await asyncio.wait_for(
+        wr._handle_fill_session(
+            ws,
+            "session-wiring-test",
+            service,
+            False,
+            accept_connection=False,
+            schema=None,
+            form_session_id="fs-wiring-1",
+            firm_id=None,  # keeps firm_kind() OFF the call path (falls
+                           # through to the "live" ternary literal) so this
+                           # test needs no Firestore stub to isolate the
+                           # ONE kwarg it is pinning.
+            kit_id="i-90",
+            link_jti=None,
+            link_employee_id="LINK-EMPLOYEE-should-not-be-used",
+            usage_employee_id="USAGE-EMPLOYEE-the-real-key",
+        ),
+        timeout=5.0,
+    )
+
+    assert captured.get("employee_id") == "USAGE-EMPLOYEE-the-real-key", (
+        "the teardown's usage-rollup call must attribute to "
+        "usage_employee_id, not link_employee_id -- got "
+        f"{captured.get('employee_id')!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_TEARDOWN_dispatches_the_usage_rollup_OFF_the_event_loop(
+    monkeypatch,
+):
+    """Opus cross-surface, bd polyglot-pdf-w828m finding 1 (blocker).
+
+    firm_kind() is an uncached sync Admin-SDK .get(), and
+    record_session_end() does its own db lookup plus a batch.commit() --
+    both blocking network calls. Every sibling Firestore call in this same
+    teardown `finally` block is already to_thread-dispatched (complete_link,
+    _bank_link_spend's record_spend, enforce_link_redemption,
+    _mirror_budget_exhausted -- whose own docstring states the rule by
+    name: "callers on the event loop must wrap it in asyncio.to_thread,
+    exactly like every other Firestore call on this route"). Calling
+    firm_kind/record_session_end directly here would stall every OTHER
+    concurrent connection on this Cloud Run instance, in-flight audio
+    included, on what is now the highest-frequency teardown path in the
+    app. Every existing usage-rollup test stubs record_session_end to
+    return instantly, which makes a missing to_thread wrapper invisible
+    (mirrors test_link_routes.py's
+    test_the_minting_flag_check_runs_OFF_the_event_loop exactly) -- this
+    test spies on asyncio.to_thread itself instead.
+
+    MUTATION HOOK: replace
+    `await asyncio.to_thread(_resolve_kind_and_record_rollup)` in
+    websocket_routes.py's `_handle_fill_session` teardown with a direct
+    `_resolve_kind_and_record_rollup()` call -- red, because
+    firm_kind/record_session_end are then never dispatched via to_thread.
+    """
+    from backend.routes import websocket_routes as wr
+
+    real_to_thread = asyncio.to_thread
+    dispatched: list = []
+
+    async def spy_to_thread(func, *a, **kw):
+        dispatched.append(func)
+        return await real_to_thread(func, *a, **kw)
+
+    monkeypatch.setattr(asyncio, "to_thread", spy_to_thread)
+
+    firm_kind_calls = []
+    record_calls = []
+
+    def _fake_firm_kind(firm_id):
+        firm_kind_calls.append(firm_id)
+        return "live"
+
+    def _fake_record_session_end(**kwargs):
+        record_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        "backend.services.firms.firm_kind", _fake_firm_kind,
+    )
+    monkeypatch.setattr(
+        "backend.services.usage_rollups.record_session_end",
+        _fake_record_session_end,
+    )
+
+    ws = MagicMock(spec=WebSocket)
+    ws.accept = AsyncMock()
+    ws.receive = AsyncMock(return_value={"type": "websocket.disconnect"})
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+
+    service = MagicMock(name="form_filling_service")
+    service._is_resume_session = False
+    service.start_session = AsyncMock()
+    service.end_session = AsyncMock()
+    service.confirmed_field_count = MagicMock(return_value=0)
+    del service.spoken_language
+
+    await asyncio.wait_for(
+        wr._handle_fill_session(
+            ws,
+            "session-to-thread-test",
+            service,
+            False,
+            accept_connection=False,
+            schema=None,
+            form_session_id="fs-to-thread-1",
+            firm_id="firm-off-loop",  # non-None -> firm_kind() is on the
+                                      # call path this time.
+            kit_id="i-90",
+            link_jti=None,
+            link_employee_id=None,
+            usage_employee_id="staff-uid-1",
+        ),
+        timeout=5.0,
+    )
+
+    assert firm_kind_calls == ["firm-off-loop"], (
+        "firm_kind was not called (or called with the wrong firm_id) -- "
+        f"got {firm_kind_calls!r}"
+    )
+    assert len(record_calls) == 1, (
+        f"record_session_end should be called exactly once, got {record_calls!r}"
+    )
+    # The dispatched closure resolves both firm_kind and record_session_end
+    # inside the SAME to_thread call -- assert at least one dispatched
+    # callable actually ran them (rather than asserting the closure's
+    # object identity, which is a fresh function object per call).
+    assert dispatched, "usage-rollup teardown never called asyncio.to_thread"
 
 
 @pytest.mark.asyncio

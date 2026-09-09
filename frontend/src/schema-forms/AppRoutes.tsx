@@ -21,6 +21,8 @@ import { Route, Routes } from "react-router-dom";
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { ClientLinkEntry } from "./ClientLinkEntry";
 import { MintLinkPage } from "../console/MintLinkPage";
+import { EmployeesPage } from "../console/EmployeesPage";
+import { LinkHistoryPage } from "../console/LinkHistoryPage";
 import { AuthProvider } from "../contexts/AuthContext";
 import { ProtectedRoute } from "../components/layout/ProtectedRoute";
 
@@ -30,12 +32,28 @@ import { ProtectedRoute } from "../components/layout/ProtectedRoute";
  * (backend/routes/link_routes.py). Changing either side alone silently
  * breaks every link a firm has already sent, with no error anywhere -- the
  * client just lands on a sign-in screen. The pairing is asserted by
- * clientRoute.test.tsx against the backend's own constant.
+ * AppRoutes.test.tsx against the backend's own constant.
  */
 export const CLIENT_LINK_PATH = "/f";
 
 /** Where staff mint a client link (bd polyglot-pdf-gob8l, first console slice). */
 export const MINT_PATH = "/console/links";
+
+/** Where a firm manager runs their own staff account management (bd
+ * polyglot-pdf-krbol, Epic 2 Track C bead C4). Any signed-in staffer can
+ * REACH this route (ProtectedRoute gates on sign-in only, same as MINT_PATH
+ * above) -- EmployeesPage itself hides its content unless the token's
+ * firm_role claim is "manager", and the admin service enforces the same
+ * rule independently on every request the page sends. See EmployeesPage.tsx's
+ * module docstring for why the route-level gate is deliberately no
+ * stricter than sign-in. */
+export const EMPLOYEES_PATH = "/console/employees";
+
+/** Where staff see a firm's (or their own) client link history (bd
+ * polyglot-pdf-x22hm, Epic 2 Track C bead C5). Deliberately nested under
+ * /console/links/ rather than beside it -- MINT_PATH is the CREATE action,
+ * this is the READ/manage view of the same resource. */
+export const LINK_HISTORY_PATH = "/console/links/history";
 
 export function AppRoutes() {
   return (
@@ -62,6 +80,34 @@ export function AppRoutes() {
           <AuthProvider>
             <ProtectedRoute>
               <MintLinkPage />
+            </ProtectedRoute>
+          </AuthProvider>
+        }
+      />
+      {/* CONSOLE -- firm-console employee management (bd polyglot-pdf-krbol).
+          Same auth-gate shape as MINT_PATH: any signed-in staffer reaches
+          the route, EmployeesPage's own manager-only check (UX) and the
+          admin service's gate (enforcement) are what actually restrict it. */}
+      <Route
+        path={EMPLOYEES_PATH}
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <EmployeesPage />
+            </ProtectedRoute>
+          </AuthProvider>
+        }
+      />
+      {/* Link history: a manager sees the firm's links, an employee only
+          their own -- see LinkHistoryPage.tsx's own docstring. Same
+          auth-gate shape as the mint route above; the admin service scopes
+          by actor independently. */}
+      <Route
+        path={LINK_HISTORY_PATH}
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <LinkHistoryPage />
             </ProtectedRoute>
           </AuthProvider>
         }

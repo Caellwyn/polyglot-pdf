@@ -1,7 +1,11 @@
 /**
  * Client for the admin service's routes this console consumes (bd
- * polyglot-pdf-b6943): GET /admin/whoami, GET /admin/audit, GET+PUT
- * /admin/config/{channel}.
+ * polyglot-pdf-b6943, extended by polyglot-pdf-z4y91 for users,
+ * polyglot-pdf-mzblw for kit commercials, and polyglot-pdf-r8z9g for
+ * firms/credits/links): GET /admin/whoami, GET /admin/audit,
+ * GET+PUT /admin/config/{channel}, the four staff-account routes, kit
+ * commercial list/get/set, firm CRUD, credit grant/adjust, and link
+ * listing/revoke.
  *
  * MIRRORS the auth/error handling in
  * schema-editor/src/utils/remoteKitStore.ts (editorFetch, AuthError,
@@ -429,4 +433,342 @@ export async function setKitCommercial(
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not save this kit\'s pricing'));
   return (await res.json()) as SetKitCommercialResult;
+}
+
+// ---------------------------------------------------------------------------
+// Firms, credits and links (bd polyglot-pdf-r8z9g, Epic 2 Track C bead C2),
+// driving admin_backend/routes/firm_routes.py, credit_routes.py and
+// link_routes.py.
+// ---------------------------------------------------------------------------
+
+/** The two firm kinds (backend/services/firms.py's FIRM_KIND_MOCK /
+ * FIRM_KIND_LIVE) -- mirrored here as a wire contract, not re-derived,
+ * since create/kind-change send these strings. */
+export const FIRM_KINDS = ['mock', 'live'] as const;
+export type FirmKind = (typeof FIRM_KINDS)[number];
+
+/** The two firm statuses (backend/services/firms.py's FIRM_STATUS_ACTIVE /
+ * FIRM_STATUS_SUSPENDED). */
+export const FIRM_STATUSES = ['active', 'suspended'] as const;
+export type FirmStatus = (typeof FIRM_STATUSES)[number];
+
+/** One row from GET /admin/firms' `firms` array
+ * (firm_routes.py's _public_firm_view -- an explicit key allowlist). */
+export interface FirmRow {
+  firm_id: string;
+  name: string | null;
+  contact_email: string | null;
+  kind: FirmKind;
+  status: FirmStatus | null;
+  allowed_kits: string[];
+  balance_credits: number;
+}
+
+/** GET /admin/firms' response shape. A read, so no audit row. */
+export async function listFirms(): Promise<FirmRow[]> {
+  const res = await adminFetch('/admin/firms');
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the firm list'));
+  const body = (await res.json()) as { firms: FirmRow[] };
+  return body.firms;
+}
+
+export interface CreateFirmRequest {
+  firmId: string;
+  name: string;
+  contactEmail: string;
+  kind: FirmKind;
+  allowedKits?: string[];
+  status?: FirmStatus;
+}
+
+/** POST /admin/firms' response shape. */
+export interface CreateFirmResult {
+  firm_id: string;
+  created: boolean;
+  request_id: string;
+}
+
+/** Create a firm. `kind` is REQUIRED by the route (422 if omitted) -- this
+ * client's own CreateFirmRequest makes it a required field too, so a caller
+ * cannot construct a request that would 422 server-side. */
+export async function createFirm(req: CreateFirmRequest): Promise<CreateFirmResult> {
+  const res = await adminFetch('/admin/firms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      firm_id: req.firmId,
+      name: req.name,
+      contact_email: req.contactEmail,
+      kind: req.kind,
+      allowed_kits: req.allowedKits ?? [],
+      status: req.status ?? 'active',
+    }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not create the firm'));
+  return (await res.json()) as CreateFirmResult;
+}
+
+/** One row from GET /admin/firms/{firm_id}'s `ledger` array
+ * (backend/services/credit_ledger.py's stored entry shape -- read_entries()
+ * returns the persisted document verbatim and does NOT attach doc_id, unlike
+ * the grant/adjust routes' GrantCreditsResult/AdjustCreditsResult or the
+ * sibling audit_routes.py list route, so doc_id is optional here and MUST
+ * NOT be relied on as a stable identity; see polyglot-pdf-migp9). */
+export interface LedgerEntry {
+  doc_id?: string;
+  type: string;
+  amount: number;
+  usd_amount: number | null;
+  firm_kind: FirmKind;
+  channel: string | null;
+  balance_after: number;
+  actor: string;
+  reason: string | null;
+  link_jti: string | null;
+  kit_id: string | null;
+  ts: number;
+}
+
+/** GET /admin/firms/{firm_id}'s response shape: profile, balance, and a
+ * page of ledger rows (newest first). */
+export interface FirmDetail {
+  firm_id: string;
+  name: string | null;
+  contact_email: string | null;
+  kind: FirmKind;
+  status: FirmStatus | null;
+  allowed_kits: string[];
+  balance_credits: number;
+  ledger: LedgerEntry[];
+  ledger_truncated: boolean;
+}
+
+/** One firm's profile, balance, and a page of ledger rows. `ledgerLimit`
+ * mirrors the route's own `ledger_limit` query param (1-200, default 50). */
+export async function getFirm(firmId: string, ledgerLimit?: number): Promise<FirmDetail> {
+  const qs = ledgerLimit !== undefined ? `?ledger_limit=${ledgerLimit}` : '';
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}${qs}`);
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the firm'));
+  return (await res.json()) as FirmDetail;
+}
+
+/** PATCH /admin/firms/{firm_id}/status's response shape. */
+export interface SetFirmStatusResult {
+  firm_id: string;
+  status: FirmStatus;
+  before_status: FirmStatus | null;
+  request_id: string;
+}
+
+/** Set a firm's status (active/suspended). */
+export async function setFirmStatus(
+  firmId: string, status: FirmStatus,
+): Promise<SetFirmStatusResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the firm status'));
+  return (await res.json()) as SetFirmStatusResult;
+}
+
+/** PATCH /admin/firms/{firm_id}/allowed_kits's response shape. */
+export interface SetFirmAllowedKitsResult {
+  firm_id: string;
+  allowed_kits: string[];
+  request_id: string;
+}
+
+/** Replace a firm's private-kit allowlist (full replace, not a merge). */
+export async function setFirmAllowedKits(
+  firmId: string, allowedKits: string[],
+): Promise<SetFirmAllowedKitsResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/allowed_kits`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowed_kits: allowedKits }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the allowed kits'));
+  return (await res.json()) as SetFirmAllowedKitsResult;
+}
+
+/** PATCH /admin/firms/{firm_id}/kind's response shape. */
+export interface SetFirmKindResult {
+  firm_id: string;
+  kind: FirmKind;
+  before_kind: FirmKind | null;
+  request_id: string;
+}
+
+/** Reclassify a firm mock<->live. `reason` is REQUIRED by the route (422 if
+ * blank) -- the confirm-twice control is this console's OWN job
+ * (firm_routes.py's SetKindRequest docstring: "a route cannot see how many
+ * times a human clicked"), enforced in FirmDetailPage before this function
+ * is ever called. */
+export async function setFirmKind(
+  firmId: string, kind: FirmKind, reason: string,
+): Promise<SetFirmKindResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/kind`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, reason }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not change the firm kind'));
+  return (await res.json()) as SetFirmKindResult;
+}
+
+/** The three grant-shaped ledger entry types (credit_routes.py's
+ * GRANT_TYPES) -- adjustment is deliberately excluded, matching the route
+ * split: grant() below can never send the signed operator escape hatch. */
+export const GRANT_TYPES = ['subscription_grant', 'purchase', 'promo_grant'] as const;
+export type GrantType = (typeof GRANT_TYPES)[number];
+
+/** The two income types that carry a real dollar price
+ * (credit_routes.py's _USD_REQUIRED_GRANT_TYPES) -- usd_amount is shown
+ * ONLY for these two on the grant form (bead exit criterion 1). */
+export const USD_REQUIRED_GRANT_TYPES: readonly GrantType[] = ['subscription_grant', 'purchase'];
+
+export interface GrantCreditsRequest {
+  type: GrantType;
+  amount: number;
+  usdAmount?: number;
+  kitId?: string;
+}
+
+/** POST /admin/firms/{firm_id}/credits/grant's response shape
+ * (backend/services/credit_ledger.py::append_entry's return, spread with
+ * request_id). */
+export interface GrantCreditsResult {
+  doc_id: string;
+  firm_id: string;
+  type: GrantType;
+  amount: number;
+  usd_amount: number | null;
+  balance_credits: number;
+  request_id: string;
+}
+
+/** Grant credits to a firm. `usdAmount` is sent ONLY when the caller
+ * supplies it -- the route itself REFUSES a usd_amount on promo_grant
+ * (422), so this client does not default one in for that type. */
+export async function grantCredits(
+  firmId: string, req: GrantCreditsRequest,
+): Promise<GrantCreditsResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/credits/grant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: req.type,
+      amount: req.amount,
+      usd_amount: req.usdAmount ?? undefined,
+      kit_id: req.kitId || undefined,
+    }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not grant credits'));
+  return (await res.json()) as GrantCreditsResult;
+}
+
+export interface AdjustCreditsRequest {
+  amount: number;
+  reason: string;
+}
+
+/** POST /admin/firms/{firm_id}/credits/adjust's response shape. */
+export interface AdjustCreditsResult {
+  doc_id: string;
+  firm_id: string;
+  type: 'adjustment';
+  amount: number;
+  balance_credits: number;
+  request_id: string;
+}
+
+/** The operator's signed adjustment. `reason` is REQUIRED by the route
+ * (422 if blank); `amount` may be either sign. */
+export async function adjustCredits(
+  firmId: string, req: AdjustCreditsRequest,
+): Promise<AdjustCreditsResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/credits/adjust`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: req.amount, reason: req.reason }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not adjust credits'));
+  return (await res.json()) as AdjustCreditsResult;
+}
+
+/** The two channels the admin service knows about
+ * (admin_backend/routes/link_routes.py's KNOWN_CHANNELS) -- link routes take
+ * `channel` as a REQUIRED explicit query param (never derived), since a
+ * link record lives in exactly one channel's collection. */
+export const LINK_CHANNELS = ['demo', 'staging'] as const;
+export type LinkChannel = (typeof LINK_CHANNELS)[number];
+
+/** One row from GET /admin/firms/{firm_id}/links' `links` array
+ * (link_routes.py's _ALLOWLISTED_KEYS join). */
+export interface LinkRow {
+  jti: string;
+  kit_id: string | null;
+  employee_id: string | null;
+  status: string | null;
+  minted_at: number | null;
+  open_deadline: number | null;
+  opened_at: number | null;
+  completed_at: number | null;
+  spend_usd: number | null;
+  turns: number | null;
+  cap_usd: number | null;
+  credit_cost: number | null;
+}
+
+export interface ListFirmLinksFilters {
+  status?: string;
+  employeeId?: string;
+}
+
+/** GET /admin/firms/{firm_id}/links's response shape. */
+export interface FirmLinksPage {
+  firm_id: string;
+  channel: LinkChannel;
+  links: LinkRow[];
+}
+
+/** A firm's links, joined with their redemption detail. `channel` is
+ * REQUIRED (mirrors the route's own 422-on-missing rule). */
+export async function listFirmLinks(
+  firmId: string, channel: LinkChannel, filters: ListFirmLinksFilters = {},
+): Promise<FirmLinksPage> {
+  const params = new URLSearchParams({ channel });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.employeeId) params.set('employee_id', filters.employeeId);
+  const res = await adminFetch(
+    `/admin/firms/${encodeURIComponent(firmId)}/links?${params.toString()}`,
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the firm links'));
+  return (await res.json()) as FirmLinksPage;
+}
+
+/** POST /admin/links/{jti}/revoke's response shape. */
+export interface RevokeLinkResult {
+  jti: string;
+  channel: LinkChannel;
+  status: 'revoked';
+  before_status: string;
+  revoked_at: number;
+  request_id: string;
+}
+
+/** Revoke a minted link. Only a `minted` link may be revoked (409
+ * otherwise, naming the current status -- surfaced via errorDetail like
+ * every other route's refusal). */
+export async function revokeLink(
+  jti: string, channel: LinkChannel,
+): Promise<RevokeLinkResult> {
+  const params = new URLSearchParams({ channel });
+  const res = await adminFetch(`/admin/links/${encodeURIComponent(jti)}/revoke?${params.toString()}`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not revoke the link'));
+  return (await res.json()) as RevokeLinkResult;
 }

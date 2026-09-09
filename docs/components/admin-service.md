@@ -2,6 +2,41 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-09 (bd polyglot-pdf-r8z9g: Epic 2 Track C bead C2 --
+the console's Firms tab (`admin-console/src/pages/FirmsPage.tsx`,
+`FirmDetailPage.tsx`), the SECOND page under `pages/` (after
+`UsersPage.tsx`). FirmsPage lists every firm (kind badge, balance, status --
+driving `GET /admin/firms`) and creates one; `kind` has NO client-side
+default (an explicit "Choose kind..." placeholder option, never
+pre-selected mock or live) and the Create button stays disabled until an
+operator actively picks one -- the route's own kind-REQUIRED 422 mirrored
+client-side, deliberately in the safer direction since a mis-defaulted LIVE
+firm can mint for real money (firm_routes.py's own docstring). FirmDetailPage
+drives `GET /admin/firms/{firm_id}` (profile, balance, ledger page),
+`PATCH .../allowed_kits` (a comma-separated textarea, full replace),
+`PATCH .../kind` (CONFIRM-TWICE IN THE CONSOLE, not the route -- opening the
+change-kind form is confirmation #1, and a second dialog rendered only
+after a reason is typed gates the actual write as confirmation #2; the
+route's own `reason` REQUIRED 422 is mirrored client-side ahead of both
+confirmations), `POST .../credits/grant` and `.../credits/adjust` (grant
+shows `usd_amount` ONLY for `subscription_grant`/`purchase` -- switching to
+`promo_grant` clears any typed value so it can never ride along on a type
+credit_routes.py would refuse it on; adjust requires a non-blank `reason`,
+enforced by both the input's own `required` attribute and a `.trim()`
+check, since a whitespace-only value passes the former), and bead B4's
+`GET /admin/firms/{firm_id}/links` + `POST /admin/links/{jti}/revoke`
+(a channel `<select>` defaulting to `demo` reloads the link list on
+change -- `channel` is a REQUIRED query param on both routes, per
+link_routes.py's own 422-on-missing rule; revoke is enabled only on a
+`minted` link, calls the route once, and re-reads the link list from the
+same channel). Every mutation on this page follows the same MUTATE-THEN-
+RE-READ round trip `ConfigEditorPage`/`UsersPage` already use. `App.tsx`
+gains a fifth tab, Firms, whose detail view is a SUB-STATE of that tab
+(`openFirmId`) rather than a sixth tab -- switching tabs away and back to
+Firms always returns to the list. `adminApi.ts` gains `listFirms`,
+`createFirm`, `getFirm`, `setFirmStatus`, `setFirmAllowedKits`,
+`setFirmKind`, `grantCredits`, `adjustCredits`, `listFirmLinks`,
+`revokeLink`.)*
 *Last updated: 2026-09-09 (bd polyglot-pdf-f0kuu: kit commercial settings,
 Track B bead B3 -- `GET /admin/kits` (every kit in the form-kit store,
 joined with its resolved commercial or the global defaults),
@@ -501,16 +536,17 @@ one.
   polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
   `components/`: it drives four routes and two mutations with a re-read
   each, past the point a single-file "page" component was the more natural
-  location).
+  location), Firms (`pages/FirmsPage.tsx` + `pages/FirmDetailPage.tsx`, bd
+  polyglot-pdf-r8z9g -- see below).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
   `handleAuthExpired`.
 - **Users page** (`pages/UsersPage.tsx`): the firm-ID field is a REQUIRED
-  text input, always shown -- there is no firm-picker dropdown, because no
-  `GET /admin/firms` list route exists yet (Epic 2 Track C's firms page, C2,
-  has not shipped) and because the console's sign-in gate calls only `GET
-  /admin/whoami` (`require_app_admin`, the STRICT gate), never the composite
+  text input, always shown -- there is no firm-picker dropdown (the Firms
+  page's own firm picker is a SEPARATE tab, not wired into this one) and
+  because the console's sign-in gate calls only `GET /admin/whoami`
+  (`require_app_admin`, the STRICT gate), never the composite
   `require_app_admin_or_owning_manager` the user routes accept -- so every
   signed-in caller of this page is necessarily an app admin, who must name a
   firm (`admin_auth.resolve_target_firm` 422s an app admin who omits one). A
@@ -522,12 +558,50 @@ one.
   call their route once and then RE-READ the firm's list, the same
   round-trip pattern `ConfigEditorPage` uses, so the screen always reflects
   what the server actually stored.
+- **Firms pages** (`pages/FirmsPage.tsx` + `pages/FirmDetailPage.tsx`, bd
+  polyglot-pdf-r8z9g, Epic 2 Track C bead C2): the SECOND page pair under
+  `pages/`. `FirmsPage` loads `GET /admin/firms` on mount (deliberately
+  unfiltered, matching the route's own contract) and lists every firm's
+  kind badge, balance, and status; its create form's `kind` <select> has NO
+  default -- an explicit "Choose kind..." placeholder that is never a valid
+  `FirmKind`, so the Create button stays disabled until an operator makes
+  an active choice, the SAFER direction to default given a mis-defaulted
+  LIVE firm can mint for real money (`firm_routes.py`'s own docstring).
+  Clicking a firm name opens `FirmDetailPage` as a SUB-STATE of the Firms
+  tab (`App.tsx`'s `openFirmId`), not a separate tab -- switching tabs away
+  and back to Firms always returns to the list.
+  `FirmDetailPage` drives `GET /admin/firms/{firm_id}` (profile, balance,
+  and a ledger page), `PATCH .../allowed_kits` (a comma-separated textarea
+  committed as a full replace, matching the route's own full-replace
+  contract), `PATCH .../kind` (CONFIRM-TWICE IN THE CONSOLE, not the route
+  -- `firm_routes.py`'s `SetKindRequest` docstring: "a route cannot see how
+  many times a human clicked". Opening the change-kind form is confirmation
+  #1; a second dialog, rendered only once a non-blank reason is typed,
+  gates the actual `setFirmKind` call as confirmation #2. `reason` is
+  REQUIRED client-side ahead of both confirmations, mirroring the route's
+  own 422), `POST .../credits/grant` and `.../credits/adjust` (grant shows
+  `usd_amount` ONLY for `subscription_grant`/`purchase` -- the two income
+  types `credit_routes.py` requires it for; switching the type <select> to
+  `promo_grant` clears any typed `usd_amount` so a stale value can never
+  ride along on a type the route would refuse it on. Adjust requires a
+  non-blank `reason`, enforced by BOTH the input's own `required` attribute
+  and a `.trim()` check -- the former alone lets a whitespace-only value
+  through), and bead B4's `GET /admin/firms/{firm_id}/links` +
+  `POST /admin/links/{jti}/revoke` (a channel `<select>`, defaulting to
+  `demo`, reloads the link list on change -- `channel` is a REQUIRED query
+  param on both routes per `link_routes.py`'s own 422-on-missing rule;
+  Revoke is enabled only on a `minted` link, calls the route once, and
+  re-reads the SAME channel's link list afterward). Every mutation on this
+  page follows the same MUTATE-THEN-RE-READ round trip `ConfigEditorPage`/
+  `UsersPage` already use.
 - **API client:** `admin-console/src/utils/adminApi.ts` (`probeWhoAmI`,
   `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`, `listUsers`,
-  `createUser`, `setUserDisabled`, `setUserRole`), each call carrying
-  `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST from
-  `admin-console/src/utils/adminAuth.ts` (never cached client-side, so a
-  mid-session token refresh cannot leave a stale credential in memory). A
+  `createUser`, `setUserDisabled`, `setUserRole`, `listFirms`, `createFirm`,
+  `getFirm`, `setFirmStatus`, `setFirmAllowedKits`, `setFirmKind`,
+  `grantCredits`, `adjustCredits`, `listFirmLinks`, `revokeLink`), each call
+  carrying `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST
+  from `admin-console/src/utils/adminAuth.ts` (never cached client-side, so
+  a mid-session token refresh cannot leave a stale credential in memory). A
   403 is classified into `ForbiddenError.noAdminAccess` by the
   `NO_ADMIN_ACCESS:` wire prefix, the same idiom the schema editor's
   `NO_EDITOR_ACCESS_PREFIX` uses.

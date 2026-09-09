@@ -149,3 +149,227 @@
   border-radius: 4px;
   color: #611a15;
 }
+
+/* Employees page (bd polyglot-pdf-krbol, C4). Same palette as the mint page
+   above -- wider, since it carries a table, not a single field. */
+.employees-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #333;
+}
+
+@media (min-width: 768px) {
+  .employees-page {
+    padding: 2rem;
+  }
+}
+
+.employees-page h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.5rem;
+}
+
+.employees-page > p {
+  margin: 0 0 1.5rem;
+  color: #555;
+}
+
+.employees-page label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.employees-page input,
+.employees-page select {
+  padding: 0.5rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.employees-page input:focus,
+.employees-page select:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.employees-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.employees-create-form button {
+  padding: 0.6rem 1.25rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: #fff;
+  background-color: #4CAF50;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.employees-create-form button:hover:not(:disabled) {
+  background-color: #43a047;
+}
+
+.employees-create-form button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.employees-reset-link {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.employees-reset-link input {
+  width: 100%;
+  margin: 0.5rem 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
+  font-size: 0.875rem;
+}
+
+.employees-reset-link button {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #333;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.employees-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.employees-table th,
+.employees-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.employees-table th {
+  color: #666;
+  font-weight: 600;
+}
+
+.employees-truncated-note {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #9a6700;
+}
+
+.employees-page [role="alert"] {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background-color: #fdecea;
+  border: 1px solid #f5c6cb;
+  border-left: 4px solid #d32f2f;
+  border-radius: 4px;
+  color: #611a15;
+}
+
+/* LinkHistoryPage (bd polyglot-pdf-x22hm). Reuses .mint-page for the page
+   shell (same reasoning MintLinkPage's own header comment gives for lifting
+   values from schema-form.css: one palette per product, not one per page) --
+   these two rules are the ones the mint page has no analogue for: a manager's
+   filter row and the link table itself. */
+.link-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.link-history-filters label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.link-history-filters select,
+.link-history-filters input {
+  padding: 0.5rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.link-history-filters button {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: #333;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.link-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.link-history-table th,
+.link-history-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.link-history-table th {
+  color: #555;
+  font-weight: 600;
+}
+
+.link-history-table button {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #fff;
+  background-color: #d32f2f;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.link-history-table button:hover:not(:disabled) {
+  background-color: #b71c1c;
+}
+
+.link-history-table button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
