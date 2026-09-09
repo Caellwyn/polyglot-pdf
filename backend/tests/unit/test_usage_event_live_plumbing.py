@@ -147,7 +147,18 @@ def _real_service() -> FormFillingService:
 
 def _stub_open_link(monkeypatch):
     """Every gate before _handle_fill_session must clear to reach it
-    (mirrors test_websocket_link_budget.py's helper of the same name)."""
+    (mirrors test_websocket_link_budget.py's helper of the same name).
+
+    Since Epic 2 bead A3 the socket's link path ALSO requires a mint record
+    (links_store.get_link) before it redeems; unstubbed, that read fails
+    closed and the session never reaches the adapter -- so the assertions
+    below would fail on the gate, not on the plumbing they pin."""
+    from backend.services import links_store
+
+    monkeypatch.setattr(
+        links_store, "get_link",
+        lambda jti, channel=None: {"jti": jti, "status": links_store.STATUS_MINTED},
+    )
     monkeypatch.setattr(
         "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {

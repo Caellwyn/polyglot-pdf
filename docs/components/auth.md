@@ -1,20 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- telemetry
-alert docs, `alerts/{id}` (new `backend/services/alerts.py`), written with
-DETERMINISTIC ids so a repeat trigger dedups onto the SAME doc:
-`link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch
-(which now takes an optional `firm_id` kwarg purely to label the alert), and
-`{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from
-`credit_ledger.append_entry()` after a `mint_debit` commits, compared
-against the new `CREDIT_LOW_THRESHOLD` runtime-config key
-(`runtime_config.credit_low_threshold()`, compiled default 10, no env
-fallback -- same shape as `CREDITS_ENFORCED`). Both hooks are best-effort
-(alerts.py's own write path can never raise into either caller); `firestore.
-rules` gains a client deny block for `alerts/{alertId}`, folded into the
-set-derived rules test.) (bd polyglot-pdf-dmjl5: the firm-manager rule gets ONE home -- `backend/services/firms.py`'s `manager_firm_id(claims)` predicate, consumed by the new `require_firm_manager` dependency in `backend/services/auth.py` (403) and by the retire route's `_require_firm_owns_private_kit` (which keeps its 404); the admin service gains `require_app_admin_or_owning_manager`, its `resolve_target_firm` two-actor rule, and the four staff-account routes that write ONLY `firm_id` and `firm_role`.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- `credit_ledger.refund_expired_link()`, the transactional expiry-refund helper keyed on `link_redemptions[_<channel>]/{jti}`'s existence (never the `links` record's best-effort `opened` mirror) and idempotent on `links[_<channel>]/{jti}.status == "minted"`; `reconcile_expired_for_firm()`, the lazy best-effort per-firm catch-up called only by a balance read, never by the mint transaction (pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard); and the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4 -- the token payload gains an OPTIONAL `cap_usd` per-link spend ceiling, signed in only for a real finite positive number; `link_tokens.py` gains `new_jti()` and a caller-supplied `jti=` on `mint_link_token` so Epic 2 bead A3 can reserve a credit before signing; new `link_budget.cost_ceiling_usd_for_claims(claims)` resolves the socket's spend ceiling with the same defensive parsing as `cost_ceiling_usd_for_kit`; the socket's client-link gate now calls `check_budget` with that resolved ceiling instead of the bare global.) (bd polyglot-pdf-d4wdi: Epic 2 Track A bead A6, the one-time credits migration -- `scripts/backfill_firm_kind.py` gives every pre-A1 `firms/{firm_id}` doc a `kind` (`live` unless named in an explicit `--mock` allowlist) and a `balance_credits`/`balance_updated_at` of 0, ONLY when those keys are absent (never overwrites an operator's deliberate choice), plus an optional one-time `--seed-credits N` `promo_grant` through `credit_ledger.append_entry` for firms newly given a kind; `scripts/seed_kit_commercials.py` writes `kits/{kit_id}` (`credit_cost` from a REQUIRED `--default-credit-cost N`, `burn_cap_usd` from the kit's own `metadata.json` `link_cost_ceiling_usd` where present and valid else `--default-burn-cap-usd`, `display.label`, `updated_by`/`updated_at`) for every kit under `--kits-root` by walking the filesystem directly rather than the async `FormKitStore`; both scripts pin the same DEAD_PROJECTS refusal and `--project`-match assertion as `bootstrap_firm.py`/`grant_credits.py`. `CREDITS_ENFORCED` is switched on per channel only after this has run.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-09 (bd polyglot-pdf-jecrl: Epic 2 Track A bead A3 -- `POST /api/links/mint` reserves the credit BEFORE signing (one transaction: the `mint_debit` ledger entry, the balance, and the `links[_<channel>]/{jti}` record, via `append_entry`'s `extra_writes`), refuses `403` for a live or kindless firm unless the RAW `LINK_CHANNEL` is exactly `demo` and `402` when `CREDITS_ENFORCED` and the balance will not cover the kit's `credit_cost`; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for that price and the `burn_cap_usd` signed in as `cap_usd`; and `enforce_link_redemption` -- the shared gate serving `/open`, the socket and `require_paid_client_work` -- now refuses (new `LinkNotMinted`, a subclass of `RedemptionUnavailable`) a link with no mint record or a revoked/refunded one.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- telemetry alert docs, `alerts/{id}` (new `backend/services/alerts.py`), written with DETERMINISTIC ids so a repeat trigger dedups onto the SAME doc: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which now takes an optional `firm_id` kwarg purely to label the alert), and `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, compared against the new `CREDIT_LOW_THRESHOLD` runtime-config key (`runtime_config.credit_low_threshold()`, compiled default 10, no env fallback -- same shape as `CREDITS_ENFORCED`). Both hooks are best-effort (alerts.py's own write path can never raise into either caller); `firestore. rules` gains a client deny block for `alerts/{alertId}`, folded into the set-derived rules test.) (bd polyglot-pdf-dmjl5: the firm-manager rule gets ONE home -- `backend/services/firms.py`'s `manager_firm_id(claims)` predicate, consumed by the new `require_firm_manager` dependency in `backend/services/auth.py` (403) and by the retire route's `_require_firm_owns_private_kit` (which keeps its 404); the admin service gains `require_app_admin_or_owning_manager`, its `resolve_target_firm` two-actor rule, and the four staff-account routes that write ONLY `firm_id` and `firm_role`.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- `credit_ledger.refund_expired_link()`, the transactional expiry-refund helper keyed on `link_redemptions[_<channel>]/{jti}`'s existence (never the `links` record's best-effort `opened` mirror) and idempotent on `links[_<channel>]/{jti}.status == "minted"`; `reconcile_expired_for_firm()`, the lazy best-effort per-firm catch-up called only by a balance read, never by the mint transaction (pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard); and the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4 -- the token payload gains an OPTIONAL `cap_usd` per-link spend ceiling, signed in only for a real finite positive number; `link_tokens.py` gains `new_jti()` and a caller-supplied `jti=` on `mint_link_token` so Epic 2 bead A3 can reserve a credit before signing; new `link_budget.cost_ceiling_usd_for_claims(claims)` resolves the socket's spend ceiling with the same defensive parsing as `cost_ceiling_usd_for_kit`; the socket's client-link gate now calls `check_budget` with that resolved ceiling instead of the bare global.) (bd polyglot-pdf-d4wdi: Epic 2 Track A bead A6, the one-time credits migration -- `scripts/backfill_firm_kind.py` gives every pre-A1 `firms/{firm_id}` doc a `kind` (`live` unless named in an explicit `--mock` allowlist) and a `balance_credits`/`balance_updated_at` of 0, ONLY when those keys are absent (never overwrites an operator's deliberate choice), plus an optional one-time `--seed-credits N` `promo_grant` through `credit_ledger.append_entry` for firms newly given a kind; `scripts/seed_kit_commercials.py` writes `kits/{kit_id}` (`credit_cost` from a REQUIRED `--default-credit-cost N`, `burn_cap_usd` from the kit's own `metadata.json` `link_cost_ceiling_usd` where present and valid else `--default-burn-cap-usd`, `display.label`, `updated_by`/`updated_at`) for every kit under `--kits-root` by walking the filesystem directly rather than the async `FormKitStore`; both scripts pin the same DEAD_PROJECTS refusal and `--project`-match assertion as `bootstrap_firm.py`/`grant_credits.py`. `CREDITS_ENFORCED` is switched on per channel only after this has run.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -374,11 +362,11 @@ Precedence at `/ws/fill`'s client-link gate is `services/link_budget.py`'s
 `cost_ceiling_usd_for_claims(claims)`: the token's own `cap_usd` claim wins
 over the global default (`LINK_COST_CEILING_USD` via `runtime_config`), and
 nothing else -- there is no Firestore kit metadata load on connect. That is
-safe once Epic 2 bead A3 lands (open requires a mint record, so every token
-that CAN open already carries `cap_usd`, resolved once at mint from the
-kit's price commercial); until then, or for a kit with no resolvable
-ceiling, the claim is simply absent and the global applies, exactly as
-before this bead. `_verify_ws_credential` carries `cap_usd` through into the
+safe because open now REQUIRES a mint record (bd `polyglot-pdf-jecrl` /
+Epic 2 A3, below), so every token that can open was signed by the current
+mint route and already carries `cap_usd`, resolved once from the kit's
+commercial doc. A kit with no resolvable ceiling still signs no claim, and
+the global applies -- the defensive default, never "no ceiling". `_verify_ws_credential` carries `cap_usd` through into the
 claims dict only when the verified payload has it -- there is no synthetic
 `cap_usd: None` for an uncapped link. `websocket_routes.check_budget` still
 takes a `kit_metadata`-shaped dict (unchanged signature); the socket now
@@ -398,16 +386,23 @@ together would mean a doc exists before the client's first open, which is
 precisely the state `link_redemptions.py`'s callers currently treat as proof
 of a real open -- so they stay separate collections under the SAME
 channel-suffix convention (`links` for demo, `links_staging` for staging).
-This bead ships the collection, its doc shape (firm/kit/employee,
-`credit_cost`/`cap_usd` snapshots, `minted_at`/`open_deadline`, a `status`
-cache, and an `expire_at` for the Firestore TTL policy declared by
-`scripts/setup-firestore-ttl.sh`), and a plain non-transactional
-`record_mint()` write -- NOT yet wired into the mint route. The ATOMIC
-"reserve a credit + ledger entry + this record" transaction, the
-open-requires-a-mint-record gate, and the revoke/sweep/refund paths that
-transition `status` all land in later Epic 2 beads (A3/A5); until then
-nothing calls `record_mint()` from a route. The ATOMIC transaction it will
-join now exists -- see the next section.
+The doc shape is firm/kit/employee, `credit_cost`/`cap_usd`
+snapshots, `minted_at`/`open_deadline`, a `status` cache, and an `expire_at`
+for the Firestore TTL policy declared by `scripts/setup-firestore-ttl.sh`.
+`build_mint_record()` is the ONE place that shape is defined: the mint
+route's transaction writes what it returns with `tx.set()`, and the plain
+non-transactional `record_mint()` writes the same builder's output for
+callers with no credit to reserve (a migration backfill, a test fixture).
+The refund and revoke writers that transition `status` land in Epic 2 bead
+A5.
+
+`status` is a DERIVED CACHE and never decides money.
+`OPEN_BLOCKING_STATUSES` -- `revoked` and `refunded`, the two terminal money
+states -- is the closed set the open gate refuses on; `opened` and
+`completed` are best-effort mirrors (`mark_opened()` never raises and only
+ever moves `minted` -> `opened`), and `budget_exhausted` is telemetry only.
+A5's refund transaction reads the AUTHORITATIVE redemption doc, not this
+field.
 
 ### The credit ledger (`firms/{firm_id}/ledger/{auto}`, Epic 2 bead A2, `backend/services/credit_ledger.py`)
 
@@ -452,11 +447,11 @@ async callers wrap it in `asyncio.to_thread`.
 **Enforcement is a caller's switch, not a default.**
 `require_sufficient_balance=False` (the default) WRITES a debit past zero
 and lets the balance go negative -- the metered soft-launch mode; `True`
-raises `InsufficientCredits` with nothing committed. Epic 2 bead A3's mint
-route passes it from the `CREDITS_ENFORCED` runtime-config flag and maps the
-refusal to `402`. That bead also passes `extra_writes`, which joins the
-`links[_<channel>]/{jti}` mint record above to the SAME transaction, so the
-debit, the entry and the record commit together or not at all.
+raises `InsufficientCredits` with nothing committed. The mint route passes it from the
+`CREDITS_ENFORCED` runtime-config flag and maps the refusal to `402` (below).
+It also passes `extra_writes`, which joins the `links[_<channel>]/{jti}` mint
+record above to the SAME transaction, so the debit, the entry and the record
+commit together or not at all.
 
 **Every committed write emits one `ledger_export` structured log line**
 (`event_type`, `type`, `amount`, `usd_amount`, `firm_id`, `firm_kind`,
@@ -531,6 +526,93 @@ same as every other Firestore call on this route) with NO ledger entry --
 whether a budget-exhausted link earns a refund, and whether a replacement
 link (bd `polyglot-pdf-1uyof`) costs a fresh credit, are both maintainer
 pricing calls the plan lists as undecided.
+
+### Minting a link costs a credit, and opening one requires the record (Epic 2 bead A3, `polyglot-pdf-jecrl`)
+
+**Reserve, THEN sign.** `POST /api/links/mint` runs, in this order:
+`link_tokens.new_jti()`; ONE Firestore transaction; then
+`mint_link_token(..., jti=..., cap_usd=...)`. The order is the whole
+guarantee: a refused reservation must not leave a signed token behind,
+because a signed token that opens is a paid Gemini session nobody was
+charged for. The transaction is `credit_ledger.append_entry()` -- the repo's
+one writer of `balance_credits` -- with the `links[_<channel>]/{jti}` mint
+record joined in as `extra_writes`, so the debit, the ledger entry and the
+record commit together or not at all. A refusal leaves **no token, no ledger
+entry and no record**.
+
+The kit's price comes from `backend/services/kit_commercials.py`
+(`kits/{kit_id}`: `credit_cost`, `burn_cap_usd`), read OUTSIDE the
+transaction and deliberately fail-soft: a missing doc, an unreachable store
+or a malformed value resolves to the global defaults -- never to "free" and
+never to "no ceiling". `burn_cap_usd` funnels through
+`link_budget.cost_ceiling_usd_for_kit()`, so a bad commercial value fails
+exactly the way a bad kit-metadata value does. Both numbers are resolved
+ONCE here: `cap_usd` is signed into the token, and both are snapshotted onto
+the record, so a later pricing edit cannot change what an already-minted
+link costs or may spend. `open_deadline` is pinned to the token's `exp` by
+handing `mint_link_token` the same clock -- A5's expiry sweep queries
+Firestore on that field, and a drifted deadline would refund a live link or
+strand a dead one.
+
+**Two staff-facing refusals, deliberately NOT the uniform 404.** The
+uniform-refusal rule protects the UNAUTHENTICATED `/open` door, which must
+not become an oracle. This door is authenticated staff and already knows
+which firm is calling, so hiding the reason would only cost the console a
+useful message.
+
+| Status | When | Notes |
+|--------|------|-------|
+| `403` | the firm is `live`, **or has no `kind` at all**, and the process's raw `LINK_CHANNEL` is not exactly `demo` | checked INSIDE the transaction, off the same firm snapshot the balance comes from |
+| `402` | `CREDITS_ENFORCED` is on and the balance does not cover `credit_cost` | with enforcement OFF the debit is still written and the balance may go negative -- the metered soft-launch mode |
+| `503` | no such firm, or the store is unreachable | a deployment/data fault; nothing was committed, so nothing is signed |
+
+**The channel gate reads `os.environ["LINK_CHANNEL"]` RAW, not
+`link_tokens.link_channel()`.** `link_channel()` defaults to `demo` so an
+unconfigured deploy keeps minting and opening the links it already has --
+which means asking it would make an UNSET channel (a laptop, a one-off
+container, a misconfigured revision) look like the demo and let it debit a
+paying firm. Both halves of that are deliberate and both are pinned: an
+unset channel still mints `aud=demo` tokens for **mock** firms, while
+refusing live ones. A firm with no `kind` is treated as live, the same
+fail-closed polarity `firms.firm_kind()` uses -- a mis-defaulted mock firm
+merely blocks staging, a mis-defaulted live firm mints for free. This is
+what makes staging-vs-demo firm-billing isolation a CODE property rather
+than an operational habit (see
+[../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md)).
+
+**Opening requires that record, and the check lives in the SHARED gate.**
+`link_redemptions.enforce_link_redemption()` -- the one helper every door
+that SPENDS already calls (`/api/links/open`, `/ws/fill`,
+`require_paid_client_work`) -- now reads `links[_<channel>]/{jti}` first and
+raises `LinkNotMinted` when there is no record, or when the status is one of
+`OPEN_BLOCKING_STATUSES` (`revoked`, `refunded`). Every other status falls
+through to the existing redemption gate, so reopening an unfinished link
+still works: `opened` and `completed` are best-effort mirrors, and refusing
+on them would let a failed mirror write lock a client out of a form they are
+part-way through.
+
+Three details carry weight:
+
+- **It runs BEFORE `open_link()`**, which creates the redemption doc.
+  Checking after would stamp `opened_at` on a link about to be refused.
+- **`LinkNotMinted` subclasses `RedemptionUnavailable`.** The socket gate and
+  `require_paid_client_work` both catch a tuple that already includes the
+  base class, so a door someone adds later, catching only that, still fails
+  closed. A brand-new exception type would have sailed past those handlers
+  as an unhandled error.
+- **An unreachable links store RAISES** rather than reading as "no record".
+  Both refuse; the raise keeps the two causes distinguishable in the log.
+
+All three doors return the refusal they already returned (the uniform `404`
+for `/open`, close code `1008` for the socket), so this adds no oracle:
+"never minted", "revoked", "already completed" and "store unreachable" stay
+indistinguishable from outside. A successful open then best-effort mirrors
+the record to `opened` for the console's link table -- advisory, incapable of
+failing the request.
+
+**CUTOVER, deliberate:** a token minted before the record existed cannot
+open. Few or no live client links exist today (the same reasoning the `aud`
+cutover used) and the maintainer re-mints any outstanding link.
 
 ### The firm WRITE path: authorization is not authentication
 
