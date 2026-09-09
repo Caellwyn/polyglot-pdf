@@ -715,7 +715,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         conn.sendManualFieldUpdate(
           fieldId,
           field?.name || fieldId,
-          unwrapFieldValue(next.fieldValues[fieldId]),
+          // Alias-aware here TOO (bd polyglot-pdf-5k52). A bare read after
+          // verifying a group stored under the bracketed key sends value=undefined
+          // WITH verified=true -- telling the model the field is confirmed and
+          // empty, which is worse than the gate bug: that one did nothing, this
+          // one asserts something false.
+          unwrapFieldValue(readFieldEntryWithAlias(next.fieldValues, fieldId)),
           true
         );
       }

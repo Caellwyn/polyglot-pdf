@@ -37,6 +37,8 @@ vi.mock('../../shared/config', () => ({
 // continuous-mode section-paging test drives it directly to simulate the voice
 // model advancing its focus to a field in another section.
 let capturedOnNextField: ((fieldId: string | null) => void) | null = null;
+const capturedNotify = vi.fn();
+
 vi.mock('../../shared/connection', () => ({
   createConnectionManager: vi.fn(
     (
@@ -47,7 +49,9 @@ vi.mock('../../shared/connection', () => ({
       onNextField: (fieldId: string | null) => void,
     ) => {
       capturedOnNextField = onNextField;
-      return { connect: vi.fn(), disconnect: vi.fn() };
+      // Capture the notify so a test can assert the PAYLOAD the model receives,
+      // not merely the local state write.
+      return { connect: vi.fn(), disconnect: vi.fn(), sendManualFieldUpdate: capturedNotify };
     },
   ),
 }));
@@ -414,5 +418,38 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
     ).toBeTruthy();
     // ...and the modal must show the REAL answer, not a blank.
     expect(screen.getByTestId('verify-field-value').textContent).toContain('a');
+  });
+
+  it('the notify sends the REAL value when a group is stored under the alias key', () => {
+    // The nastier half of the alias bug. The gate one merely did nothing; this
+    // one ASSERTS SOMETHING FALSE -- a bare read here sends value=undefined with
+    // verified=true, telling the model the field is confirmed and empty.
+    capturedNotify.mockClear();
+    const schema = {
+      ...VERIFY_SCHEMA,
+      fields: [{
+        id: 'reason', name: 'Reason', spoken_name: 'reason', section_id: 's1',
+        type: 'checkbox_group',
+        options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+      }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['reason'] }],
+    } as unknown as FormSchema;
+
+    const seeded = SchemaFormStateManager.init(schema);
+    (seeded.fieldValues as any)['reason[]'] = { value: ['a'], confirmed: false };
+    SchemaFormStateManager.save(seeded);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+    const options = Array.from(document.querySelectorAll('input[name="reason[]"]')) as HTMLInputElement[];
+    fireEvent.keyDown(options[0], { key: 'Enter' });
+    fireEvent.keyDown(screen.getByTestId('verify-field-checkbox'), { key: 'Enter' });
+
+    expect(capturedNotify, 'verifying must notify the model').toHaveBeenCalled();
+    const [, , sentValue, sentVerified] = capturedNotify.mock.calls.at(-1)!;
+    expect(sentVerified).toBe(true);
+    expect(
+      sentValue,
+      'the model must be told the REAL answer, never undefined-with-verified-true'
+    ).toEqual(['a']);
   });
 });
