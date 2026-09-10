@@ -16,7 +16,11 @@ a second reader: the plan is explicit ("do not write a second reader"), and
 test_get_commercial_calls_the_shared_a3_reader below asserts the import by
 name rather than merely by behavior, so a future rewrite that inlines a
 second copy of the fallback logic is caught even if it happens to compute
-the same numbers today.
+the same numbers today. Both GET routes below spread that reader's return
+dict directly, so `display` (bd polyglot-pdf-zcbm1: resolve_commercial now
+returns the kit's stored display map, or {} when there is none) reaches the
+console for free -- no route change was needed here for that bead, only
+the reader itself.
 
 WRITE SIDE VALIDATES BEFORE ANY WRITE (exit criterion 1): credit_cost must
 be a positive int (bool excluded -- bool is an int subclass, so a stray
@@ -281,13 +285,17 @@ async def get_kit_commercial(
     kit_id: str,
     actor: Annotated[AdminActor, Depends(require_app_admin)],
 ) -> dict:
-    """The resolved credit price and USD ceiling for one kit -- the SAME
-    reader bead A3's mint transaction calls (exit criterion 2), so the
-    console can never show a number the mint path would not also use.
+    """The resolved credit price, USD ceiling, and display label for one
+    kit -- the SAME reader bead A3's mint transaction calls (exit criterion
+    2), so the console can never show a number the mint path would not also
+    use.
 
     A read, so no audit row. `source` is "kit" when a commercial doc exists,
     "default" when this kit has never been priced -- resolve_commercial's
-    own vocabulary, passed straight through.
+    own vocabulary, passed straight through. `display` (bd
+    polyglot-pdf-zcbm1) is the kit's stored console label map, or {} when
+    none is set -- so a console page can read it here and echo it back on a
+    PUT instead of always sending {} and silently wiping a seeded label.
     """
     kit_id = _validated_kit_id(kit_id)
     resolved = await asyncio.to_thread(

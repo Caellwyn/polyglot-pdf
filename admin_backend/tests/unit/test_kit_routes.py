@@ -293,6 +293,45 @@ def test_put_defaults_display_to_an_empty_map_when_omitted(client, fake_db):
     assert fake_db.kit_doc("w-7")["display"] == {}
 
 
+def test_a_console_read_then_write_preserves_a_seeded_display_label(
+        client, fake_db):
+    """bd polyglot-pdf-zcbm1's end-to-end acceptance case: a kit seeded with
+    a display label (e.g. by scripts/seed_kit_commercials.py) must survive
+    a console price edit. This drives the exact round trip
+    KitCommercialsPage.tsx now performs -- GET the kit's current commercial
+    (to read its display), then PUT the whole body back with THAT read
+    display, never a hardcoded {} -- and confirms the label is still there
+    on the next GET.
+
+    This is a regression test for the bug the bead reports, not just the
+    reader unit test above: it fails if EITHER half of the fix is missing
+    (resolve_commercial not returning display, or a caller not echoing what
+    it read)."""
+    fake_db.docs[(kit_commercials.COLLECTION, "w-7")] = {
+        "credit_cost": 3, "burn_cap_usd": 7.5, "display": {"label": "Form W-7"},
+    }
+
+    # 1. The console's GET before editing -- this is where a caller would
+    # read the existing label from.
+    read = client.get("/admin/kits/w-7/commercial")
+    assert read.status_code == 200, read.text
+    seeded_display = read.json()["display"]
+    assert seeded_display == {"label": "Form W-7"}
+
+    # 2. Save a new price, echoing the display JUST READ (not {}).
+    put = client.put(
+        "/admin/kits/w-7/commercial",
+        json={"credit_cost": 5, "burn_cap_usd": 12.0, "display": seeded_display},
+    )
+    assert put.status_code == 200, put.text
+
+    # 3. The label survived the price edit.
+    reread = client.get("/admin/kits/w-7/commercial")
+    assert reread.status_code == 200, reread.text
+    assert reread.json()["display"] == {"label": "Form W-7"}
+    assert reread.json()["credit_cost"] == 5
+
+
 # --------------------------------------------------------------------------
 # Exit criterion 1, other half: malformed bodies refuse BEFORE any write.
 # --------------------------------------------------------------------------
@@ -465,6 +504,7 @@ def test_get_for_a_kit_with_no_commercial_doc_returns_the_global_defaults(
     assert body["credit_cost"] == kit_commercials.DEFAULT_CREDIT_COST
     assert body["source"] == "default"
     assert isinstance(body["cap_usd"], float) and body["cap_usd"] > 0
+    assert body["display"] == {}
 
 
 def test_get_for_a_priced_kit_returns_its_own_values_and_source_kit(
@@ -480,6 +520,20 @@ def test_get_for_a_priced_kit_returns_its_own_values_and_source_kit(
     assert body["source"] == "kit"
 
 
+def test_get_for_a_priced_kit_returns_its_stored_display_label(client, fake_db):
+    """bd polyglot-pdf-zcbm1: this is the whole point of the bead -- GET
+    must surface a kit's stored `display` so a console PUT can preserve it
+    instead of always sending `display: {}`. Mutation: revert
+    kit_commercials.resolve_commercial to drop "display" from its return
+    dict -- this goes red with a KeyError."""
+    fake_db.docs[(kit_commercials.COLLECTION, "w-7")] = {
+        "credit_cost": 3, "burn_cap_usd": 7.5, "display": {"label": "Form W-7"},
+    }
+    resp = client.get("/admin/kits/w-7/commercial")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["display"] == {"label": "Form W-7"}
+
+
 def test_get_writes_no_audit_row(client, fake_db):
     client.get("/admin/kits/w-7/commercial")
     assert fake_db.audit_rows() == []
@@ -492,7 +546,7 @@ def test_get_writes_no_audit_row(client, fake_db):
 def test_list_kits_joins_every_kit_id_with_its_resolved_commercial(
         client, fake_db, monkeypatch):
     fake_db.docs[(kit_commercials.COLLECTION, "w-7")] = {
-        "credit_cost": 3, "burn_cap_usd": 7.5, "display": {},
+        "credit_cost": 3, "burn_cap_usd": 7.5, "display": {"label": "Form W-7"},
     }
     store = _FakeFormKitStore(["w-7", "i-90"])
     monkeypatch.setattr(
@@ -504,8 +558,12 @@ def test_list_kits_joins_every_kit_id_with_its_resolved_commercial(
     assert set(kits) == {"w-7", "i-90"}
     assert kits["w-7"]["credit_cost"] == 3
     assert kits["w-7"]["source"] == "kit"
+    # bd polyglot-pdf-zcbm1: the list route also gets display for free,
+    # via the same resolve_commercial spread the single-kit GET uses.
+    assert kits["w-7"]["display"] == {"label": "Form W-7"}
     assert kits["i-90"]["credit_cost"] == kit_commercials.DEFAULT_CREDIT_COST
     assert kits["i-90"]["source"] == "default"
+    assert kits["i-90"]["display"] == {}
 
 
 def test_list_kits_on_an_empty_store_returns_an_empty_list(
