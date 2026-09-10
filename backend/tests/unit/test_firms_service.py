@@ -19,6 +19,8 @@ Each test's docstring names the mutation that must turn it red
 
 ASCII only.
 """
+import threading
+import time
 import pytest
 from firebase_admin import firestore as fb_firestore
 
@@ -347,6 +349,26 @@ def test_upsert_raises_on_store_failure(monkeypatch):
 # ----------------------------------------------------------------- probe
 
 
+@pytest.fixture(autouse=True)
+def _reset_probe_cache():
+    """Clear the firms probe cache around EVERY test in this file.
+
+    firms_store_status() gained a process-wide cache + in-flight Event
+    when it was wired into /health (bd polyglot-pdf-vq5wd /
+    polyglot-pdf-e4dt8). Without this reset the tests below leak into each
+    other: the 'ok' this file probes first is still cached when the error
+    test runs, so the error test passes on a STALE 'ok' and asserts
+    nothing (observed -- it went red for exactly this reason before the
+    fixture existed).
+    """
+    firms._probe_cache = None
+    firms._probe_in_flight = None
+    yield
+    firms._probe_cache = None
+    firms._probe_in_flight = None
+
+
+
 def test_firms_store_status_disabled(monkeypatch):
     """Mutation: invert the gate -- 'disabled' never returned."""
     monkeypatch.delenv("FIRMS_FIRESTORE_ENABLED", raising=False)
@@ -375,3 +397,101 @@ def test_firms_store_status_reports_error(monkeypatch):
 
     monkeypatch.setattr("backend.services.auth.get_db", _boom)
     assert firms.firms_store_status().startswith("error:")
+
+def test_firms_store_status_caches_within_max_age(fake_db):
+    """A second call inside the window does NOT hit Firestore again.
+
+    /health is UNAUTHENTICATED, so any caller can poll it at their own
+    rate; without the cache each poll is a Firestore round trip. Mutation:
+    delete the cache read at the top of firms_store_status -- limit_calls
+    grows to [1, 1] and this goes red.
+    """
+    assert firms.firms_store_status() == "ok"
+    assert firms.firms_store_status() == "ok"
+
+    col = fake_db.collection(firms._FIRMS_COLLECTION)
+    assert col.limit_calls == [1], (
+        "the probe ran twice inside the cache window: " + repr(col.limit_calls))
+
+
+def test_firms_store_status_reprobes_after_the_window(fake_db):
+    """max_age_s=0 forces a fresh probe -- the cache expires, it does not
+    pin the first answer forever. Without this, a cache that never expired
+    would pass the test above and report a long-dead 'ok' in production.
+    """
+    assert firms.firms_store_status() == "ok"
+    assert firms.firms_store_status(max_age_s=0) == "ok"
+
+    col = fake_db.collection(firms._FIRMS_COLLECTION)
+    assert col.limit_calls == [1, 1], (
+        "an expired cache did not re-probe: " + repr(col.limit_calls))
+
+
+def test_firms_store_status_coalesces_concurrent_callers(monkeypatch):
+    """N concurrent callers on a cold cache produce ONE Firestore round trip.
+
+    The cache alone does not give this: N threads arriving together all see
+    an empty cache and all fall through. The in-flight Event is what makes
+    the second through Nth wait for the first.
+
+    THE PROBE IS DELIBERATELY SLOW (a 0.3s sleep inside get_db). With the
+    fake_db fixture's instant probe the threads never actually overlap: the
+    first finishes and populates the cache before the others reach the
+    check, so they hit the CACHE and the test passes even with coalescing
+    removed -- verified by mutation, it did exactly that. The sleep is what
+    makes the window real, so this test measures coalescing rather than
+    scheduling luck.
+    """
+    monkeypatch.setenv("FIRMS_FIRESTORE_ENABLED", "true")
+
+    probe_count = []
+    count_lock = threading.Lock()
+
+    class _SlowCollection:
+        def limit(self, n):
+            return self
+
+        def stream(self):
+            with count_lock:
+                probe_count.append(1)
+            time.sleep(0.3)
+            return iter([])
+
+    class _SlowDB:
+        def collection(self, name):
+            return _SlowCollection()
+
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: _SlowDB())
+
+    barrier = threading.Barrier(4)
+    results = []
+    results_lock = threading.Lock()
+
+    def _call():
+        barrier.wait(timeout=5)
+        r = firms.firms_store_status()
+        with results_lock:
+            results.append(r)
+
+    threads = [threading.Thread(target=_call) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert results == ["ok"] * 4, repr(results)
+    assert len(probe_count) == 1, (
+        "concurrent callers each ran their own Firestore probe ({} of them) -- the in-flight coalescing is not working".format(len(probe_count)))
+
+def test_firms_store_status_disabled_is_not_cached(monkeypatch, fake_db):
+    """The disabled short-circuit returns BEFORE the cache is consulted.
+
+    So flipping FIRMS_FIRESTORE_ENABLED on does not leave /health reporting
+    a cached 'disabled' for five minutes after the store came up.
+    """
+    monkeypatch.delenv("FIRMS_FIRESTORE_ENABLED", raising=False)
+    assert firms.firms_store_status() == "disabled"
+
+    monkeypatch.setenv("FIRMS_FIRESTORE_ENABLED", "true")
+    assert firms.firms_store_status() == "ok"
+

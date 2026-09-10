@@ -85,6 +85,19 @@ EXPECTED_ADMIN_SA_ROLES = {
     # test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset
     # below for why the SCOPE, not just the role name, is pinned).
     "roles/bigquery.dataViewer",
+    # Read Cloud Error Reporting groupStats for the console's "errors per
+    # channel" view (Epic 3 bead 8, E3.8). VIEWER, not writer or admin:
+    # the console READS groups and never resolves or deletes them, and
+    # the SERVICES report errors by writing logs (logging.logWriter,
+    # which they already hold), not by calling this API. Granted by
+    # scripts/setup-monitoring.sh.
+    "roles/errorreporting.viewer",
+    # Read the log-based metrics, the alert policies' firing state and
+    # the uptime-check results for the console's health and alert views
+    # (Epic 3 bead 8). Read-only: an operator changes a threshold by
+    # re-running scripts/setup-monitoring.sh under their OWN credentials,
+    # never through the console with the service's identity.
+    "roles/monitoring.viewer",
 }
 
 # Roles granted on ONE RESOURCE rather than project-wide. Kept apart from the
@@ -104,9 +117,25 @@ EXPECTED_ADMIN_SA_BUCKET_ROLES = {
 # separate so test_admin_sa_project_role_pin_matches_the_setup_script (which
 # reads ONLY setup-admin-service.sh) can subtract these out instead of
 # wrongly demanding that script grant BigQuery roles it does not touch.
+# The subset granted by scripts/setup-monitoring.sh (Epic 3 bead 8).
+# Named separately from TELEMETRY_GRANTED_ROLES so a reader can tell WHICH
+# operator script provisions which role without opening both.
+MONITORING_GRANTED_ROLES = {
+    "roles/errorreporting.viewer",
+    "roles/monitoring.viewer",
+}
+
 TELEMETRY_GRANTED_ROLES = {
     "roles/bigquery.jobUser",
     "roles/bigquery.dataViewer",
+    # Granted by scripts/setup-monitoring.sh (Epic 3 bead 8), the sibling
+    # that provisions the metrics/policies/uptime checks these two roles
+    # exist to READ. Same reason as the BigQuery pair above: the role
+    # lands with the script that creates the thing it reads, so
+    # test_admin_sa_project_role_pin_matches_the_setup_script (which
+    # reads ONLY setup-admin-service.sh) must subtract it out.
+    "roles/errorreporting.viewer",
+    "roles/monitoring.viewer",
 }
 
 # Roles the plan defers to the epic that first needs them. Granting one early
@@ -117,9 +146,6 @@ DEFERRED_ROLES = {
     "roles/iam.serviceAccountUser",
     "roles/run.admin",
     "roles/firebasehosting.admin",
-    # Epic 3 bead 8 (error reporting + monitoring script), not yet built.
-    "roles/errorreporting.viewer",
-    "roles/monitoring.viewer",
 }
 
 
@@ -289,6 +315,62 @@ def test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset(
         assert "bigquery.dataViewer" not in block, (
             "roles/bigquery.dataViewer appears in a project-level "
             "add-iam-policy-binding call -- it must be dataset-scoped.")
+
+
+def _monitoring_script_text() -> str:
+    script = REPO_ROOT / "scripts" / "setup-monitoring.sh"
+    assert script.is_file(), (
+        "scripts/setup-monitoring.sh is missing. It is the script that grants "
+        "admin-backend-sa the two monitoring roles this test pins.")
+    return script.read_text(encoding="utf-8")
+
+
+def test_monitoring_script_grants_admin_sa_the_two_monitoring_roles():
+    """The two roles Epic 3 bead 8 moved out of DEFERRED_ROLES are
+    actually GRANTED, in scripts/setup-monitoring.sh -- not merely added
+    as names to EXPECTED_ADMIN_SA_ROLES with nothing on the other side
+    granting them.
+
+    This is the failure the whole file exists to prevent, in its
+    least obvious form: moving a role out of the deferred set is the
+    cheap half, and a pin that only checks the NAME would go green on
+    that alone while the deployed SA still lacked the permission and
+    every console call 403'd (CLAUDE.md scar #7). Mutation: delete either
+    add-iam-policy-binding call from setup-monitoring.sh -- red.
+    """
+    text = _monitoring_script_text()
+    for role in ("roles/errorreporting.viewer", "roles/monitoring.viewer"):
+        assert role in text, (
+            "setup-monitoring.sh does not grant {} to admin-backend-sa".format(role))
+        # The prefix is NOT .format()ed: it contains a regex repetition
+        # `{1,5}` that str.format would read as a field name and blow up on
+        # (KeyError: '1,5'). Only the role half is substituted, then the two
+        # are concatenated.
+        pattern = (
+            r'gcloud projects add-iam-policy-binding\b(?:[^\n]*\n){1,5}?\s*'
+            + r'--role="' + re.escape(role) + r'"'
+        )
+        assert re.search(pattern, text), (
+            "{} is not granted with `gcloud projects add-iam-policy-binding`. "
+            "Error Reporting groups and Monitoring metrics are PROJECT-scoped "
+            "resources, so unlike the BigQuery dataViewer grant there is no "
+            "narrower scope available -- but the call still has to exist.".format(role))
+
+    assert MONITORING_GRANTED_ROLES <= EXPECTED_ADMIN_SA_ROLES, (
+        "MONITORING_GRANTED_ROLES must be a subset of EXPECTED_ADMIN_SA_ROLES.")
+
+
+def test_monitoring_script_does_not_widen_the_public_backend_sa():
+    """polyglot-backend-sa gains NOTHING from the monitoring script.
+
+    It writes logs; it never reads a metric or an error group back.
+    Granting it either role would widen the blast radius of a compromise
+    for a capability nothing calls -- the exact shape CLAUDE.md scar #7
+    is about, on the grant side rather than the call side.
+    """
+    assert "polyglot-backend-sa@" not in _monitoring_script_text(), (
+        "scripts/setup-monitoring.sh references polyglot-backend-sa -- the "
+        "public backend's identity must not gain monitoring read roles.")
 
 
 def test_admin_sa_holds_no_deferred_role_early():

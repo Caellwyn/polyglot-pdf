@@ -20,6 +20,19 @@ from backend.utils.log_schemas import (
 )
 
 
+# Severity per WebSocket close code. Defined at module scope (not inline in
+# log_ws_close) so scripts/setup-monitoring.sh's metric filters and
+# backend/tests/unit/test_ws_close_events.py can both be checked against ONE
+# table instead of against a reading of the method body.
+WS_CLOSE_SEVERITY: Dict[int, Severity] = {
+    1006: "ERROR",
+    1007: "WARNING",
+    1008: "WARNING",
+    1011: "ERROR",
+    1013: "WARNING",
+}
+
+
 class StructuredLogger:
     """
     Production logger that outputs structured JSON to stdout.
@@ -475,6 +488,76 @@ class StructuredLogger:
             section_number=section_number,
             metadata=error_metadata,
         )
+
+    # ------------------------------------------------------------------
+    # WebSocket close events (bd polyglot-pdf-e4dt8 / E3.8)
+    # ------------------------------------------------------------------
+    def log_ws_close(
+        self,
+        close_code: int,
+        reason_token: str,
+        source: EventSource = "backend",
+        form_session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Log a WebSocket close as a structured, NON-exception error event.
+
+        WHY THIS EXISTS. Cloud Monitoring's log-based metrics
+        (scripts/setup-monitoring.sh: ws_close_1011_count,
+        ws_close_1013_count) count log ENTRIES matching a filter. Before this
+        wrapper, a close was recorded only in whatever ad-hoc structlog line
+        the surrounding branch happened to write -- different event names,
+        different key names, some with the code and some without -- so no
+        single filter could count them and no alert policy could fire on the
+        rate. This gives every close ONE shape with the code in ONE place.
+
+        NON-EXCEPTION on purpose. A close is a control-plane outcome, not a
+        crash: there is no traceback and nothing for Cloud Error Reporting to
+        group. Routing these through the exception processor would put
+        thousands of frame-less entries into Error Reporting and drown the
+        real crashes. They go to Cloud LOGGING as counted events instead.
+
+        SEVERITY IS DERIVED FROM THE CODE, not passed in, so two call sites
+        cannot disagree about how bad a 1013 is:
+          1011 / 1006  ERROR    -- a genuine failure (a Gemini-side drop or an
+                                   abnormal close). 1006 never appears on the
+                                   wire; it is what the peer records when the
+                                   connection died without a close frame.
+          1007         WARNING  -- the client sent an unparseable handshake.
+                                   Bad input, not a server fault.
+          1013         WARNING  -- a budget or capacity refusal. Working as
+                                   designed; it is the RATE that matters, and
+                                   the metric captures that.
+          1008         WARNING  -- policy violation: auth failed, kit
+                                   mismatch, a bad source. Expected traffic on
+                                   a public endpoint.
+        Anything else is ERROR, so an unclassified code is loud rather than
+        silently swallowed.
+
+        reason_token is a FIXED IDENTIFIER chosen by the call site (e.g.
+        "budget_exhausted", "handshake_json_decode"), never a formatted
+        message and never user-derived text -- a close reason built from a
+        client-supplied string would be a PII vector
+        (docs/standards/hipaa-pii-policy.md).
+        """
+        severity: Severity = WS_CLOSE_SEVERITY.get(close_code, "ERROR")
+        close_metadata = dict(metadata or {})
+        close_metadata["close_code"] = close_code
+        close_metadata["reason_token"] = reason_token
+
+        self.log_error(
+            error_type="ws_error",
+            # The error_message field of a ws_error carries the reason TOKEN,
+            # not prose: it is the value a log filter or a human groups on.
+            error_message=reason_token,
+            source=source,
+            form_session_id=form_session_id,
+            ws_session_id=ws_session_id,
+            metadata=close_metadata,
+            severity=severity,
+        )
+
 
 
 # Global logger instance

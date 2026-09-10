@@ -1,6 +1,6 @@
 # Logging & cost tracking
 
-**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py
+**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
 shape for every paid call, the `usage_kind` closed set, and the text +
@@ -9,7 +9,9 @@ firm/employee/link/kit/channel/model into every per-turn usage event. bd
 polyglot-pdf-t86oz: the text (validator/secretary/translation) and TTS
 (spellback/notice/intro) paths now emit their usage events too -- see the
 Call-site coverage paragraph below. bd polyglot-pdf-rd3s8: the BigQuery telemetry sink + cost/income views,
-and the three-shape sink filter the plan's prose undersold.)*
+and the three-shape sink filter the plan's prose undersold. bd
+polyglot-pdf-e4dt8: the PII-safe exception shape that reaches Cloud Error
+Reporting, counted WebSocket close events, and scripts/setup-monitoring.sh.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -336,6 +338,106 @@ set into `EXPECTED_ADMIN_SA_ROLES`, granted by `scripts/setup-telemetry.sh`
 rather than `scripts/setup-admin-service.sh`'s `PROJECT_ROLES` array (that
 script grants the admin service's non-BigQuery roles; this dataset-adjacent
 pair travels with the script that creates the dataset).
+
+## Errors, close events, and monitoring (bd polyglot-pdf-e4dt8, E3.8)
+
+### The exception shape
+
+`backend/utils/logging.py` runs `pii_safe_exception_processor` in the
+structlog chain, NOT `structlog.processors.format_exc_info`. The stock
+processor renders the exception MESSAGE, and in a form-filling app that
+message can embed a field value (a parse error over an A-number, a validation
+error naming a date of birth) -- a P0 (bd `polyglot-pdf-p84m`).
+
+Every `.exception(...)` / `exc_info=True` site under `backend/` renders
+through this one processor, which emits:
+
+| Field | Content |
+|-------|---------|
+| `error_type` | The exception class NAME, so a log filter can count by type without parsing a trace. |
+| `stack_trace` | Frames as `file`, `line`, `function` only -- plus each exception's TYPE. Never the message, never locals, never source text. The `__cause__` / `__context__` chain is walked (capped at 5 links, 30 frames each). |
+| `severity` | The level, UPPERCASED. Cloud Logging reads `severity`, not structlog's lowercase `level`; `level` stays in place for existing queries. |
+
+That is the shape Cloud Error Reporting ingests and GROUPS on. The earlier
+local fix -- a bare `error_type=type(e).__name__` line at two call sites in
+`live_ai_gemini.py` -- was PII-safe but ungroupable, so Error Reporting showed
+nothing. A file path, a line number and a function name are repository facts,
+not user data, so frames buy grouping at no privacy cost.
+
+The message is DROPPED, not scrubbed: the value arrives as arbitrary user
+speech, so no pattern covers it and only a wholesale drop cannot be defeated
+by an input. Developers who need the message have the `DEV_LOGGING_ENABLED`
+file log (`backend/utils/dev_file_logger.py`), which never leaves the machine.
+
+`EXCEPTION_LOGGING_SITES` in that module registers every file that logs an
+exception; `backend/tests/unit/test_error_shape.py` re-derives the set from
+the AST and fails on an addition or a removal, so a new site is visible at
+review rather than after it has shipped. `backend/tests/test_no_pii_logging.py`
+carries the sentinel case: an exception whose message contains a sentinel must
+render frames and type with the sentinel nowhere in the output.
+
+### WebSocket close events
+
+`StructuredLogger.log_ws_close` emits every close as a structured,
+NON-exception `ws_error` event carrying `metadata.close_code` and
+`metadata.reason_token`, at a severity derived from the code
+(`WS_CLOSE_SEVERITY`): 1011/1006 ERROR, 1007/1008/1013 WARNING, anything
+unclassified ERROR so it is loud rather than silent.
+
+Non-exception on purpose -- a close is a control-plane outcome with no
+traceback, and routing thousands of frame-less entries into Error Reporting
+would drown the real crashes.
+
+`websocket_routes._close_ws` wraps every close on `/fill` (it never raises: a
+telemetry failure on a teardown path must not turn a clean refusal into a
+500). The 1011/1006 family is emitted from `live_ai_gemini.py` instead,
+because that is a GEMINI-side close the route only learns about second hand,
+and only for the spontaneous-drop codes -- a normal end and a GoAway expiry
+come through the same block. `reason_token` is a FIXED identifier, never
+user-derived text.
+
+`backend/tests/unit/test_ws_close_events.py` pins both the shape and the SET:
+an AST walk finds every `close()` on the route, and a bare one outside the
+allowlist fails.
+
+### scripts/setup-monitoring.sh (operator-run)
+
+Sibling of `setup-telemetry.sh`. Declarative and idempotent
+(describe-then-create-or-update at every step -- policies and uptime checks
+have no operator-chosen id, so a create-only script would duplicate them on
+every re-run). Pinned by `tests/test_setup_monitoring_script.py`.
+
+| Resource | Detail |
+|----------|--------|
+| `ws_close_1011_count` | Gemini-side drops. 1006 is deliberately excluded -- it also fires on ordinary network churn, which would raise the metric's floor above the alert threshold. |
+| `ws_close_1013_count` | Budget refusals. A business signal, not an error: a rising rate means link ceilings are too low for real usage. |
+| `mint_refused_count` | Refused mint requests. |
+| Policy `polyglot 5xx rate` | Cloud Run's own `request_count` by response class, `ALIGN_RATE` over 5m. |
+| Policy `polyglot ws 1011 rate` | Reads the log-based metric above, `ALIGN_RATE`, 15m duration -- an occasional 1011 is a tolerated fact of the native-audio models. |
+| Uptime checks | ONE PER CHANNEL on `/health`: demo, staging, admin. Staging and demo run different code on the same project, so a shared check would either miss a broken demo or page on a staging channel that is expected to be broken. |
+| IAM | `roles/errorreporting.viewer` + `roles/monitoring.viewer` on `admin-backend-sa`, moved out of the IAM envelope test's `DEFERRED_ROLES`. `polyglot-backend-sa` gains neither (scar #7), pinned negatively. |
+
+**Filter shapes matter more than the field names.** This repo emits through
+two renderers: `StructuredLogger._emit` nests its envelope under a `message`
+key (so `ws_error` reads at `jsonPayload.message.event_type`, with the code at
+`jsonPayload.message.metadata.close_code`), while a plain structlog call
+renders flat at `jsonPayload.event` (where `link_mint_refused` lives). A
+filter written at the wrong depth matches NOTHING while the script still exits
+0 -- an alert that never fires, which nothing else would notice. The tests
+assert the depth of each path, and `setup-telemetry.sh`'s sink filter gained
+`ws_error` in its nested clause so these rows reach BigQuery too.
+
+### /health probes
+
+`/health` reports two Firestore probes: `confirmation_sink` (a WRITE probe --
+that writer fails OPEN) and `firms_store` (a READ probe -- that reader fails
+CLOSED, so IAM drift silently hides every firm's private kits). Both are
+cached 5 minutes, coalesce concurrent callers onto one round trip, and are
+bounded by a separate `HEALTH_PROBE_TIMEOUT_S` `wait_for` each -- `/health` is
+unauthenticated, so any caller can drive them at their own rate, and a stalled
+store must not eat the other probe's answer. A degraded probe still returns
+200: the ALERT pages, not a flapping uptime check.
+
 
 ## Voice round-trip timing checkpoints (bd polyglot-pdf-cwsy)
 

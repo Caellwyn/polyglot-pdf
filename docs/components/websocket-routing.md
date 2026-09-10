@@ -2,7 +2,10 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect.)*
+*Last updated: 2026-09-09 (bd polyglot-pdf-e4dt8: every close on `/fill`
+now routes through `_close_ws`, which emits a counted `ws_error` event with
+the close code and a fixed reason token before closing. The 1011/1006
+Gemini-side family is counted in the adapter instead.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -66,6 +69,33 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.
+
+**Every close on `/fill` goes through `_close_ws`, not a bare
+`websocket.close()`** (bd polyglot-pdf-e4dt8). The wrapper emits a counted
+`ws_error` event (`StructuredLogger.log_ws_close`) carrying the close code and
+a fixed `reason_token`, then performs the close; it never raises, because a
+telemetry failure on a teardown path must not turn a clean refusal into a 500.
+Cloud Monitoring's log-based metrics (`ws_close_1011_count`,
+`ws_close_1013_count` -- see `scripts/setup-monitoring.sh`) count those
+entries, which only works because every close now has ONE shape with the code
+in ONE place; before this the route closed eight different ways and no single
+filter could count them. The per-site `structlog` lines stay alongside: they
+carry context (`not_enrolled`, the mismatched kit ids, the `jti`) a generic
+close event has no field for.
+
+`reason_token` is an identifier the call site picks (`auth_failed`,
+`handshake_json_decode`, `budget_exhausted`, `link_kit_mismatch`, ...), NEVER
+user-derived text. It is distinct from the ON-THE-WIRE `reason` the client
+sees, because the frontend branches on specific wire strings while others are
+human prose ("This account is not enrolled...").
+
+The `1011`/`1006` family is NOT emitted here: those are Gemini-side closes the
+route only learns about second hand, so they are counted in
+`backend/adapters/live_ai_gemini.py`, at the one except block that reads the
+code off the wire. `/ws/echo`, `/ws/audio` and the `1000` idle timeout are
+deliberately uncounted (diagnostic routes and a normal close);
+`backend/tests/unit/test_ws_close_events.py` pins that allowlist and fails on
+any new bare close.
 
 **DTI current-field guidance rides the initiating message (`USE_DTI` only).** In
 DTI mode the system instruction is fully static and carries no field data, so the
