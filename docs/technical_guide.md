@@ -173,7 +173,7 @@ its own table).
 | GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=` an optional equality filter, `?employee_id=` optional for a manager/app admin but FORCED to the caller's own uid for an employee actor (bd `polyglot-pdf-scaig`). Gate: `require_app_admin_or_owning_manager_or_employee` (bd `polyglot-pdf-scaig` widened this from the two-actor `require_app_admin_or_owning_manager` -- a FIFTH, route-scoped dependency, NOT a widening of the shared one, since that gate also guards the four `/admin/users` routes where an employee must stay refused) -- a manager or employee reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager/employee must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/firms.py` |
 | PATCH | `/admin/firms/{firm_id}/status` | Set a firm `active`\|`suspended` (bd `polyglot-pdf-zopqq`). Body `{status}`. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/kits` | Every kit in the form-kit store (bd `polyglot-pdf-f0kuu`, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the SAME reader `GET /admin/kits/{kit_id}/commercial` and the mint transaction use (Surface contract 24) -- so this list can never disagree with what a mint actually charges. `list_kit_ids()` is ASYNC (the store may be GCS-backed), awaited directly rather than run under `asyncio.to_thread`. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
-| GET | `/admin/kits/{kit_id}/commercial` | One kit's resolved credit price and USD spend ceiling (bd `polyglot-pdf-f0kuu`, Track B bead B3), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24). `source` is `"kit"` when a commercial doc exists, `"default"` when it does not. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
+| GET | `/admin/kits/{kit_id}/commercial` | One kit's resolved credit price, USD spend ceiling, and display label (bd `polyglot-pdf-f0kuu`, Track B bead B3; `display` added bd polyglot-pdf-zcbm1), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24). `source` is `"kit"` when a commercial doc exists, `"default"` when it does not. `display` is the kit's stored console-label map, or `{}`. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
 | PUT | `/admin/kits/{kit_id}/commercial` | Set a kit's `credit_cost`, `burn_cap_usd` and `display` (bd `polyglot-pdf-f0kuu`, Track B bead B3). Refuses BEFORE any write on a malformed `credit_cost` (must be a positive int; bool refused), `burn_cap_usd` (must be a positive finite float; bool/NaN/+-inf refused) or `display` (a small string map) -- 422, so a bad edit can never reach the store as a "successful" write the read side's fallback would then paper over. Audited in the SAME `@firestore.transactional` body as the write (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). `admin_backend/routes/kit_routes.py` |
 | POST | `/admin/links/sweep-expired` | The hourly expired-link refund sweep (bd `polyglot-pdf-8vgfh`, plan: "Refund on unopened expiry"). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the FOURTH and last admin-service gate, its first consumer. Cloud Scheduler presents a Google-signed OIDC token; the gate checks the token's `aud` against this route's own URL -- the bare `ADMIN_SERVICE_URL` env var (service root) with the route's own path appended -- AND its `email` claim against the scheduler job's service account (`SWEEP_SCHEDULER_SA_EMAIL` env var); both env vars are set automatically by `deploy-admin.sh` on every run -- on a public (`--allow-unauthenticated`) service, a matching audience alone is forgeable by anyone with a GCP project, so it is not by itself proof of caller identity. Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every channel in `KNOWN_CHANNELS`. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit, which itself re-reads `link_redemptions` first and refuses an opened link -- this route adds no refund logic of its own. Each committed refund's audit row is written IN THE SAME Firestore transaction as the refund via `refund_expired_link`'s `extra_writes` parameter (bd `polyglot-pdf-8vgfh`'s extension to that A5 helper) -- the SAME extra_writes-delegated shape of Surface contract 15's `MUTATION_KIND_FIRESTORE` the credit routes above use (see `_EXTRA_WRITES_TRANSACTION_OPENERS`). A per-link failure is logged and skipped rather than aborting the whole pass. Returns `{results: [{channel, refunded, skipped}], total_refunded, total_skipped}` -- counts only; the ledger entry and the audit row are the durable record. `admin_backend/routes/sweep_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/credit_ledger.py` |
 | POST | `/admin/links/{jti}/revoke` | Revoke a minted link (bd `polyglot-pdf-jmiys`, Track B bead B4). `?channel=` REQUIRED. One `@firestore.transactional` body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke touches only the link's own `status`) sets `status=revoked` with `revoked_by`/`revoked_at`, audited in the SAME transaction. Only a `minted` record may transition (409, naming the current status, otherwise). Gate: `require_app_admin_or_owning_manager` -- a manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti); an app admin may revoke any. This status flip is what Epic 2 Track A bead A3's open gate (`backend/routes/link_routes.py`) must refuse on once it lands -- see Surface contract 22. `admin_backend/routes/link_routes.py` |
@@ -1939,9 +1939,15 @@ non-transactional write between them -- reopens the hole.
   operational habit `docs/doctrine/promotion-tiers.md` used to describe.
 - **The kit's price: `backend/services/kit_commercials.py` (NEW).**
   `resolve_commercial(kit_id)` reads `kits/{kit_id}` and returns
-  `{credit_cost, cap_usd, source}`. FAIL-SOFT IN ONE DIRECTION: a missing
-  doc, an unreachable store or a malformed value resolves to the global
-  defaults, never to "free" and never to "no ceiling". `burn_cap_usd` funnels
+  `{credit_cost, cap_usd, source, display}` (`display` added bd
+  polyglot-pdf-zcbm1: the kit's stored console-label map, or `{}` when
+  there is none -- not used by the mint path, it rides along so the admin
+  console's GET routes can surface it). FAIL-SOFT IN ONE DIRECTION: a
+  missing doc, an unreachable store or a malformed value resolves to the
+  global defaults, never to "free" and never to "no ceiling" -- `display`
+  follows the same posture (a malformed stored value degrades to `{}`
+  rather than being passed through raw), though it has no global default to
+  fall back to since `{}` already IS its default. `burn_cap_usd` funnels
   through `link_budget.cost_ceiling_usd_for_kit()` (contract 12's parsing
   rule, reused rather than re-implemented); `credit_cost` falls back to
   `DEFAULT_CREDIT_COST = 1`, because no global runtime-config key for it
@@ -2026,12 +2032,15 @@ save. A 422 is classified onto the `credit_cost`/`burn_cap_usd` field it
 names (an allowlist prefix match against the route's own detail strings)
 and shown as a field-level error rather than a generic banner. The console
 does not surface `updated_by`: neither GET route's response carries it.
-KNOWN GAP (bd `polyglot-pdf-zcbm1`): neither GET route surfaces a kit's
-`display` value either (`resolve_commercial`'s own docstring: "not read
-here"), so every save through this page sends `display: {}`, silently
-erasing any label a kit was seeded with by
-`scripts/seed_kit_commercials.py` -- fixing this needs `display` added to
-`resolve_commercial`'s return value.
+DISPLAY IS PRESERVED, NOT EDITED (bd polyglot-pdf-zcbm1): `resolve_commercial`
+returns a kit's stored `display` map (or `{}` for a missing doc, missing
+key, or malformed value -- unlike `credit_cost`/`cap_usd`, `display` has no
+global default, so `{}` IS its default) alongside `credit_cost`/`cap_usd`/
+`source`, so both GET routes surface it for free. The page has no UI to
+edit the label, but it captures the map the fresh GET on Edit returns and
+echoes it back unchanged on the PUT, instead of the hardcoded `{}` it sent
+before this bead -- a price edit can no longer silently erase a label
+`scripts/seed_kit_commercials.py` or a previous save had set.
 
 ### 25. BigQuery telemetry sink + cost/income views (Epic 3 bead E3.6, bd polyglot-pdf-rd3s8)
 
