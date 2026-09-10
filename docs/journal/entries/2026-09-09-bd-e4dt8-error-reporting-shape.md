@@ -90,6 +90,41 @@ spontaneous-drop codes are counted: a normal end and a GoAway expiry arrive
 through that same block, and counting them would make the metric fire on every
 healthy session.
 
+### Fresh-eyes round: the wire reason the wrapper quietly changed
+
+Adopted (1 blocker). `_close_ws`'s `reason` kwarg defaulted to `reason_token`,
+so the five sites that previously called `websocket.close(code=X)` with NO
+reason kwarg -- 1003 `handshake_not_text`, 1007 `handshake_json_decode`,
+1007 `handshake_not_object`, 1007 `schema_missing`, 1008
+`invalid_schema_source` -- silently began putting a string on the wire that
+the peer had never received. The builder's own changed-contracts claim said
+every close reason was byte-identical; it was not.
+
+The trap is that the wrapper takes two same-looking strings: `reason_token` is
+telemetry-only, `reason` is the bytes the client sees. Defaulting one to the
+other collapsed the distinction the docstring was drawing. The default is now
+`""` -- exactly what a bare `websocket.close(code=X)` sends -- and the two
+sites that DID rely on the old default for their wire string (1013
+`budget_exhausted` / `budget_unavailable`) now state it explicitly. Every wire
+reason is once again byte-identical to `origin/dev`.
+
+Nothing caught this, which is the real finding: every existing close assertion
+checks `code` and none checks `reason`. Three tests now pin it
+(`test_ws_close_events.py`) -- the empty default as a mechanism, and the
+per-site wire reason in BOTH directions, since `webFormConnection.handleClose`
+does a strict `event?.reason === "budget_exhausted"` compare whose sibling
+`budget_unavailable` must NOT match it. Mutation-verified against four
+mutations, including restoring the exact original bug.
+
+Adopted (1 nit): a spurious `# noqa: E501` on a short signature in
+`tests/test_setup_telemetry_script.py`, introduced by this diff.
+
+Deferred (2, both pre-existing and filed): `polyglot-pdf-5di76` (the ~100-site
+`error=str(e)` kwarg leak, the same shape this bead fixed for `.exception()`
+but reached by a different code path) and `polyglot-pdf-7lmdr`
+(`firms_store_status`'s probe can wedge permanently if a non-`Exception`
+escapes before `in_flight.set()`).
+
 ### scripts/setup-monitoring.sh
 
 Operator-run and declarative, sibling of `setup-telemetry.sh`. Three log-based
@@ -187,7 +222,8 @@ the silent one.
 - `scripts/setup-monitoring.sh` -- new.
 - `scripts/setup-telemetry.sh` -- sink filter widened with `ws_error`.
 - `backend/tests/unit/test_error_shape.py` -- new (10 tests).
-- `backend/tests/unit/test_ws_close_events.py` -- new (13 tests).
+- `backend/tests/unit/test_ws_close_events.py` -- new (16 tests: the shape,
+  the close SET, and the on-the-wire reason per site).
 - `backend/tests/unit/test_health.py` -- four probe tests + a cache-reset
   fixture.
 - `backend/tests/unit/test_firms_service.py` -- four cache/coalescing tests +

@@ -162,8 +162,7 @@ def test_sink_filter_covers_all_three_actual_event_shapes():
     assert " OR " in sink_filter
 
 
-def test_sink_filter_captures_the_ws_error_rows(  # noqa: E501
-):
+def test_sink_filter_captures_the_ws_error_rows():
     """The error clause Epic 3 bead 8 (E3.8) added.
 
     This script's own header PREDICTED this widening: log_error routes

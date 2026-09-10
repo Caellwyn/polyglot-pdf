@@ -296,3 +296,118 @@ def test_uncounted_allowlist_has_no_stale_entries():
     assert not stale, (
         "_UNCOUNTED_CLOSES names close(s) that no longer exist: "
         + ", ".join(sorted("{}/{}".format(f, c) for f, c in stale)))
+
+
+# ---------------------------------------------------------------------------
+# The WIRE: routing a close through the wrapper must not change what the
+# peer receives
+# ---------------------------------------------------------------------------
+
+# The on-the-wire close reason each /fill site sends, as it was BEFORE the
+# wrapper existed. Written out here from `git show origin/dev` rather than
+# derived from the call sites, because deriving it from the code under test
+# would be vacuous -- the point is that the wrapper did not change the wire.
+#
+# WHY THIS IS PINNED. The wrapper takes TWO strings that read alike:
+# reason_token (telemetry-only, a fixed identifier) and reason (the bytes the
+# client actually receives). An earlier revision defaulted `reason` to
+# reason_token, which silently started sending a reason at five sites that
+# previously sent none -- caught in review, invisible to every test, because
+# the existing close assertions check only `code`. The default is now "" (what
+# a bare websocket.close(code=X) sends) and every site that puts a string on
+# the wire says so explicitly. This test is what keeps that true.
+#
+# Keyed by reason_token because that is the one identifier unique per site.
+EXPECTED_WIRE_REASON = {
+    # Had an explicit reason before the wrapper, and still does.
+    "auth_failed": "<dynamic>",          # prose, branches on not_enrolled
+    "link_redeem_refused": "Authentication failed",
+    "link_kit_mismatch": "Authentication failed",
+    "budget_exhausted": "budget_exhausted",
+    "budget_unavailable": "budget_unavailable",
+    # Closed with NO reason kwarg before the wrapper -- must still send none.
+    "handshake_not_text": "",
+    "handshake_json_decode": "",
+    "handshake_not_object": "",
+    "schema_missing": "",
+    "invalid_schema_source": "",
+}
+
+
+def _close_ws_sites():
+    """Every _close_ws(...) call site: (reason_token, reason_expr, lineno).
+
+    reason_expr is the literal string passed as `reason=`, or "" when the
+    call omits the kwarg (the wrapper's default), or "<dynamic>" when it
+    passes a non-literal expression.
+    """
+    tree = ast.parse(WS_ROUTES.read_text(encoding="utf-8"))
+    sites = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not (isinstance(node.func, ast.Name) and node.func.id == "_close_ws"):
+            continue
+        token = None
+        if len(node.args) >= 3 and isinstance(node.args[2], ast.Constant):
+            token = node.args[2].value
+        reason = ""
+        for kw in node.keywords:
+            if kw.arg == "reason":
+                if isinstance(kw.value, ast.Constant):
+                    reason = kw.value.value
+                else:
+                    reason = "<dynamic>"
+        sites.append((token, reason, node.lineno))
+    return sites
+
+
+def test_the_close_ws_site_enumeration_actually_finds_sites():
+    """Guard the guard: an empty enumeration would pass the next test forever."""
+    sites = _close_ws_sites()
+    assert len(sites) >= 8, (
+        "the AST walk found only {} _close_ws() call(s) -- the walk is "
+        "probably broken, not the route".format(len(sites)))
+
+
+def test_the_wrapper_default_reason_is_empty_not_the_token():
+    """The default must be the EMPTY wire reason, never reason_token.
+
+    Pinned separately from the sites because it is the mechanism: with
+    reason_token as the default, every site that omits `reason=` starts
+    sending a string the peer never used to receive, and the per-site test
+    below would still pass at any site that happened to omit the kwarg.
+    """
+    tree = ast.parse(WS_ROUTES.read_text(encoding="utf-8"))
+    fn = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_close_ws":
+            fn = node
+            break
+    assert fn is not None, "_close_ws not found in websocket_routes.py"
+
+    names = [a.arg for a in fn.args.kwonlyargs]
+    assert "reason" in names, "_close_ws no longer takes a `reason` kwarg"
+    default = fn.args.kw_defaults[names.index("reason")]
+    assert isinstance(default, ast.Constant) and default.value == "", (
+        "_close_ws's `reason` default is not the empty string. A non-empty "
+        "default (notably reason_token) puts bytes on the wire that the "
+        "pre-wrapper close did not send, at every site that omits `reason=`.")
+
+
+def test_every_close_site_sends_the_wire_reason_it_always_sent():
+    """The WIRE. A site whose on-the-wire reason drifts fails HERE.
+
+    Both directions: a site that starts sending a reason it did not send
+    before, and a site that stops sending one the frontend branches on
+    ("budget_exhausted" in webFormConnection.handleClose).
+    """
+    actual = {token: reason for token, reason, _ in _close_ws_sites()}
+    assert actual == EXPECTED_WIRE_REASON, (
+        "the on-the-wire close reason changed at one or more /fill sites.\n"
+        "  expected: {}\n  actual:   {}\n"
+        "The wire reason is what the CLIENT sees and branches on; "
+        "reason_token is telemetry-only. If a change here is deliberate, "
+        "check frontend/src/**/webFormConnection* for a string compare on "
+        "the old value before updating EXPECTED_WIRE_REASON.".format(
+            sorted(EXPECTED_WIRE_REASON.items()), sorted(actual.items())))

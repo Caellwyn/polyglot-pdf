@@ -1456,18 +1456,24 @@ def _verify_ws_credential(token: str) -> dict:
 # a telemetry failure there must not turn a clean refusal into a 500 or leave
 # the socket open. Both the emit and the close itself are guarded.
 async def _close_ws(websocket, code: int, reason_token: str, *,
-	  reason: str | None = None, form_session_id=None,
+	  reason: str = "", form_session_id=None,
 	  ws_session_id=None, metadata: dict | None = None) -> None:
 	"""Emit a counted ws_error event, then close the socket.
 
 	reason_token is a FIXED identifier ("budget_exhausted",
 	"handshake_json_decode"), never user-derived text -- a close reason built
 	from a client-supplied string would be a PII vector
-	(docs/standards/hipaa-pii-policy.md). `reason` is the separate ON-THE-WIRE
-	string the client sees; it defaults to reason_token, and the two are
-	distinct because the frontend BRANCHES on specific wire reasons
-	("budget_exhausted" in webFormConnection.handleClose) while others are
-	human prose ("This account is not enrolled...").
+	(docs/standards/hipaa-pii-policy.md). It names the close for TELEMETRY
+	only and never reaches the wire on its own.
+
+	`reason` is the separate ON-THE-WIRE string the client sees. It defaults
+	to "" -- the same empty reason a bare websocket.close(code=X) sends --
+	so routing a close through this wrapper CANNOT silently change what the
+	peer receives; every site that sends a wire reason states it explicitly.
+	The two are distinct because the frontend BRANCHES on specific wire
+	reasons ("budget_exhausted" in webFormConnection.handleClose) while
+	others are human prose ("This account is not enrolled...") and several
+	sites deliberately send none at all.
 	"""
 	try:
 		get_structured_logger().log_ws_close(
@@ -1482,10 +1488,7 @@ async def _close_ws(websocket, code: int, reason_token: str, *,
 		_log.warning("ws_close_event_emit_failed", close_code=code,
 					 reason_token=reason_token)
 	try:
-		if reason is None:
-			await websocket.close(code=code, reason=reason_token)
-		else:
-			await websocket.close(code=code, reason=reason)
+		await websocket.close(code=code, reason=reason)
 	except Exception:
 		# Already closed, or the peer vanished. Nothing to do and nothing
 		# to report -- the counted event above already recorded the intent.
@@ -1743,6 +1746,7 @@ async def fill_form_from_schema(
 			# mirror write must not delay or block the close below.
 			await asyncio.to_thread(_mirror_budget_exhausted, claims.get("jti"))
 			await _close_ws(websocket, 1013, "budget_exhausted",
+							reason="budget_exhausted",
 							form_session_id=form_session_id)
 			return
 		except RedemptionUnavailable as exc:
@@ -1752,6 +1756,7 @@ async def fill_form_from_schema(
 			log.warning("ws_link_budget_unavailable", jti=claims.get("jti"),
 						error=str(exc))
 			await _close_ws(websocket, 1013, "budget_unavailable",
+							reason="budget_unavailable",
 							form_session_id=form_session_id)
 			return
 
