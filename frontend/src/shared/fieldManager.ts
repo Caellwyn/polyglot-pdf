@@ -78,11 +78,19 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 *                    returns a non-member.
 	 */
 	function idResolvesToNonGroup(
-		element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+		element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null,
+		fieldId: string
 	): boolean {
 		if (element === null) return false
 		if (element instanceof HTMLInputElement) {
-			return element.type !== 'radio' && element.type !== 'checkbox'
+			if (element.type !== 'radio' && element.type !== 'checkbox') return true
+			// A radio/checkbox can STILL be a standalone field whose id merely
+			// collides with another group's name (id="race" name="agree" beside a
+			// group named race[]). Both earlier layers waved it through -- the
+			// element IS a group type and the query DOES return group members --
+			// and it then got no listener at all. The decisive test is membership:
+			// is THIS element one of the inputs the group lookup returned?
+			return !groupInputsFor(fieldId).includes(element)
 		}
 		return true
 	}
@@ -216,7 +224,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// (id="sex" vs a radio group name="sex") otherwise bound the OTHER
 			// field's radios and `continue`d, leaving the text field with NO
 			// listener at all -- so typing in it never reached the model.
-			const groupEls = idResolvesToNonGroup(element) ? [] : groupInputsFor(fieldId)
+			const groupEls = idResolvesToNonGroup(element, fieldId) ? [] : groupInputsFor(fieldId)
 			if (groupEls.length) {
 				groupEls.forEach(input => setupEditListener(input as HTMLElement, fieldId))
 				continue
@@ -295,7 +303,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// of a text field whose id collides with a group's name nulled `element`
 			// and the fill landed NOWHERE. Measured: the field stayed empty.
 			if (
-				!idResolvesToNonGroup(element) &&
+				!idResolvesToNonGroup(element, update.fieldId) &&
 				groupInputsFor(update.fieldId).length
 			) {
 				element = null

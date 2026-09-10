@@ -647,3 +647,78 @@ describe('a BRACKETED-ID text field is not swallowed by its groups query', () =>
     expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
   })
 })
+
+describe('a STANDALONE group-type field is not swallowed by a colliding group', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // The THIRD collision shape, and the one both earlier layers waved through: a
+  // standalone checkbox/radio whose id collides with ANOTHER field's group name.
+  // The element IS a group type (so the call-site gate allowed it) and the query
+  // DOES return group members (so the type filter allowed it) -- but this element
+  // is not among them. It got no listener at all, so ticking it never reached the
+  // model. Regression vs origin/dev, where getElementById resolved first.
+  // The fix is a MEMBERSHIP test, which subsumes the type check.
+  const mk = (fields: any[]) => ({
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields,
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: fields.map(f => f.id) }],
+  } as unknown as FormSchema)
+
+  it('a standalone CHECKBOX whose id collides with a bracketed group name', () => {
+    document.body.innerHTML = `
+      <input id="race" name="agree" type="checkbox" value="yes" />
+      <input name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'race', name: 'Agree', spoken_name: 'agree', type: 'checkbox' }]),
+      onManualEdit,
+    })
+
+    const el = document.getElementById('race') as HTMLInputElement
+    el.checked = true
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('yes')
+  })
+
+  it('a standalone RADIO whose id collides with another radio groups name', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="marital" type="radio" value="single" />
+      <input name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'sex', name: 'Marital', spoken_name: 'marital', type: 'radio',
+                   options: [{ value: 'single', label: 'Single' }] }]),
+      onManualEdit,
+    })
+
+    const el = document.getElementById('sex') as HTMLInputElement
+    el.checked = true
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('sex')
+  })
+
+  it('a REAL group member still reports under the group -- membership cuts both ways', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+                   options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }]),
+      onManualEdit,
+    })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
+  })
+})
