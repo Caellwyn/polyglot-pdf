@@ -361,3 +361,81 @@ def test_guard_catches_print_leaks():
     # A non-print line interpolating a value must NOT be caught here (that's the
     # _log scanner's job, or it's a legitimate assignment).
     assert not _scan_print_leaks('result = f"...{value}"')
+
+# ===========================================================================
+# The EXCEPTION-MESSAGE leak (bd polyglot-pdf-p84m P0 / polyglot-pdf-e4dt8)
+# ===========================================================================
+#
+# Everything above this line is a SOURCE-LEVEL grep guard: it reads the repo's
+# text and flags a log call that names a sensitive kwarg. That shape of guard
+# is structurally blind to this leak, because the leaking call looks perfectly
+# clean in source:
+#
+#     self._log.exception("tool_callback_error", tool=tool_name)
+#
+# No value kwarg, no transcript, nothing to grep for. The PII arrives at
+# RENDER time, from structlog's processor chain, which used to run
+# format_exc_info -- and that processor writes the exception MESSAGE into the
+# JSON output. In a form-filling app that message routinely embeds a field
+# value: a parse error over an A-number, a validation error naming a date of
+# birth.
+#
+# So this case is a RUNTIME test in a file of static ones, deliberately. It
+# drives a real exception through the real production chain and asserts the
+# sentinel never appears. The deeper shape assertions (frames present, type
+# present, chained causes, exc_info=True, source text, locals) live in
+# backend/tests/unit/test_error_shape.py; what belongs HERE is the one
+# question this file is the home for: did user data reach the log?
+
+
+def test_an_exception_message_never_reaches_the_log():
+    """RED before bd polyglot-pdf-e4dt8, green after.
+
+    Mutation-verified by restoring structlog.processors.format_exc_info in
+    backend/utils/logging.py's chain -- the sentinel reappears and this goes
+    red.
+    """
+    import io as _io
+    import logging as _logging
+
+    import structlog
+
+    from backend.utils.logging import configure_logging
+
+    sentinel = "A-098-765-432-PII-SENTINEL"
+
+    stream = _io.StringIO()
+    root = _logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    handler = _logging.StreamHandler(stream)
+    handler.setFormatter(_logging.Formatter("%(message)s"))
+    root.handlers = [handler]
+    root.setLevel(_logging.DEBUG)
+
+    try:
+        configure_logging()
+        log = structlog.get_logger("test_no_pii_logging")
+        try:
+            # The shape that actually occurs: a field value interpolated
+            # into the message of an exception raised while handling it.
+            raise ValueError("could not parse alien number " + sentinel)
+        except ValueError:
+            log.exception("tool_callback_error", tool="update_form_fields")
+        rendered = stream.getvalue()
+    finally:
+        root.handlers = saved_handlers
+        root.setLevel(saved_level)
+        structlog.reset_defaults()
+
+    assert rendered.strip(), (
+        "nothing was logged -- the assertion below would pass vacuously")
+    assert sentinel not in rendered, (
+        "the exception MESSAGE reached the rendered log line, carrying what "
+        "stands in for a field value straight to Cloud Logging "
+        "(bd polyglot-pdf-p84m, a P0). Rendered: " + rendered)
+    # And the log is still USEFUL -- a guard that passed by emitting nothing
+    # would trade a PII leak for a debugging blackout.
+    assert "ValueError" in rendered, (
+        "the exception TYPE was dropped along with the message; the error is "
+        "now undebuggable and invisible to Cloud Error Reporting")
