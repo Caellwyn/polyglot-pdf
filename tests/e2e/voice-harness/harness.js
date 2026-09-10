@@ -365,8 +365,14 @@
       // of its own value ('White' where the answer was 'yes').
       var own = document.getElementById(fieldId);
       if (bracketed.length) {
-        if (own && bracketed.indexOf(own) === -1 &&
-            (own.type === 'checkbox' || own.type === 'radio')) {
+        // ANY own element that is not a member disqualifies the group -- not
+        // just a group-typed one. Requiring own.type to be checkbox/radio let a
+        // TEXT field whose id collides with a group's name fall through and
+        // receive the unrelated group's inputs, which is the very shape this
+        // guard exists to stop. fieldManager's idResolvesToNonGroup returns
+        // non-group for ANY other type before considering membership; this now
+        // mirrors it rather than only claiming to.
+        if (own && bracketed.indexOf(own) === -1) {
           return [];
         }
         return bracketed;
@@ -382,8 +388,7 @@
       // with no bracket, so this is the branch every real radio group takes --
       // and a standalone radio whose id collides with another group's name is
       // not one of them.
-      if (radios.length && own && radios.indexOf(own) === -1 &&
-          (own.type === 'checkbox' || own.type === 'radio')) {
+      if (radios.length && own && radios.indexOf(own) === -1) {
         return [];
       }
       return radios.length ? radios : [];

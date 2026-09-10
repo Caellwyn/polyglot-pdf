@@ -38,7 +38,51 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
     expect(document.activeElement).toBe(screen.getByTestId('verify-field-checkbox'));
   });
 
-  it('SPACE on the focused checkbox ticks it, then the confirm button is live', () => {
+  it('SPACE on the focused checkbox VERIFIES (bd polyglot-pdf-96um6)', async () => {
+    // The exit criterion is "a second Enter OR SPACE verifies". For eleven
+    // review rounds the modal handled only Enter while I scored that PASS -- and
+    // the test below, whose title ends "then the confirm button is live",
+    // DOCUMENTED that space did not verify. I read my own negative result as
+    // coverage.
+    //
+    // jsdom does not toggle a checkbox from a keydown, so the browser's own
+    // toggle is emulated first, then the keydown the handler actually sees.
+    const props = renderModal();
+    const box = screen.getByTestId('verify-field-checkbox') as HTMLInputElement;
+
+    box.checked = true;
+    fireEvent.keyDown(box, { key: ' ' });
+    await new Promise(r => requestAnimationFrame(() => r(null)));
+
+    expect(props.onVerify).toHaveBeenCalledTimes(1);
+  });
+
+  it('SPACE that UNTICKS a ticked box must NOT verify', async () => {
+    // Space is not intercepted (a focused checkbox toggles natively and
+    // preventDefault would kill that), so the verify reads the POST-toggle
+    // state. Untoggling must therefore not assert anything.
+    const props = renderModal();
+    const box = screen.getByTestId('verify-field-checkbox') as HTMLInputElement;
+
+    box.checked = true;
+    fireEvent.keyDown(box, { key: ' ' });
+    await new Promise(r => requestAnimationFrame(() => r(null)));
+    expect(props.onVerify).toHaveBeenCalledTimes(1);
+
+    box.checked = false;   // space again, now unticking
+    fireEvent.keyDown(box, { key: ' ' });
+    await new Promise(r => requestAnimationFrame(() => r(null)));
+    expect(props.onVerify, 'unticking must not verify again').toHaveBeenCalledTimes(1);
+  });
+
+  it('SPACE elsewhere in the modal does nothing', async () => {
+    const props = renderModal();
+    fireEvent.keyDown(screen.getByTestId('verify-field-cancel'), { key: ' ' });
+    await new Promise(r => requestAnimationFrame(() => r(null)));
+    expect(props.onVerify).not.toHaveBeenCalled();
+  });
+
+  it('the click path still works alongside the space path', () => {
     const props = renderModal();
     const box = screen.getByTestId('verify-field-checkbox') as HTMLInputElement;
 
