@@ -204,6 +204,16 @@ describe('SHAPE 3: a standalone group-type field colliding with a group name', (
 })
 
 describe('the mirrors above cannot drift from the real functions', () => {
+  // SCOPE, stated honestly after I defeated these myself: these guards read
+  // SOURCE TEXT, so they catch a rule being DELETED but not a rule being
+  // WEAKENED. Appending `|| inputEl.type === 'checkbox'` to the membership test
+  // keeps every assertion here green while regressing shape 3.
+  //
+  // connectionGroupBehaviour.test.ts calls the REAL exported functions and does
+  // catch that defeat. These stay because they still pin the branch ORDER and
+  // the site COUNT -- properties a behaviour test cannot see -- but they are the
+  // weaker half, and the behaviour file is the one that actually protects the
+  // rule.
   // restoreDOMFromSessionStorage and capturePreFilledValues are module-private,
   // so the tests above necessarily MIRROR their logic. A mirror nothing pins is
   // worse than no test: it keeps passing while production regresses.

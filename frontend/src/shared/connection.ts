@@ -155,7 +155,7 @@ export interface ConnectionManager {
  * Restore DOM fields from sessionStorage on page load
  * Ensures DOM and sessionStorage stay in sync across page refreshes
  */
-function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
+export function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
 	let restoredCount = 0
 
 	for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
@@ -232,7 +232,7 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
  * Scan DOM for pre-filled values and populate sessionStorage
  * Called before connecting to capture values user entered before activating voice
  */
-function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
+export function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
 	let capturedCount = 0
 
 	for (const field of schema.fields) {
