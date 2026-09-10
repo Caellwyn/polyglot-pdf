@@ -54,12 +54,18 @@
 # fourth member of the plan's set) are deliberately NOT filtered on below:
 # Epic 3 bead 8 (setup-monitoring.sh, a separate bead) is what first WIRES
 # StructuredLogger.log_error to a real call site; until it does, no error
-# event_type value is ever emitted, and pre-filtering for one now would be
-# guessing at a shape that bead has not built yet. When it lands, log_error
-# routes through the SAME StructuredLogger._emit as the usage events (same
-# nested jsonPayload.message.event_type shape), so widening this filter at
-# that point is a one-line addition to the existing message.event_type
-# clause, not a new shape to reason about.
+# event_type value was ever emitted. That bead has now LANDED, and the
+# prediction held: StructuredLogger.log_ws_close routes through the SAME
+# StructuredLogger._emit as the usage events, so its ws_error rows carry the
+# same nested jsonPayload.message.event_type shape and widening this filter
+# was the predicted one-word addition to the existing message.event_type
+# clause rather than a fourth shape to reason about.
+#
+# ONLY ws_error is added, not every error_* EventType. The other five
+# (error_validation, error_network, error_ai, error_tool, error_timeout) are
+# still declared-but-unemitted in backend/utils/log_schemas.py; naming them
+# here would be guessing at rows nothing writes, and the clause can be
+# widened by one word each when they acquire a real call site.
 #
 # Pinned by tests/test_setup_telemetry_script.py, which reads this script's
 # actual shipped text (gcloud is never invoked in CI).
@@ -151,7 +157,7 @@ fi
 # creation -- so step 4 below can grant the writer identity
 # bigquery.dataEditor on either path, not just the create one.
 echo -e "${GREEN}[INFO]${NC} Checking whether Cloud Logging sink $SINK_NAME already exists..."
-SINK_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name=("polyglot-backend" OR "polyglot-backend-staging" OR "polyglot-admin") AND (jsonPayload.event_type="ledger_export" OR jsonPayload.message.event_type=("gemini_api_response" OR "text_ai_usage" OR "tts_usage") OR jsonPayload.event=("form_session_started" OR "form_session_ended"))'
+SINK_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name=("polyglot-backend" OR "polyglot-backend-staging" OR "polyglot-admin") AND (jsonPayload.event_type="ledger_export" OR jsonPayload.message.event_type=("gemini_api_response" OR "text_ai_usage" OR "tts_usage" OR "ws_error") OR jsonPayload.event=("form_session_started" OR "form_session_ended"))'
 
 if gcloud logging sinks describe "$SINK_NAME" --project="$PROJECT_ID" &>/dev/null; then
     echo -e "${GREEN}[INFO]${NC} Sink $SINK_NAME already exists -- updating its filter..."

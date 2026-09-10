@@ -4,7 +4,9 @@
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-cjifh: `set_session_context` gains
 five usage-event context ids -- firm/employee/link/kit/channel -- read by the
-per-turn `log_gemini_api_response` call; see the Session lifecycle bullet.)
+per-turn `log_gemini_api_response` call; see the Session lifecycle bullet.
+bd polyglot-pdf-e4dt8: `.exception(...)` is production-safe here now, and the
+1011/1006 drop emits a counted `ws_error` event -- see Scar tissue.)
 Also current, from bd polyglot-pdf-kvrfq: the `name_spellback` bullet
 now records the client-side stale-arrival guards and the wire-verified fact
 that holding the tool response open does NOT park the model -- see the
@@ -510,6 +512,22 @@ so this is safe-if-ignored rather than guaranteed.
   calls to the wrong tab. The adapter also warns `bg_task_already_running` if
   `set_callbacks` is called on a live task.
 - **Never log transcript/hint text** — only lengths (bd `polyglot-pdf-hjo`).
+- **`.exception(...)` is safe in production HERE now** (bd
+  `polyglot-pdf-e4dt8`). The two `DEV_LOGGING_ENABLED`-gated branches that
+  used to keep `self._log.exception(...)` out of production are gone: what
+  made it unsafe was structlog's stock `format_exc_info` rendering the
+  exception MESSAGE (which can embed a field value, bd `polyglot-pdf-p84m`),
+  and `backend/utils/logging.py` now runs `pii_safe_exception_processor`
+  instead -- exception TYPE plus FRAMES, never the message. The stderr
+  `traceback.print_exc()` block STAYS dev-gated: it bypasses structlog
+  entirely, so the processor cannot protect it.
+- **The `1011`/`1006` drop is COUNTED here, not in the route** (bd
+  `polyglot-pdf-e4dt8`). The connection-closed except block is the single
+  place the close code is read off the wire, so it emits the counted
+  `ws_error` event that feeds the `ws_close_1011_count` metric
+  (`scripts/setup-monitoring.sh`). Only `_SPONTANEOUS_DROP_CLOSE_CODES` are
+  counted -- a normal end and a GoAway expiry arrive through the same block,
+  and counting those would make the alert fire on every healthy session.
 - **2.5 native-audio `1011`s at an early turn boundary on an INCOMPLETE tool declaration under
   tool-soliciting prompts** (bd `polyglot-pdf-daa`/`h04c`; wire-verified isolation
   experiment, `scripts/spikes/diag_native_audio_1011_tools.py`, 2026-06-15). On

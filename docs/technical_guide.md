@@ -2313,3 +2313,92 @@ never implemented. Filed as `polyglot-pdf-scaig` (admin_backend surfaces,
 not this bead's) rather than fixed inline -- this page's own exit criteria
 are frontend-only and are pinned against a mocked API regardless, so the
 page needs no change once `scaig` closes.
+
+### 28. The error/close telemetry shape: emitter -> Cloud Logging -> metrics + Error Reporting (Epic 3 bead E3.8, bd polyglot-pdf-e4dt8)
+
+Two DIFFERENT contracts share this entry because they share a consumer
+(Cloud Logging) and are read by the same operator surfaces; they are
+deliberately kept apart in the code because one is an exception and the other
+explicitly is not.
+
+**28a. The exception shape (producer: the structlog processor chain).**
+
+- **Producer:** `pii_safe_exception_processor` in
+  `backend/utils/logging.py`, installed in `configure_logging()`'s
+  `structlog.configure(processors=[...])` chain in place of
+  `structlog.processors.format_exc_info`. Every `.exception(...)` /
+  `exc_info=True` site under `backend/` renders through it -- structlog has
+  ONE global chain, so this is by construction, not by convention. The
+  register of those sites is `EXCEPTION_LOGGING_SITES` in the same module.
+- **Emitted keys:** `error_type` (the exception class name), `stack_trace`
+  (frames as `file`, `line`, `function`, plus each chained exception's TYPE),
+  and `severity` (the level, UPPERCASED). The exception MESSAGE, frame locals
+  and frame source text are NEVER emitted.
+- **Consumers:** (1) **Cloud Error Reporting**, which ingests an entry as an
+  error when it carries an uppercase `severity` of ERROR-or-above plus a
+  stack-trace-shaped field, and GROUPS on the frames. (2) The admin console's
+  errors-per-channel view (a later bead) reading Error Reporting's
+  `groupStats` as `admin-backend-sa`, which holds
+  `roles/errorreporting.viewer` from `scripts/setup-monitoring.sh`.
+- **What silently breaks if they disagree:** restoring `format_exc_info`
+  re-opens a P0 PII leak (the message can embed a field value, bd
+  `polyglot-pdf-p84m`) with NO test failure anywhere except
+  `backend/tests/unit/test_error_shape.py`, since the leak happens at RENDER
+  time and every call site still looks clean in source. Dropping the
+  `severity` uppercase is worse-than-silent in the other direction: the frames
+  are still emitted, Cloud Logging files them under a lowercase level it does
+  not recognise, and Error Reporting shows an empty console for an app that is
+  crashing. Emitting `stack_trace` on NON-exception lines would turn routine
+  INFO traffic into thousands of phantom errors.
+- **Pinned by:** `backend/tests/unit/test_error_shape.py` (shape, sentinel
+  absence, chained causes, `exc_info=True`, no locals, no source text, the
+  AST-derived site register, and the processor's presence in the chain) plus
+  the sentinel case in `backend/tests/test_no_pii_logging.py`.
+
+**28b. The WebSocket close event (producer: `log_ws_close`).**
+
+- **Producer:** `StructuredLogger.log_ws_close`
+  (`backend/utils/structured_logger.py`), routed through the same `_emit` as
+  the usage events -- so the envelope is NESTED under a `message` key.
+  Severity comes from the module-level `WS_CLOSE_SEVERITY` table, never from
+  the caller, so two call sites cannot disagree about how bad a 1013 is.
+- **Call sites:** `websocket_routes._close_ws` wraps EVERY close on `/fill`
+  (1003/1007/1008/1013); `backend/adapters/live_ai_gemini.py`'s
+  connection-closed except block emits the 1011/1006 Gemini-side family,
+  because that is the one place the code is read off the wire. The
+  diagnostic routes' closes and the 1000 idle timeout are deliberately
+  uncounted.
+- **Wire shape:** `event_type` `"ws_error"` at
+  `jsonPayload.message.event_type`; the code at
+  `jsonPayload.message.metadata.close_code`; a FIXED `reason_token` at
+  `jsonPayload.message.metadata.reason_token` (an identifier the call site
+  picks, never user-derived text -- a close reason built from a
+  client-supplied string would be a PII vector).
+- **Consumers:** the log-based metrics `ws_close_1011_count` and
+  `ws_close_1013_count` in `scripts/setup-monitoring.sh`, whose filters name
+  those exact paths; the `polyglot ws 1011 rate` alert policy reading the
+  first metric; and `scripts/setup-telemetry.sh`'s BigQuery sink, whose
+  nested `jsonPayload.message.event_type` clause gained `"ws_error"` in this
+  same bead.
+- **What silently breaks if they disagree:** a renamed metadata key, a
+  changed `event_type`, or a filter written at the wrong DEPTH leaves the
+  metric counting zero forever. Nothing errors -- the metric exists, the
+  policy is green, and the outage it was built for goes unreported. That
+  failure mode is why the pinning tests assert the depth of each path rather
+  than the presence of the field names.
+- **NON-exception on purpose.** A close has no traceback and nothing for
+  Error Reporting to group; routing thousands of frame-less entries there
+  would drown the real crashes from 28a.
+- **Pinned by:** `backend/tests/unit/test_ws_close_events.py` (the shape, the
+  severity table against an independently-written expectation, and the SET of
+  closes on the route via an AST walk with an allowlist),
+  `tests/test_setup_monitoring_script.py` (the filter paths and depths), and
+  `tests/test_setup_telemetry_script.py` (the sink's `ws_error` clause).
+
+**Related, same bead:** `/health` gained a `firms_store` key alongside
+`confirmation_sink` (`backend/main.py` producer,
+`backend/services/firms.py:firms_store_status` probe). Its consumers are the
+three per-channel uptime checks in `scripts/setup-monitoring.sh` and the
+standard post-deploy check. A degraded probe still returns HTTP 200 -- the
+ALERT policies page, rather than an uptime check flapping and taking the
+channel's whole availability history with it.

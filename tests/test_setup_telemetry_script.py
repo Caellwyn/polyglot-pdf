@@ -162,6 +162,39 @@ def test_sink_filter_covers_all_three_actual_event_shapes():
     assert " OR " in sink_filter
 
 
+def test_sink_filter_captures_the_ws_error_rows(  # noqa: E501
+):
+    """The error clause Epic 3 bead 8 (E3.8) added.
+
+    This script's own header PREDICTED this widening: log_error routes
+    through the same StructuredLogger._emit as the usage events, so ws_error
+    shares their nested jsonPayload.message.event_type shape and joining the
+    existing clause was a one-word change. Pinning it stops a later edit from
+    silently dropping it back out -- which would leave BigQuery with no error
+    rows at all while the sink still reported healthy.
+
+    Mutation: remove "ws_error" from the usage clause -- red.
+    """
+    text = _script_text()
+    filter_match = re.search(r"SINK_FILTER='([^']*)'", text)
+    assert filter_match
+    sink_filter = filter_match.group(1)
+
+    assert '"ws_error"' in sink_filter, (
+        "the sink filter does not capture ws_error rows, so the WebSocket "
+        "close events wired by bd polyglot-pdf-e4dt8 never reach BigQuery")
+    # And it must sit in the NESTED clause, with the usage events -- ws_error
+    # is a StructuredLogger._emit row, so a flat jsonPayload.event_type or
+    # jsonPayload.event clause for it would match nothing.
+    nested_clause = re.search(
+        r"jsonPayload\.message\.event_type=\(([^)]*)\)", sink_filter)
+    assert nested_clause, "no nested message.event_type clause at all"
+    assert '"ws_error"' in nested_clause.group(1), (
+        "ws_error is in the filter but NOT in the nested "
+        "jsonPayload.message.event_type clause -- StructuredLogger nests its "
+        "envelope, so any flatter placement matches zero rows")
+
+
 def test_sink_filter_does_not_claim_a_single_flat_event_type_clause():
     """The negative half of the shape test above: the filter must not be
     written as if jsonPayload.event_type alone covered every case (the bug
