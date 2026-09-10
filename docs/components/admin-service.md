@@ -104,12 +104,14 @@ the "Kit commercials" tab. DOES NOT SHOW `updated_by`: neither GET route's
 response carries it (only the raw Firestore doc does) -- a discrepancy from
 the bead's own prose, left for a future bead if the console needs it, since
 adding it needs a `kit_routes.py` wire change outside this bead's Surfaces.
-KNOWN DATA-LOSS GAP, FILED AS bd `polyglot-pdf-zcbm1`: neither GET route
-surfaces a kit's `display` value either (`resolve_commercial`'s own
-docstring: "not read here"), so this page always sends `display: {}` on
-save, silently erasing any label a kit was seeded with by
-`scripts/seed_kit_commercials.py` -- fixing this needs `display` added to
-`resolve_commercial`'s return value, out of this bead's own Surfaces.)
+DISPLAY IS PRESERVED, NOT EDITED (bd polyglot-pdf-zcbm1): the page has no UI
+for the console label itself, but the fresh GET on Edit captures the kit's
+`display` map (now returned by `resolve_commercial`, see below) into state,
+and Save echoes that same map back on the PUT unchanged -- so a price edit
+never silently wipes a label `scripts/seed_kit_commercials.py` or a
+previous save had set. Before `resolve_commercial` returned `display`, this
+page had nothing to read it from and always sent `display: {}`, erasing any
+seeded label on every price edit; that reader-side gap is now closed.)
 (bd polyglot-pdf-jmiys: link listing and revoke,
 Track B bead B4 -- `GET /admin/firms/{firm_id}/links`
 (`?channel=` REQUIRED, `?status=`/`?employee_id=` optional filters) joins a

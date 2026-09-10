@@ -49,7 +49,11 @@ DOC SHAPE (kits/{kit_id}):
     credit_cost: int      how many credits minting a link on this form costs
     burn_cap_usd: float   the per-link USD spend ceiling signed into the
                           token as `cap_usd` (bd polyglot-pdf-4tjt7)
-    display: dict         console label etc.; not read here
+    display: dict         console label etc.; passed through by
+                          resolve_commercial (bd polyglot-pdf-zcbm1) so the
+                          admin console can read a kit's existing label
+                          before overwriting it -- the mint path itself has
+                          no use for it, it just rides along
     updated_by: str       updated_at: number
 
 ASCII only.
@@ -108,6 +112,26 @@ def _positive_int(raw: Any, fallback: int) -> int:
     return fallback
 
 
+def _display(raw: Any) -> dict:
+    """The stored `display` map, or {} for anything that is not one.
+
+    `display` has no global default to fall back to (unlike credit_cost/
+    cap_usd) -- an empty map IS the fallback. A non-dict stored value (or a
+    dict with a non-string key/value) is treated as absent rather than
+    passed through raw: this reader has no way to refuse a bad WRITE (that
+    is kit_routes.py's job, on the way in), but it must not hand a
+    malformed shape to a caller that expects a small string map, so it
+    degrades to the same "nothing to show" the write side would have
+    refused outright.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    if any(not isinstance(k, str) or not isinstance(v, str)
+           for k, v in raw.items()):
+        return {}
+    return dict(raw)
+
+
 def read_commercial(kit_id: str) -> Optional[dict]:
     """The raw commercial doc for `kit_id`, or None when there is none.
 
@@ -135,12 +159,24 @@ def read_commercial(kit_id: str) -> Optional[dict]:
 
 
 def resolve_commercial(kit_id: str) -> dict:
-    """The credit price and USD ceiling for a link on this form.
+    """The credit price, USD ceiling, and display label for a link on this
+    form.
 
-    Returns {"credit_cost": int, "cap_usd": float, "source": str}. `source`
-    is "kit" when a commercial doc was found and "default" when it was not
-    -- for the mint log line, so an operator can see at a glance whether a
-    form is priced or riding the fallback.
+    Returns {"credit_cost": int, "cap_usd": float, "source": str,
+    "display": dict}. `source` is "kit" when a commercial doc was found and
+    "default" when it was not -- for the mint log line, so an operator can
+    see at a glance whether a form is priced or riding the fallback.
+    `display` is the stored doc's own `display` dict verbatim when present,
+    or `{}` for a missing/malformed value or no doc at all (bd
+    polyglot-pdf-zcbm1) -- unlike credit_cost/cap_usd it has no "global
+    default" to fall back to, so the empty map IS its default. It is not
+    read by the mint path (nothing here needs a console label to charge a
+    link); it rides along so a GET route built on this reader -- the admin
+    console's kit list and per-kit read -- can show an operator a kit's
+    existing label, and so a save that PUTs the whole commercial doc back
+    can preserve that label instead of silently wiping it (the gap this bead
+    closes: a PUT that always sent display: {} because there was nothing to
+    read it from first).
 
     SYNC (Admin SDK). Async callers must wrap this in asyncio.to_thread, as
     backend/routes/link_routes.py does for every other Firestore read.
@@ -149,6 +185,8 @@ def resolve_commercial(kit_id: str) -> dict:
     into the token (bd polyglot-pdf-ah5d3) and `credit_cost` is snapshotted
     onto the links/{jti} record, so neither a later pricing edit nor a slow
     Firestore can change what an already-minted link costs or may spend.
+    `display` is NOT snapshotted anywhere -- it never reaches the mint
+    transaction or the token, it only ever answers a console read.
     """
     from backend.services.link_budget import (
         KIT_COST_CEILING_KEY,
@@ -170,4 +208,5 @@ def resolve_commercial(kit_id: str) -> dict:
         "credit_cost": credit_cost,
         "cap_usd": float(cap_usd),
         "source": "kit" if doc is not None else "default",
+        "display": _display((doc or {}).get("display")),
     }

@@ -79,21 +79,16 @@ function validateBurnCapUsd(raw: string): string | null {
  * partial patch, matching the route's own "a PUT replaces the whole
  * commercial doc" contract.
  *
- * KNOWN GAP, NOT INTRODUCED HERE: this page always sends `display: {}` on
- * Save (never omitted -- kit_routes.py treats a missing/null `display` the
- * same way, defaulting it to `{}` server-side) because NEITHER GET route
- * this page reads (`resolve_commercial`'s own docstring: "display: dict
- * console label etc.; not read here") ever returns a kit's existing
- * `display` value -- there is nothing here to preserve. CONCRETELY: a kit
- * seeded with a `display.label` by `scripts/seed_kit_commercials.py` LOSES
- * that label the first time ANY console operator edits its price through
- * this page, PUT's own whole-doc-replace contract being what it is. This
- * is a pre-existing gap in the read side of bead A3/B3's `kit_routes.py`
- * (Surfaces here are `adminApi.ts` + this page + the shell tab only, not
- * `kit_routes.py`) -- flagged rather than silently worked around; filed as
- * bd `polyglot-pdf-zcbm1` (add `display` to
- * `kit_commercials.resolve_commercial`'s return value so both GET routes
- * surface it, then this page can preserve it on save).
+ * DISPLAY IS PRESERVED, NOT EDITED (bd polyglot-pdf-zcbm1). This page has
+ * no UI for the console label itself, but Save must never silently erase
+ * one. The fresh GET on Edit captures the kit's current `display` map into
+ * state; Save echoes that SAME map back on the PUT, unchanged. Before
+ * `kit_commercials.resolve_commercial` returned `display`, this page had
+ * nothing to read it from and always sent `display: {}` on every save --
+ * wiping any label `scripts/seed_kit_commercials.py` or a previous save had
+ * set, the moment ANY operator edited a kit's price. That reader-side gap
+ * is fixed; this page's half of the fix is capturing and re-sending what it
+ * now reads rather than a hardcoded `{}`.
  *
  * EXACTLY ONE PUT PER SAVE. Client-side validation (mirroring the route's
  * own rules: credit_cost a positive int, burn_cap_usd a positive finite
@@ -116,6 +111,10 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
   const [editError, setEditError] = React.useState<string | null>(null);
   const [creditCostInput, setCreditCostInput] = React.useState('');
   const [burnCapUsdInput, setBurnCapUsdInput] = React.useState('');
+  // The kit's existing display map, captured on the fresh Edit read and
+  // echoed back unchanged on Save -- this page has no UI to edit it, but
+  // Save must never wipe it (bd polyglot-pdf-zcbm1).
+  const [displayRef, setDisplayRef] = React.useState<Record<string, string>>({});
   const [creditCostFieldError, setCreditCostFieldError] = React.useState<string | null>(null);
   const [burnCapUsdFieldError, setBurnCapUsdFieldError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -145,6 +144,7 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
     setCreditCostFieldError(null);
     setBurnCapUsdFieldError(null);
     setSavedMessage(null);
+    setDisplayRef({});
   }, []);
 
   const startEdit = React.useCallback(async (kitId: string) => {
@@ -160,6 +160,9 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
       const commercial = await getKitCommercial(kitId);
       setCreditCostInput(String(commercial.credit_cost));
       setBurnCapUsdInput(String(commercial.cap_usd));
+      // Captured so Save can echo it back unchanged -- see the module
+      // docstring's "DISPLAY IS PRESERVED, NOT EDITED".
+      setDisplayRef(commercial.display);
     } catch (err) {
       if (onAuthExpired(err)) { setEditingKitId(null); return; }
       setEditError(err instanceof Error ? err.message : 'Could not load this kit\'s pricing');
@@ -183,9 +186,12 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
     setSavedMessage(null);
     try {
       // EXACTLY ONE PUT: the whole commercial body, never a partial patch.
+      // `display` rides along as whatever the fresh Edit read captured --
+      // this page never changes it, only preserves it.
       await setKitCommercial(editingKitId, {
         creditCost: Number(creditCostInput),
         burnCapUsd: Number(burnCapUsdInput),
+        display: displayRef,
       });
       // Re-read so the editor reflects what the server actually stored,
       // not merely the form's draft (the round trip the exit criterion
@@ -193,6 +199,7 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
       const reread = await getKitCommercial(editingKitId);
       setCreditCostInput(String(reread.credit_cost));
       setBurnCapUsdInput(String(reread.cap_usd));
+      setDisplayRef(reread.display);
       setSavedMessage(`Saved ${editingKitId}.`);
       await loadKits();
     } catch (err) {
@@ -205,7 +212,7 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
     } finally {
       setSaving(false);
     }
-  }, [editingKitId, creditCostInput, burnCapUsdInput, loadKits, onAuthExpired]);
+  }, [editingKitId, creditCostInput, burnCapUsdInput, displayRef, loadKits, onAuthExpired]);
 
   return (
     <div data-testid="kit-commercials-page" className="max-w-3xl">
