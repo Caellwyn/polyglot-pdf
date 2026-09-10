@@ -4,26 +4,28 @@ import { WhoAmIPage } from './components/WhoAmIPage';
 import { AuditLogPage } from './components/AuditLogPage';
 import { ConfigEditorPage } from './components/ConfigEditorPage';
 import { UsersPage } from './pages/UsersPage';
+import { KitCommercialsPage } from './pages/KitCommercialsPage';
 import { FirmsPage } from './pages/FirmsPage';
 import { FirmDetailPage } from './pages/FirmDetailPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
-type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'firms';
+type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits' | 'firms';
 
 /**
- * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91
- * and polyglot-pdf-r8z9g): the sign-in gate, then a simple tabbed shell over
- * the console's pages -- who-am-I, the audit log list, the per-channel
- * runtime-config editor, staff-account management (users), and firms
- * (list/detail with ledger, grants, links and revoke).
+ * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91,
+ * polyglot-pdf-r8z9g, and polyglot-pdf-mzblw): the sign-in gate, then a
+ * simple tabbed shell over the console's pages -- who-am-I, the audit log
+ * list, the per-channel runtime-config editor, staff-account management
+ * (users), kit commercials (per-form credit price and USD spend ceiling),
+ * and firms (list/detail with ledger, grants, links and revoke).
  *
  * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
  * state is simple enough that a router would be pure ceremony for this
  * bead's scope. A future bead can add one if the page count grows past what
  * tab state comfortably tracks.
  *
- * FIRM DETAIL IS A SUB-VIEW OF THE FIRMS TAB, not a fifth tab: `openFirmId`
+ * FIRM DETAIL IS A SUB-VIEW OF THE FIRMS TAB, not a sixth tab: `openFirmId`
  * tracks which firm (if any) is open. Switching away to another tab and
  * back to Firms always lands on the list (the tab click below clears
  * `openFirmId`), matching how a router's own list link would behave rather
@@ -98,6 +100,7 @@ export const App: React.FC = () => {
             { id: 'audit', label: 'Audit log' },
             { id: 'config', label: 'Runtime config' },
             { id: 'users', label: 'Users' },
+            { id: 'kits', label: 'Kit commercials' },
             { id: 'firms', label: 'Firms' },
           ] as const
         ).map((item) => (
@@ -122,6 +125,7 @@ export const App: React.FC = () => {
         {tab === 'audit' && <AuditLogPage onAuthExpired={handleAuthExpired} />}
         {tab === 'config' && <ConfigEditorPage onAuthExpired={handleAuthExpired} />}
         {tab === 'users' && <UsersPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'kits' && <KitCommercialsPage onAuthExpired={handleAuthExpired} />}
         {tab === 'firms' && (
           openFirmId ? (
             <FirmDetailPage
