@@ -70,3 +70,47 @@ describe('FULL SPACE: no combination silently drops the answer', () => {
     }
   }
 })
+
+const stateWith = (fieldValues: Record<string, unknown>) =>
+  ({ fieldValues, schema: null, sectionState: {} } as any)
+
+describe('the axes BEYOND element-type x neighbour-shape', () => {
+  // The 15-case matrix varies two axes. These are the other axes I could think
+  // of that might hide a fifth shape -- probed rather than assumed, and kept
+  // because they cost nothing and the shape count in this bead is four.
+  beforeEach(() => { document.body.innerHTML = '' })
+
+  it('TWO colliding neighbours at once -- plain AND bracketed', () => {
+    document.body.innerHTML = `
+      <input id="f" name="f_own" type="checkbox" value="yes" />
+      <input name="f" type="radio" value="P" />
+      <input name="f[]" type="checkbox" value="B" />`
+    restoreDOMFromSessionStorage(stateWith({ f: { value: true, confirmed: false } }),
+      mk({ id: 'f', name: 'F', spoken_name: 'f', type: 'checkbox' }))
+
+    expect((document.getElementById('f') as HTMLInputElement).checked, 'own field wins').toBe(true)
+    expect((document.querySelector('input[name="f"]') as HTMLInputElement).checked).toBe(false)
+    expect((document.querySelector('input[name="f[]"]') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('a BOOLEAN value onto a colliding standalone radio', () => {
+    document.body.innerHTML = `
+      <input id="f" name="f_own" type="radio" value="yes" />
+      <input name="f" type="radio" value="X" />`
+    restoreDOMFromSessionStorage(stateWith({ f: { value: true, confirmed: false } }),
+      mk({ id: 'f', name: 'F', spoken_name: 'f', type: 'radio', options: [{ value: 'yes', label: 'y' }] }))
+
+    expect((document.getElementById('f') as HTMLInputElement).checked).toBe(true)
+    expect((document.querySelector('input[name="f"]') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('a field id that is ITSELF bracketed and collides', () => {
+    document.body.innerHTML = `
+      <input id="f[]" name="f_own" type="text" value="" />
+      <input name="f[][]" type="checkbox" value="X" />`
+    restoreDOMFromSessionStorage(stateWith({ 'f[]': { value: 'typed', confirmed: false } }),
+      mk({ id: 'f[]', name: 'F', spoken_name: 'f', type: 'text' }))
+
+    expect((document.getElementById('f[]') as HTMLInputElement).value).toBe('typed')
+  })
+})
