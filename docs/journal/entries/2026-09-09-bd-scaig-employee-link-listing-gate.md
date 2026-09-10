@@ -146,4 +146,58 @@ actually changed them.
   `docs/components/config-deployment.md`, `docs/technical_guide.md` -- see
   "Doc freshness" above.
 
+## Cross-surface review round 1
+
+The Opus outer reviewer traced every changed contract (the new dependency,
+`CompositeActor.employee_id`, the new `ACTOR_KIND_FIRM_EMPLOYEE`,
+`employee_firm_id`, the listing route's forced `employee_id`, the new
+Firestore query shape, and the gate-set vocabulary) into every consumer file
+outside the diff and returned GAPS-FOUND(1):
+
+- **Adopted (fixed inline):** `docs/technical_guide.md:192`'s `/health`
+  row said "every other route ... carries one of the four gates named in
+  `test_admin_route_auth.py`" -- true on `origin/dev`, false on HEAD (that
+  test's `known_gate_names` is now five, and the link-listing route carries
+  the fifth). This diff had already fixed the doc's OTHER two mentions
+  (Surface contract 22's row and its own addendum) but never enumerated the
+  rest of the file's restatements (CLAUDE.md scar #8) -- this was the one
+  instance in `technical_guide.md` itself. Reworded to name both the
+  four-gate plan vocabulary AND the fifth route-scoped gate explicitly,
+  pointing at the test file as the enumeration's source of truth rather than
+  hand-repeating a count that will go stale again the next time the set
+  changes.
+- **Deferred (already filed as beads, not touched here):** three more
+  "four gates" restatements in files this bead's diff never touched at all
+  (`admin_backend/main.py:25`, `test_admin_route_auth.py:202`'s assertion
+  message, `test_admin_health.py:109`), plus a docstring in
+  `test_admin_route_auth.py` that names a test (`test_link_listing_route_
+  gate_set`) which does not exist -- the real test is `test_only_the_link_
+  listing_route_carries_the_fifth_gate`, and the docstring's claimed guard
+  mechanism (a second gate-only route becoming an "unrecognized-combination
+  offender") is also wrong (the fifth gate IS in `known_gate_names`, so it
+  would pass the set pin; the real guard is the separate `carriers == [...]`
+  assertion). Both filed as `polyglot-pdf-xwm32` (comment-align, nit) by
+  the reviewer before this round; the docstring inaccuracy is a nit on a
+  correct, mutation-verified guard, not a functional gap.
+- **Refuted (no code change; recorded so it is not re-hunted):** the
+  reviewer's own trace initially flagged the new unconditional
+  `firm_id`+`employee_id` Firestore query as needing a composite index
+  absent from `firestore.indexes.json`. Retracted in the same report: the
+  query is all-equality even with `?status=` added, and
+  `test_firestore_indexes.py`'s own stated rule is that Firestore's
+  automatic single-field index merging covers all-equality queries --
+  no index owed, correct as shipped.
+- **Deferred (already filed, not touched here):** the employee scoping in
+  `link_routes.py` fails OPEN (not closed) if a `CompositeActor` is ever
+  constructed with `kind=ACTOR_KIND_FIRM_EMPLOYEE` and `employee_id=None` --
+  unreachable today (the sole production constructor 401s on a falsy uid
+  before building the actor), but the invariant lives in one constructor's
+  control flow rather than the type. Filed as `polyglot-pdf-wiju0`
+  (local-bug, nit) by the reviewer before this round.
+
+Full backend + admin_backend suite re-run after the fix: 4176 passed, 67
+skipped, 3 deselected, 1 xfailed, 0 failed. Root-level suite: 1472 passed,
+46 skipped. No new or changed test in this round (the fix is a doc-only
+correction), so no mutation-verification was owed.
+
 Review outcomes recorded in the closeout ping.
