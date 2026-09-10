@@ -161,3 +161,38 @@ pointer to the one frontend caller that would need updating.
 - `docs/technical_guide.md`
 
 Review outcomes recorded in the closeout ping.
+
+## Cross-surface review fix round
+
+The Opus outer cross-surface review traced every producer/consumer contract
+this bead touches (`listKits`/`getKitCommercial`/`setKitCommercial` against
+`kit_routes.py`, the `cap_usd`/`burn_cap_usd` two-spelling contract into
+`kit_commercials.py` and `link_budget.py`, the `display: {}` wipe, the
+`fieldFromDetail` prefix coupling, the `App.tsx` tab union, the audit
+action, and the `kits/` collection's channel-scoping) and returned
+`GAPS-FOUND (1)`. Breakdown:
+
+- **Adopted (1):** `docs/components/admin-service.md`'s "Pages:"
+  enumeration under "The console" section named five pages and omitted
+  `KitCommercialsPage.tsx` -- a tier-2 current-state doc under-describing
+  the shipped console (the page was documented only in the file's dated
+  changelog stamp, not the current-state section). Added Kit commercials
+  to the "Pages:" list and gave it its own detail bullet matching the
+  Users-page/Firms-pages shape. While in the same section, also enumerated
+  `listKits`/`getKitCommercial`/`setKitCommercial` into the "API client:"
+  bullet's function list -- the identical staleness class the reviewer
+  flagged, on the same bullet's sibling. Filed by the reviewer as bd
+  `polyglot-pdf-a0xr0`; closed by this fix round.
+- **Rejected/refuted (0):** none -- every other traced contract came back
+  OK (see the reviewer's contract-trace list in the PR).
+- **Deferred, pre-existing, not this bead's to fix (2, both already
+  filed):** the `kits/` collection's lack of channel-suffixing means the
+  admin-console candidate (staging) build writes the DEMO's real kit
+  pricing -- filed as bd `polyglot-pdf-vdc3w`; it is a property of the
+  whole console programme (the merged Firms page's credit grants have the
+  same exposure and are strictly more consequential) rather than of this
+  bead specifically, and the reviewer flagged it explicitly for the
+  maintainer rather than treating it as blocking. The `display: {}` wipe
+  on save was independently reconfirmed pre-existing and currently
+  cosmetic (no reader of `display.label` anywhere in the repo) -- already
+  filed as bd `polyglot-pdf-zcbm1`, unchanged by this round.

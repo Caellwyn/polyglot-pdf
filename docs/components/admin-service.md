@@ -543,7 +543,8 @@ one.
   `components/`: it drives four routes and two mutations with a re-read
   each, past the point a single-file "page" component was the more natural
   location), Firms (`pages/FirmsPage.tsx` + `pages/FirmDetailPage.tsx`, bd
-  polyglot-pdf-r8z9g -- see below).
+  polyglot-pdf-r8z9g -- see below), Kit commercials
+  (`pages/KitCommercialsPage.tsx`, bd polyglot-pdf-mzblw -- see below).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
@@ -600,9 +601,34 @@ one.
   re-reads the SAME channel's link list afterward). Every mutation on this
   page follows the same MUTATE-THEN-RE-READ round trip `ConfigEditorPage`/
   `UsersPage` already use.
+- **Kit commercials page** (`pages/KitCommercialsPage.tsx`, bd
+  polyglot-pdf-mzblw, Epic 2 Track C bead C1): the FIRST console page over
+  `admin_backend/routes/kit_routes.py`'s three routes. Lists every kit
+  (`GET /admin/kits`: kit id, `credit_cost`, `cap_usd`, `source` --
+  "kit" when a commercial doc exists, "default" when the kit rides the
+  global fallback), then edits ONE kit's pricing at a time: clicking Edit
+  loads that kit's fresh commercial (`GET /admin/kits/{kit_id}/commercial`,
+  never the list row's already-rendered values, since the list can be
+  stale if another operator just saved), and Save `PUT`s the WHOLE body
+  (`credit_cost`, `burn_cap_usd`, `display: {}`) -- never a partial patch,
+  matching the route's own whole-doc-replace contract. Client-side
+  validation mirrors the route's own rules (a positive int credit cost, a
+  positive finite burn cap) ahead of the network call, but the server's own
+  422 still governs anything that check misses, surfaced next to the named
+  field (an allowlist match against the route's own `"credit_cost "` /
+  `"burn_cap_usd "` detail prefixes) rather than as a generic banner. A
+  successful save re-reads the kit's commercial so the editor reflects what
+  the server actually stored, then reloads the list, the same
+  MUTATE-THEN-RE-READ pattern the other pages use. KNOWN GAP: because
+  neither GET route this page reads ever returns a kit's existing
+  `display` value, this page always sends `display: {}` on save, wiping any
+  `display.label` a kit was seeded with (bd polyglot-pdf-zcbm1;
+  currently cosmetic, since nothing in the repo reads `display.label`
+  today).
 - **API client:** `admin-console/src/utils/adminApi.ts` (`probeWhoAmI`,
   `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`, `listUsers`,
-  `createUser`, `setUserDisabled`, `setUserRole`, `listFirms`, `createFirm`,
+  `createUser`, `setUserDisabled`, `setUserRole`, `listKits`,
+  `getKitCommercial`, `setKitCommercial`, `listFirms`, `createFirm`,
   `getFirm`, `setFirmStatus`, `setFirmAllowedKits`, `setFirmKind`,
   `grantCredits`, `adjustCredits`, `listFirmLinks`, `revokeLink`), each call
   carrying `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST
