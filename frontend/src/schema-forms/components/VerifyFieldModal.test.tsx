@@ -50,15 +50,29 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
     const props = renderModal();
     const box = screen.getByTestId('verify-field-checkbox') as HTMLInputElement;
 
-    // The real gesture: keydown, the browser's own toggle, then keyup. jsdom
-    // does not toggle from a keydown, so the toggle is fired as a click --
-    // which is what a browser does internally for space on a checkbox.
+    // Space keydown marks intent; the browser then toggles the box, which fires
+    // CHANGE. The test fires click for the toggle because jsdom does not
+    // implement space-activates-checkbox -- but unlike the previous keyup
+    // version, the ASSERTION does not depend on when the toggle lands relative
+    // to any key event. Only that a space-initiated toggle verifies.
     fireEvent.keyDown(box, { key: ' ' });
     fireEvent.click(box);
-    fireEvent.keyUp(box, { key: ' ' });
 
     expect(box.checked, 'the box must actually be ticked').toBe(true);
     expect(props.onVerify).toHaveBeenCalledTimes(1);
+  });
+
+  it('a MOUSE click ticks the box WITHOUT verifying', () => {
+    // The other half of the space flag: only a space-initiated toggle verifies,
+    // so a plain click still requires the Confirm button. Without this, routing
+    // space through onChange would silently make every click verify too.
+    const props = renderModal();
+    const box = screen.getByTestId('verify-field-checkbox') as HTMLInputElement;
+
+    fireEvent.click(box);
+
+    expect(box.checked).toBe(true);
+    expect(props.onVerify, 'a click must not verify on its own').not.toHaveBeenCalled();
   });
 
   it('SPACE that UNTICKS a ticked box must NOT verify', () => {
@@ -70,19 +84,17 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
 
     fireEvent.keyDown(box, { key: ' ' });
     fireEvent.click(box);                 // tick
-    fireEvent.keyUp(box, { key: ' ' });
     expect(props.onVerify).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(box, { key: ' ' });
     fireEvent.click(box);                 // UNtick
-    fireEvent.keyUp(box, { key: ' ' });
     expect(box.checked, 'the second space unticked it').toBe(false);
     expect(props.onVerify, 'unticking must not verify again').toHaveBeenCalledTimes(1);
   });
 
   it('SPACE elsewhere in the modal does nothing', () => {
     const props = renderModal();
-    fireEvent.keyUp(screen.getByTestId('verify-field-cancel'), { key: ' ' });
+    fireEvent.keyDown(screen.getByTestId('verify-field-cancel'), { key: ' ' });
     expect(props.onVerify).not.toHaveBeenCalled();
   });
 

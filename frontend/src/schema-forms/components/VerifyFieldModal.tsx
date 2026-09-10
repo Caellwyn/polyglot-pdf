@@ -61,6 +61,12 @@ export function VerifyFieldModal({
   const checkboxRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [checked, setChecked] = useState(false);
+  // Whether the in-flight checkbox toggle was initiated by SPACE. Declared
+  // with the other hooks: it must sit ABOVE the `if (!isOpen) return null`
+  // below, or React renders a different number of hooks per pass and throws
+  // "Rendered fewer hooks than expected" -- which is exactly what a sibling
+  // test caught when this was declared further down.
+  const spacePendingRef = useRef(false);
 
   // The checkbox takes focus so the gesture is two keystrokes (bd 96um6). A
   // focused checkbox responds to BOTH Enter and space, which is why the bead
@@ -125,25 +131,31 @@ export function VerifyFieldModal({
     // land and the verify runs after it -- which also means space UNTICKING a
     // ticked box must NOT verify, hence reading the post-toggle state rather
     // than assuming space means "on".
-    // Space is handled on KEY UP, not keydown -- see handleKeyUp below.
+    // Space is handled by onChange -- see spacePendingRef below.
   };
 
-  // SPACE completes the gesture, on KEY UP.
+  // SPACE completes the gesture, via the checkbox's own CHANGE event.
   //
-  // Not intercepted on keydown: a focused checkbox toggles itself natively on
-  // space, and preventDefault would kill that. The toggle lands between keydown
-  // and keyup, so keyup reads the SETTLED state synchronously -- which is why
-  // this is not a deferred callback. An earlier version used
-  // requestAnimationFrame and could have fired onVerify after the modal
-  // unmounted, holding a stale closure; keyup has no such window.
+  // Two earlier attempts got this wrong and BOTH passed every jsdom test:
+  //   requestAnimationFrame -- could fire onVerify into an unmounted modal.
+  //   keyup                 -- assumed the native toggle lands BEFORE keyup.
+  //                            Verified in a real browser: it does not.
   //
-  // Reading the post-toggle state also means space UNTICKING a ticked box does
-  // not verify, which is the correct reading of "space verifies".
-  const handleKeyUp = (e: React.KeyboardEvent) => {
-    if (e.key !== ' ') return;
-    if (e.target !== checkboxRef.current) return;
-    e.stopPropagation();
-    if (checkboxRef.current?.checked) onVerify();
+  // `change` needs NO ordering assumption at all: it fires exactly when the box
+  // toggles, whatever caused it, and `e.target.checked` is the SETTLED value by
+  // definition. The keydown below only records that THIS toggle came from
+  // space, so a mouse click still just ticks the box without verifying.
+  const handleCheckboxKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === ' ') spacePendingRef.current = true;
+  };
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nowChecked = e.target.checked;
+    setChecked(nowChecked);
+    const fromSpace = spacePendingRef.current;
+    spacePendingRef.current = false;
+    // Only a space that TICKS it verifies; unticking must not assert anything.
+    if (fromSpace && nowChecked) onVerify();
   };
 
   return (
@@ -155,7 +167,6 @@ export function VerifyFieldModal({
         aria-modal="true"
         aria-labelledby="verify-field-title"
         onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
       >
         <h2 id="verify-field-title" className="verify-field-modal-title">
           {copy.title}
@@ -177,7 +188,8 @@ export function VerifyFieldModal({
             ref={checkboxRef}
             type="checkbox"
             checked={checked}
-            onChange={e => setChecked(e.target.checked)}
+            onKeyDown={handleCheckboxKeyDown}
+            onChange={handleCheckboxChange}
             data-testid="verify-field-checkbox"
           />
           <span>{copy.checkboxLabel}</span>
