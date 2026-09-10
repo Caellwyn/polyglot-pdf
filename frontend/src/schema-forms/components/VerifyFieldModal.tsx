@@ -74,6 +74,12 @@ export function VerifyFieldModal({
   useEffect(() => {
     if (isOpen) {
       setChecked(false); // never inherit a previous field's tick
+      // ...nor a previous field's PENDING SPACE. A space keydown that never
+      // produced a toggle -- press space, then Escape -- otherwise left this
+      // set, and the next modal's first MOUSE CLICK verified with no space
+      // pressed at all: a verification the user never made, on the audit path
+      // this whole bead exists to protect.
+      spacePendingRef.current = false;
       checkboxRef.current?.focus();
     }
   }, [isOpen]);

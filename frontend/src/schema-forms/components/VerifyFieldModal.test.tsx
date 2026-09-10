@@ -62,6 +62,33 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
     expect(props.onVerify).toHaveBeenCalledTimes(1);
   });
 
+  it('a stale SPACE flag does not leak into the next open', () => {
+    // Press space, then Escape -- the keydown set the flag but no toggle ever
+    // cleared it. Without a reset on open, the NEXT modal's first mouse click
+    // verified with no space pressed at all: a verification the user never
+    // made, on the audit path this bead exists to protect. Found by probing my
+    // own fix rather than by the review.
+    const props = {
+      fieldName: 'Family Name', value: 'Vasquez', selectedLanguage: 'English',
+      onVerify: vi.fn(), onCancel: vi.fn(),
+    };
+    const { rerender } = render(<VerifyFieldModal isOpen {...props} />);
+    fireEvent.keyDown(screen.getByTestId('verify-field-checkbox'), { key: ' ' });
+
+    rerender(<VerifyFieldModal isOpen={false} {...props} />);  // close
+    rerender(<VerifyFieldModal isOpen {...props} />);          // reopen
+
+    fireEvent.click(screen.getByTestId('verify-field-checkbox'));
+
+    expect(props.onVerify, 'a stale flag must not verify the next field').not.toHaveBeenCalled();
+  });
+
+  it('a LABEL click forwards to the checkbox but does not verify', () => {
+    const props = renderModal();
+    fireEvent.click(document.querySelector('.verify-field-modal-checkbox-row') as HTMLElement);
+    expect(props.onVerify).not.toHaveBeenCalled();
+  });
+
   it('a MOUSE click ticks the box WITHOUT verifying', () => {
     // The other half of the space flag: only a space-initiated toggle verifies,
     // so a plain click still requires the Confirm button. Without this, routing
