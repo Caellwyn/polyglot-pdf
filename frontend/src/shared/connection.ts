@@ -207,10 +207,21 @@ export function restoreDOMFromSessionStorage(state: SchemaFormState, schema: For
 			} else if (inputEl.type === 'radio') {
 				// Likewise a radio group: select the MATCHING option rather than
 				// overwriting option[0]'s value attribute (bd polyglot-pdf-sjbdm).
-				const radios = document.querySelectorAll(
-					`input[name="${fieldId}"]`
-				) as NodeListOf<HTMLInputElement>
-				radios.forEach(el => { el.checked = el.value === String(value) })
+				//
+				// MEMBERSHIP HERE TOO. RadioField renders name={field.id} with NO
+				// bracket, so this plain branch -- not the bracketed one above -- is
+				// what every real radio group takes. Ungated, a standalone radio whose
+				// id collides with ANOTHER group's name wrote that group and dropped
+				// its own answer entirely (measured: nothing selected anywhere).
+				const radios = Array.from(
+					document.querySelectorAll(`input[name="${fieldId}"]`)
+				) as HTMLInputElement[]
+				if (radios.includes(inputEl)) {
+					radios.forEach(el => { el.checked = el.value === String(value) })
+				} else {
+					// Not a member: it is a standalone control that merely shares the id.
+					inputEl.checked = inputEl.value === String(value) || Boolean(value)
+				}
 			} else if (inputEl.type === 'checkbox') {
 				inputEl.checked = Boolean(value)
 			} else {

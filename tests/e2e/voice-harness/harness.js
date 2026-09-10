@@ -378,6 +378,14 @@
       for (var i = 0; i < plain.length; i++) {
         if (plain[i].type === 'radio') radios.push(plain[i]);
       }
+      // MEMBERSHIP on the PLAIN branch too. RadioField renders name={field.id}
+      // with no bracket, so this is the branch every real radio group takes --
+      // and a standalone radio whose id collides with another group's name is
+      // not one of them.
+      if (radios.length && own && radios.indexOf(own) === -1 &&
+          (own.type === 'checkbox' || own.type === 'radio')) {
+        return [];
+      }
       return radios.length ? radios : [];
     } catch (e) { return []; }
   }

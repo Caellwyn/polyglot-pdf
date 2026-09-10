@@ -39,6 +39,26 @@ describe('restoreDOMFromSessionStorage -- real function, real DOM', () => {
     expect(group.some(g => g.checked), 'the unrelated group must not be touched').toBe(false)
   })
 
+  it('SHAPE 4: a standalone radio colliding with a PLAIN-named group restores ITSELF', () => {
+    // RadioField renders name={field.id} with NO bracket, so the PLAIN branch --
+    // not the bracketed one -- is what every real radio group takes. My first
+    // membership fix gated only the bracketed branch, and the set-closure guard
+    // I wrote counted only bracketed lookups, so it excluded exactly this site.
+    // Measured before fixing: nothing selected anywhere, the answer dropped.
+    const schema = mk([{ id: 'mar', name: 'Marital', spoken_name: 'marital', type: 'radio',
+                         options: [{ value: 'single', label: 'S' }] }])
+    document.body.innerHTML = `
+      <input id="mar" name="marStatus" type="radio" value="single" />
+      <input name="mar" type="radio" value="X" />
+      <input name="mar" type="radio" value="Y" />`
+
+    restoreDOMFromSessionStorage(stateWith({ mar: { value: 'single', confirmed: false } }), schema)
+
+    expect((document.getElementById('mar') as HTMLInputElement).checked).toBe(true)
+    const others = Array.from(document.querySelectorAll('input[name="mar"]')) as HTMLInputElement[]
+    expect(others.some(o => o.checked), 'the unrelated group must not be touched').toBe(false)
+  })
+
   it('a REAL checkbox group restores the picked options', () => {
     const schema = mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
                          options: [{ value: 'Asian', label: 'A' }, { value: 'White', label: 'W' }] }])

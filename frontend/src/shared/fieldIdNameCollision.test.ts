@@ -93,6 +93,19 @@ describe('the SET of group-resolution sites is closed', () => {
     return fs.readFileSync(path.join(__dirname, rel), 'utf8')
   }
 
+  it('the PLAIN-name group lookups are gated too', () => {
+    // The guard below counted only BRACKETED lookups, so it silently excluded
+    // the plain-name radio path -- which is the branch every real radio group
+    // takes (RadioField renders name={field.id}, no bracket). The bug lived in
+    // exactly the site my enumeration omitted. Counting both shapes is the
+    // point: a guard whose scope skips the vulnerable branch is theatre.
+    const conn = read('./connection.ts')
+    expect(
+      /radios\.includes\(inputEl\)/.test(conn),
+      "connection.ts's plain-radio restore must gate on membership"
+    ).toBe(true)
+  })
+
   it('exactly the known sites resolve a group by bracketed name', () => {
     const sites: Array<[string, number]> = [
       ['./fieldManager.ts', 1],   // groupInputsFor -- the single source
