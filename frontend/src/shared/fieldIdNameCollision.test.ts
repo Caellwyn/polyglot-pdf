@@ -77,3 +77,55 @@ describe('MATRIX: every id-vs-name collision shape', () => {
     expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['X', 'Y'])
   })
 })
+
+describe('the SET of group-resolution sites is closed', () => {
+  // Three modules hold this one rule, and it changed under all three when I
+  // edited only one. This asserts the complete list of sites that resolve a
+  // field to a group by bracketed name, so a FIFTH one fails here rather than
+  // in a review round (CLAUDE.md scar #8: pin the set, not the instance).
+  //
+  // The harness cannot import the app's helper -- it is injected into a live
+  // page -- so the duplication is unavoidable. What is avoidable is the
+  // duplication being SILENT.
+  const read = (rel: string): string => {
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    return fs.readFileSync(path.join(__dirname, rel), 'utf8')
+  }
+
+  it('exactly the known sites resolve a group by bracketed name', () => {
+    const sites: Array<[string, number]> = [
+      ['./fieldManager.ts', 1],   // groupInputsFor -- the single source
+      ['./connection.ts', 2],     // restore + capture
+    ]
+    for (const [file, expected] of sites) {
+      const hits = (read(file).match(/querySelectorAll\(\s*`input\[name="\$\{fieldId\}\[\]"\]`/g) || []).length
+      expect(hits, `${file} should hold exactly ${expected} bracketed group lookup(s)`).toBe(expected)
+    }
+  })
+
+  it('every one of them gates on MEMBERSHIP', () => {
+    // fieldManager routes all three consumers through idResolvesToNonGroup,
+    // which ends in a membership test; connection.ts tests it inline at both.
+    expect(
+      /includes\(element\)/.test(read('./fieldManager.ts')),
+      'fieldManager must decide by membership'
+    ).toBe(true)
+    expect(
+      (read('./connection.ts').match(/memberEls\.includes\(inputEl\)/g) || []).length,
+      'both connection.ts sites must decide by membership'
+    ).toBe(2)
+  })
+
+  it('the voice harness twin carries the same membership rule', () => {
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    const harness = fs.readFileSync(
+      path.join(__dirname, '../../../tests/e2e/voice-harness/harness.js'), 'utf8'
+    )
+    expect(
+      /bracketed\.indexOf\(own\) === -1/.test(harness),
+      'harness.js groupInputs must reject a non-member, as the app does'
+    ).toBe(true)
+  })
+})
