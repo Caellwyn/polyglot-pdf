@@ -2,6 +2,33 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-09 (bd polyglot-pdf-scaig: an employee-role staff
+account could not reach `GET /admin/firms/{firm_id}/links` at all -- the
+route's only gate, `require_app_admin_or_owning_manager`, has exactly two
+actor kinds (app admin, firm manager), so an employee was refused with a
+flat 403 before the route's own `employee_id` filtering ever ran. Fixed
+with a FIFTH, route-scoped dependency,
+`require_app_admin_or_owning_manager_or_employee`
+(`admin_backend/services/admin_auth.py`), wired ONLY onto the listing
+route -- `POST /admin/links/{jti}/revoke` deliberately keeps the original,
+narrower gate unchanged, since an employee must never revoke a link. The
+new gate's employee branch resolves via a new sibling rule,
+`backend/services/firms.py::employee_firm_id(claims)` (the same shape as
+`manager_firm_id`, one role over), and the route forces `employee_id` to
+`actor.employee_id` (the caller's own uid from the verified token)
+whenever the actor is an employee, ignoring/overriding any `?employee_id=`
+the query names -- the plan's own words, "ids come from the token, not the
+query". THIS IS NOT A WIDENING of `require_app_admin_or_owning_manager`
+itself: that gate keeps refusing an employee everywhere else (the four
+`/admin/users` routes in particular), which is why the fix is a new
+function rather than a third branch on the existing one --
+`test_composite_gate.py`'s `test_neither_an_admin_nor_a_manager_is_403`
+already pinned an employee claims dict as a 403 through that name before
+this bead, and still does. The fifth gate is deliberately NOT part of
+`test_admin_route_auth.py`'s four-gate vocabulary (the plan's own named
+list); it is pinned directly on its one route instead, both there
+(`test_only_the_link_listing_route_carries_the_fifth_gate`) and in
+`test_admin_link_routes.py`.)*
 *Last updated: 2026-09-09 (bd polyglot-pdf-r8z9g: Epic 2 Track C bead C2 --
 the console's Firms tab (`admin-console/src/pages/FirmsPage.tsx`,
 `FirmDetailPage.tsx`), the SECOND page under `pages/` (after
@@ -96,8 +123,8 @@ ik7e's `spend_usd`/`turns`) by hand into an explicit key ALLOWLIST -- never
 `firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance
 mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke
 touches only the link's own status). Only a `STATUS_MINTED` record may be
-revoked; any other status is a 409 naming the current status. Both routes
-carry `require_app_admin_or_owning_manager`; unlike the body-field firm
+revoked; any other status is a 409 naming the current status. Revoke
+carries `require_app_admin_or_owning_manager`; unlike the body-field firm
 rule `resolve_target_firm` enforces for `/admin/users`, `firm_id` here is a
 URL PATH segment a manager must be able to name (their own firm) to reach a
 GET at all -- so this bead's own small `_require_owning_firm` helper
@@ -106,7 +133,10 @@ to one) with the SAME 404 an unknown firm_id/jti would get, never 403,
 which would confirm the other firm exists. Revoking a link does not itself
 change what `POST /api/links/open` does on the PUBLIC backend -- that check
 is Epic 2 Track A bead A3's job (`backend/routes/link_routes.py`,
-`links_store.get_link`), landing separately.)
+`links_store.get_link`), landing separately. LISTING'S GATE WIDENED LATER
+(bd polyglot-pdf-scaig, 2026-09-09) to also accept a firm EMPLOYEE -- see
+that note below for the current shape; this note stays as the bead-B4-era
+description of revoke, which is unchanged.)
 (bd polyglot-pdf-8vgfh: the hourly expired-link
 refund sweep, `POST /admin/links/sweep-expired`
 (`admin_backend/routes/sweep_routes.py`) -- the fourth and last gate,
@@ -235,7 +265,7 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/firms/{firm_id}/kind` | PATCH | `require_app_admin` | Reclassify `mock`<->`live` (`{kind, reason}`) -- `reason` REQUIRED; the confirm-twice UI control is the console's job, not this route's. Audited in-transaction. |
 | `/admin/firms/{firm_id}/credits/grant` | POST | `require_app_admin` | Grant credits (`{type, amount, usd_amount?, kit_id?}`; `type` in `subscription_grant`\|`purchase`\|`promo_grant`, `usd_amount` required for the first two and refused otherwise). Calls `backend/services/credit_ledger.py::append_entry` -- the ONE writer of a firm's balance. Grants to `kind=mock` firms are allowed. Audited via `append_entry`'s `extra_writes` hook, joined to its own transaction. |
 | `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED, `amount` may be either sign). Same writer and audit form as `grant`. |
-| `/admin/firms/{firm_id}/links` | GET | `require_app_admin_or_owning_manager` | The firm's links (bd polyglot-pdf-jmiys, Track B bead B4), joining `links[_<channel>]` mint records with `link_redemptions[_<channel>]` detail. `?channel=` REQUIRED (422 if missing/unknown); `?status=`/`?employee_id=` optional equality filters. A manager reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Response rows are an explicit key allowlist. A read, so no audit row. |
+| `/admin/firms/{firm_id}/links` | GET | `require_app_admin_or_owning_manager_or_employee` | The firm's links (bd polyglot-pdf-jmiys, Track B bead B4; gate widened to a firm EMPLOYEE by bd polyglot-pdf-scaig), joining `links[_<channel>]` mint records with `link_redemptions[_<channel>]` detail. `?channel=` REQUIRED (422 if missing/unknown); `?status=` an optional equality filter; `?employee_id=` is an optional filter for a manager/app admin but is FORCED to the caller's own uid (from the verified token) for an employee actor, overriding whatever the query names. A manager or employee reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Response rows are an explicit key allowlist. A read, so no audit row. |
 | `/admin/links/{jti}/revoke` | POST | `require_app_admin_or_owning_manager` | Revoke a minted link (bd polyglot-pdf-jmiys). `?channel=` REQUIRED. Sets `status=revoked` with `revoked_by`/`revoked_at` in one transaction with an in-transaction audit row; only a `minted` link may be revoked (409 otherwise, naming the current status). A manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti). |
 | `/admin/links/sweep-expired` | POST | `require_google_oidc` | The hourly expired-link refund sweep (bd polyglot-pdf-8vgfh). Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every `KNOWN_CHANNELS` channel. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit -- see Surface contract 18 in [technical_guide.md](../technical_guide.md) for that helper. Returns counts only (`{results, total_refunded, total_skipped}`); the ledger entry and the extra_writes-delegated audit row (joined via the same `_EXTRA_WRITES_TRANSACTION_OPENERS` shape as the credit routes above) are the durable record. |
 | `/admin/kits` | GET | `require_app_admin` | Every kit in the form-kit store (bd polyglot-pdf-f0kuu, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the same reader the single-kit GET below and the mint transaction use. A read, so no audit row. |
@@ -250,13 +280,18 @@ both channels' data from one deployment.
 This is the COMPLETE route set as of this doc's stamp, and it is pinned
 mechanically: `admin_backend/tests/unit/test_admin_route_auth.py` derives
 the live route set off `admin_backend.main.app` and fails if a route is
-added without exactly one of four gate names
+added without exactly one of the PLAN'S four gate names
 (`require_app_admin`; `require_firm_manager`;
 `require_app_admin_or_owning_manager`; `require_google_oidc`). ALL FOUR now
 exist; `require_google_oidc` shipped with its first consuming route above
 (bd polyglot-pdf-8vgfh) -- Epic 4 4.3's Pub/Sub push route will be its
-second. Read that test, not this table, for the authoritative set the day a
-new route lands.
+second. A FIFTH dependency, `require_app_admin_or_owning_manager_or_employee`
+(bd polyglot-pdf-scaig), exists beside these four for the ONE route that
+needs a third actor kind (`GET /admin/firms/{firm_id}/links` -- see that
+gate's own subsection below); it is deliberately outside the four-gate
+vocabulary the set-pin test enforces and is instead pinned directly on its
+one route. Read that test, not this table, for the authoritative set the
+day a new route lands.
 
 ## `require_app_admin` (`admin_backend/services/admin_auth.py`)
 
@@ -315,6 +350,41 @@ account's existing claims, so no request value can reach any other key, and
 every pre-existing claim survives (`set_custom_user_claims` **replaces** the
 whole claims object, the same trap `scripts/bootstrap_firm.py` documents).
 `app_admin` is still granted only by `scripts/bootstrap_admin_user.py`.
+
+## `require_app_admin_or_owning_manager_or_employee` (bd polyglot-pdf-scaig)
+
+The ONLY gate on `GET /admin/firms/{firm_id}/links`. Same first two
+branches as `require_app_admin_or_owning_manager` above (app admin, then
+firm manager), PLUS a third: a firm **employee**, resolved via a new sibling
+rule beside `manager_firm_id`, `backend/services/firms.py::employee_firm_id
+(claims)` -- accepts only `firm_role == "employee"`, the same shape one role
+over. An employee actor's `firm_id` is their own firm and `employee_id` is
+their own uid, both from the **verified token**; the route forces
+`employee_id` to that value whenever the actor is an employee, silently
+overriding any `?employee_id=` the query names (unlike the manager firm-body
+rule, naming a DIFFERENT value here is not itself refused -- there is
+exactly one value an employee's own filter could ever legitimately mean, so
+substituting it is applying the only correct answer, not papering over a
+disagreement). `_require_owning_firm` (`link_routes.py`) covers the
+employee actor with the SAME check it already used for a manager (both
+kinds carry `firm_id` on the actor identically), so an employee naming
+another firm gets the same 404-not-403 existence-hiding refusal.
+
+**Why a separate dependency, not a third branch on
+`require_app_admin_or_owning_manager` itself:** that gate is also the gate
+on all four `/admin/users` routes and on `POST /admin/links/{jti}/revoke`,
+where an employee has never had access and must continue not to --
+`test_composite_gate.py::test_neither_an_admin_nor_a_manager_is_403`
+already pinned an employee claims dict as a 403 through that name, and
+widening the shared function would have silently widened every one of
+those routes too. The two dependencies share their token-verification body
+(`_resolve_admin_or_manager_or_employee_actor(token, allow_employee=...)`
+in `admin_auth.py`) so the branch order (app admin first) cannot drift
+between them; only whether the employee branch is reachable differs.
+`POST /admin/links/{jti}/revoke` deliberately keeps the narrower,
+unwidened dependency -- an employee must never revoke a link, and the
+route's own dependency graph makes that unreachable rather than relying on
+an in-route check.
 
 ## `require_firm_manager` (`backend/services/auth.py`)
 
@@ -694,7 +764,18 @@ rename), `test_sweep_routes.py` (the sweep route end to end through a fake
 Firestore, including the forced-audit-failure atomicity pin),
 `test_admin_link_routes.py` (bd polyglot-pdf-jmiys: link listing's allowlist
 and firm-scoping, and revoke's atomicity and 409/404 refusals, over the
-same fake-Firestore shape `test_sweep_routes.py` uses), `test_kit_routes.py`
+same fake-Firestore shape `test_sweep_routes.py` uses; bd polyglot-pdf-scaig
+adds the employee actor's own scoping -- token-not-query `employee_id`, one
+employee never seeing another's links, the 404-not-403 rule extending to an
+employee, and a direct pin that revoke's route wiring still carries only
+the narrower gate), `test_composite_gate.py` (bd polyglot-pdf-scaig: the new
+`require_app_admin_or_owning_manager_or_employee` gate's own branch
+resolution and 401/403 splits, plus a pin that the ORIGINAL
+`require_app_admin_or_owning_manager` still 403s an employee claims dict
+unchanged), `test_require_firm_manager.py` (bd polyglot-pdf-scaig adds
+`employee_firm_id`'s own whole-claim-space enumeration beside
+`manager_firm_id`'s, plus a check that the two rules never both accept the
+same claims), `test_kit_routes.py`
 (bd polyglot-pdf-f0kuu: PUT's in-transaction audit atomicity, the
 parametrized 422 refusal over every malformed `credit_cost`/`burn_cap_usd`/
 `display` shape -- including bool-as-number and NaN/+-inf sent as raw JSON

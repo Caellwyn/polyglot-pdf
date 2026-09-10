@@ -170,7 +170,7 @@ its own table).
 | POST | `/admin/firms/{firm_id}/credits/adjust` | The operator's signed adjustment (bd `polyglot-pdf-zopqq`). Body `{amount, reason}` -- `amount` may be positive or negative, `reason` is REQUIRED (422 if blank). Calls `backend/services/credit_ledger.py::append_entry` with `entry_type=adjustment`, `actor=` the admin's uid, `channel=None`. Audited via `append_entry`'s `extra_writes` hook, joined to its OWN Firestore transaction (see Surface contract 18) -- a forced audit failure leaves the balance unchanged. `admin_backend/routes/credit_routes.py` |
 | POST | `/admin/firms/{firm_id}/credits/grant` | Grant credits (bd `polyglot-pdf-zopqq`). Body `{type, amount, usd_amount?, kit_id?}` -- `type` in `subscription_grant`\|`purchase`\|`promo_grant`; `usd_amount` REQUIRED for the first two and REFUSED otherwise (422), exactly as `append_entry`'s own validation enforces. Grants to `kind=mock` firms are allowed (staging needs credits to test); `firm_kind` is snapshotted onto the entry by `append_entry` itself. Same in-transaction audit form as `adjust`. `admin_backend/routes/credit_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/kind` | Reclassify a firm `mock`<->`live` (bd `polyglot-pdf-zopqq`). Body `{kind, reason}` -- `reason` is REQUIRED (422 if blank); the UI's confirm-twice is a console-side control this route cannot see or enforce. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
-| GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=`/`?employee_id=` optional equality filters. Gate: `require_app_admin_or_owning_manager` -- a manager reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py` |
+| GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=` an optional equality filter, `?employee_id=` optional for a manager/app admin but FORCED to the caller's own uid for an employee actor (bd `polyglot-pdf-scaig`). Gate: `require_app_admin_or_owning_manager_or_employee` (bd `polyglot-pdf-scaig` widened this from the two-actor `require_app_admin_or_owning_manager` -- a FIFTH, route-scoped dependency, NOT a widening of the shared one, since that gate also guards the four `/admin/users` routes where an employee must stay refused) -- a manager or employee reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager/employee must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/firms.py` |
 | PATCH | `/admin/firms/{firm_id}/status` | Set a firm `active`\|`suspended` (bd `polyglot-pdf-zopqq`). Body `{status}`. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/kits` | Every kit in the form-kit store (bd `polyglot-pdf-f0kuu`, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the SAME reader `GET /admin/kits/{kit_id}/commercial` and the mint transaction use (Surface contract 24) -- so this list can never disagree with what a mint actually charges. `list_kit_ids()` is ASYNC (the store may be GCS-backed), awaited directly rather than run under `asyncio.to_thread`. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
 | GET | `/admin/kits/{kit_id}/commercial` | One kit's resolved credit price and USD spend ceiling (bd `polyglot-pdf-f0kuu`, Track B bead B3), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24). `source` is `"kit"` when a commercial doc exists, `"default"` when it does not. A read, so no audit row. `admin_backend/routes/kit_routes.py` |
@@ -1753,8 +1753,8 @@ record revoked through this route cannot open.
 bead ik7e's `spend_usd`/`turns` fields, `backend/services/link_spend.py`)
 by `jti`, and assembles the two into ONE explicit key allowlist
 (`link_routes._ALLOWLISTED_KEYS`) -- never `**doc`, so a field added to
-either stored document later does not silently reach a firm manager's
-response. There is no cross-collection query; a firm's link count is
+either stored document later does not silently reach a firm manager's or
+employee's response. There is no cross-collection query; a firm's link count is
 already bounded by bead ik7e's per-firm minting meter, so an N+1 per-jti
 redemption read is the same shape `credit_ledger.reconcile_expired_for_
 firm` and the sweep route (contract 15's neighbour) already accept.
@@ -1766,11 +1766,40 @@ never has a reason to type their own `firm_id`. Both B4 routes take
 `firm_id`/the link's owning firm from a URL PATH, which a manager MUST be
 able to name (their own firm) to reach a `GET` at all -- so this bead adds
 its own small `_require_owning_firm(actor, firm_id)` helper, LOCAL to
-`admin_backend/routes/link_routes.py`, which refuses a manager acting on
-any OTHER firm with the SAME 404 an unknown firm_id/jti would get (never
-403, which would confirm the other firm exists). `resolve_target_firm`
+`admin_backend/routes/link_routes.py`, which refuses a manager (or,
+per the addendum below, an employee) acting on any OTHER firm with the SAME
+404 an unknown firm_id/jti would get (never 403, which would confirm the
+other firm exists). `resolve_target_firm`
 itself is untouched by this bead and stays the one home for the body-field
 rule it already owns.
+
+**Addendum (bd polyglot-pdf-scaig, 2026-09-09): the listing route's gate
+widened to a THIRD actor kind, an employee.** As shipped, B4's listing
+route carried the SAME two-actor gate as revoke
+(`require_app_admin_or_owning_manager`), which has no branch for a firm
+EMPLOYEE at all -- an employee-role staff account got a flat 403 before the
+route's own `employee_id` filtering ever ran, contradicting the plan's own
+words ("an employee sees ONLY links whose `employee_id` equals their own
+uid"). Fixed with a FIFTH, route-scoped dependency,
+`require_app_admin_or_owning_manager_or_employee`
+(`admin_backend/services/admin_auth.py`), wired ONLY onto `GET
+/admin/firms/{firm_id}/links` -- `POST /admin/links/{jti}/revoke` keeps the
+original, narrower gate, since an employee must never revoke. The new
+gate's employee branch resolves via a sibling rule,
+`backend/services/firms.py::employee_firm_id(claims)` (the same shape as
+`manager_firm_id`, one role over), and the route forces `employee_id` to
+`actor.employee_id` (the caller's own uid, from the verified token)
+whenever the actor is an employee, overriding any `?employee_id=` the query
+names -- "ids come from the token, not the query", the plan's own test
+name. This is a NEW dependency, not a widening of
+`require_app_admin_or_owning_manager` itself, because that gate is ALSO the
+gate on the four `/admin/users` routes (contract 19) and on revoke, where
+an employee must stay refused -- `test_composite_gate.py`'s existing
+`test_neither_an_admin_nor_a_manager_is_403` already pinned an employee
+claims dict as a 403 through that name, and a widening would have silently
+widened those routes too. The fifth gate is deliberately OUTSIDE
+`test_admin_route_auth.py`'s four-gate vocabulary (the plan's own named
+list) and is pinned directly on its one route instead.
 
 ### 23. Main app -> admin service: base URL + channel wiring (Epic 2 Track C bead C0, bd polyglot-pdf-z4ljj)
 
