@@ -1,5 +1,6 @@
 """Link listing + revoke on the admin service (bd polyglot-pdf-jmiys, Epic 2
-Track B bead B4).
+Track B bead B4; the listing route's employee actor added by bd
+polyglot-pdf-scaig).
 
 EXIT CRITERIA THIS FILE PINS:
 
@@ -17,6 +18,18 @@ EXIT CRITERIA THIS FILE PINS:
      revoked jti is refused with the uniform 404) is pinned separately in
      backend/tests/integration/test_revoked_link_open.py, over the REAL
      HTTP open route, as the bead requires.
+
+BD POLYGLOT-PDF-SCAIG ADDS (plan lines 567-569, "Tests to pin" #9):
+  test_employee_link_listing_response_is_allowlisted and
+  test_employee_history_scoped_to_token below -- an employee never sees
+  another employee's links, and employee_id is taken from the TOKEN, never
+  the query, even when the query tries to name someone else.
+  test_an_employee_cannot_revoke and
+  test_an_employee_listing_another_firms_links_is_404_not_403 pin the two
+  edges of the new gate: the write route is untouched (an employee gets the
+  SAME refusal an unauthenticated caller of that dependency would), and the
+  existence-hiding 404 rule extends to the third actor kind exactly as it
+  already covers a manager.
 
 THE FAKE FIRESTORE below is the SAME shape test_sweep_routes.py's own
 _FakeDb/_Transaction/_Query use (tuple-path documents, a real
@@ -40,9 +53,11 @@ from admin_backend.routes import link_routes
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import (
     ACTOR_KIND_APP_ADMIN,
+    ACTOR_KIND_FIRM_EMPLOYEE,
     ACTOR_KIND_FIRM_MANAGER,
     CompositeActor,
     require_app_admin_or_owning_manager,
+    require_app_admin_or_owning_manager_or_employee,
 )
 
 
@@ -228,11 +243,37 @@ MANAGER_ACTOR = CompositeActor(uid="mgr-1", email="ada@acme.example",
 OTHER_MANAGER_ACTOR = CompositeActor(
     uid="mgr-2", email="bo@other.example",
     kind=ACTOR_KIND_FIRM_MANAGER, firm_id="other-firm")
+# Employee actors (bd polyglot-pdf-scaig) -- employee_id is their own uid,
+# exactly as require_app_admin_or_owning_manager_or_employee constructs one
+# from a verified token.
+EMPLOYEE_ACTOR = CompositeActor(
+    uid="emp-1", email="al@acme.example",
+    kind=ACTOR_KIND_FIRM_EMPLOYEE, firm_id="acme", employee_id="emp-1")
+OTHER_EMPLOYEE_ACTOR = CompositeActor(
+    uid="emp-b", email="bea@acme.example",
+    kind=ACTOR_KIND_FIRM_EMPLOYEE, firm_id="acme", employee_id="emp-b")
+OTHER_FIRM_EMPLOYEE_ACTOR = CompositeActor(
+    uid="emp-2", email="cy@other.example",
+    kind=ACTOR_KIND_FIRM_EMPLOYEE, firm_id="other-firm", employee_id="emp-2")
 
 
 def _client(actor):
+    # BOTH dependencies are overridden to the SAME actor: list_firm_links
+    # carries require_app_admin_or_owning_manager_or_employee while
+    # revoke_link still carries the narrower require_app_admin_or_owning_
+    # manager (bd polyglot-pdf-scaig kept the write route's gate
+    # untouched) -- a client built from one actor must drive both routes
+    # identically for the admin/manager cases this file already exercises,
+    # and an employee actor overriding the narrower dependency is exactly
+    # what the "an employee cannot revoke" test below needs to be able to
+    # even reach the route at all (the real dependency chain would 403 an
+    # employee token before revoke_link's body ever runs; overriding lets
+    # the test instead prove the ROUTE'S OWN actor-kind check, see that
+    # test's docstring).
     app.dependency_overrides[require_app_admin_or_owning_manager] = \
         lambda: actor
+    app.dependency_overrides[
+        require_app_admin_or_owning_manager_or_employee] = lambda: actor
     return TestClient(app)
 
 
@@ -253,6 +294,31 @@ def manager_client():
 @pytest.fixture
 def other_manager_client():
     with _client(OTHER_MANAGER_ACTOR) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def employee_client():
+    with _client(EMPLOYEE_ACTOR) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def other_employee_client():
+    """A second employee of the SAME firm ('acme') as EMPLOYEE_ACTOR --
+    used to prove one employee never sees another's links."""
+    with _client(OTHER_EMPLOYEE_ACTOR) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def other_firm_employee_client():
+    """An employee of a DIFFERENT firm ('other-firm') -- used to prove the
+    404-not-403 existence-hiding rule extends to the employee actor kind."""
+    with _client(OTHER_FIRM_EMPLOYEE_ACTOR) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -372,6 +438,98 @@ def test_listing_writes_no_audit_row(admin_client, fake_db):
 
 
 # ==========================================================================
+# GET /admin/firms/{firm_id}/links -- the EMPLOYEE actor (bd
+# polyglot-pdf-scaig, plan "Tests to pin" #9)
+# ==========================================================================
+
+
+def test_an_employee_can_list_their_own_firms_links(employee_client, fake_db):
+    """The gate that was a flat 403 before this bead now lets an employee
+    reach the route at all -- the base case bd polyglot-pdf-scaig exists to
+    fix."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1")
+    resp = employee_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 200
+    assert [row["jti"] for row in resp.json()["links"]] == ["jti-1"]
+
+
+def test_employee_history_scoped_to_token_not_query(
+        employee_client, fake_db):
+    """Exit criterion / plan test #9, the query half: an employee's OWN
+    links are returned even when the query asks for someone else's, and a
+    query naming another employee_id does not leak that other employee's
+    links either -- the token wins, not the query, in EITHER direction.
+
+    Mutation: read employee_id from the query when present instead of
+    always forcing actor.employee_id -- this goes red (jti-2, minted for
+    "emp-b", would appear in the response)."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1")
+    _mint(fake_db, jti="jti-2", firm_id="acme", employee_id="emp-b")
+    resp = employee_client.get("/admin/firms/acme/links", params={
+        "channel": "demo", "employee_id": "emp-b",
+    })
+    assert resp.status_code == 200
+    assert [row["jti"] for row in resp.json()["links"]] == ["jti-1"]
+
+
+def test_an_employee_never_sees_another_employees_links(
+        other_employee_client, fake_db):
+    """The plan's own wording: "an employee never sees another employee's
+    links". other_employee_client is a SECOND employee of the SAME firm
+    ('acme') as the link below, with no query params at all -- the omission
+    itself must not widen the result to the whole firm."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1")
+    resp = other_employee_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 200
+    assert resp.json()["links"] == []
+
+
+def test_an_employee_listing_another_firms_links_is_404_not_403(
+        other_firm_employee_client, fake_db):
+    """The existence-hiding 404 rule (_require_owning_firm) extends to the
+    employee actor kind exactly as it already covers a manager -- an
+    employee naming a firm that is not their own must not learn whether
+    that firm exists."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1")
+    resp = other_firm_employee_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 404
+
+
+def test_employee_link_listing_response_is_allowlisted(
+        employee_client, fake_db):
+    """Exit criterion / plan test #9's allowlist half: the SAME response
+    shape an admin or manager gets (_public_link_view has no actor-kind
+    branch), pinned again through the employee actor so a future change
+    cannot special-case a wider response for this kind alone."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1",
+          some_internal_field="should never leak")
+    _redeem(fake_db, jti="jti-1", extra_internal="also should never leak")
+    resp = employee_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 200
+    row = resp.json()["links"][0]
+    assert set(row.keys()) == set(link_routes._ALLOWLISTED_KEYS)
+
+
+def test_an_employee_status_filter_still_applies_with_employee_id_forced(
+        employee_client, fake_db):
+    """status stays a real, respected filter for an employee -- only
+    employee_id is overridden, not every query param."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1",
+          status=links_store.STATUS_MINTED)
+    _mint(fake_db, jti="jti-2", firm_id="acme", employee_id="emp-1",
+          status=links_store.STATUS_REVOKED)
+    resp = employee_client.get("/admin/firms/acme/links", params={
+        "channel": "demo", "status": links_store.STATUS_MINTED,
+    })
+    assert resp.status_code == 200
+    assert [row["jti"] for row in resp.json()["links"]] == ["jti-1"]
+
+
+# ==========================================================================
 # POST /admin/links/{jti}/revoke
 # ==========================================================================
 
@@ -470,3 +628,31 @@ def test_revoke_does_not_touch_the_other_channels_collection(
         links_store.STATUS_REVOKED
     assert fake_db.link("jti-1", channel="staging")["status"] == \
         links_store.STATUS_MINTED
+
+
+def test_revoke_route_carries_the_narrower_gate_not_the_employee_one(
+        fake_db):
+    """bd polyglot-pdf-scaig's OWN scope line: the write route stays on
+    require_app_admin_or_owning_manager, UNCHANGED, so an employee token can
+    never reach revoke_link's body at all -- the real dependency, not an
+    override, is what refuses it. Proven by reading the route's wiring
+    directly (mirrors test_admin_route_auth.py's approach) rather than by
+    driving an HTTP call with an overridden dependency, since overriding
+    require_app_admin_or_owning_manager with an employee actor (as the
+    other revoke tests in this file could do) would prove only that the
+    ROUTE BODY has no special-case for that kind -- not that the real gate
+    refuses one before the body runs, which is the actual guarantee this
+    bead makes.
+
+    Mutation: swap revoke_link's dependency to require_app_admin_or_owning_
+    manager_or_employee -- this goes red, and so does
+    test_admin_route_auth.py::test_only_the_link_listing_route_carries_the_
+    fifth_gate."""
+    route = next(
+        r for r in app.routes if r.path == "/admin/links/{jti}/revoke")
+    dependant = route.dependant
+    assert any(sub.call is require_app_admin_or_owning_manager
+              for sub in dependant.dependencies)
+    assert not any(
+        sub.call is require_app_admin_or_owning_manager_or_employee
+        for sub in dependant.dependencies)

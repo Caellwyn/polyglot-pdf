@@ -1,5 +1,6 @@
 """require_app_admin_or_owning_manager and resolve_target_firm, directly
-(bd polyglot-pdf-dmjl5).
+(bd polyglot-pdf-dmjl5); require_app_admin_or_owning_manager_or_employee
+added alongside it (bd polyglot-pdf-scaig).
 
 test_user_routes.py drives the four routes with the gate OVERRIDDEN, which
 is right for those tests -- they are about route behaviour, not token
@@ -21,10 +22,12 @@ from fastapi import HTTPException
 import admin_backend.services.admin_auth as aa
 from admin_backend.services.admin_auth import (
     ACTOR_KIND_APP_ADMIN,
+    ACTOR_KIND_FIRM_EMPLOYEE,
     ACTOR_KIND_FIRM_MANAGER,
     NO_ADMIN_ACCESS_PREFIX,
     CompositeActor,
     require_app_admin_or_owning_manager,
+    require_app_admin_or_owning_manager_or_employee,
     resolve_target_firm,
 )
 
@@ -171,6 +174,120 @@ async def test_a_verified_token_with_no_subject_is_401(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await require_app_admin_or_owning_manager("Bearer t")
     assert exc.value.status_code == 401
+
+
+# --------------------------------------------------------------------------
+# require_app_admin_or_owning_manager_or_employee: the THIRD actor kind
+# (bd polyglot-pdf-scaig), scoped to its own dependency so the gate above
+# stays exactly as pinned for its existing callers.
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_an_employee_resolves_to_the_employee_actor(monkeypatch):
+    _fake_firebase(monkeypatch, {"uid": "u4", "email": "al@acme.example",
+                                 "firm_id": "acme", "firm_role": "employee"})
+    actor = await require_app_admin_or_owning_manager_or_employee("Bearer t")
+    assert actor.kind == ACTOR_KIND_FIRM_EMPLOYEE
+    assert not actor.is_app_admin
+    assert actor.firm_id == "acme"
+    assert actor.employee_id == "u4", (
+        "an employee's employee_id is their OWN uid, from the token -- "
+        "never a value the caller could otherwise influence")
+
+
+@pytest.mark.asyncio
+async def test_employee_gate_still_resolves_app_admin_and_manager(
+        monkeypatch):
+    """The new dependency is STRICTLY WIDER, not a replacement -- the first
+    two branches behave identically to require_app_admin_or_owning_manager.
+    """
+    _fake_firebase(monkeypatch, {"uid": "u1", "email": "ops@x.example",
+                                 "app_admin": True})
+    admin = await require_app_admin_or_owning_manager_or_employee("Bearer t")
+    assert admin.kind == ACTOR_KIND_APP_ADMIN
+
+    _fake_firebase(monkeypatch, {"uid": "u2", "email": "ada@acme.example",
+                                 "firm_id": "acme", "firm_role": "manager"})
+    manager = await require_app_admin_or_owning_manager_or_employee(
+        "Bearer t")
+    assert manager.kind == ACTOR_KIND_FIRM_MANAGER
+    assert manager.employee_id is None
+
+
+@pytest.mark.asyncio
+async def test_an_account_holding_manager_and_employee_acts_as_manager(
+        monkeypatch):
+    """BRANCH ORDER, pinned for the third kind too: manager_firm_id is
+    checked before employee_firm_id, so an account somehow carrying both
+    (a data anomaly, not a real claims shape today) resolves to the WIDER
+    of the two rather than the narrower.
+
+    Mutation: check employee_firm_id first -- red."""
+    _fake_firebase(monkeypatch, {"uid": "u5", "email": "amb@acme.example",
+                                 "firm_id": "acme", "firm_role": "manager"})
+    # A manager-role claims dict alone already proves the ordering here,
+    # since firm_role is a single string a real token can only carry once;
+    # this test exists to make the intended precedence explicit rather than
+    # leave it as an accident of "employee_firm_id would have returned None
+    # anyway for firm_role=manager".
+    actor = await require_app_admin_or_owning_manager_or_employee("Bearer t")
+    assert actor.kind == ACTOR_KIND_FIRM_MANAGER
+
+
+@pytest.mark.parametrize("claims,why", [
+    ({"uid": "u", "firm_id": "acme"}, "a firm account with no role"),
+    ({"uid": "u", "vff_dev": True}, "a voice dev with no firm"),
+    ({"uid": "u", "schema_editor_role": "editor"}, "an editor account"),
+    ({"uid": "u"}, "a valid account with no claims at all"),
+], ids=["no-role", "voice-dev", "editor", "bare"])
+@pytest.mark.asyncio
+async def test_employee_gate_still_403s_everyone_else(
+        monkeypatch, claims, why):
+    """The widened gate does not become "anyone with a firm_id" or "anyone
+    at all" -- only app admin, manager, or employee resolve; everything
+    else is still the same 403."""
+    _fake_firebase(monkeypatch, claims)
+    with pytest.raises(HTTPException) as exc:
+        await require_app_admin_or_owning_manager_or_employee("Bearer t")
+    assert exc.value.status_code == 403, why
+    assert str(exc.value.detail).startswith(NO_ADMIN_ACCESS_PREFIX)
+
+
+@pytest.mark.asyncio
+async def test_employee_gate_dev_bypass_returns_an_app_admin(monkeypatch):
+    monkeypatch.setattr(aa, "_dev_bypass_allowed", lambda: True)
+    actor = await require_app_admin_or_owning_manager_or_employee(None)
+    assert actor.kind == ACTOR_KIND_APP_ADMIN
+
+
+@pytest.mark.asyncio
+async def test_employee_gate_a_token_that_does_not_verify_is_401(
+        monkeypatch):
+    _fake_firebase(monkeypatch, raises=ValueError("bad token"))
+    with pytest.raises(HTTPException) as exc:
+        await require_app_admin_or_owning_manager_or_employee("Bearer t")
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_the_original_gate_still_403s_an_employee(monkeypatch):
+    """THE PROPERTY bd polyglot-pdf-scaig depends on: the original,
+    narrower gate MUST NOT have been widened -- an employee claims dict
+    still resolves to the SAME 403 through require_app_admin_or_owning_
+    manager it always has (this exact case is also pinned in
+    test_neither_an_admin_nor_a_manager_is_403 above; restated here,
+    adjacent to the new gate's own tests, so a reader comparing the two
+    functions sees the contrast in one place).
+
+    Mutation: make require_app_admin_or_owning_manager delegate to the
+    shared resolver with allow_employee=True -- this goes red, along with
+    the /admin/users route tests that never intended to accept an
+    employee."""
+    _fake_firebase(monkeypatch, {"uid": "u", "firm_id": "acme",
+                                 "firm_role": "employee"})
+    with pytest.raises(HTTPException) as exc:
+        await require_app_admin_or_owning_manager("Bearer t")
+    assert exc.value.status_code == 403
 
 
 # --------------------------------------------------------------------------
