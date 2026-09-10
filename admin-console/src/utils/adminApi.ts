@@ -336,10 +336,11 @@ export async function setUserRole(
 /** One kit's resolved commercial, from either GET /admin/kits' `kits` array
  * or GET /admin/kits/{kit_id}/commercial (admin_backend/routes/
  * kit_routes.py) -- both spread `kit_commercials.resolve_commercial`'s
- * return value, `{credit_cost, cap_usd, source}`, plus the route-added
- * `kit_id`. `source` is "kit" when a commercial doc exists for this kit,
- * "default" when it does not and the kit is riding the global fallback
- * (kit_commercials.DEFAULT_CREDIT_COST / link_budget's default ceiling).
+ * return value, `{credit_cost, cap_usd, source, display}`, plus the
+ * route-added `kit_id`. `source` is "kit" when a commercial doc exists for
+ * this kit, "default" when it does not and the kit is riding the global
+ * fallback (kit_commercials.DEFAULT_CREDIT_COST / link_budget's default
+ * ceiling).
  *
  * NOTE ON THE FIELD NAME: this is deliberately `cap_usd`, not
  * `burn_cap_usd` -- resolve_commercial's own vocabulary (bead A3), which
@@ -350,21 +351,24 @@ export async function setUserRole(
  * translating, mirroring the route module's own docstring on why the two
  * names coexist.
  *
- * NO `updated_by` AND NO `display` HERE: kit_commercials.resolve_commercial's
- * return value carries neither (only the raw Firestore doc does, which
- * neither GET route echoes) -- so a console page cannot show who last
- * edited a kit's pricing, or preserve its existing `display` label on a
- * save, without a wire change on the READ side. Both are out of this
- * bead's scope (Surfaces lists only adminApi.ts + the page + the tab, not
- * kit_routes.py); the `display` gap is filed as bd polyglot-pdf-zcbm1 since
- * it is a real data-loss risk (KitCommercialsPage.tsx's PUT always sends
- * display: {}, silently wiping any label a kit was seeded with).
+ * `display` (bd polyglot-pdf-zcbm1): the kit's stored console label map, or
+ * `{}` when the kit has no commercial doc or no display value set --
+ * resolve_commercial's own default, not something this client invents.
+ * KitCommercialsPage.tsx reads this on Edit and echoes it back on Save so a
+ * price edit can never silently wipe a label `scripts/seed_kit_commercials.py`
+ * or a previous save set.
+ *
+ * NO `updated_by` HERE: kit_commercials.resolve_commercial's return value
+ * does not carry it (only the raw Firestore doc does, which neither GET
+ * route echoes) -- so a console page cannot show who last edited a kit's
+ * pricing without a further wire change. Out of this bead's scope.
  */
 export interface KitCommercial {
   kit_id: string;
   credit_cost: number;
   cap_usd: number;
   source: 'kit' | 'default';
+  display: Record<string, string>;
 }
 
 /** GET /admin/kits' response shape. */
