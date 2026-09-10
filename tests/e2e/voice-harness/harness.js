@@ -359,7 +359,18 @@
           bracketed.push(bracketedAll[b]);
         }
       }
-      if (bracketed.length) return bracketed;
+      // MEMBERSHIP, as the app does. A STANDALONE checkbox/radio whose id
+      // collides with another field's group name is a group TYPE but not a
+      // member -- and reading it returned the unrelated group's picks instead
+      // of its own value ('White' where the answer was 'yes').
+      var own = document.getElementById(fieldId);
+      if (bracketed.length) {
+        if (own && bracketed.indexOf(own) === -1 &&
+            (own.type === 'checkbox' || own.type === 'radio')) {
+          return [];
+        }
+        return bracketed;
+      }
       // Radios: many inputs sharing the plain name. A single control also matches
       // its own name, so require more than one to avoid capturing it.
       var plain = document.querySelectorAll('input[name="' + fieldId + '"]');

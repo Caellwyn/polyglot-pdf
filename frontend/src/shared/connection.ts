@@ -190,10 +190,17 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
 			// is keyed on the field's OWN id. Ungated, that text field restored/captured
 			// nothing at all (measured).
-			const isGroupMember = inputEl.type === 'radio' || inputEl.type === 'checkbox'
-			const groupEls = isGroupMember
-				? Array.from(document.querySelectorAll(`input[name="${fieldId}[]"]`) as NodeListOf<HTMLInputElement>)
-				: []
+			// MEMBERSHIP, not type. A standalone checkbox/radio whose id collides with
+			// another field's group name IS a group type, so a type-only gate sent it
+			// down the group branch and wrote the UNRELATED group instead of itself.
+			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
+			// share, which diverged the moment I added the membership dimension there
+			// and did not carry it here.
+			const memberEls = Array.from(
+				document.querySelectorAll(`input[name="${fieldId}[]"]`)
+			) as HTMLInputElement[]
+			const isGroupMember = memberEls.includes(inputEl)
+			const groupEls = isGroupMember ? memberEls : []
 			if (groupEls.length) {
 				const picked = Array.isArray(value) ? value.map(String) : [String(value)]
 				groupEls.forEach(el => { el.checked = picked.includes(el.value) })
@@ -264,10 +271,17 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
 			// is keyed on the field's OWN id. Ungated, that text field restored/captured
 			// nothing at all (measured).
-			const isGroupMember = inputEl.type === 'radio' || inputEl.type === 'checkbox'
-			const groupEls = isGroupMember
-				? Array.from(document.querySelectorAll(`input[name="${fieldId}[]"]`) as NodeListOf<HTMLInputElement>)
-				: []
+			// MEMBERSHIP, not type. A standalone checkbox/radio whose id collides with
+			// another field's group name IS a group type, so a type-only gate sent it
+			// down the group branch and wrote the UNRELATED group instead of itself.
+			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
+			// share, which diverged the moment I added the membership dimension there
+			// and did not carry it here.
+			const memberEls = Array.from(
+				document.querySelectorAll(`input[name="${fieldId}[]"]`)
+			) as HTMLInputElement[]
+			const isGroupMember = memberEls.includes(inputEl)
+			const groupEls = isGroupMember ? memberEls : []
 			if (groupEls.length) {
 				const picked = Array.from(groupEls).filter(el => el.checked).map(el => el.value)
 				value = picked.length ? picked : null

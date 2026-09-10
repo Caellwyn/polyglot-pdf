@@ -134,6 +134,75 @@ describe('an id/name COLLISION must not hijack restore or capture', () => {
   })
 })
 
+describe('SHAPE 3: a standalone group-type field colliding with a group name', () => {
+  // I fixed this in fieldManager and told the review that connection.ts's
+  // divergent spelling was "NOT drift". That was true when I checked it -- and
+  // false the moment I added the membership dimension without carrying it here.
+  // The reviewer caught it one commit later. Both sites now test MEMBERSHIP.
+  beforeEach(() => { document.body.innerHTML = '' })
+
+  function restore(fieldId: string, value: unknown) {
+    const el = document.getElementById(fieldId) as HTMLInputElement | null
+    if (!el) return
+    const memberEls = Array.from(
+      document.querySelectorAll(`input[name="${fieldId}[]"]`)
+    ) as HTMLInputElement[]
+    const isGroupMember = memberEls.includes(el)
+    const groupEls = isGroupMember ? memberEls : []
+    if (groupEls.length) {
+      const picked = Array.isArray(value) ? value.map(String) : [String(value)]
+      groupEls.forEach(e => { e.checked = picked.includes(e.value) })
+    } else if (el.type === 'checkbox') {
+      el.checked = Boolean(value)
+    } else {
+      el.value = String(value)
+    }
+  }
+
+  function capture(fieldId: string): string | string[] | boolean | null {
+    const el = document.getElementById(fieldId) as HTMLInputElement | null
+    if (!el) return null
+    const memberEls = Array.from(
+      document.querySelectorAll(`input[name="${fieldId}[]"]`)
+    ) as HTMLInputElement[]
+    if (memberEls.includes(el)) {
+      const picked = memberEls.filter(e => e.checked).map(e => e.value)
+      return picked.length ? picked : null
+    }
+    return el.type === 'checkbox' ? el.checked : (el.value || null)
+  }
+
+  function render() {
+    document.body.innerHTML = `
+      <input id="race" name="agree" type="checkbox" value="yes" />
+      <input name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+  }
+
+  it('RESTORE writes the standalone field, never the unrelated group', () => {
+    render()
+    restore('race', true)
+    expect((document.getElementById('race') as HTMLInputElement).checked).toBe(true)
+    const group = Array.from(document.querySelectorAll('input[name="race[]"]')) as HTMLInputElement[]
+    expect(group.some(g => g.checked), 'the unrelated group must not be touched').toBe(false)
+  })
+
+  it('CAPTURE reads the standalone field, never the unrelated groups picks', () => {
+    render()
+    ;(document.getElementById('race') as HTMLInputElement).checked = true
+    ;(document.querySelectorAll('input[name="race[]"]')[1] as HTMLInputElement).checked = true
+    expect(capture('race'), 'must be the standalone boolean, not ["White"]').toBe(true)
+  })
+
+  it('a REAL group member still round-trips -- membership cuts both ways', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    restore('race', ['White'])
+    expect(capture('race')).toEqual(['White'])
+  })
+})
+
 describe('the mirrors above cannot drift from the real functions', () => {
   // restoreDOMFromSessionStorage and capturePreFilledValues are module-private,
   // so the tests above necessarily MIRROR their logic. A mirror nothing pins is
@@ -156,6 +225,24 @@ describe('the mirrors above cannot drift from the real functions', () => {
     const end = rest.indexOf('\nfunction ')
     return end === -1 ? rest : rest.slice(0, end)
   }
+
+  it('BOTH sites gate on MEMBERSHIP, not merely on the element type', () => {
+    // The shape-3 tests above MIRROR the logic, so they pass either way -- which
+    // is exactly the hazard this describe block exists for, and it caught me:
+    // reverting connection.ts to the type-only gate left all of them green.
+    // This reads the SOURCE, so the regression reddens here.
+    const src = readSource()
+    const membership = src.match(/const isGroupMember = memberEls\.includes\(inputEl\)/g) || []
+    expect(
+      membership.length,
+      'restore AND capture must each test membership, not inputEl.type'
+    ).toBe(2)
+    expect(
+      /const isGroupMember = inputEl\.type ===/.test(src),
+      'the type-only gate must not come back -- a standalone checkbox whose id ' +
+      'collides with a group name IS a group type but not a member'
+    ).toBe(false)
+  })
 
   it('BOTH group branches still resolve by the bracketed name', () => {
     // One in restore, one in capture. Requiring exactly two means deleting
