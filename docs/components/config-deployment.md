@@ -1,9 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
-*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.) (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declares the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, and names the remaining targets as failing steps bead polyglot-pdf-ywxoh fills in. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-service
-gate, `require_app_admin_or_owning_manager_or_employee`, scoped to one
+*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.) (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declared the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, naming the remaining targets as failing steps.) (bd polyglot-pdf-ywxoh: the remaining `cloudbuild.yaml` targets land -- `frontend-<channel>`, `editor`, `form-kits`, `firestore-rules`, `admin-service` (tagged-revision-then-shift), `admin-console-candidate`, `admin-console`; the reachability gate becomes ONE python module (`scripts/verify_service_reachable.py`) the build and all four bash wrappers call instead of four hand copies; `scripts/write_kits_manifest.py` and `scripts/record_deployment.py` are new; the staging-before-demo gate lands IN THE BUILD via `scripts/promotion_gate.py` over the placeholder pure predicate `admin_backend/services/promotion_gate.py::staging_verified` (bead 4.4 extends it); `deployments` and `build_checks` gain firestore.rules deny blocks. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-servicegate, `require_app_admin_or_owning_manager_or_employee`, scoped to one
 route only -- no deploy-time env var or config key changed; see the gate
 inventory section below and [admin-service.md](admin-service.md).) (bd
 polyglot-pdf-z4ljj: Epic 2 Track C bead C0, main-app admin wiring -- `deploy-all.sh`'s frontend stage now resolves a SECOND live Cloud Run URL, `VITE_ADMIN_API_BASE_URL` (from `polyglot-admin`), the same way it resolves `VITE_WS_URL`, reusing the same explicit-channel abort signal; both channel wrappers also export `VITE_APP_CHANNEL` so the built frontend's firm-console pages know their own channel for the admin service's required `?channel=` param; `frontend/src/shared/config.ts` gains `getAdminApiBaseUrl()`/`getAppChannel()`, and `frontend/src/console/adminApi.ts` is the new generic authenticated-fetch client C4/C5 build on.) (bd polyglot-pdf-8vgfh: the admin service's gate inventory -- ALL FOUR gates now exist, `require_google_oidc` having shipped with `POST /admin/links/sweep-expired`.) (bd polyglot-pdf-dmjl5: the admin service's gate inventory -- three of the four now exist (`require_app_admin_or_owning_manager` ships with the four `/admin/users` routes; `require_firm_manager` lives on the public backend over the shared `manager_firm_id` rule), so the earlier "require_app_admin is the only one that exists yet" no longer holds. No env var, deploy step or config key changed.) (bd polyglot-pdf-b6943: the admin console app -- `admin-console/`, mirroring `schema-editor/`'s sign-in gate and delivery-mode split; two new Hosting sites `polyglot-admin-demo`/`polyglot-admin-candidate` with NO `/api` rewrite; `deploy-admin-console.sh` deploys candidate first, then `--live`, resolving the admin service's URL into `VITE_ADMIN_API_BASE_URL` the same way `deploy-editor.sh` resolves the public backend's -- see `technical_guide.md`'s Surface contracts.) (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the ceiling actually in force at a client connect is the link token's own `cap_usd` claim over the global `LINK_COST_CEILING_USD`, not the global alone.) (bd polyglot-pdf-w828m: Epic 3 bead E3.4, session-end usage rollups -- the redemption/teardown write count above is corrected to include the rollup helper's own writes: TWO writes on first open, one read plus two writes on completion, one read plus one-or-two writes per connection teardown.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
@@ -342,10 +341,25 @@ stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
 two channel scripts use.
 
-**The reachability gate lives in THREE byte-identical copies** --
-`deploy-all.sh`, `backend/deploy-new.sh` (bd `polyglot-pdf-6oi9s`) and
-`deploy-editor.sh` (bd `polyglot-pdf-dldwb`) -- pinned identical by
-`tests/test_deploy_reachability_gate.py`. Edit one and you must edit all three.
+**The reachability gate is ONE module, `scripts/verify_service_reachable.py`**
+(bd `polyglot-pdf-ywxoh`, 4.2), called from FOUR thin bash wrapper functions --
+`deploy-all.sh`, `backend/deploy-new.sh` (bd `polyglot-pdf-6oi9s`),
+`deploy-editor.sh` (bd `polyglot-pdf-dldwb`) and `deploy-admin-console.sh`
+(bd `polyglot-pdf-b6943`) -- and from `cloudbuild.yaml`'s
+`backend-reachability-gate`, `editor-reachability-warn` and
+`admin-console-reachability-warn` steps. Before this bead each bash script
+carried the FULL check inline (a byte-identical copy, pinned equal by
+`tests/test_deploy_reachability_gate.py`); the module now holds the ONE
+implementation (IAM-policy query, `--flatten`/`--filter` shape, the
+false-pass/false-fail cases, warn-vs-fatal severity) and each bash function is
+a thin wrapper resolving a python interpreter and shelling out to it --
+`tests/test_verify_service_reachable.py` exercises the module directly via
+dependency injection, and `tests/test_deploy_reachability_gate.py` now proves
+the four wrapper functions are byte-identical THIN CALLS (no inline
+`get-iam-policy` query left in any of them) and pins the per-script call-site
+properties (bare-command shape, correct severity, ordering vs. the success
+banner) that still apply to a wrapper the same way they applied to the full
+copy.
 
 That file pins **TWO different completeness sets**, and confusing them is what
 let the editor ship ungated for a round:
@@ -353,12 +367,13 @@ let the editor ship ungated for a round:
 | set | membership rule | members |
 |---|---|---|
 | `GATED_DEPLOY_SCRIPTS` | passes `--allow-unauthenticated` (deploys a public service) | `deploy-all.sh`, `backend/deploy-new.sh` |
-| `URL_BAKING_SCRIPTS` | calls `services describe` AND exports a `VITE_*` (bakes a backend URL into a frontend build) | `deploy-all.sh`, `deploy-editor.sh` |
+| `URL_BAKING_SCRIPTS` | calls `services describe` AND exports a `VITE_*` (bakes a backend URL into a frontend build) | `deploy-all.sh`, `deploy-editor.sh`, `deploy-admin-console.sh` |
 
-`deploy-editor.sh` deploys only Hosting, so it is correctly absent from the
-first; `backend/deploy-new.sh` builds no frontend, so it is correctly absent from
-the second. Both sets are derived mechanically, so a new script joining either
-one fails CI rather than slipping between them.
+`deploy-editor.sh` and `deploy-admin-console.sh` deploy only Hosting, so both
+are correctly absent from the first; `backend/deploy-new.sh` builds no
+frontend, so it is correctly absent from the second. Both sets are derived
+mechanically, so a new script joining either one fails CI rather than
+slipping between them.
 
 The gate's SEVERITY differs by call site: a stage that just CREATED the service
 aborts, while a stage binding a PRE-EXISTING backend (the frontend stage, the
@@ -400,10 +415,13 @@ the gate crying wolf. The counts are pinned per script.
   (`CHANNEL_SPECIFIC` in the parity test). Change staging FIRST, verify there,
   then promote. `admin.env` is deliberately outside that pair -- there is ONE
   admin service backing both channels' data, so it carries
-  `admin-backend-sa` and `APP_MODULE=admin_backend.main:app`. It is
-  DECLARATIVE today: `deploy-admin.sh` still passes those values inline, and
-  the two copies are pinned equal by `tests/test_cloudbuild_yaml.py` until bead
-  `polyglot-pdf-ywxoh` (4.2) lands the `admin-service` build target.
+  `admin-backend-sa` and `APP_MODULE=admin_backend.main:app`. `deploy-admin.sh`
+  still passes those values inline (unchanged by this bead); `admin.env` is now
+  ALSO read directly by `cloudbuild.yaml`'s `admin-service` target (bead
+  `polyglot-pdf-ywxoh`, 4.2), so bash and the build share the same channel file
+  the way the `backend-<channel>` targets already did -- the two live copies
+  stay pinned equal by `tests/test_cloudbuild_yaml.py` until `deploy-admin.sh`
+  itself becomes a thin wrapper over the build (bead `polyglot-pdf-oqtm7`, 4.6).
 
   **`--set-secrets`** comes from the channel file's `[SET_SECRETS]` section (an
   explicit `BACKEND_SECRETS` from the caller still wins); a channel that sets
