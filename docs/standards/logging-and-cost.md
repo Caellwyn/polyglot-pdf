@@ -2,16 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-wio6m: usage event v2 -- one emitter
-shape for every paid call, the `usage_kind` closed set, and the text +
-TTS pricing tables. bd polyglot-pdf-cjifh: the live-voice path now threads
-firm/employee/link/kit/channel/model into every per-turn usage event. bd
-polyglot-pdf-t86oz: the text (validator/secretary/translation) and TTS
-(spellback/notice/intro) paths now emit their usage events too -- see the
-Call-site coverage paragraph below. bd polyglot-pdf-rd3s8: the BigQuery telemetry sink + cost/income views,
-and the three-shape sink filter the plan's prose undersold. bd
-polyglot-pdf-e4dt8: the PII-safe exception shape that reaches Cloud Error
-Reporting, counted WebSocket close events, and scripts/setup-monitoring.sh.)*
+*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: the uvicorn access log is OFF -- `--no-access-log` on the deployed CMD plus a WARNING cap on `uvicorn.access` in `configure_logging()` -- see "The uvicorn access log is OFF" below.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -438,6 +429,19 @@ unauthenticated, so any caller can drive them at their own rate, and a stalled
 store must not eat the other probe's answer. A degraded probe still returns
 200: the ALERT pages, not a flapping uptime check.
 
+
+### The uvicorn access log is OFF (bd polyglot-pdf-6rj0j, sprint 23 B0)
+
+uvicorn's per-request access line -- the full request target at INFO -- is
+not emitted anywhere this app runs: the deployed image's CMD passes
+`--no-access-log`, and `configure_logging()` lists `uvicorn.access` among
+the WARNING-capped library loggers for a uvicorn started without the flag
+(the local launchers). The reason is `/ws/fill`'s `?token=` credential
+(see [hipaa-pii-policy.md](hipaa-pii-policy.md)); the cost is that the app
+stream carries no per-connection line, so per-request status and latency
+come from Cloud Run's `run.googleapis.com/requests` log instead. The two
+guards are pinned separately by `tests/test_dockerfile_app_module.py` and
+`tests/test_logging_access_log.py`.
 
 ## Voice round-trip timing checkpoints (bd polyglot-pdf-cwsy)
 

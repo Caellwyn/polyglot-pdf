@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.)*
+*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
