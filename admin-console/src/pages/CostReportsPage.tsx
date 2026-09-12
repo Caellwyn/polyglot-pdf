@@ -42,8 +42,16 @@ function rangeTooWideMessage(from: string, to: string): string {
     + MAX_REPORT_RANGE_MONTHS + ' months; narrow it and query again';
 }
 
-function formatUsd(value: number): string {
-  return value.toFixed(2);
+/** BigQuery's SUM(SAFE_CAST(...)) returns NULL, not 0, for a group whose
+ * cost/amount inputs are all NULL or fail the cast (sql/telemetry_views.sql
+ * has no COALESCE) -- reachable whenever a cost-bearing event lands
+ * without a cost_estimate_usd/usd_amount in its metadata, since the
+ * grouping keys still produce a row via COUNT(*). This function MUST stay
+ * total over both number and null: with no error boundary anywhere in
+ * admin-console/src, an unhandled TypeError in a render path unmounts the
+ * entire console (blank white screen, every tab), not just the one row. */
+function formatUsd(value: number | null): string {
+  return value == null ? '--' : value.toFixed(2);
 }
 
 /**

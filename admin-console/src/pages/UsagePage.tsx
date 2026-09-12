@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   getFirmUsage, listFirms, MONITORING_CHANNELS,
-  type FirmUsagePage, type MonitoringChannel, type FirmRow,
+  type FirmUsagePage, type MonitoringChannel, type FirmRow, type FirmUsageRollup,
 } from '../utils/adminApi';
 
 interface UsagePageProps {
@@ -31,6 +31,29 @@ function formatUsd(value: number): string {
   return value.toFixed(2);
 }
 
+/** The complete set of usage.ts counter keys that a Firestore-side write
+ * can populate (mirrors usage_routes.py's own _FIRM_USAGE_KEYS numeric/map
+ * fields; kind/channel are metadata, not counters, and are excluded on
+ * purpose -- a doc written with only kind/channel set does not exist in
+ * this backend, but excluding them here keeps the predicate scoped to
+ * "did any activity get recorded" rather than "did metadata get stamped").
+ * Enumerated explicitly so a future counter added to the allowlist is a
+ * visible one-line diff here, not a silent gap in the no-data check. */
+const USAGE_COUNTER_KEYS = [
+  'connections_ended', 'sessions_completed', 'cost_usd_total',
+  'links_opened', 'links_completed', 'by_kit', 'by_employee', 'by_language',
+] as const;
+
+/** True only when EVERY counter above is null -- i.e. no rollup doc exists
+ * for this firm-month at all. A single null counter (most commonly
+ * sessions_completed, which is written only for completion_status ==
+ * "completed" sessions) means a real doc exists with real activity in it,
+ * even though that one field never got incremented. */
+function hasNoUsageData(usage: FirmUsageRollup | null): boolean {
+  if (!usage) return true;
+  return USAGE_COUNTER_KEYS.every((key) => usage[key] === null);
+}
+
 /**
  * Usage page (bd polyglot-pdf-i6dlb, E3.11b), driving
  * admin_backend/routes/usage_routes.py's GET /admin/firms/{firm_id}/usage.
@@ -43,8 +66,20 @@ function formatUsd(value: number): string {
  *
  * A MONTH WITH NO ROLLUP DOC SAYS SO EXPLICITLY (bead requirement) --
  * usage_routes.py returns an all-null usage object rather than a 404 for a
- * quiet month, so this page treats sessions_completed === null as the
- * "no data" signal and renders a dedicated empty-state message.
+ * quiet month, so this page treats EVERY allowlisted counter being null as
+ * the "no data" signal and renders a dedicated empty-state message.
+ * sessions_completed ALONE is not a safe proxy for "no rollup doc": a
+ * firm-month where every connection was abandoned or reconnected (never
+ * reached completion_status == "completed") writes connections_ended,
+ * cost_usd_total, kind, channel and the breakdown maps while leaving
+ * sessions_completed null -- backend/services/usage_rollups.py's
+ * record_session_end only increments sessions_completed inside its
+ * "if completed:" branch. The same shape happens for a links-only month:
+ * _increment_firm_counter (record_link_opened / record_link_completed)
+ * writes just links_opened/links_completed via merge=True, never touching
+ * sessions_completed. Both are real activity, not "no data" -- checking
+ * every counter, not one field, is what tells them apart from a genuinely
+ * missing doc.
  */
 export const UsagePage: React.FC<UsagePageProps> = ({ onAuthExpired }) => {
   const [firms, setFirms] = React.useState<FirmRow[]>([]);
@@ -94,7 +129,7 @@ export const UsagePage: React.FC<UsagePageProps> = ({ onAuthExpired }) => {
   }, [firmId, month, channel, onAuthExpired]);
 
   const usage = page?.usage ?? null;
-  const hasData = usage !== null && usage.sessions_completed !== null;
+  const hasData = usage !== null && !hasNoUsageData(usage);
 
   return (
     <div data-testid="usage-page" className="max-w-4xl">

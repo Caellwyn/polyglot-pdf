@@ -919,13 +919,22 @@ export type CostGroupBy = (typeof COST_GROUP_BY)[number];
  * usage_kind, call_count, cost_usd). The group column's NAME varies by
  * `group_by`, so this client reads it generically rather than typing three
  * near-identical row shapes; callers select it with the same `group_by`
- * value they requested. */
+ * value they requested.
+ *
+ * cost_usd IS NULLABLE. sql/telemetry_views.sql computes it as
+ * SUM(SAFE_CAST(...cost_estimate_usd AS FLOAT64)) with no COALESCE --
+ * BigQuery's SUM returns NULL (not 0) for a group whose inputs are all
+ * NULL or fail the cast, which happens whenever a cost-bearing event lands
+ * without a cost_estimate_usd in its metadata; the row still exists
+ * because COUNT(*) does not depend on that column. CostReportsPage.tsx's
+ * formatUsd renders this as "--", never assume it can call .toFixed()
+ * directly. */
 export interface CostReportRow {
   month: string;
   channel: string | null;
   usage_kind: string | null;
   call_count: number;
-  cost_usd: number;
+  cost_usd: number | null;
   firm_id?: string;
   kit_id?: string;
   employee_id?: string;
@@ -985,7 +994,11 @@ export interface IncomeReportRow {
   entry_type: string;
   channel: null;
   entry_count: number;
-  usd_amount: number;
+  /** NULLABLE for the same reason CostReportRow.cost_usd is: income_month's
+   * SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64)) has no COALESCE
+   * either (sql/telemetry_views.sql), so an income-month group whose
+   * entries all fail the cast returns NULL, not 0. */
+  usd_amount: number | null;
 }
 
 /** GET /admin/reports/income's response shape. Same `delayed`/`note`

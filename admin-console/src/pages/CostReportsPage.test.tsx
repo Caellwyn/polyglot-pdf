@@ -112,6 +112,26 @@ describe('CostReportsPage', () => {
     await screen.findByTestId('cost-table');
     expect(screen.queryByTestId('cost-delayed-note')).not.toBeInTheDocument();
   });
+
+  it('renders "--" for a null cost_usd instead of throwing (BigQuery SUM over all-NULL inputs)', async () => {
+    // sql/telemetry_views.sql's cost views have no COALESCE around
+    // SUM(SAFE_CAST(...)), so a group whose cost-bearing events all lack
+    // cost_estimate_usd comes back with cost_usd: null while the row still
+    // exists (COUNT(*) does not depend on that column). formatUsd calling
+    // .toFixed() unconditionally used to throw here, and with no error
+    // boundary in admin-console/src that unmounted the entire app, not just
+    // this row (finding 2, bd polyglot-pdf-i6dlb review round).
+    vi.mocked(getCostReport).mockResolvedValue({
+      group_by: 'firm', from: '2026-09', to: '2026-09', channel: null,
+      rows: [{ ...COST_ROW, cost_usd: null }], delayed: false, note: '',
+    });
+    render(<CostReportsPage onAuthExpired={noAuthExpired} />);
+    setRange('2026-09', '2026-09');
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+
+    await screen.findByTestId('cost-table');
+    expect(screen.getByText('--')).toBeInTheDocument();
+  });
 });
 
 describe('CostReportsPage income tab', () => {
@@ -131,6 +151,24 @@ describe('CostReportsPage income tab', () => {
     await waitFor(() => expect(getIncomeReport).toHaveBeenCalledTimes(1));
     expect(getIncomeReport).toHaveBeenCalledWith('2026-01', '2026-09');
     expect(getCostReport).not.toHaveBeenCalled();
+  });
+
+  it('renders "--" for a null usd_amount instead of throwing (BigQuery SUM over all-NULL inputs)', async () => {
+    // Same NULL-propagation shape as CostReportRow.cost_usd: income_month's
+    // SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64)) has no COALESCE
+    // either, so a group whose entries all fail the cast returns
+    // usd_amount: null while the row still exists.
+    vi.mocked(getIncomeReport).mockResolvedValue({
+      from: '2026-09', to: '2026-09',
+      rows: [{ ...INCOME_ROW, usd_amount: null }], delayed: false, note: '',
+    });
+    render(<CostReportsPage onAuthExpired={noAuthExpired} />);
+    await switchToIncome();
+    setRange('2026-09', '2026-09');
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+
+    await screen.findByTestId('income-table');
+    expect(screen.getByText('--')).toBeInTheDocument();
   });
 
   it('the income tab has no channel selector at all', async () => {

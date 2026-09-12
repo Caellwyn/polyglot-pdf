@@ -194,3 +194,59 @@ GAPS-FOUND(1). Breakdown:
   bead filed.
 
 Review outcomes recorded in the closeout ping.
+
+## Fresh-eyes review round 2 (outer cross-surface)
+
+A second outer cross-surface review round ran on this bead, STATUS
+GAPS-FOUND(2). Breakdown:
+
+- **Adopted (2):**
+  1. `UsagePage.tsx`'s "no data" predicate was `usage.sessions_completed
+     !== null` alone. `sessions_completed` is written by
+     `backend/services/usage_rollups.py`'s `record_session_end` only
+     inside its `if completed:` branch (`completion_status ==
+     "completed"`) -- a firm-month where every connection was abandoned
+     or reconnected still writes `connections_ended`, `cost_usd_total`,
+     `kind`, and `channel`, with `sessions_completed` left null. The
+     links-only path (`_increment_firm_counter`, backing
+     `record_link_opened`/`record_link_completed`) can likewise write
+     only `links_opened`/`links_completed` via `merge=True`. Both are
+     real activity that the single-field check misreported as "no usage
+     recorded" -- a silently wrong billing-adjacent reading on a
+     monitoring page built specifically to surface this. Fixed by
+     checking every allowlisted counter (`USAGE_COUNTER_KEYS`, mirroring
+     `usage_routes.py`'s own `_FIRM_USAGE_KEYS` minus the two metadata
+     fields `kind`/`channel`) rather than one field; two new tests pin an
+     abandoned-sessions-only month and a links-only month, each asserting
+     the stats grid renders instead of the no-data message. Mutation-
+     verified: reverting to `sessions_completed !== null` alone turns
+     both new tests red while the six pre-existing ones stay green.
+  2. `CostReportsPage.tsx`'s `formatUsd` called `.toFixed(2)`
+     unconditionally, but both `CostReportRow.cost_usd` and
+     `IncomeReportRow.usd_amount` are legitimately nullable at the SQL
+     layer: `sql/telemetry_views.sql`'s cost and income views compute
+     `SUM(SAFE_CAST(... AS FLOAT64))` with no `COALESCE`, and BigQuery's
+     `SUM` returns NULL (not 0) for a group whose inputs are all NULL or
+     fail the cast -- reachable whenever a cost-bearing event lands
+     without a `cost_estimate_usd`/`usd_amount` in its metadata, since the
+     grouping keys still produce a row via `COUNT(*)`. The prior types
+     (`number`, non-nullable) made this green under TypeScript while the
+     runtime threw `TypeError: Cannot read properties of null (reading
+     'toFixed')` in React's render phase -- reproduced exactly under
+     mutation-verify below -- and because `admin-console/src` has no error
+     boundary anywhere, that throw unmounts the entire console (every
+     tab, not just the row). Fixed by widening both fields to `number |
+     null` in `adminApi.ts` and making `formatUsd` total
+     (`value == null ? '--' : value.toFixed(2)`); two new tests (cost tab
+     and income tab) pin a null money value rendering `'--'` instead of
+     throwing. Mutation-verified: reverting `formatUsd` to an
+     unconditional `.toFixed(2)` reproduces the exact `TypeError` from the
+     live console in the test run and turns both new tests red (11 other
+     CostReportsPage tests stay green).
+- **Rejected (0):** none.
+- **Deferred (0):** none needing a new bead -- one purely cosmetic
+  observation (`ALERT_LEVELS` is an exported-but-unconsumed constant,
+  intentional symmetry with `ALERT_KINDS`) was recorded by the reviewer
+  as not worth filing, and no other finding was left unaddressed.
+
+Review outcomes recorded in the closeout ping.

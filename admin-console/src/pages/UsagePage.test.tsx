@@ -81,6 +81,50 @@ describe('UsagePage', () => {
     expect(screen.queryByText('Sessions completed')).not.toBeInTheDocument();
   });
 
+  it('a firm-month with real activity but zero completed sessions still renders the stats grid (not "no data")', async () => {
+    // Every connection this month was abandoned/reconnected -- record_session_end
+    // (backend/services/usage_rollups.py) only increments sessions_completed
+    // inside its `if completed:` branch, so this is a real, non-null doc with
+    // sessions_completed left null. Checking sessions_completed alone as the
+    // "no data" signal would misreport this as an empty month, hiding the real
+    // cost and connection counts (finding 1, bd polyglot-pdf-i6dlb review round).
+    vi.mocked(getFirmUsage).mockResolvedValue({
+      firm_id: 'firm-a', month: '2026-09', channel: 'demo',
+      usage: {
+        connections_ended: 5, sessions_completed: null, cost_usd_total: 12.5,
+        links_opened: null, links_completed: null, by_kit: null, by_employee: null,
+        by_language: null, kind: 'live', channel: 'demo',
+      },
+    });
+    render(<UsagePage onAuthExpired={noAuthExpired} />);
+    await loadUsage('2026-09');
+
+    expect(screen.queryByTestId('usage-no-data')).not.toBeInTheDocument();
+    await screen.findByText('Connections ended');
+    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('12.50').length).toBeGreaterThan(0);
+  });
+
+  it('a firm-month with only link activity (no session data at all) still renders the stats grid', async () => {
+    // _increment_firm_counter (record_link_opened / record_link_completed)
+    // writes just links_opened/links_completed via merge=True, never touching
+    // sessions_completed, connections_ended, or cost_usd_total.
+    vi.mocked(getFirmUsage).mockResolvedValue({
+      firm_id: 'firm-a', month: '2026-09', channel: 'demo',
+      usage: {
+        connections_ended: null, sessions_completed: null, cost_usd_total: null,
+        links_opened: 3, links_completed: 1, by_kit: null, by_employee: null,
+        by_language: null, kind: null, channel: null,
+      },
+    });
+    render(<UsagePage onAuthExpired={noAuthExpired} />);
+    await loadUsage('2026-09');
+
+    expect(screen.queryByTestId('usage-no-data')).not.toBeInTheDocument();
+    await screen.findByText('Links opened');
+    expect(screen.getAllByText('3').length).toBeGreaterThan(0);
+  });
+
   it('renders the counters and the by_kit / by_employee / by_language breakdowns as tables', async () => {
     vi.mocked(getFirmUsage).mockResolvedValue({
       firm_id: 'firm-a', month: '2026-09', channel: 'demo', usage: REAL_USAGE,
