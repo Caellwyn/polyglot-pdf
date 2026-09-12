@@ -937,7 +937,7 @@ with `gcloud builds submit --tag`, which cannot pass one.
   channels' data, so this is that service's own staging tier -- it has no
   second Cloud Run service to rehearse against first.
 - **Consumer:** the root `Dockerfile`'s
-  `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}`,
+  `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log`,
   plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must
   carry the SAME default string so the admin `/health`'s `app_module` field
   does not lie about which app is live.
