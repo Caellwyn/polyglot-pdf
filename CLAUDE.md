@@ -243,9 +243,12 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    (`backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json`). Kit-coupled
    tests are legitimate ONLY when the shipped artifact IS the subject ("every
    shipped kit lints clean"), and those stay cheap because they name no field.
-   `f1040` is the LAST tracked kit and is a documented exception -- it is not in
-   the bucket, so git is its only copy. `w7` was untracked on 2026-09-11 once its
-   tracked copy had drifted from the published one. Do NOT add another.
+   **NO KIT IS TRACKED.** Both exceptions ended 2026-09-11: `w7` was untracked
+   once its tracked copy had drifted from the published one, and `f1040` was
+   deleted outright for re-extraction. So a kit-reading test is now dead in CI by
+   construction -- when a rule genuinely needs a real field, FREEZE it as a
+   fixture (`backend/tests/unit/fixtures/*_frozen.json`) rather than reading
+   `form-kits/`. Do NOT add a kit back to git.
 
 ---
 

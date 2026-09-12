@@ -29,84 +29,7 @@ from backend.models.form_models import (
     iter_condition_atoms,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-
-
-def load_kit(kit: str) -> dict:
-    path = REPO_ROOT / "form-kits" / kit / "schema.json"
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def discovered_kits() -> list:
-    """Every kit present on disk, discovered -- never a hardcoded list.
-
-    Kits are authored and republished continuously and the canonical collection
-    lives in the GCS bucket, not git (see .gitignore's form-kits note), so any
-    literal list here is wrong the moment an author adds, renames or retires a
-    form. Scanning means these guards cover whatever is actually present --
-    including a kit someone pulled down locally -- and need no edit when the
-    set changes (bd polyglot-pdf-1mgkq).
-
-    EVERY kit on disk, draft included. These guards are about STRUCTURAL
-    validity -- valid v2 shape, no dangling references, an unlockable read_only
-    field -- and those must hold for a draft exactly as much as for a published
-    kit. An earlier version filtered to status:complete and thereby dropped
-    f1040 (draft), silently halving this file's coverage from 6 parametrizations
-    to 3 while .gitignore still justified tracking f1040 on the grounds that it
-    "backs kit-coupled tests" (caught by the Opus cross-surface review). The
-    publish gate belongs on tests about PUBLISHABILITY, not about schema shape.
-
-    The cost of including drafts is that a maintainer with a genuinely broken
-    kit in their scratch tree sees these fail -- which is the correct signal:
-    the schema IS malformed. CI only ever sees what git tracks.
-
-    KNOWN LIMIT: git tracks only f1040 now (w7 was untracked 2026-09-11), while
-    the CANONICAL collection is the GCS bucket (.gitignore's form-kits note). So
-    this guard is real but NARROW -- it proves the invariant holds for the one
-    kit CI can see, not for every published kit, and that margin got thinner
-    with w7. Closing that means running against a pulled or
-    synthetic corpus, which is bd polyglot-pdf-1mgkq's job. Do NOT "fix" the
-    narrowness by hardcoding kit names back in; that is the coupling 1mgkq
-    exists to remove.
-    """
-    import subprocess
-
-    # EVERY exit asserts. The guard below is worthless if a failure can return []
-    # around it -- and the two paths that could are exactly the ones its comment
-    # names (no form-kits/ dir, git unavailable), so an early `return []` here
-    # would reproduce the silent-skip it exists to stop (fresh-eyes round 2).
-    root = REPO_ROOT / "form-kits"
-    assert root.is_dir(), (
-        f"{root} is not a directory -- the kit-discovery guards below would "
-        "silently collect zero cases instead of failing"
-    )
-    try:
-        tracked = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "ls-files", "form-kits/"],
-            capture_output=True, text=True, timeout=30, check=True,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise AssertionError(
-            f"`git ls-files form-kits/` failed ({exc!r}) -- a broken harness, not "
-            "'no kits to check'; the guards below would silently collect zero cases"
-        ) from exc
-    names = {
-        line.split("/")[1] for line in tracked.splitlines()
-        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
-    }
-    found = sorted(n for n in names if (root / n / "schema.json").is_file())
-    # NON-VACUITY GUARD, matching the sibling helpers in test_translation_lint.py
-    # and test_dti_si_voice_rules.py. An empty list here does NOT fail the three
-    # consumers below -- pytest turns an empty parametrize into an implicit
-    # "got empty parameter set" SKIP, which is precisely the look-alive-but-dead
-    # signal scar #10 warns about. Fail loudly instead: git being unavailable or
-    # the ls-files parse breaking is a broken harness, not "no kits to check".
-    assert found, (
-        "no git-tracked kit with a schema.json found -- `git ls-files form-kits/` "
-        "returned nothing usable, so these guards would silently skip"
-    )
-    return found
 
 
 def v2_schema(fields: list, source: str = "pdf") -> dict:
@@ -197,154 +120,22 @@ def assert_v2_error(doc: dict, *needles: str):
 
 
 # ---------------------------------------------------------------------------
-# Exit criterion 1: shipped v1 kits validate UNCHANGED
-# ---------------------------------------------------------------------------
-
-# Post the P6.2 strictness flip (bd h76m.16), EVERY kit is v2 -- there is no
-# v1-acceptance path left, the model applies v2 rules to every schema. The kit
-# set is DISCOVERED, not listed: see discovered_kits().
-@pytest.mark.parametrize("kit", discovered_kits())
-def test_shipped_kit_is_v2_and_validates(kit):
-    schema = validate(load_kit(kit))
-    assert schema.schema_version == "2"
-
-
-@pytest.mark.parametrize("kit", discovered_kits())
-def test_shipped_kit_has_no_dangling_references(kit):
-    # Every id a section's fields[] (or a show_if/require_if) names must exist.
-    # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4] as
-    # section field ids that did not exist in schema.fields) + bd p3ww (the retired w7-2 copy
-    # sec_agent listed 4 agent_* fields that were never extracted) -- both dead
-    # section refs, not caught by the promotion lint (which only checks condition
-    # references, not section.fields).
-    result = validate(load_kit(kit)).validate_all_references()
-    assert result["errors"] == [], result["errors"]
-
-
-@pytest.mark.parametrize("kit", discovered_kits())
-def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
-    # A field that is read_only AND carries a show_if is only editable once shown
-    # if it ALSO declares an unlock_method -- FieldRenderer's isDisabled falls back
-    # to field.read_only UNCONDITIONALLY when shouldUnlock is false, so a shown
-    # read-only field with no unlock is permanently disabled. Guards bd
-    # polyglot-pdf-3fz7 (i-90 p4_checkbox1a/b/c: read_only + show_if, no
-    # unlock_method -> the accommodation checkboxes could never be checked once
-    # Part 4 was answered Yes). The unlock descriptor lives on
-    # conditional_behavior.unlock_method (the only conditional container the v2
-    # model declares; a raw conditional_logic key is dropped at parse time).
-    schema = validate(load_kit(kit))
-    offenders = []
-    for field in schema.fields:
-        if not (field.read_only and field.show_if is not None):
-            continue
-        behavior = field.conditional_behavior
-        if behavior is None or not getattr(behavior, "unlock_method", None):
-            offenders.append(field.id)
-    assert offenders == [], (
-        f"{kit}: shown read-only fields with no unlock_method (permanently "
-        f"disabled once shown): {offenders}"
-    )
-
-
-# Known-outstanding violations of the rule below, pinned as an EQUALITY so the
-# set can only SHRINK. EMPTY IS THE GOAL, and it is empty: an entry here is a
-# live defect with a bead, never an exemption, so do not add one to make a
-# failing kit pass -- fix the kit.
+# The four kit-discovering guards that lived here were DELETED 2026-09-11
+# (maintainer decision, bd polyglot-pdf-q3u5r). They asserted structural
+# properties -- valid v2 shape, no dangling references, an unlockable read_only
+# field, no required+read_only dead end -- over every kit `git ls-files
+# form-kits/` returned.
 #
-# It last held w7 countries_of_citizenship (required + read_only with nothing
-# writing it, against an UNLOCKED pdf widget, so a W-7 could not be completed by
-# voice for that field). The maintainer fixed it in the schema editor and the
-# published kit now carries zero read_only fields; w7 was then untracked
-# (2026-09-11) because the git copy had drifted from what the app serves. Both
-# halves of bd polyglot-pdf-nck2q are done.
-_KNOWN_REQUIRED_READONLY: dict[str, list[str]] = {}
-
-
-@pytest.mark.parametrize("kit", discovered_kits())
-def test_shipped_kit_required_fields_are_not_read_only(kit):
-    """A REQUIRED field may be read_only ONLY if something else writes it.
-
-    THE RULE (maintainer, 2026-09-08): "if something has a require_if or a
-    required flag, the only time it should be read-only is if it's being written
-    to from somewhere else, such as the a-number on the last section of the
-    i-90. It's required, but it's filled from a previous field automatically."
-
-    WHY IT IS A DEAD END OTHERWISE. isFieldReadOnly (frontend/src/schema-forms/
-    utils/validation.ts) refuses the model's write for a read_only field and
-    tells it the field is "system-managed, never fillable", so the model stops
-    trying. The user is asked for a value nothing can supply, and required makes
-    that terminal rather than merely awkward: the form cannot be completed.
-
-    ONE EXCEPTION, since bd polyglot-pdf-38p0y: a field declaring
-    unlock_method=flip_readonly_bit is now writable by the AI once its condition
-    SHOWS it -- the AI-write gate honors the unlock, matching the renderer and
-    the PDF filler. Before that fix those three surfaces disagreed.
-
-    THE CARVE-OUT is copy_to, and it is the whole of it: a field listed as some
-    other field's copy_to target IS written from elsewhere, which is exactly the
-    case the rule allows (the I-90's Part-8 continuation-sheet copies of the
-    A-Number and name -- required on the printed form, filled automatically from
-    page 1). Note this guard checks copy_to and NOT unlock_method. That is now a
-    DELIBERATE NARROWNESS rather than a consequence of the old frontend
-    behaviour: since bd polyglot-pdf-38p0y an unlock DOES make a shown field
-    AI-fillable, so a required+read_only field carrying flip_readonly_bit is
-    arguably fine and this guard would still flag it. No tracked kit has that
-    shape today (w7's offender declares no unlock at all, and f1040 has no
-    read_only fields), so nothing is mis-flagged right now -- but whether an
-    unlock should become a second carve-out is open, and rides with the wider
-    predicate question in bd polyglot-pdf-cgb5a.
-
-    Caught two live instances when first written: the i-90's
-    accommodation_other_detail (fixed in the kit) and the W-7's
-    countries_of_citizenship -- the latter required, read_only, NOT a copy_to
-    target, with no unlock at all and an unlocked PDF widget, i.e. pure schema
-    drift on a shipped kit (bd polyglot-pdf-38p0y).
-    """
-    raw = load_kit(kit)
-    validate(raw)  # the schema must still be valid v2; we read copy_to from raw
-
-    # copy_to is read from the RAW dict, NOT the parsed model. FormField does
-    # not DECLARE copy_to and the model is extra="ignore", so pydantic silently
-    # drops it -- `getattr(field, "copy_to", None)` is unconditionally None, and
-    # an earlier version of this guard used exactly that, making the carve-out
-    # dead code. It passed only because no git-tracked kit uses copy_to; the
-    # I-90 that does is bucket-only. The failure mode was the bad one: the guard
-    # would have flagged the very case the rule sanctions (Opus cross-surface).
-    # isinstance(list) on copy_to, matching the two real consumers
-    # (schemaFormState's `Array.isArray(field?.copy_to) ? ... : []` and
-    # copyLinks' `if (!Array.isArray(raw)) return []`). Without it a copy_to
-    # authored as a bare STRING iterates character-by-character, so a single
-    # character matching a field id would silently excuse that field -- the
-    # wrong direction for a guard, since at runtime a string copy_to fans out
-    # to nothing and the target really is unfillable. FormField does not
-    # declare copy_to and the model is extra="ignore", so validate() accepts
-    # the malformed shape without complaint (Opus cross-surface).
-    written_from_elsewhere = {
-        target
-        for field in raw.get("fields", [])
-        if isinstance(field, dict) and isinstance(field.get("copy_to"), list)
-        for target in field["copy_to"]
-    }
-    offenders = []
-    for field in raw.get("fields", []):
-        if not isinstance(field, dict) or not field.get("read_only"):
-            continue
-        validation = field.get("validation")
-        required = bool(
-            isinstance(validation, dict) and validation.get("required")
-        ) or (field.get("require_if") is not None)
-        if required and field.get("id") not in written_from_elsewhere:
-            offenders.append(field.get("id"))
-    assert sorted(offenders) == sorted(_KNOWN_REQUIRED_READONLY.get(kit, [])), (
-        f"{kit}: REQUIRED fields marked read_only with nothing writing them "
-        f"(the voice model is told they are system-managed and never fillable, "
-        f"so the form cannot be completed): {offenders}. Either clear read_only, "
-        f"or make the field a copy_to target of whatever supplies it. "
-        f"(Known-outstanding for this kit: "
-        f"{_KNOWN_REQUIRED_READONLY.get(kit, [])} -- shrink that list as they "
-        f"are fixed; never grow it.)"
-    )
-
+# No kit is tracked any more: w7 is bucket-canonical and f1040 was deleted for
+# re-extraction, so the set they discovered is empty and their own non-vacuity
+# assertion failed collection, taking this file's synthetic tests with it.
+#
+# Do NOT reinstate them against git. The canonical collection is the GCS bucket;
+# a git-reading guard can only cover kits that are not the ones we ship, which
+# is the drift that produced bd polyglot-pdf-nck2q. If these properties are
+# wanted again they must read the BUCKET (credentials in CI, a slower
+# network-dependent suite) or a synthetic corpus.
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Exit criterion 2: v2 fixtures validate; violations -> field-path errors

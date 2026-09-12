@@ -3,7 +3,7 @@
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
 *Last updated: 2026-09-03 (no kit measured to date exercises the widget-name
-suffix fallback -- w7 47/47, the git-tracked f1040 167/167, and the bucket's
+suffix fallback -- w7 47/47, f1040 167/167, and the bucket's
 I-90 79/79, all resolve EXACTLY as measured 2026-09-02 (w7 was still tracked
 then; it was untracked 2026-09-11, which does not change the measurement); the fallback stays
 because a kit MAY map the bare leaf. Kit deletion remains GRADUATED, not a
@@ -415,7 +415,7 @@ Values come back keyed by SCHEMA FIELD ID, never by PDF widget name; the two
 namespaces are disjoint (zero of the W-7's 53 ids equal their
 `pdf_field_name`). Widget lookup tries exact then `endswith`, mirroring
 `find_widget` in the fill path. No kit measured to date needs the `endswith`
-leg -- measured 2026-09-02: w7 47/47, the git-tracked f1040 167/167, and the
+leg -- measured 2026-09-02: w7 47/47, f1040 167/167, and the
 bucket's canonical I-90 79/79, all resolve EXACTLY (the applicant-only v2 I-90
 stores fully-qualified widget names; its 132-field predecessor was the inverse,
 0 exact / 114 suffix-only). The fallback stays because a kit MAY map the bare

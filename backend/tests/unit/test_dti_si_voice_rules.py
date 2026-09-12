@@ -679,12 +679,38 @@ def test_render_field_guidance_no_options_render_unchanged():
 # them. Mechanism for both: SI prose + (for 41fi) the n==2 render marker.
 
 def _load_kit_field(kit, field_id):
+    """A real choice field, read from the FROZEN witness fixture.
+
+    It used to read form-kits/<kit>/schema.json off disk. No kit is tracked any
+    more -- kits are bucket-canonical and the last two left git on 2026-09-11 --
+    so a working-tree read passes on a machine that happens to have pulled the
+    kit and SKIPS in CI (CLAUDE.md scar #10, bd polyglot-pdf-q3u5r).
+
+    The fields are still REAL: captured from the published w7 and from f1040 at
+    the commit that deleted it. That matters for these rules -- a synthetic field
+    cannot show that a genuine yes/no is padded to 17 words with printed-form
+    navigation, which is the boundary the two-option threshold exists to admit.
+    """
     import json
     from pathlib import Path
 
-    p = Path(__file__).resolve().parents[3] / "form-kits" / kit / "schema.json"
-    schema = json.loads(p.read_text(encoding="utf-8"))
-    return next(f for f in schema["fields"] if f["id"] == field_id)
+    frozen = (Path(__file__).resolve().parent / "fixtures"
+              / "choice_field_witnesses_frozen.json")
+    doc = json.loads(frozen.read_text(encoding="utf-8"))
+    for entry in doc.values():
+        if isinstance(entry, dict) and "field" in entry:
+            f = entry["field"]
+            if f.get("id") == field_id:
+                return f
+    for entry in doc.get("short_two_option_witnesses", []):
+        if entry["field"].get("id") == field_id:
+            return entry["field"]
+    raise AssertionError(
+        "%r is not in the frozen witness fixture. It holds EVIDENCE captured "
+        "from real kits, so add the field by re-capturing it from the bucket -- "
+        "do not hand-write one, and do not point this back at form-kits/."
+        % (field_id,)
+    )
 
 
 def _retired_p7_checkbox7():
@@ -709,77 +735,41 @@ def _retired_p7_checkbox7():
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def _shipped_fields():
-    """(kit_id, field) for every field of every GIT-TRACKED kit.
-
-    One walker for all the discovery helpers here, so none of them names a form
-    (bd polyglot-pdf-1mgkq).
-
-    TRACKED, not on-disk. An earlier version walked every directory and said
-    "what is on disk is whatever the developer pulled, which is exactly the
-    right scope" -- that is wrong, and it is how a guard here came to look alive
-    locally while being dead in CI: its only witnesses lived in an UNTRACKED
-    scratch kit. Tracked is what CI actually sees, and it also stops these
-    assertions running against a colleague's half-built scratch kit that is not
-    a deliverable. Matches test_form_models_v2.discovered_kits().
-
-    Consequence worth knowing: no tracked kit contains a `select` field at all,
-    so a rule about selects cannot be witnessed from here -- it needs a frozen
-    fixture (see test_real_long_selects_are_never_force_recited).
-    """
-    import json as _json
-    from pathlib import Path as _Path
-
-    import subprocess as _sp
-
-    root = _Path(__file__).resolve().parents[3] / "form-kits"
-    if not root.is_dir():
-        return
-    # GIT-TRACKED only, matching test_form_models_v2.discovered_kits(). Scanning
-    # the whole directory instead would assert against a maintainer's UNTRACKED
-    # scratch kits -- which CI never sees (so a guard can look alive locally and
-    # be dead in CI) and which can go red on a colleague's machine for a kit
-    # that is not a deliverable. Both failure directions are real; this one
-    # bit twice on the long-select guard above.
-    try:
-        tracked = _sp.run(
-            ["git", "-C", str(root.parent), "ls-files", "form-kits/"],
-            capture_output=True, text=True, timeout=30, check=True,
-        ).stdout
-    except (OSError, _sp.SubprocessError):
-        return
-    names = sorted({
-        line.split("/")[1] for line in tracked.splitlines()
-        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
-    })
-    for name in names:
-        schema = root / name / "schema.json"
-        if not schema.is_file():
-            continue
-        try:
-            doc = _json.loads(schema.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            continue
-        for f in doc.get("fields") or []:
-            yield name, f
+# _shipped_fields() -- the git-tracked kit walker -- was DELETED 2026-09-11
+# (bd polyglot-pdf-q3u5r). No kit is tracked any more, so it always returned
+# nothing. Its consumers now read frozen witnesses captured from the published
+# kits. Do NOT reinstate a working-tree walk: it passes on a machine that
+# pulled a kit and skips in CI, which is the failure it was itself written to
+# avoid.
 
 
 def _short_two_option_fields():
     """Every (id, field) in a TRACKED kit that is a 2-option pair with SHORT labels.
 
     Short = under the render's fold-into-one-question threshold, so these are the
-    fields the natural-question marker must fire on. Discovered rather than
-    named, so an author adding or retiring a form never edits this test
-    (bd polyglot-pdf-1mgkq), and sourced from _shipped_fields() so it uses the
-    SAME git-tracked scope as every other discovery helper here.
+    fields the natural-question marker must fire on.
+
+    FROZEN, not discovered. This used to walk the git-tracked kits, which was
+    right while any were tracked; none is now (bd polyglot-pdf-q3u5r), so the
+    walk returns nothing and the guard would fail its own non-vacuity assert.
+    The seven witnesses are real fields captured from the published w7 and from
+    f1040 at the commit that deleted it -- still real labels, just no longer
+    re-read from a tree CI cannot see (CLAUDE.md scar #10).
     """
+    import json
+    from pathlib import Path
+
+    frozen = (Path(__file__).resolve().parent / "fixtures"
+              / "choice_field_witnesses_frozen.json")
+    doc = json.loads(frozen.read_text(encoding="utf-8"))
     out = []
-    for kit, f in _shipped_fields():
+    for entry in doc.get("short_two_option_witnesses", []):
+        f = entry["field"]
         opts = f.get("options") or []
         if len(opts) != 2:
             continue
         if max(len(str(o.get("label", "")).split()) for o in opts) <= 6:
-            out.append((f"{kit}:{f['id']}", f))
+            out.append((f"{entry['kit']}:{f['id']}", f))
     return out
 
 def test_real_yes_no_fields_get_the_natural_question_marker():

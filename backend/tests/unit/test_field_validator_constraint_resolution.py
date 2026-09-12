@@ -6,13 +6,17 @@ _resolve_constraint reads a validation constraint from THREE possible shapes,
 in order: validation.<snake_case> (canonical), validation.<camelCase>
 (tolerant), then a flattened top-level key. The final top-level fallback used
 to try ONLY the camelCase form (e.g. "maxLength"), so a real on-disk kit that
-carries the constraint as a top-level SNAKE_CASE key with no nested
-`validation` block at all (form-kits/w7/schema.json's date_of_entry_us,
-"max_length": 16) silently lost its length constraint -- validate_field_value
-returned VALID for any length. Loads the REAL on-disk schema rather than a
-hand-built dict, per this repo's "verify claims against code, not the brief"
-convention: a hand-built fixture could accidentally encode the same
-assumption the bug depended on.
+carries the constraint as a top-level SNAKE_CASE key with no nested length
+constraint (the published W-7's date_of_entry_us, "max_length": 16) silently
+lost its length constraint -- validate_field_value returned VALID for any
+length.
+
+Reads a FROZEN COPY of that real field rather than a hand-built dict, because a
+hand-built fixture could accidentally encode the same assumption the bug
+depended on. Frozen rather than read live (it used to open
+form-kits/w7/schema.json) because no kit is tracked any more -- kits are
+bucket-canonical, so a working-tree read passes on one machine and skips in CI
+(CLAUDE.md scar #10, bd polyglot-pdf-q3u5r).
 
 ASCII only.
 """
@@ -23,24 +27,25 @@ import pytest
 
 from backend.utils.field_validator import validate_field_value
 
-W7_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[3] / "form-kits" / "w7" / "schema.json"
+FROZEN_FIELD_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "w7_top_level_max_length_frozen.json"
 )
 
 
 def _load_w7_field(field_id: str) -> dict:
-    data = json.loads(W7_SCHEMA_PATH.read_text(encoding="utf-8"))
-    for field in data.get("fields", []):
-        if field.get("id") == field_id:
-            return field
-    raise AssertionError(
-        "field %r not found in %s -- schema may have been restructured; "
-        "update this test's target field" % (field_id, W7_SCHEMA_PATH)
+    """The frozen real field. Asserts the id so a swapped fixture cannot pass."""
+    data = json.loads(FROZEN_FIELD_PATH.read_text(encoding="utf-8"))
+    field = data["field"]
+    assert field.get("id") == field_id, (
+        "frozen fixture holds %r, not %r -- it is EVIDENCE captured from the "
+        "published kit, so repoint the test rather than editing the fixture"
+        % (field.get("id"), field_id)
     )
+    return field
 
 
-def test_top_level_snake_case_max_length_is_enforced_on_the_real_w7_schema():
-    """The exact regression: form-kits/w7/schema.json's date_of_entry_us
+def test_top_level_snake_case_max_length_is_enforced():
+    """The exact regression: the published W-7's date_of_entry_us
     carries a top-level snake_case max_length. Its `validation` block (if
     any) does not itself carry a length constraint, so the top-level key is
     the ONLY source -- confirming this test exercises the top-level fallback

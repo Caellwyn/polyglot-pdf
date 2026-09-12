@@ -172,20 +172,23 @@ pitch/ignored_pitch/
 #
 # Pull the bucket down with scripts/pull-form-kits.sh when you need kits locally.
 #
-# f1040 is the LAST tracked kit and is the exception, not the pattern
-# (w9-heldout is also tracked but is NOT a kit -- it is a deliberately held-out
+# NO KIT IS TRACKED. The bucket is the whole collection; git holds none of it.
+# (w9-heldout is still tracked but is NOT a kit -- it is a deliberately held-out
 # PDF with no schema.json, see its NOTE.md, and _translation is shared glossary
-# data rather than a form):
-# f1040 is NOT in the bucket -- git is currently its only copy, so untracking it
-# would DELETE it. It stays until it is published, then it goes the same way w7
-# did. Do NOT add another.
+# data rather than a form.) Do NOT add a kit back.
 #
-# w7 was UNTRACKED on 2026-09-11 (maintainer decision, bd polyglot-pdf-nck2q).
-# It had drifted: the tracked copy still carried 53 fields and 9 read_only flags
-# while the published kit had 46 and zero -- so CI was testing a form the app
-# does not serve. Every tracked w7 file was verified present in the bucket
-# (status: complete, 46/46 reviewed) before removal; nothing was lost. Pull it
-# back with scripts/pull-form-kits.sh.
+# Both exceptions were removed on 2026-09-11 (maintainer decision, bd
+# polyglot-pdf-nck2q):
+#   w7    -- UNTRACKED. Its tracked copy had drifted (53 fields / 9 read_only vs
+#            the published 46 / 0), so CI was testing a form the app does not
+#            serve. Every file was verified present in the bucket (status:
+#            complete, 46/46 reviewed) before removal; nothing was lost.
+#   f1040 -- DELETED outright. It was never in the bucket, so git was its only
+#            copy, and the maintainer is re-extracting it from scratch: "I need
+#            to re-extract it anyway. Everything except the deployed w-7 and
+#            i-90 are going to need to be deleted and redone from scratch."
+#
+# Pull published kits down with scripts/pull-form-kits.sh.
 #
 # HAZARD THIS RULE DOES NOT COVER (bd polyglot-pdf-xyfu8): `git` ignoring a kit
 # does NOT stop a deploy publishing it. deploy-all.sh's --form-kits stage
@@ -200,8 +203,6 @@ pitch/ignored_pitch/
 form-kits/*/
 !form-kits/_translation/
 !form-kits/w9-heldout/
-!form-kits/f1040/
-
 # Stray zero-byte artifact from tooling, not produced by any repo script.
 # Swept into a commit twice during bd polyglot-pdf-96um6 by `git add -A`.
 tmpfile

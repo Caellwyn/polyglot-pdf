@@ -178,9 +178,9 @@ approximation for feedback; this modal (and download) is the ground truth.
   font shrink); the FilledPreviewModal is the exact render.
 - Radio/checkbox-group selections paint marks at their own option boxes only
   where the schema carries per-option `pdf_position` (backfilled into the
-  f1040 and w7, measured 2026-09-03 when both were tracked -- f1040 is the only
-  tracked kit now, and a bucket kit may or may not carry it, so check the kit
-  rather than assuming); a schema without
+  f1040 and w7, measured 2026-09-03 when both were tracked -- NO kit is tracked
+  now, and a bucket kit may or may not carry it, so check the kit rather than
+  assuming); a schema without
   option rects falls back
   to labels at the field-level rect (tiny for 10px option boxes).
 - Retired gap (bd `polyglot-pdf-ks1y`): 8 choice fields on the OLD i-90

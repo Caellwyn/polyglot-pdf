@@ -1,7 +1,7 @@
 ---
 date: 2026-09-11
 bead: polyglot-pdf-nck2q
-title: "Untracking the W-7: CI was testing a form the app does not serve"
+title: "No kit is tracked any more: the W-7 had drifted, f1040 is being re-extracted"
 tags: [testing, doctrine, conventions]
 ---
 
@@ -143,9 +143,55 @@ the branch green in about ten minutes. It would also convert ~35 red tests into
 ~35 silently-dead ones -- precisely what `q3u5r` exists to delete. A guard here
 buys a green CI by hiding the thing that should be removed.
 
+## Then f1040 went too, and the guards with it
+
+The maintainer's call, on reading that f1040 was the last tracked kit and only
+because it was unpublished:
+
+> "kill it. I need to re-extract it anyway. Everything except the deployed w-7
+> and i-90 are going to need to be deleted and redone from scratch anyway."
+
+Verified against the bucket first: only `w7` and `i-90_v2` are `status: complete`.
+The rest (`form`, `form-2`, `form-3`, `form-4`) are drafts and `i-90` is
+unpublished -- so nothing published was at risk. f1040 was deleted outright, not
+untracked, because git was its only copy and it is being rebuilt.
+
+**That emptied the tracked set, and the four kit-discovering guards in
+`test_form_models_v2.py` went with it.** Their own non-vacuity assertion fired --
+correctly, it refuses to pass with nothing to check -- and took ~25 unrelated
+synthetic tests in the same file down with it at collection time. Deleted on the
+maintainer's decision rather than made to skip: a skipping guard is dead in CI,
+which is the shape this whole cleanup removes.
+
+### What the remaining five files needed, and why they differ
+
+The 12 failures were not one problem. Each file got the treatment its CONTENT
+deserved, not a blanket one:
+
+| File | Action | Why |
+|---|---|---|
+| `test_form_models_v2.py` | deleted 4 guards | discovered set is empty; ~25 synthetic tests kept |
+| `test_guidance_contract.py` | deleted 1 test | asserted one FORM's guidance coverage -- a content claim |
+| `test_measure_harness_naive_arm.py` | deleted 2 classes | spike-harness plumbing; 15 synthetic tests kept |
+| `test_field_validator_constraint_resolution.py` | froze the field | property is general; the specimen was real for a reason |
+| `test_dti_si_voice_rules.py` | froze 10 witnesses | ditto -- a synthetic field cannot be a 17-word padded yes/no |
+
+The two conversions kept real data deliberately. `_resolve_constraint`'s own
+docstring explained why it read a live kit: *a hand-built fixture could
+accidentally encode the same assumption the bug depended on.* That reasoning
+survives a freeze -- the field is still the real one, it just no longer comes
+from a tree CI cannot see.
+
+Both conversions were mutation-verified against the ORIGINAL bug, not a
+convenient one: reverting the top-level fallback to camelCase-only reddens the
+frozen constraint test, and dropping the two-option threshold below 17 reddens
+the frozen padded-yes-no witness. A conversion that cannot fail is worse than a
+deletion, because it looks like coverage.
+
 ## Doc freshness
 
-- `CLAUDE.md` -- scar #10 updated (tier 1, no stamp convention).
+- `CLAUDE.md` -- scar #10 now states that NO kit is tracked and that a rule
+  needing a real field must FREEZE it, rather than naming the old exceptions.
 - `docs/components/pdf-filling.md`, `docs/components/pdf-view.md` -- re-attributed
   w7 from "git-tracked" to plain; measurements unchanged, so the stamps were not
   bumped for a re-measure that did not happen.
@@ -153,7 +199,19 @@ buys a green CI by hiding the thing that should be removed.
 
 ## Files touched
 
-- `.gitignore` -- w7 exception removed; rationale records why and how to restore.
+- `.gitignore` -- BOTH kit exceptions removed; the rationale records why each
+  went and how to get a published kit back (`scripts/pull-form-kits.sh`).
+- `form-kits/f1040/` -- DELETED (5 files). Git was its only copy; it is being
+  re-extracted.
+- `backend/tests/unit/fixtures/choice_field_witnesses_frozen.json` -- NEW. Ten
+  real choice fields captured from the published w7 and from f1040 at the commit
+  that deleted it.
+- `backend/tests/unit/fixtures/w7_top_level_max_length_frozen.json` -- NEW. The
+  one field whose top-level snake_case `max_length` the resolver bug depended on.
+- `backend/tests/unit/test_guidance_contract.py`,
+  `test_measure_harness_naive_arm.py`, `test_field_validator_constraint_resolution.py`,
+  `test_dti_si_voice_rules.py` -- the four files whose kit-coupled tests were
+  deleted or converted.
 - `form-kits/w7/` -- six files untracked (still on disk locally, still in the
   bucket).
 - `backend/tests/test_form_models_v2.py` -- `_KNOWN_REQUIRED_READONLY` emptied;
