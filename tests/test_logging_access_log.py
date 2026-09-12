@@ -14,10 +14,24 @@ at the end of configure_logging() -> both assertions go red.
 """
 import logging
 
+import pytest
+
 from backend.utils.logging import configure_logging
 
 
-def test_configure_logging_caps_uvicorn_access_at_warning():
+@pytest.fixture
+def restored_uvicorn_access():
+    """Snapshot uvicorn.access and put it back, so this test leaves no
+    process-wide logger state behind for a later test to trip over."""
+    access = logging.getLogger("uvicorn.access")
+    saved = (access.level, list(access.handlers), access.propagate)
+    yield access
+    access.setLevel(saved[0])
+    access.handlers = saved[1]
+    access.propagate = saved[2]
+
+
+def test_configure_logging_caps_uvicorn_access_at_warning(restored_uvicorn_access):
     configure_logging()
     access = logging.getLogger("uvicorn.access")
     assert access.level >= logging.WARNING, (

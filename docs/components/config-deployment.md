@@ -496,9 +496,11 @@ drops the line too; the two guards are pinned separately
 The cost is diagnostic: there is no per-connection access line in the
 app stream. Cloud Run's own request log (`run.googleapis.com/requests`)
 still records status and latency per request -- and, until the WS
-credential moves out of the URL (sprint 23 bead C2), the URL itself,
-which the interim Cloud Logging exclusion on `httpRequest.requestUrl`
-covers.
+credential moves out of the URL (sprint 23 bead C2), the URL itself.
+That request-log copy is NOT mitigated by this flag; an interim Cloud
+Logging exclusion on `httpRequest.requestUrl` is a separate live-change
+ask tracked on bd `polyglot-pdf-6rj0j`, applied only when the maintainer
+approves it.
 
 **Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
 `gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
