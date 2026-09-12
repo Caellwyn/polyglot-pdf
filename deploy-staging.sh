@@ -44,6 +44,14 @@
 
 set -e
 
+# DEPLOY PREFLIGHT (bd polyglot-pdf-1s3ko). Runs BEFORE anything else: a build
+# runs from a COMMIT and build_checks/{sha} vouches for that commit's test run,
+# so a dirty or unpushed tree makes both claims false. Refuses with the reason
+# and the remedy; see scripts/deploy_preflight.sh for the full rationale.
+PREFLIGHT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PREFLIGHT_DIR/scripts/deploy_preflight.sh"
+deploy_preflight "$PREFLIGHT_DIR"
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -70,28 +78,15 @@ CONSOLIDATED_PROJECT="polyglot-demo-aa709"
 GCP_PROJECT="$CONSOLIDATED_PROJECT"
 FIREBASE_PROJECT="$CONSOLIDATED_PROJECT"
 BUCKET_NAME="$CONSOLIDATED_PROJECT-form-kits"
-SA_NAME="polyglot-backend-sa"
-SA_EMAIL="$SA_NAME@$GCP_PROJECT.iam.gserviceaccount.com"
 
 STAGING_SERVICE_NAME="polyglot-backend-staging"
 STAGING_SITE="polyglot-app-staging"
 STAGING_HOSTING_TARGET="app-staging"
-
-# Secret Manager bindings, passed to gcloud as --set-secrets (bd
-# polyglot-pdf-hvui4). MUST stay identical to deploy-demo.sh's copy -- pinned by
-# tests/test_deploy_channel_parity.py, which derives both lists from the two
-# scripts rather than restating them.
-#
-# --set-secrets REPLACES the whole secret block, so this must name EVERY
-# binding the service should keep, not just the one being added. Today that is
-# the link signing key alone: the two SCHEMA_*_TOKEN bindings live on the demo
-# service are hand-applied drift for a gate that is RETIRED (deploy-editor.sh,
-# bd rhc2v), so they are deliberately NOT carried forward here.
-#
-# LINK_TOKEN_SECRET gates client-link minting: without it the mint route 503s.
-# The secret itself is provisioned out of band (maintainer, 2026-09-01); this
-# only binds the existing secret's latest version to the env var.
-BACKEND_SECRETS_COMMON="LINK_TOKEN_SECRET=LINK_TOKEN_SECRET:latest"
+# The runtime service account and the Secret Manager bindings moved to
+# deploy/channels/<channel>.env (bd polyglot-pdf-1s3ko) -- they were
+# constants here, and a constant that two files must keep in step is the
+# drift the channel files exist to end. deploy-all.sh reads them from the
+# file; so does cloudbuild.yaml's backend target.
 
 # Determine which components to deploy.
 #
@@ -155,50 +150,20 @@ if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
     [ "$DEPLOY_GCP" = true ] && GCP_ARGS+=("--backend")
     [ "$DEPLOY_FORM_KITS" = true ] && GCP_ARGS+=("--form-kits")
 
-    # Backend env MIRRORS deploy-demo.sh exactly. That is the whole point of a
-    # staging channel: a config difference between the two would mean staging
-    # stops predicting demo behavior, and the deploy-only bugs this environment
-    # exists to catch are precisely the config-shaped ones. When you change a
-    # setting in deploy-demo.sh's BACKEND_EXTRA_ENV, change it HERE FIRST, verify
-    # on staging, and only then promote it to the demo.
+    # CHANNEL CONFIG LIVES IN A FILE NOW (bd polyglot-pdf-1s3ko).
     #
-    # The one deliberate difference is CORS_EXTRA_ORIGINS, which names the
-    # editor origins. The staging SITE needs no CORS entry of its own, but NOT
-    # for the reason you might assume: the voice path is a WEBSOCKET, and
-    # Firebase Hosting does not proxy WS upgrades, so the client connects to
-    # Cloud Run DIRECTLY, cross-origin (docs/technical_guide.md "Gotchas").
-    # It works because a WS upgrade is not CORS-preflighted -- not because it is
-    # same-origin. Only the app's plain HTTP calls use the Hosting /api/**
-    # rewrite and are genuinely same-origin.
+    # Everything this block used to spell out inline -- VERTEXAI, the LINK_*
+    # set, CORS_EXTRA_ORIGINS, the secret binding, the runtime SA -- is in
+    # deploy/channels/staging.env, which deploy-all.sh reads and cloudbuild.yaml's
+    # backend-staging target reads too. ONE source, two consumers: a Cloud Build
+    # step cannot read a bash string, and a restated config is exactly the drift
+    # tests/test_deploy_channel_parity.py exists to catch.
     #
-    # So: if anyone later adds a cross-origin fetch/XHR from the staging site
-    # straight to Cloud Run (bypassing the rewrite), it WILL need an entry here.
-    # The editor origins are listed precisely because the hosted editor does
-    # exactly that -- it calls Cloud Run directly to dodge the rewrite's 60s cap.
-    #
-    # CLIENT LINKS mirror the demo (bd polyglot-pdf-hvui4). They were missing
-    # here: this script was written from a pre-#693 copy of the demo config, so
-    # staging could not mint or open a client link at all -- and a channel that
-    # cannot exercise the pilot's core feature does not predict demo behavior,
-    # which is the one job stated at the top of this block.
-    #
-    # TWO link values must NOT match the demo. Copying either one verbatim
-    # from deploy-demo.sh silently breaks a guarantee:
-    #
-    #   LINK_BASE_URL -- the STAGING frontend. A minted link is
-    #   `<base>/f#t=<token>` and /f is a client-app route (AppRoutes.tsx
-    #   CLIENT_LINK_PATH), so pointing staging at the demo origin would mint
-    #   links that open the DEMO -- silently testing the wrong deployment,
-    #   which is worse than not minting at all.
-    #
-    #   LINK_CHANNEL -- the channel name minted into every token as `aud` and
-    #   checked on open (bd polyglot-pdf-3q9qn). Matching the demo's value
-    #   would make staging links verify on the demo AND put both channels on
-    #   one redemption ledger, so a staging test could burn a real client's
-    #   link. tests/test_deploy_channel_parity.py asserts both differ.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_CHANNEL=staging,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://$STAGING_SITE.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
-        BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
-        BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
+    # The mirror contract is unchanged and now mechanical: staging.env and
+    # demo.env must agree LINE FOR LINE except for the CHANNEL_SPECIFIC keys
+    # (LINK_BASE_URL, LINK_CHANNEL, GIT_SHA). Change staging.env FIRST, verify
+    # on staging, then promote to demo.env.
+    DEPLOY_CHANNEL="staging" \
         BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

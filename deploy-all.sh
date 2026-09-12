@@ -143,6 +143,66 @@ collect_publishable_kit_files() {
     done
 }
 
+# ---------------------------------------------------------------------------
+# CHANNEL FILE PARSER (bd polyglot-pdf-1s3ko)
+#
+# Per-channel Cloud Run configuration lives in deploy/channels/<channel>.env as
+# plain KEY=value data under three section headers, so BOTH this script and
+# cloudbuild.yaml read ONE source. Before this existed the env lived only as an
+# inline BACKEND_EXTRA_ENV string inside deploy-staging.sh / deploy-demo.sh,
+# which a Cloud Build step cannot read without restating it -- and a restated
+# config is the drift tests/test_deploy_channel_parity.py exists to catch.
+#
+# read_channel_section <file> <SECTION>
+#   Prints the KEY=value lines of one section, comma-joined for gcloud's
+#   --set-env-vars / --set-secrets. Prints nothing for an absent or empty
+#   section (admin.env's [SET_SECRETS] is deliberately empty), so the caller's
+#   `[ -n "$x" ] &&` guards keep producing a flagless invocation.
+#
+# A missing FILE is fatal: silently deploying with an empty env block would
+# strip every setting off the service, since --set-env-vars REPLACES rather
+# than merges.
+read_channel_section() {
+    local file="$1" want="$2" section="" line key out=""
+    if [ ! -f "$file" ]; then
+        echo "[ERROR] channel file not found: $file" >&2
+        exit 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip a trailing CR so a CRLF-checked-out file still parses (the
+        # repo is edited on Windows).
+        line="${line%$'\r'}"
+        case "$line" in
+            \#*|"") continue ;;
+            \[*\]) section="${line#[}"; section="${section%]}"; continue ;;
+        esac
+        [ "$section" = "$want" ] || continue
+        key="${line%%=*}"
+        # A line inside a section that is not KEY=value is a typo, not data.
+        case "$line" in
+            *=*) ;;
+            *) echo "[ERROR] $file [$want]: not KEY=value: $line" >&2; exit 1 ;;
+        esac
+        [ -n "$key" ] || { echo "[ERROR] $file [$want]: empty key" >&2; exit 1; }
+        if [ -z "$out" ]; then out="$line"; else out="$out,$line"; fi
+    done < "$file"
+    printf '%s' "$out"
+}
+
+# read_channel_value <file> <SECTION> <KEY> -- one value, unwrapped.
+read_channel_value() {
+    local pairs p
+    pairs=$(read_channel_section "$1" "$2")
+    # NO pipeline here: a `while read` on the right of a pipe runs in a
+    # SUBSHELL, so its printf would be discarded and every caller would see an
+    # empty value. Split on commas with IFS in this shell instead.
+    local IFS=,
+    for p in $pairs; do
+        if [ "${p%%=*}" = "$3" ]; then printf '%s' "${p#*=}"; return 0; fi
+    done
+    return 0
+}
+
 # Verify a just-deployed Cloud Run service is PUBLICLY REACHABLE, and abort if
 # it is not (bd polyglot-pdf-pidtg, extended to this script by bd
 # polyglot-pdf-6oi9s).
@@ -490,9 +550,47 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # (-C, not a bare cd, so this stays correct regardless of the caller's
     # cwd); a detached/dirty tree still resolves to the checked-out commit,
     # which is what actually got built.
+    #
+    # DEPLOY_CHANNEL (bd polyglot-pdf-1s3ko): the per-channel settings are NO
+    # LONGER built inline here. They live in deploy/channels/<channel>.env, so
+    # this script and cloudbuild.yaml's backend targets read ONE source instead
+    # of the Cloud Build steps restating what bash computes. The wrappers set
+    # DEPLOY_CHANNEL (staging | demo | admin) alongside BACKEND_SERVICE_NAME.
+    #
+    # The three computed keys stay HERE, above the channel file, because none
+    # of them is static data: GOOGLE_CLOUD_PROJECT and the FORM_KITS_* trio come
+    # from the caller's exports, and GIT_SHA is read from the tree actually
+    # being built. Channel keys are layered AFTER them, so a channel file can
+    # override a default deliberately rather than being silently overridden.
+    #
+    # BACKEND_EXTRA_ENV survives as the LAST layer for values only knowable at
+    # deploy time (deploy-admin.sh's ADMIN_SERVICE_URL, read from a live
+    # `gcloud run services describe`). It is no longer where channel config
+    # lives -- tests/test_deploy_channel_parity.py pins that.
     APP_MODULE="${APP_MODULE:-backend.main:app}"
     GIT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
     BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true,APP_MODULE=$APP_MODULE,GIT_SHA=$GIT_SHA"
+
+    CHANNEL_ENV=""
+    CHANNEL_SECRETS=""
+    CHANNEL_SA=""
+    if [ -n "$DEPLOY_CHANNEL" ]; then
+        CHANNEL_FILE="$SCRIPT_DIR/deploy/channels/$DEPLOY_CHANNEL.env"
+        log_info "Reading channel configuration from deploy/channels/$DEPLOY_CHANNEL.env"
+        CHANNEL_ENV=$(read_channel_section "$CHANNEL_FILE" SET_ENV_VARS)
+        CHANNEL_SECRETS=$(read_channel_section "$CHANNEL_FILE" SET_SECRETS)
+        CHANNEL_SA=$(read_channel_value "$CHANNEL_FILE" SERVICE_ACCOUNT SERVICE_ACCOUNT)
+        # A channel file with no SET_ENV_VARS would silently deploy the bare
+        # defaults -- every LINK_*, VERTEXAI and CORS setting gone, because
+        # --set-env-vars REPLACES the block. Refuse instead.
+        if [ -z "$CHANNEL_ENV" ]; then
+            log_error "deploy/channels/$DEPLOY_CHANNEL.env has no [SET_ENV_VARS] entries."
+            log_error "--set-env-vars REPLACES the service's whole env block, so"
+            log_error "deploying from an empty channel file would strip every setting."
+            exit 1
+        fi
+        BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"
+    fi
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
@@ -505,6 +603,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # identity, and a failed follow-up update can't strand the demo on a revision
     # that can't call Vertex (bd polyglot-pdf-ignt). Empty (the default, e.g. a
     # bare deploy-all.sh run) -> no --service-account, behavior unchanged.
+    # The channel file's [SERVICE_ACCOUNT] is the DEFAULT; an explicit
+    # BACKEND_SERVICE_ACCOUNT from the caller still wins, so a one-off deploy
+    # under a different identity needs no file edit (bd polyglot-pdf-1s3ko).
+    [ -z "$BACKEND_SERVICE_ACCOUNT" ] && BACKEND_SERVICE_ACCOUNT="$CHANNEL_SA"
     SA_FLAG=()
     [ -n "$BACKEND_SERVICE_ACCOUNT" ] && SA_FLAG=(--service-account "$BACKEND_SERVICE_ACCOUNT")
 
@@ -525,6 +627,9 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # carries two hand-applied bindings no script sets (SCHEMA_EDITOR_TOKEN,
     # SCHEMA_AUTHOR_TOKEN -- both retired per deploy-editor.sh, bd rhc2v);
     # passing a partial list here would drop them without a word.
+    # Same layering as SA_FLAG: the channel file's [SET_SECRETS] is the
+    # default, an explicit BACKEND_SECRETS still wins.
+    [ -z "$BACKEND_SECRETS" ] && BACKEND_SECRETS="$CHANNEL_SECRETS"
     SECRETS_FLAG=()
     [ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")
 
