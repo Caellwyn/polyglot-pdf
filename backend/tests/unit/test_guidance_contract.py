@@ -2,9 +2,12 @@
 
 Pins: the containment normalization spec (the zero-trust core of the details
 channel), the anti-restatement heuristic, and every new schema_lint guidance
-rule -- one synthetic violation fixture per rule, plus the exit-criterion
-check that the coverage rule fires on the REAL w7 kit (0/59 authored
-guidance today).
+rule -- one synthetic violation fixture per rule.
+
+The exit-criterion check that the coverage rule fires on the REAL w7 kit was
+deleted 2026-09-11 (bd polyglot-pdf-q3u5r): it asserted one FORM's guidance
+coverage, and no kit is tracked any more. The lint RULE itself is still pinned
+by the synthetic fixtures here.
 
 ASCII only (CLAUDE.md scar #6). Unicode punctuation in fixtures is
 chr()-composed.
@@ -12,7 +15,6 @@ chr()-composed.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from backend.services import guidance_contract as gc
