@@ -1,0 +1,102 @@
+{
+  "_why": "FROZEN date fields from the published W-7 (2026-09-11), captured as the last kits left git. These pin that a date validates against its OWN declared layout rather than a hardcoded ISO -- the regression the maintainer reported 2026-08-03, where the voice model kept asking for year-first dates on a form whose label and hint both say MM/DD/YYYY.\nREAL fields, not hand-built: the bug was that no shipped kit set the flat `format` key at all (the layout lives in help.format_hint), so a synthetic field risks encoding the assumption the bug depended on. date_of_entry_us additionally carries a PROSE hint ('MM/DD/YYYY or \"Never Entered US\"'), which is why the resolver must find a layout token inside a sentence.\nFrozen because no kit is tracked (CLAUDE.md scar #10). Do not hand-edit.",
+  "_source": "form-kits/w7/schema.json, published kit",
+  "fields": {
+    "date_of_birth": {
+      "id": "date_of_birth",
+      "name": "4 Date of birth (month / day / year)",
+      "spoken_name": "date of birth",
+      "type": "date",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
+      "max_length": 8,
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 129.6,
+        "y": 432,
+        "width": 100.8,
+        "height": 12
+      },
+      "section_id": "sec_birth_information_p1",
+      "help": {
+        "instructions": "Give your date of birth as month, day, and year. It must match the date of birth shown on your supporting documents.",
+        "details": "Line 4. Enter your date of birth in the month/day/year (MM/DD/YYYY) format, where MM = 1 to 12 and DD = 1 to 31.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "_review": {
+        "status": "reviewed_correct",
+        "guidance_ack_sha1": "ed111c263a12a3f3f35933f4ce98eb0d9b9f656a"
+      },
+      "spoken_name_translations": {
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u064a\u0644\u0627\u062f",
+        "tagalog": "petsa ng kapanganakan",
+        "spanish": "fecha de nacimiento",
+        "french": "date de naissance",
+        "chinese": "\u51fa\u751f\u65e5\u671f",
+        "portuguese": "data de nascimento",
+        "hindi": "\u091c\u0928\u094d\u092e \u0924\u093f\u0925\u093f",
+        "italian": "data di nascita",
+        "german": "Geburtsdatum",
+        "korean": "\uc0dd\ub144\uc6d4\uc77c",
+        "dutch": "Geboortedatum",
+        "ukrainian": "\u0434\u0430\u0442\u0430 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
+        "russian": "\u0414\u0430\u0442\u0430 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u044f",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u062a\u0648\u0644\u062f",
+        "urdu": "\u062a\u0627\u0631\u06cc\u062e \u067e\u06cc\u062f\u0627\u0626\u0634",
+        "swedish": "f\u00f6delsedatum",
+        "afrikaans": "geboortedatum"
+      },
+      "read_only": false
+    },
+    "date_of_entry_us": {
+      "id": "date_of_entry_us",
+      "name": "6d Date of entry into the United States (MM/DD/YYYY)",
+      "spoken_name": "date of entry into the United States",
+      "type": "text",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
+      "max_length": 16,
+      "pdf_position": {
+        "page": 1,
+        "x": 511.2,
+        "y": 504,
+        "width": 64.8,
+        "height": 10
+      },
+      "section_id": "sec_other_information_p1",
+      "help": {
+        "instructions": "Give the complete date, month, day, and year, on which you entered the country for the purpose you are requesting this number for. If you have never entered the United States, enter exactly \"Never entered US\" instead of a date -- the printed box is only wide enough for that short form. A passport without an entry date does not prove U.S. residency and may not stand alone for certain dependents.",
+        "details": "The \"Date of entry into the United States\" must contain the complete date on which you entered the country for the purpose for which you're requesting an ITIN (if applicable). If you've never entered the United States, enter \"Never entered the United States\" on this line. A passport without an entry date doesn't prove U.S. residency and may not be used as a stand-alone document for certain dependents. See Supporting Documentation Requirements, earlier.\nExample. You entered the United States last year to work. You want to file a tax return for the income you earned in the United States that year. You aren't eligible to get a social security number. You file Form W-7 with your tax return for that year. On line 6d of your Form W-7, enter, as the \"Date of entry into the United States,\" the month, day, and year you entered the United States in MM/DD/YYYY format.",
+        "format_hint": "MM/DD/YYYY or \"Never Entered US\""
+      },
+      "_review": {
+        "status": "reviewed_correct",
+        "guidance_ack_sha1": "d6d574cdaf8b64a1fcecf9c9071ba40373b31299"
+      },
+      "spoken_name_translations": {
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u062f\u062e\u0648\u0644 \u0625\u0644\u0649 \u0627\u0644\u0648\u0644\u0627\u064a\u0627\u062a \u0627\u0644\u0645\u062a\u062d\u062f\u0629",
+        "tagalog": "petsa ng pagpasok sa Estados Unidos",
+        "spanish": "fecha de entrada a los Estados Unidos",
+        "french": "date d'entree aux Etats-Unis",
+        "chinese": "\u5165\u5883\u7f8e\u56fd\u7684\u65e5\u671f",
+        "portuguese": "data de entrada nos Estados Unidos",
+        "hindi": "\u0938\u0902\u092f\u0941\u0915\u094d\u0924 \u0930\u093e\u091c\u094d\u092f \u0905\u092e\u0947\u0930\u093f\u0915\u093e \u092e\u0947\u0902 \u092a\u094d\u0930\u0935\u0947\u0936 \u0915\u0940 \u0924\u093f\u0925\u093f",
+        "italian": "data di ingresso negli Stati Uniti",
+        "german": "Datum der Einreise in die Vereinigten Staaten",
+        "korean": "\ubbf8\uad6d \uc785\uad6d\uc77c",
+        "dutch": "Datum van binnenkomst in de Verenigde Staten",
+        "ukrainian": "\u0434\u0430\u0442\u0430 \u0432'\u0457\u0437\u0434\u0443 \u0434\u043e \u0421\u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0445 \u0428\u0442\u0430\u0442\u0456\u0432",
+        "russian": "\u0414\u0430\u0442\u0430 \u0432\u044a\u0435\u0437\u0434\u0430 \u0432 \u0421\u0428\u0410",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u0648\u0631\u0648\u062f \u0628\u0647 \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647",
+        "urdu": "\u0627\u0645\u0631\u06cc\u06a9\u06c1 \u0645\u06cc\u06ba \u062f\u0627\u062e\u0644\u06d2 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "swedish": "datum for inresa i USA",
+        "afrikaans": "datum van binnekoms in die Verenigde State"
+      },
+      "validation": {
+        "required": true
+      },
+      "read_only": false
+    }
+  }
+}

@@ -175,6 +175,17 @@ deserved, not a blanket one:
 | `test_measure_harness_naive_arm.py` | deleted 2 classes | spike-harness plumbing; 15 synthetic tests kept |
 | `test_field_validator_constraint_resolution.py` | froze the field | property is general; the specimen was real for a reason |
 | `test_dti_si_voice_rules.py` | froze 10 witnesses | ditto -- a synthetic field cannot be a 17-word padded yes/no |
+| `test_date_format_resolution.py` | froze 2 date fields | no shipped kit sets the flat `format` key, so a hand-built field would encode the bug's own assumption |
+| `test_translation_lint.py` | deleted 1 test | asserted lint_kits sweeps every TRACKED kit; the premise is now empty |
+
+A correction on the count. I reported the failing set as 12 across 5 files, then
+committed the fix claiming a green suite -- while FOUR failures were still
+outstanding in two files I had not touched. `test_date_format_resolution.py` I
+had explicitly classified as a convert and then simply never converted;
+`test_translation_lint.py` I never found at all, because my greps looked for
+kit PATHS and it reaches the kits through `git ls-files` instead. The honest
+figure for this change is **16 tests across 7 files**. The commit message that
+claimed green was written before the suite that disproved it came back.
 
 The two conversions kept real data deliberately. `_resolve_constraint`'s own
 docstring explained why it read a live kit: *a hand-built fixture could
