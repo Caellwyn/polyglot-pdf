@@ -99,8 +99,8 @@ surfaces. The grep looked like evidence of a gap and was evidence of nothing.
 
 ### What the reviews found, and the one pattern behind all of it
 
-Six inner rounds and four outer ones. Two findings were serious, and both were
-mine:
+Thirteen inner rounds and six outer ones. Three findings were serious, and all
+three were mine:
 
 **Groups had no keyboard verification path at all.** Radio and checkbox-group
 inputs render only `name`, never `id`, and the Enter handler keyed on `id`. That
@@ -115,8 +115,27 @@ took the single-control path and a voice fill of a radio group **selected
 nothing** while the model believed it had filled the field. Measured both
 directions: `Female.checked` true without the id, false with.
 
-**The pattern, stated plainly: NINE of my fixes closed one gap and opened or
-exposed another.** Every one has the same shape -- the change altered WHICH CODE
+**The worst was found on round ELEVEN: criterion 1 was never true.** The
+criterion says "a second Enter OR SPACE verifies". Space only ticked the box --
+and I had scored that criterion PASS eleven times, because my own test, titled
+"SPACE ... ticks it, THEN THE CONFIRM BUTTON IS LIVE", recorded the broken
+behaviour as correct. I wrote a test that documented the bug and read it as
+coverage.
+
+That one gesture then took FOUR implementations, three of which passed the entire
+jsdom suite while being broken in a real browser:
+  1. none -- space only ticked.
+  2. requestAnimationFrame -- could fire the verify into an UNMOUNTED modal.
+  3. keyup -- assumed the native toggle lands before keyup. I opened a real
+     browser and measured: it does not.
+  4. the checkbox's own CHANGE event -- correct by construction, with no ordering
+     assumption left to be wrong about.
+The probe that settled it also showed why no test here could: an automation
+keypress does not trigger native activation at all (bd polyglot-pdf-u8xz9).
+
+**The pattern, stated plainly: TWENTY-FIVE of my fixes closed one gap and opened or
+exposed another**, several of them regressions against origin/dev -- working
+behaviour I broke and a reviewer, not I, noticed. Every one has the same shape -- the change altered WHICH CODE
 PATH a value takes, and I verified the path I was fixing rather than the paths I
 was diverting. The id change alone touched five `getElementById` sites; I guarded
 one, and the reviewers found the second, then the third.
@@ -127,7 +146,7 @@ consumers BEFORE the review asks. That habit caught the notify payload sending
 "verified and empty", the always-true harness clear-check, and the third alias
 read -- none of which a reviewer had to find.
 
-### Three of my tests proved nothing
+### Four kinds of bad test, all mine
 
 Each was caught by running the mutation rather than trusting green:
 
@@ -139,9 +158,18 @@ Each was caught by running the mutation rather than trusting green:
 3. Non-first-option tests asserting only that the modal OPENS, when the claim is
    that it VERIFIES.
 
+4. Source-reading GUARDS against the above. I wrote tests that grep the source
+   to pin a rule, then **defeated them myself in one line**: appending
+   `|| inputEl.type === 'checkbox'` to a membership test keeps the exact
+   substring they search for while regressing the behaviour. They stayed green.
+
 The lesson that generalises: **when jsdom is the environment, assert on the
-event, not on what a browser would do next** -- and when a test asserts an
-absence, ask what would have produced the presence.
+event, not on what a browser would do next**; when a test asserts an absence, ask
+what would have produced the presence; and above all, **test what the code DOES,
+not what it LOOKS LIKE** -- every one of these four failures is the same mistake
+at a different altitude. The grep guards were kept but demoted: they catch a rule
+being DELETED, never one being WEAKENED, and the behaviour tests that call the
+real exported functions are what actually protect it.
 
 ## Doc freshness
 
