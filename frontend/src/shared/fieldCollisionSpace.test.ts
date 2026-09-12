@@ -12,12 +12,21 @@ const mk = (f: any) => ({
 // THE FULL SPACE: {what id resolves to} x {what shares the name} x {bracketed?}
 const OWN = ['text', 'checkbox', 'radio', 'select', 'textarea'] as const
 const NEIGH = ['none', 'plain-radio', 'bracketed-checkbox'] as const
+// THE THIRD AXIS, added after the outer review found the live bug hiding in it:
+// the field's OWN name. Every case below used to hardcode `f_own`, so the matrix
+// never produced a field whose own name IS the bracketed query -- which is
+// exactly where connection.ts's missing type filter dropped the value. A matrix
+// named for enumerating the space had an axis missing (bd polyglot-pdf-6r2si).
+const OWN_NAME = ['f_own', 'f', 'f[]'] as const
 
-function domFor(own: string, neigh: string): string {
+function domFor(own: string, neigh: string, ownName = 'f_own'): string {
   const self =
-    own === 'select'   ? `<select id="f" name="f_own"><option value="v">v</option></select>`
-  : own === 'textarea' ? `<textarea id="f" name="f_own"></textarea>`
-  : `<input id="f" name="f_own" type="${own}" value="v" />`
+    own === 'select'   ? `<select id="f" name="${ownName}"><option value="">-</option><option value="v">v</option></select>`
+  : own === 'textarea' ? `<textarea id="f" name="${ownName}"></textarea>`
+  // Text/checkbox/radio start EMPTY -- the fixture must never pre-seed the value
+  // restore is meant to write, or every row passes whether or not restore ran.
+  // That vacuity hid the very regression this matrix was extended to catch.
+  : `<input id="f" name="${ownName}" type="${own}" ${own === "text" ? "" : 'value="v"'} />`
   const other =
     neigh === 'plain-radio'         ? `<input name="f" type="radio" value="X" /><input name="f" type="radio" value="Y" />`
   : neigh === 'bracketed-checkbox'  ? `<input name="f[]" type="checkbox" value="X" /><input name="f[]" type="checkbox" value="Y" />`
@@ -49,12 +58,22 @@ describe('FULL SPACE: no combination silently drops the answer', () => {
 
   for (const own of OWN) {
     for (const neigh of NEIGH) {
-      it(`own=${own} neighbour=${neigh}`, () => {
-        document.body.innerHTML = domFor(own, neigh)
+      for (const ownName of OWN_NAME) {
+      it(`own=${own} neighbour=${neigh} ownName=${ownName}`, () => {
+        document.body.innerHTML = domFor(own, neigh, ownName)
         const schema = mk({ id: 'f', name: 'F', spoken_name: 'f', type: own === 'select' ? 'select' : own,
                             ...(own === 'radio' ? { options: [{ value: 'v', label: 'v' }] } : {}) })
         restoreDOMFromSessionStorage(
           { fieldValues: { f: { value: own === 'checkbox' ? true : 'v', confirmed: false } } } as any, schema)
+
+        // When the field's OWN name makes it a genuine group member, the group
+        // path is CORRECT and value-matching applies -- these rows are not
+        // collisions at all. Only assert the single-control contract where the
+        // field really is standalone.
+        const isGroupMember =
+          (own === 'checkbox' || own === 'radio') &&
+          (ownName === 'f[]' || (ownName === 'f' && own === 'radio'))
+        if (isGroupMember) return
 
         const el = document.getElementById('f') as any
         const got = (own === 'checkbox' || own === 'radio') ? el.checked : el.value
@@ -63,10 +82,17 @@ describe('FULL SPACE: no combination silently drops the answer', () => {
 
         // And the unrelated neighbour must never be written.
         if (neigh !== 'none') {
-          const others = Array.from(document.querySelectorAll('input[name="f"], input[name="f[]"]')) as HTMLInputElement[]
+          // EXCLUDE the field itself: when its own name is `f` or `f[]` this
+          // selector matches it too, and "the neighbour was written" would fire
+          // on the field's own correct restore.
+          const own_ = document.getElementById('f')
+          const others = (Array.from(
+            document.querySelectorAll('input[name="f"], input[name="f[]"]')
+          ) as HTMLInputElement[]).filter(el => el !== own_)
           expect(others.some(o => o.checked), `neighbour must not be touched (${own}/${neigh})`).toBe(false)
         }
       })
+      }
     }
   }
 })

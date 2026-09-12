@@ -7,6 +7,11 @@
 
 import { escapeHtml } from './security'
 
+// The group-membership rule lives in ONE module now (bd polyglot-pdf-96um6):
+// hand-syncing it across fieldManager and connection.ts diverged TWICE, the
+// second time silently dropping a text field's value on restore.
+import { groupInputsFor, idResolvesToNonGroup } from './groupMembership'
+
 export interface FieldUpdate {
 	fieldId: string
 	value: any
@@ -56,70 +61,6 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * there -- two sites holding one rule is precisely the shape that cost this
 	 * bead two regressions already.
 	 */
-	/**
-	 * Whether an id-resolved element rules OUT the group path.
-	 *
-	 * Ids and names share NO namespace in HTML, so a text field with id="sex"
-	 * legally coexists with a radio group named "sex" -- and resolving a group by
-	 * NAME alone let that collision hijack the text field at every consumer of
-	 * groupInputsFor: its listener bound the OTHER field's radios, its edits
-	 * reported their selection, and an AI fill landed nowhere.
-	 *
-	 * Shared by all three consumers deliberately. Gating them one at a time is
-	 * how this bug survived two rounds of fixing.
-	 *
-	 * NOT redundant with groupInputsFor's own type filter -- they catch DIFFERENT
-	 * collisions, and removing either reddens its own tests:
-	 *   this predicate : a text field whose ID collides with a group's NAME
-	 *                    (id="sex" vs name="sex"). The lookup finds real group
-	 *                    members; the wrong FIELD is asking.
-	 *   the type filter: a text field whose own NAME matches the bracketed query
-	 *                    (id="race[]"). The right field is asking; the lookup
-	 *                    returns a non-member.
-	 */
-	function idResolvesToNonGroup(
-		element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null,
-		fieldId: string
-	): boolean {
-		if (element === null) return false
-		if (element instanceof HTMLInputElement) {
-			if (element.type !== 'radio' && element.type !== 'checkbox') return true
-			// A radio/checkbox can STILL be a standalone field whose id merely
-			// collides with another group's name (id="race" name="agree" beside a
-			// group named race[]). Both earlier layers waved it through -- the
-			// element IS a group type and the query DOES return group members --
-			// and it then got no listener at all. The decisive test is membership:
-			// is THIS element one of the inputs the group lookup returned?
-			return !groupInputsFor(fieldId).includes(element)
-		}
-		return true
-	}
-
-	function groupInputsFor(fieldId: string): HTMLInputElement[] {
-		// FILTER BY TYPE, exactly as the plain branch below does. Without it a
-		// TEXT field whose own id is literally `race[]` matched this query and was
-		// bound as a member of the `race` group -- so typing a note into it
-		// reported under the GROUP's id and overwrote the group's answer. A schema
-		// declaring both `race` and `race[]` is a documented shape here
-		// (bd polyglot-pdf-ii6g), not a hypothetical.
-		//
-		// Fixed HERE rather than at each caller: four sites consult this rule, and
-		// gating them one at a time is how the id/name collision survived three
-		// rounds of my own fixing (CLAUDE.md scar #8 -- fix the SET, not the
-		// instance). tests/e2e/voice-harness/harness.js carries the twin.
-		const bracketed = (
-			Array.from(
-				document.querySelectorAll(`input[name="${fieldId}[]"]`)
-			) as HTMLInputElement[]
-		).filter(el => el.type === 'checkbox' || el.type === 'radio')
-		if (bracketed.length) return bracketed
-		const plain = Array.from(
-			document.querySelectorAll(`input[name="${fieldId}"]`)
-		) as HTMLInputElement[]
-		const radios = plain.filter(el => el.type === 'radio')
-		return radios.length ? radios : []
-	}
-
 	/**
 	 * Listen for manual edits to clear AI confirmation
 	 */

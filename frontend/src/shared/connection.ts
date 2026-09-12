@@ -57,6 +57,7 @@ import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
+import { groupInputsFor } from './groupMembership'
 
 /**
  * Pure gate function: should the mic audio chunk be forwarded to the backend?
@@ -196,9 +197,11 @@ export function restoreDOMFromSessionStorage(state: SchemaFormState, schema: For
 			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
 			// share, which diverged the moment I added the membership dimension there
 			// and did not carry it here.
-			const memberEls = Array.from(
-				document.querySelectorAll(`input[name="${fieldId}[]"]`)
-			) as HTMLInputElement[]
+			// ONE shared rule (groupMembership.ts). These two inline copies had the
+			// membership test but NOT the type filter, so a text field whose own name
+			// is bracketed took the group branch and its value vanished -- a
+			// regression against origin/dev that the green suite did not see.
+			const memberEls = groupInputsFor(fieldId)
 			const isGroupMember = memberEls.includes(inputEl)
 			const groupEls = isGroupMember ? memberEls : []
 			if (groupEls.length) {
@@ -288,9 +291,11 @@ export function capturePreFilledValues(connection: WebFormConnection, schema: Fo
 			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
 			// share, which diverged the moment I added the membership dimension there
 			// and did not carry it here.
-			const memberEls = Array.from(
-				document.querySelectorAll(`input[name="${fieldId}[]"]`)
-			) as HTMLInputElement[]
+			// ONE shared rule (groupMembership.ts). These two inline copies had the
+			// membership test but NOT the type filter, so a text field whose own name
+			// is bracketed took the group branch and its value vanished -- a
+			// regression against origin/dev that the green suite did not see.
+			const memberEls = groupInputsFor(fieldId)
 			const isGroupMember = memberEls.includes(inputEl)
 			const groupEls = isGroupMember ? memberEls : []
 			if (groupEls.length) {

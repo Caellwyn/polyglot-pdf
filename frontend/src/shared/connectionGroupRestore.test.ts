@@ -214,8 +214,11 @@ describe('the mirrors above cannot drift from the real functions', () => {
   // the site COUNT -- properties a behaviour test cannot see -- but they are the
   // weaker half, and the behaviour file is the one that actually protects the
   // rule.
-  // restoreDOMFromSessionStorage and capturePreFilledValues are module-private,
-  // so the tests above necessarily MIRROR their logic. A mirror nothing pins is
+  // These tests MIRROR the two functions' logic for historical reasons -- they
+  // predate the functions being exported. connectionGroupBehaviour.test.ts now
+  // CALLS the real ones, and that file is the one that actually protects the
+  // behaviour; these remain only for the source-shape properties a behaviour
+  // test cannot see (branch ORDER, and that the lookup is delegated). A mirror nothing pins is
   // worse than no test: it keeps passing while production regresses.
   //
   // The sibling guard in manualEditDoesNotVerify.test.ts exists for exactly this
@@ -254,14 +257,19 @@ describe('the mirrors above cannot drift from the real functions', () => {
     ).toBe(false)
   })
 
-  it('BOTH group branches still resolve by the bracketed name', () => {
-    // One in restore, one in capture. Requiring exactly two means deleting
-    // either -- or adding a third unreviewed site -- fails here.
-    const matches = readSource().match(/input\[name="\$\{fieldId\}\[\]"\]/g) || []
+  it('BOTH sites delegate the group lookup to the shared rule', () => {
+    // Was: "each site holds exactly one bracketed lookup". The lookup now lives
+    // in groupMembership.ts and both sites IMPORT it -- which is the fix for the
+    // divergence these guards existed to catch and did not.
+    const src = readSource()
     expect(
-      matches.length,
-      'restore AND capture must each resolve a group by its "[]" name shape'
+      (src.match(/groupInputsFor\(fieldId\)/g) || []).length,
+      'restore AND capture must each call the shared groupInputsFor'
     ).toBe(2)
+    expect(
+      /querySelectorAll\(\s*`input\[name="\$\{fieldId\}\[\]"\]`/.test(src),
+      'and neither may re-implement the bracketed lookup inline'
+    ).toBe(false)
   })
 
   it('restore selects the MATCHING option rather than coercing to a boolean', () => {

@@ -59,6 +59,22 @@ describe('restoreDOMFromSessionStorage -- real function, real DOM', () => {
     expect(others.some(o => o.checked), 'the unrelated group must not be touched').toBe(false)
   })
 
+  it('a TEXT field whose OWN name is bracketed still restores (regression)', () => {
+    // The third axis my "FULL SPACE" matrix omitted: it hardcoded the own
+    // element's name to `f_own`, so it never produced a field whose own name IS
+    // the bracketed query. connection.ts's two inline copies had the membership
+    // test but not the TYPE filter, so this field took the group branch, ran
+    // el.checked on a text input (a no-op) and never reached inputEl.value.
+    // The value vanished on every reconnect. Regression against origin/dev,
+    // invisible to 1444 green tests.
+    const schema = mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'text' }]);
+    document.body.innerHTML = `<input id="race" name="race[]" type="text" value="" />`;
+
+    restoreDOMFromSessionStorage(stateWith({ race: { value: 'typed by user', confirmed: false } }), schema);
+
+    expect((document.getElementById('race') as HTMLInputElement).value).toBe('typed by user');
+  });
+
   it('a REAL checkbox group restores the picked options', () => {
     const schema = mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
                          options: [{ value: 'Asian', label: 'A' }, { value: 'White', label: 'W' }] }])
@@ -117,6 +133,16 @@ describe('capturePreFilledValues -- real function, real DOM', () => {
 
     expect(updateField).toHaveBeenCalledWith('race', true, expect.anything())
   })
+
+  it('CAPTURE reads a bracketed-name TEXT field too (regression)', () => {
+    const schema = mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'text' }]);
+    document.body.innerHTML = `<input id="race" name="race[]" type="text" value="pre-filled" />`;
+    const { stub, updateField } = conn();
+
+    capturePreFilledValues(stub, schema);
+
+    expect(updateField).toHaveBeenCalledWith('race', 'pre-filled', expect.anything());
+  });
 
   it('a REAL group captures the checked values as an array', () => {
     const schema = mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',

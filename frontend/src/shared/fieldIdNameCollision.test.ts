@@ -93,41 +93,28 @@ describe('the SET of group-resolution sites is closed', () => {
     return fs.readFileSync(path.join(__dirname, rel), 'utf8')
   }
 
-  it('the PLAIN-name group lookups are gated too', () => {
-    // The guard below counted only BRACKETED lookups, so it silently excluded
-    // the plain-name radio path -- which is the branch every real radio group
-    // takes (RadioField renders name={field.id}, no bracket). The bug lived in
-    // exactly the site my enumeration omitted. Counting both shapes is the
-    // point: a guard whose scope skips the vulnerable branch is theatre.
-    const conn = read('./connection.ts')
-    expect(
-      /radios\.includes\(inputEl\)/.test(conn),
-      "connection.ts's plain-radio restore must gate on membership"
-    ).toBe(true)
-  })
+  it('the rule has exactly ONE implementation in app code', () => {
+    // The set is no longer "three modules that must agree" -- it is ONE module
+    // the others import. Hand-syncing diverged TWICE (the membership dimension,
+    // then the type filter), the second time silently dropping a text field's
+    // value on restore, so the fix was to EXTRACT the rule rather than add a
+    // fourth copy. This pins that no app file re-implements the lookup.
+    const rule = read('./groupMembership.ts')
+    expect(/input\[name="\$\{fieldId\}\[\]"\]/.test(rule), 'the shared module owns the bracketed lookup').toBe(true)
+    expect(/filter\(el => el\.type === 'checkbox' \|\| el\.type === 'radio'\)/.test(rule), 'and the TYPE filter').toBe(true)
+    expect(/includes\(element\)/.test(rule), 'and the MEMBERSHIP test').toBe(true)
 
-  it('exactly the known sites resolve a group by bracketed name', () => {
-    const sites: Array<[string, number]> = [
-      ['./fieldManager.ts', 1],   // groupInputsFor -- the single source
-      ['./connection.ts', 2],     // restore + capture
-    ]
-    for (const [file, expected] of sites) {
-      const hits = (read(file).match(/querySelectorAll\(\s*`input\[name="\$\{fieldId\}\[\]"\]`/g) || []).length
-      expect(hits, `${file} should hold exactly ${expected} bracketed group lookup(s)`).toBe(expected)
+    for (const file of ['./fieldManager.ts', './connection.ts']) {
+      const src = read(file)
+      expect(
+        (src.match(/querySelectorAll\(\s*`input\[name="\$\{fieldId\}\[\]"\]`/g) || []).length,
+        `${file} must IMPORT the rule, never re-implement the lookup`
+      ).toBe(0)
+      expect(
+        /from '\.\/groupMembership'/.test(src),
+        `${file} must import from groupMembership`
+      ).toBe(true)
     }
-  })
-
-  it('every one of them gates on MEMBERSHIP', () => {
-    // fieldManager routes all three consumers through idResolvesToNonGroup,
-    // which ends in a membership test; connection.ts tests it inline at both.
-    expect(
-      /includes\(element\)/.test(read('./fieldManager.ts')),
-      'fieldManager must decide by membership'
-    ).toBe(true)
-    expect(
-      (read('./connection.ts').match(/memberEls\.includes\(inputEl\)/g) || []).length,
-      'both connection.ts sites must decide by membership'
-    ).toBe(2)
   })
 
   it('the voice harness twin carries the same membership rule', () => {
