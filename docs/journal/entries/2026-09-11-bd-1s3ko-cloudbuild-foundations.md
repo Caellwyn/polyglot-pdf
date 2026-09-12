@@ -82,6 +82,42 @@ steps that FAIL with "target not implemented" rather than being absent -- a
 target matching no step would build nothing and report SUCCESS, and the console
 would record a green deploy that deployed nothing.
 
+**Cross-surface review round 1: one blocker adopted, two nits deferred, nothing
+rejected.**
+
+*Adopted (fixed in this branch).* The rewrite had retired a live regression
+guard with no replacement. `origin/dev`'s parity test carried
+`test_setup_grants_the_role_that_set_secrets_requires`, asserting that
+`scripts/setup-gcp-project.sh` grants `roles/secretmanager.secretAccessor` and
+that every API-enabling script on the secret-binding path enables
+`secretmanager.googleapis.com`. It was deliberately tied to `deploy-all.sh`'s
+`SECRETS_FLAG` wiring -- and that wiring is untouched by this bead and still
+live, so the dependency went unguarded: a later edit dropping the grant would
+have passed the whole suite green and failed only at deploy time on a
+freshly-bootstrapped project. Restored, rebuilt on the new file's own
+`_live_lines` helper rather than the wrapper parsers that went out with the
+rewrite. The discovery helper is the interesting half: it now finds THREE
+providers (`deploy-all.sh`, `setup-gcp-project.sh`, `setup-admin-service.sh`)
+where the original found two, which is exactly why it discovers rather than
+hand-lists. Mutation-verified three ways, one per live dependency: commenting
+out the role grant, deleting the API-enable line from the bootstrap, and
+deleting it from `deploy-all.sh`'s every-deploy self-healing list -- each red,
+each restored. The reviewer had filed this as bead `polyglot-pdf-ewr71`; it is
+closed as fixed here, since a blocker belongs in the diff that caused it.
+
+*Deferred (filed as `polyglot-pdf-jrd87`).* Two nits, neither settleable in
+this bead. `setup-cloud-build.sh` bakes `--branch=dev` into every manual
+trigger at creation -- required by `gcloud` for a 2nd-generation repository,
+but its interaction with the intended runtime `--sha` override cannot be
+tested without the maintainer's one-time OAuth connection, which is this
+bead's declared PENDING-DEPLOY boundary. And `read_channel_section` silently
+merges duplicate non-contiguous `[SECTION]` blocks instead of erroring; the
+Python-side parser merges identically, so bash and Cloud Build can never
+diverge from each other on it -- a format-hygiene footgun, not a correctness
+gap.
+
+*Rejected: none.* Every finding was either real or already a pass note.
+
 ## Lessons
 
 **Mutation testing found two weak assertions that review would have cost a
@@ -160,6 +196,7 @@ Review outcomes recorded in the closeout ping.
 - `scripts/setup-cloud-build.sh` (new) -- operator-run trigger provisioning.
 - `tests/test_cloudbuild_yaml.py` (new) -- 20 tests.
 - `tests/test_deploy_preflight.py` (new) -- 14 tests, run under real bash.
-- `tests/test_deploy_channel_parity.py` -- rewritten as a file diff, 25 tests.
+- `tests/test_deploy_channel_parity.py` -- rewritten as a file diff, 26 tests
+  (25 plus the restored `secretAccessor` / API-enable guard, review round 1).
 - `docs/components/config-deployment.md`, `docs/doctrine/promotion-tiers.md`,
   `docs/technical_guide.md`, and the new `docs/freshness/` ack.

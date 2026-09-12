@@ -453,3 +453,114 @@ def test_an_empty_channel_env_section_is_refused():
     assert 'if [ -z "$CHANNEL_ENV" ]; then' in text, (
         "deploy-all.sh does not refuse an empty SET_ENV_VARS section"
     )
+
+
+# ---------------------------------------------------------------------------
+# THE PROVISIONING the wiring depends on.
+#
+# Carried over unchanged from the pre-rewrite version of this file. The rewrite
+# replaced the bash-regex parsing of the WRAPPERS with a diff of the channel
+# FILES, which retired the wrapper parsers -- but this guard never depended on
+# them, and the dependency it protects (SECRETS_FLAG in deploy-all.sh, still
+# live) is untouched by that change. Dropping it would leave a project rebuilt
+# from setup-gcp-project.sh unable to deploy, failing only at deploy time.
+# ---------------------------------------------------------------------------
+
+SETUP_GCP = REPO_ROOT / "scripts" / "setup-gcp-project.sh"
+
+
+def _has_live_line(script: Path, token: str) -> bool:
+    """Is `token` on a line the shell actually EXECUTES?
+
+    A whole-file substring check passes when the pinned line is commented out
+    and the token survives in the comment -- the containment-vs-proximity
+    defeat this file documents for the gcloud argv, applied to provisioning.
+    """
+    return any(token in line for line in _live_lines(script))
+
+
+def _api_enabling_scripts_that_bind_secrets() -> list[Path]:
+    """Every shell script that enables APIs AND can reach a --set-secrets deploy.
+
+    DISCOVERED rather than listed: a hard-coded pair cannot notice a third
+    provider, and "a list that must be complete but is restated by hand" is the
+    exact bug this file exists to catch.
+
+    A script qualifies when it both runs `gcloud services enable` and is on the
+    secret-binding path -- either it passes --set-secrets itself, or it hands
+    BACKEND_SECRETS to the engine that does. backend/deploy-new.sh enables APIs
+    but does neither (independent legacy bootstrap), so it is correctly out.
+    """
+    found: list[Path] = []
+    for path in sorted(REPO_ROOT.rglob("*.sh")):
+        # Exclude RELATIVE to the repo root: this repo is often checked out
+        # inside a `.claude/worktrees/...` path, so testing the absolute parts
+        # for ".claude" filtered out every file and the discovery silently
+        # returned nothing. The `>= 2` floor below is what caught it.
+        rel_parts = path.relative_to(REPO_ROOT).parts
+        if "node_modules" in rel_parts or ".claude" in rel_parts:
+            continue
+        # LIVE lines only, like the assertions themselves: a script that merely
+        # MENTIONS BACKEND_SECRETS in prose would otherwise be required to
+        # enable an API it never uses -- a false positive that would send the
+        # next author chasing a non-dependency.
+        text = _live_text(path)
+        if "gcloud services enable" not in text:
+            continue
+        binds = "--set-secrets" in text or "BACKEND_SECRETS" in text
+        # The engine itself binds; a bootstrap that provisions FOR it counts
+        # too, since its whole job is making that deploy possible.
+        provisions = "secretmanager.secretAccessor" in text
+        if binds or provisions:
+            found.append(path)
+    return found
+
+
+def test_setup_grants_the_role_that_set_secrets_requires():
+    """The provisioning script must grant what the deploy path depends on.
+
+    Cloud Run refuses a revision whose runtime SA cannot read a bound secret,
+    so passing --set-secrets creates a hard dependency on
+    roles/secretmanager.secretAccessor. The live SA already had it, granted out
+    of band -- but a project rebuilt from setup-gcp-project.sh alone would not,
+    and the failure lands at deploy time on a script someone runs unattended.
+
+    Tied to the SECRETS_FLAG wiring deliberately: if a later change removes the
+    flag this can go too, and if the flag stays the role must.
+    """
+    deploy_all_text = DEPLOY_ALL.read_text(encoding="utf-8")
+
+    if "SECRETS_FLAG" not in deploy_all_text:
+        pytest.skip("no --set-secrets wiring, so the role is not required")
+
+    assert _has_live_line(SETUP_GCP, "roles/secretmanager.secretAccessor"), (
+        "deploy-all.sh binds secrets via --set-secrets, but "
+        "setup-gcp-project.sh does not grant secretmanager.secretAccessor on a "
+        "LIVE line -- a project built from that script cannot deploy"
+    )
+
+    # AND the API, in EVERY list that claims to guarantee the APIs.
+    #
+    # Three rounds on one dependency: (1) the flag without the role, (2) the
+    # role without the API -- add-iam-policy-binding is not API-gated, so the
+    # script exits 0 and the deploy fails later -- and (3) the API in the
+    # one-time bootstrap but not in deploy-all.sh's own list, which is the one
+    # that runs on EVERY deploy and self-heals.
+    #
+    # DISCOVERED, not hard-coded: a hand-listed pair is the same "restate the
+    # set" bug this file exists to catch, and a fourth provider added later
+    # would pass silently. Any script that BOTH enables APIs and can reach a
+    # secret-binding deploy must carry it.
+    providers = _api_enabling_scripts_that_bind_secrets()
+    assert len(providers) >= 2, (
+        f"expected to discover at least the bootstrap and deploy paths, got "
+        f"{[p.name for p in providers]} -- the discovery has drifted"
+    )
+
+    for script in providers:
+        assert _has_live_line(script, "secretmanager.googleapis.com"), (
+            f"{script.name} enables APIs and can reach a --set-secrets deploy, "
+            "but does not enable secretmanager.googleapis.com on a LIVE line. "
+            "add-iam-policy-binding is not API-gated, so the grant succeeds "
+            "and the deploy fails later."
+        )
