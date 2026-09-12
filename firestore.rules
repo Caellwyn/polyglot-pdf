@@ -143,5 +143,34 @@ service cloud.firestore {
     match /kits/{kitId}/usage/{monthId} {
       allow read, write: if false;
     }
+
+    // Per-SHA verify-suite results (build_checks/{sha}): Epic 4 bead
+    // polyglot-pdf-1s3ko / polyglot-pdf-ywxoh (4.1/4.2),
+    // scripts/record_build_check.py. Written by the Cloud Build `verify`
+    // target's LAST step and read by every deploy target's FIRST step
+    // ("has this commit's suites passed?"). A client-SDK write could forge a
+    // success record for a commit whose suites never ran, letting a broken
+    // commit deploy by any route; a client-SDK read leaks nothing sensitive
+    // by itself but has no legitimate browser caller either -- this
+    // collection is a build-to-build handshake, never rendered in any UI.
+    match /build_checks/{sha} {
+      allow read, write: if false;
+    }
+
+    // Deployment records (deployments/{id}): Epic 4 bead polyglot-pdf-ywxoh
+    // (4.2), scripts/record_deployment.py -- target, target_family, channel,
+    // sha, build_id, status, triggered_by, timestamps. Written by each
+    // staging target's last build step (and, once bead 4.3 ships, by the
+    // Pub/Sub build-status webhook for every build). Read by the promotion
+    // gate (admin_backend/services/promotion_gate.py::staging_verified,
+    // called from scripts/promotion_gate.py in every demo-side build step)
+    // to decide whether a demo deploy for a given commit may proceed. A
+    // client-SDK write could forge a successful staging deployment for a
+    // commit that was never verified, bypassing the staging-before-demo
+    // gate entirely; a client-SDK read would leak the project's deploy
+    // history and commit SHAs to any browser.
+    match /deployments/{deploymentId} {
+      allow read, write: if false;
+    }
   }
 }

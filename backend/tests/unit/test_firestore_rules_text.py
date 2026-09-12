@@ -33,8 +33,8 @@ _RULES = Path(__file__).resolve().parents[3] / "firestore.rules"
 # text is what this test greps for.
 #
 # EXTEND THIS LIST, not the assertions, when a bead adds an Admin-SDK-only
-# collection. Epic 2 adds the credit ledger and the links/redemption
-# collections; Epic 4 adds deployments.
+# collection. Epic 2 added the credit ledger and the links/redemption
+# collections; Epic 4 adds build_checks and deployments.
 #
 # NOT LISTED, deliberately: users/{userId} (a signed-in user reads and writes
 # their OWN profile from the browser -- AuthContext.onAuthStateChanged) and
@@ -80,6 +80,14 @@ ADMIN_SDK_ONLY_COLLECTIONS = (
     # ledger entry above).
     ("firms/{firmId}/usage", "monthId"),
     ("kits/{kitId}/usage", "monthId"),
+    # Epic 4 bead polyglot-pdf-1s3ko / polyglot-pdf-ywxoh (4.1/4.2) --
+    # scripts/record_build_check.py's per-SHA verify-suite result. A
+    # build-to-build handshake with no legitimate browser caller.
+    ("build_checks", "sha"),
+    # Epic 4 bead polyglot-pdf-ywxoh (4.2) -- scripts/record_deployment.py's
+    # deployment audit rows, read by the promotion gate
+    # (admin_backend/services/promotion_gate.py::staging_verified).
+    ("deployments", "deploymentId"),
 )
 
 
