@@ -39,29 +39,6 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	const aiUpdatingFields = new Set<string>() // Track fields currently being updated by AI
 	
 	/**
-	 * The inputs of a radio/checkbox GROUP, or [] for a single control.
-	 *
-	 * SHARED by every id-vs-name resolution in this file, deliberately. Since bd
-	 * polyglot-pdf-96um6 a group's FIRST option carries id={field.id}, so
-	 * getElementById no longer returns null for a group -- and any site that
-	 * resolves by id FIRST silently narrows the group to that one option. That
-	 * broke setupAllFieldListeners (non-first options stopped notifying) and then
-	 * applyUpdates 70 lines below it (a voice fill of a radio group selected
-	 * NOTHING). Two sites, the same mistake twice -- hence one helper rather than
-	 * two guards.
-	 *
-	 * Identified by NAME SHAPE, not by counting: a '[]' suffix is a checkbox group
-	 * at any option count (a ONE-option group is a real shape here, validation.ts's
-	 * isSingleOptionCheckbox), and a shared plain name on type=radio is a radio
-	 * group.
-	 *
-	 * DUPLICATED, deliberately and unavoidably: tests/e2e/voice-harness/harness.js
-	 * carries the same rule as groupInputs(), because it is injected into a live
-	 * page and cannot import this module. If you change the rule here, change it
-	 * there -- two sites holding one rule is precisely the shape that cost this
-	 * bead two regressions already.
-	 */
-	/**
 	 * Listen for manual edits to clear AI confirmation
 	 */
 	function setupEditListener(element: HTMLElement, fieldId: string): void {

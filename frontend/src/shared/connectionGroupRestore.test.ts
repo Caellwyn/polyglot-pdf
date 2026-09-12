@@ -267,13 +267,23 @@ describe('the mirrors above cannot drift from the real functions', () => {
     // in groupMembership.ts and both sites IMPORT it -- which is the fix for the
     // divergence these guards existed to catch and did not.
     const src = readSource()
+    // THREE now: restore's bracketed branch, restore's PLAIN-RADIO branch, and
+    // capture. The plain one was an inline lookup the extraction missed -- and
+    // this guard did not catch it, because it only forbade the BRACKETED query
+    // shape below. Counting delegations is what closes that.
     expect(
       (src.match(/groupInputsFor\(fieldId\)/g) || []).length,
-      'restore AND capture must each call the shared groupInputsFor'
-    ).toBe(2)
+      'every group lookup in this file must call the shared groupInputsFor'
+    ).toBe(3)
+    // Forbid BOTH query shapes, not just the bracketed one. The plain-name
+    // form is what the surviving inline copy used.
     expect(
       /querySelectorAll\(\s*`input\[name="\$\{fieldId\}\[\]"\]`/.test(src),
-      'and neither may re-implement the bracketed lookup inline'
+      'no inline BRACKETED lookup'
+    ).toBe(false)
+    expect(
+      /querySelectorAll\(\s*`input\[name="\$\{fieldId\}"\]`/.test(src),
+      'no inline PLAIN-NAME lookup either -- the shape that survived the extraction'
     ).toBe(false)
   })
 

@@ -216,9 +216,11 @@ export function restoreDOMFromSessionStorage(state: SchemaFormState, schema: For
 				// what every real radio group takes. Ungated, a standalone radio whose
 				// id collides with ANOTHER group's name wrote that group and dropped
 				// its own answer entirely (measured: nothing selected anywhere).
-				const radios = Array.from(
-					document.querySelectorAll(`input[name="${fieldId}"]`)
-				) as HTMLInputElement[]
+				// The SHARED rule, not another inline lookup. The extraction left this
+				// one behind and it was missing the TYPE FILTER -- the same rule and the
+				// same dimension that produced the round-7 regression, surviving because
+				// my closure guard only forbade the BRACKETED query shape.
+				const radios = groupInputsFor(fieldId)
 				if (radios.includes(inputEl)) {
 					radios.forEach(el => { el.checked = el.value === String(value) })
 				} else {
