@@ -103,6 +103,46 @@ ADMIN_SERVICE_URL=$(gcloud run services describe "$ADMIN_SERVICE_NAME" \
 SWEEP_ENV="SWEEP_SCHEDULER_SA_EMAIL=$SWEEP_SCHEDULER_SA_EMAIL"
 [ -n "$ADMIN_SERVICE_URL" ] && SWEEP_ENV="$SWEEP_ENV,ADMIN_SERVICE_URL=$ADMIN_SERVICE_URL"
 
+# BACKEND_URLS_JSON (bd polyglot-pdf-mpebj, E3.11a's GET /admin/health fan-out
+# route). THE ADMIN SERVICE HAS NO CHANNEL OF ITS OWN (admin_backend/main.py's
+# own docstring), so it cannot derive either public backend's Cloud Run URL
+# the way each channel's own deploy resolves its sibling -- this script
+# resolves BOTH, the same `gcloud run services describe` mechanism deploy-
+# all.sh already uses for VITE_WS_URL. "2>/dev/null || true" makes a
+# not-yet-deployed public backend resolve to an empty string rather than
+# aborting this script (set -e) -- admin_backend/routes/ops_routes.py's own
+# _backend_urls() reads a missing entry as `configured: false` for that
+# channel, never a crash, so an admin deploy that runs before either public
+# backend exists yet is still a valid intermediate state.
+#
+# ENCODED AS "channel=url;channel=url", NOT LITERAL JSON, for the SAME reason
+# CORS_EXTRA_ORIGINS above is semicolon-separated rather than comma-separated:
+# this whole value rides inside BACKEND_EXTRA_ENV, which deploy-all.sh joins
+# into ONE comma-separated --set-env-vars string (see that script's own
+# BACKEND_ENV assembly) -- a literal JSON object's "," between key/value pairs
+# would be silently split apart as a SECOND, malformed env-var entry the
+# moment this script's SWEEP_ENV value gets appended to BACKEND_ENV. The
+# admin service's own env var is still NAMED BACKEND_URLS_JSON (matching the
+# plan's own name for it) even though its wire FORMAT here is the semicolon
+# form; admin_backend/routes/ops_routes.py's _backend_urls() parses this
+# exact "channel=url;channel=url" shape, not json.loads.
+BACKEND_URLS_PARTS=""
+DEMO_BACKEND_URL=$(gcloud run services describe "polyglot-backend" \
+    --platform managed --region us-central1 --project "$PROJECT" \
+    --format 'value(status.url)' 2>/dev/null || true)
+[ -n "$DEMO_BACKEND_URL" ] && BACKEND_URLS_PARTS="demo=$DEMO_BACKEND_URL"
+STAGING_BACKEND_URL=$(gcloud run services describe "polyglot-backend-staging" \
+    --platform managed --region us-central1 --project "$PROJECT" \
+    --format 'value(status.url)' 2>/dev/null || true)
+if [ -n "$STAGING_BACKEND_URL" ]; then
+    if [ -n "$BACKEND_URLS_PARTS" ]; then
+        BACKEND_URLS_PARTS="$BACKEND_URLS_PARTS;staging=$STAGING_BACKEND_URL"
+    else
+        BACKEND_URLS_PARTS="staging=$STAGING_BACKEND_URL"
+    fi
+fi
+SWEEP_ENV="$SWEEP_ENV,BACKEND_URLS_JSON=$BACKEND_URLS_PARTS"
+
 # CORS_EXTRA_ORIGINS (admin_backend/main.py): the admin CONSOLE is a separate
 # Vite app on its own Hosting site(s) (bead 1.7 -- polyglot-admin-demo and the
 # polyglot-admin-candidate staging site), always cross-origin from this
