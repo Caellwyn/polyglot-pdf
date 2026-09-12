@@ -936,15 +936,35 @@ def test_every_ywxoh_deploy_target_is_gated_by_build_checks(by_id, steps, target
     """
     order = {step["id"]: i for i, step in enumerate(steps)}
     gate = order["gate-build-checks"]
+    # A whole-word match: the target name bounded by non-identifier
+    # characters on both sides, so it matches EITHER a quoted literal
+    # ("backend-staging") or a bare case-arm pattern (admin-console-candidate|
+    # admin-console) ;;) without matching a longer name that merely CONTAINS
+    # this one as a substring (e.g. "admin-console" must not match inside
+    # "admin-console-candidate").
+    target_pattern = re.compile(
+        r'(?<![\w-])' + re.escape(target) + r'(?![\w-])'
+    )
     for step in steps:
-        if step["id"] in ("gate-build-checks", "require-sha"):
+        if step["id"] in (
+            "gate-build-checks",
+            "require-sha",
+            # A DELIBERATE pre-gate step: cheap and structural (an empty
+            # COMMIT_SHA check), placed BEFORE gate-build-checks on purpose
+            # so a tarball-sourced site build fails fast without waiting on
+            # the (possibly expensive, possibly inconclusive) build_checks
+            # read. It names every site target in its case statement but is
+            # not "real work" in the sense this test guards -- it deploys
+            # nothing and mutates nothing.
+            "require-connected-source-for-site-targets",
+        ):
             continue
         body = script_of(step)
-        # A step that explicitly checks THIS target (by literal or by
-        # channel-suffix wildcard) and does not universally skip is presumed
-        # to run for it.
+        # A step that explicitly checks THIS target (by literal, by bare
+        # case-arm name, or by channel-suffix wildcard) and does not
+        # universally skip is presumed to run for it.
         runs_for_target = (
-            f'"{target}"' in body
+            target_pattern.search(body) is not None
             or (target.endswith("-staging") and 'in backend-*' in body and target.startswith("backend"))
             or (target.endswith("-demo") and 'in backend-*' in body and target.startswith("backend"))
             or (target.endswith("-staging") and 'in frontend-*' in body and target.startswith("frontend"))
