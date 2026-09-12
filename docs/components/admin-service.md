@@ -22,7 +22,9 @@ route's own refusal of one; BOTH tabs refuse a from/to range over 12
 months CLIENT-SIDE, before any network call, with the identical message
 `report_routes.py`'s own `_validated_range` returns; the `delayed`/`note`
 label renders only when the response's own `delayed` flag says so, never
-assumed), `pages/AlertsPage.tsx` (kind/level/firm filters, defaulting to
+assumed), `pages/AlertsPage.tsx` (kind/firm filters -- the route has no
+`level` query param to filter on, so `level` renders only as a display
+column, never a filter -- defaulting to
 `acknowledged=false`; Acknowledge calls the PATCH exactly once per click
 via a per-row `busyId` guard then re-reads the CURRENT filtered list; a
 409 from acknowledging an already-acknowledged alert surfaces the route's

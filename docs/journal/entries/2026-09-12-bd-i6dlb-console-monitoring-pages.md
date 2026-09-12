@@ -174,4 +174,23 @@ paragraph naming all five pages, mirroring contract 24's existing
 - `docs/components/admin-service.md`
 - `docs/technical_guide.md`
 
+## Fresh-eyes review round (outer cross-surface)
+
+One outer cross-surface review round ran on this bead, STATUS
+GAPS-FOUND(1). Breakdown:
+
+- **Adopted (1):** `docs/components/admin-service.md`'s new
+  "What shipped" entry claimed `pages/AlertsPage.tsx` has a "kind/level/
+  firm filters" -- wrong: the page has no `level` FILTER at all, only a
+  `level` DISPLAY column (a colored badge per row); `alert_routes.py`'s
+  `list_alerts` accepts only `acknowledged`/`firm_id`/`kind` as query
+  params, so there is no server-side `level` filter to build a client
+  control against. Fixed by rewording the doc line to name only the
+  kind/firm filters and note that `level` renders as a display column,
+  never a filter.
+- **Rejected (0):** none.
+- **Deferred (0):** none -- the reviewer explicitly found no
+  out-of-scope or pre-existing issue that warranted a new bead; no nits
+  bead filed.
+
 Review outcomes recorded in the closeout ping.
