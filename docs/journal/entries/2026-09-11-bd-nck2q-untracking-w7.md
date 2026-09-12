@@ -105,17 +105,30 @@ misses (`verify-in-a-clean-clone-not-your-worktree`).
 ## Not shippable alone -- the finding that ends this session
 
 The untracking is correct and the guard is honest again, but the branch **cannot
-merge as it stands**: removing w7 from git turned ~35 tests RED and produced 11
-collection errors. Confirmed in a clean clone as well as the worktree, so this is
-what CI sees.
+merge as it stands**: removing w7 from git leaves **12 tests failing across 5
+files, plus 7 collection errors**. Two independent runs -- a clean clone and the
+worktree -- agree exactly, so this is what CI sees.
 
-They are not skips. A subset of kit-reading tests carry NO skip guard and open
+(An earlier worktree run reported ~35 failures. That number was an artifact of
+that run's state and was reported to the maintainer before it was checked. The
+verified figure is 12/7. Re-running was what settled it; the first number should
+not have been quoted as fact.)
+
+They are not skips. These kit-reading tests carry NO skip guard and open
 `form-kits/w7/schema.json` directly, so the file's absence is a FileNotFoundError
-at import or first assert. Measured individually:
+at import or first assert:
 
-    unit/test_date_format_resolution.py                 3 failed / 20 passed
-    unit/test_field_validator_constraint_resolution.py  2 failed /  5 passed
-    ...plus the collection errors, which fail before any test runs
+    unit/test_measure_harness_naive_arm.py               3 failed + 7 errors
+    unit/test_date_format_resolution.py                  3 failed / 20 passed
+    unit/test_dti_si_voice_rules.py                      3 failed
+    unit/test_field_validator_constraint_resolution.py   2 failed /  5 passed
+    unit/test_guidance_contract.py                       1 failed
+
+Every one is form-specific BY NAME -- `test_w7_date_of_birth_*`,
+`test_w7_kit_coverage_matches_reality`, a `[w7-...]` parametrization,
+`..._on_the_real_w7_schema`. That is the category the maintainer asked to remove,
+so the fix is deletion or conversion to synthetic fixtures, per-file, and the
+per-file disposition is recorded on bd `polyglot-pdf-q3u5r`.
 
 Others guard correctly and skip cleanly (`test_w7_field_widget_mapping.py`, 9
 skipped) -- that is the shape the rest should have had.
