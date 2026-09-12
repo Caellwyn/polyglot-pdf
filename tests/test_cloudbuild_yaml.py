@@ -17,7 +17,10 @@ failed deploys normally, and the build_checks record becomes decoration.
 
 from __future__ import annotations
 
+import configparser
+import io
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -42,6 +45,29 @@ CHANNELS = REPO_ROOT / "deploy" / "channels"
 # name in the substitution comment is bead polyglot-pdf-ywxoh's (4.2).
 IMPLEMENTED_TARGETS = ("verify", "backend-staging", "backend-demo")
 DEPLOY_TARGETS = ("backend-staging", "backend-demo")
+
+
+def _testpaths() -> list[str]:
+    """The declared suite roots, read from pytest.ini itself.
+
+    Derived, never hand-listed -- a copied expectation here drifts the same way
+    a hardcoded pytest command line does (CLAUDE.md scar #8).
+    """
+    parser = configparser.ConfigParser()
+    parser.read_string(
+        io.open(REPO_ROOT / "pytest.ini", encoding="utf-8").read())
+    raw = parser.get("pytest", "testpaths")
+    return [line.strip().rstrip("/") for line in raw.splitlines() if line.strip()]
+
+
+def _whole_suite_arg_pattern(root: str) -> str:
+    r"""Match a suite root used as a WHOLE argument, nothing deeper.
+
+    A DEEPER path (backend/tests/unit) would be a deliberately narrow run; only
+    the bare root claims to be the full suite while excluding its siblings.
+    """
+    return (r"(?:^|[\s\"'`=])(?:\$\{?\w+\}?/|\./|/)?"
+            + re.escape(root) + r"/?(?=[\s\"'`]|$)")
 
 
 @pytest.fixture(scope="module")
@@ -105,18 +131,35 @@ def test_an_empty_sha_is_refused_before_anything_else(steps):
 
 
 def test_every_suite_the_plan_names_runs_in_the_verify_target(by_id):
-    """THREE suites, not the one someone remembers.
+    """Every suite, not the ones someone remembers.
 
     The plan names backend + frontend + admin-console. A verify build that
     runs two of them still writes a success record, so every deploy target for
     that SHA proceeds on a partial test run.
+
+    The python half asserts the ABSENCE of suite paths rather than the
+    presence of today's three: a hardcoded list is exactly the drift bd
+    polyglot-pdf-3ave and bd polyglot-pdf-pnoik shipped, and a test that
+    pinned the list would bless it. The set pin for that property across all
+    three gates lives in tests/test_every_suite_root_is_gated.py; this asserts
+    the local shape of the step.
     """
     backend = script_of(by_id["verify-backend"])
-    assert "pytest" in backend
-    for suite_root in ("backend/tests", "admin_backend/tests", "tests"):
-        assert suite_root in backend, (
-            f"the verify target's pytest run omits {suite_root}"
-        )
+    assert "python -m pytest" in backend
+    # Only the invocation LINES, never the comments above them: the comment
+    # explaining why the roots are absent names them, and a scan that read it
+    # would fail on the fixed file (and pass on a file whose comment was
+    # deleted) -- guarding prose instead of the command.
+    commands = [line for line in backend.splitlines()
+                if "pytest" in line and not line.lstrip().startswith("#")]
+    assert commands, "the verify step has no pytest command line"
+    named = sorted({root for root in _testpaths() for line in commands
+                    if re.search(_whole_suite_arg_pattern(root), line)})
+    assert not named, (
+        "the verify step names suite paths {!r}, so a new pytest.ini testpaths "
+        "root would not run in the gate that writes build_checks/{{sha}}; use a "
+        "bare `python -m pytest` and let testpaths decide".format(named)
+    )
     assert '-m "not external"' in backend, (
         "the verify run must exclude the flaky live-Gemini externals, matching "
         "CI -- those need real credentials the build does not have"
@@ -235,6 +278,37 @@ def test_the_backend_target_takes_its_env_from_the_channel_file(by_id, target):
     assert '"${SA_FLAG[@]}"' in body
     # The channel values must actually be appended, not merely read.
     assert 'BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"' in body
+
+
+def test_the_backend_target_refuses_an_empty_channel_env(by_id):
+    """deploy-all.sh's refusal has to travel to the second consumer.
+
+    --set-env-vars REPLACES the service's env block, so a channel file whose
+    [SET_ENV_VARS] section is present but EMPTY deploys the computed defaults
+    alone: VERTEXAI, every LINK_* key and CORS_EXTRA_ORIGINS silently vanish
+    from the running service. deploy-all.sh:582 refuses that (pinned by
+    tests/test_deploy_channel_parity.py); this step reads the SAME file
+    through the SAME parser, so the same refusal must precede the append --
+    the missing-FILE case aborts on its own via set -e, the empty-SECTION case
+    does not.
+    """
+    body = script_of(by_id["backend-deploy"])
+    refusal = body.find('if [ -z "$CHANNEL_ENV" ]; then')
+    assert refusal != -1, (
+        "the backend deploy step does not refuse an empty [SET_ENV_VARS]; it "
+        "would deploy with every channel setting stripped off the service"
+    )
+    # PIN THE ARM, NOT THE FILE: `"exit 1" in body` passes with this branch
+    # flipped to exit 0, because the unknown-channel case below carries one.
+    arm = body[refusal:body.index("case \"${_CHANNEL}\" in", refusal)]
+    assert "exit 1" in arm, (
+        "the empty-[SET_ENV_VARS] branch does not exit non-zero, so the build "
+        "continues into the deploy:\n" + arm
+    )
+    # It must come BEFORE the append, or it guards nothing.
+    assert refusal < body.index('BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"'), (
+        "the refusal follows the append, so the stripped env is already built"
+    )
 
 
 def test_the_backend_target_records_the_built_commit(by_id):

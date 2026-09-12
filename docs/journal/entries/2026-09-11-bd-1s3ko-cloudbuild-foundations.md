@@ -118,6 +118,65 @@ gap.
 
 *Rejected: none.* Every finding was either real or already a pass note.
 
+**Cross-surface review round 2: two blockers adopted, four nits deferred,
+nothing rejected.**
+
+*Adopted (F2 -- the verify gate hardcoded the suite roots).* The new
+`verify-backend` step ran `pytest backend/tests admin_backend/tests tests`,
+which is the exact regression this repo has journaled twice (bd
+`polyglot-pdf-3ave`, bd `polyglot-pdf-pnoik`) and that
+`tests/test_every_suite_root_is_gated.py` exists to prevent -- and it slipped
+past that set pin because the pin only knew about `ci.yml` and
+`closeout_prep.py`. Worse, the new `test_every_suite_the_plan_names_runs_in_
+the_verify_target` *pinned the anti-pattern*, asserting the three roots by
+literal tuple, so a fourth `testpaths` root would have been dropped from the
+gate with both tests green. Three fixes, because the instance was not the set:
+the step is now a bare `python -m pytest -q -m "not external"`; the
+cloudbuild test derives its expectation from `pytest.ini` `testpaths` and
+asserts the ABSENCE of suite paths rather than the presence of today's three;
+and `test_every_suite_root_is_gated.py` gained `cloudbuild.yaml` as its THIRD
+gate alongside CI and closeout_prep. That third gate matters more than the
+other two: it is the step that writes `build_checks/{sha}`, the record every
+deploy target reads as "this commit's suites passed", so a gate running a
+subset makes the record false about the one thing it exists to assert.
+Mutation-verified with the mutation the old test could not see -- a fourth
+`testpaths` root plus a hardcoded list omitting it: red in both files,
+whereas the literal-tuple version stayed green.
+
+Both scans read the pytest invocation LINES only, never `#` comments. The
+comment explaining *why* the roots are absent necessarily names them, so a
+whole-body scan would have failed on the corrected file and passed once the
+comment was deleted -- guarding prose instead of the command.
+
+*Adopted (F1 -- the empty-channel-env refusal reached only one consumer).*
+`deploy-all.sh` refuses a channel file whose `[SET_ENV_VARS]` section is
+present but empty, because `--set-env-vars` REPLACES the service's whole env
+block: deploying from one would strip `VERTEXAI`, every `LINK_*` key and
+`CORS_EXTRA_ORIGINS` off the running service. The `cloudbuild.yaml`
+`backend-deploy` step read the SAME file through the SAME sourced parser and
+carried no such check -- it went straight to the append, exiting 0 with a
+trailing comma. (The missing-FILE case was already safe: `read_channel_section`
+exits 1 inside a command substitution and `set -e` propagates it. Only the
+empty-SECTION case diverged.) The refusal now travels with the parser, and a
+new test pins it three ways -- present, exits non-zero, and precedes the
+append. It pins the ARM rather than the file, which the round-1 lesson had
+already made necessary: the step carries six `exit 1` occurrences, so a
+whole-body `assert "exit 1" in body` would have survived flipping this one.
+Verified against the real parser and a real empty channel file outside the
+repo, and both shipped channel files still pass through unchanged.
+
+*Deferred (filed by the reviewer as `polyglot-pdf-75twv`,
+`polyglot-pdf-vr84l`, `polyglot-pdf-ueazi`, `polyglot-pdf-4wh0x`).*
+`record_build_check.py`'s fail-closed `require()` has no behavioural test;
+the `--allow-unauthenticated` set pin globs `*.sh` and cannot see the new
+`cloudbuild.yaml` call site; `build_checks/{sha}` is a new Admin-SDK-only
+collection with no explicit deny block; and a stale `deploy-editor.sh`
+comment plus an unbumped `technical_guide.md` stamp. None is a live hole
+today -- the first two are missing guards over correct behaviour, the third
+is covered by Firestore's implicit default deny, the fourth is prose.
+
+*Rejected: none.*
+
 ## Lessons
 
 **Mutation testing found two weak assertions that review would have cost a

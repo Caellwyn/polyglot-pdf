@@ -18,10 +18,18 @@ it. So this pins the SET rather than any one member (CLAUDE.md scar #8): the
 gates must not name suite paths at all, which is what makes them inherit a new
 root automatically.
 
+There are now THREE code gates, not two: cloudbuild.yaml's verify target runs
+the suites once per SHA and writes build_checks/{sha}, the record every deploy
+target reads as "this commit's suites passed". A verify step that names suite
+paths makes that record false about the very thing it exists to assert, so it
+is pinned here alongside CI and closeout_prep rather than only in
+tests/test_cloudbuild_yaml.py.
+
 Mutations that must turn this red:
   - re-add explicit suite paths to the CI pytest invocation
   - re-add an explicit suite path to closeout_prep.check_tests
-  - add a root to pytest.ini testpaths that neither gate would then run
+  - re-add explicit suite paths to cloudbuild.yaml's verify-backend step
+  - add a root to pytest.ini testpaths that no gate would then run
 """
 import configparser
 import io
@@ -33,6 +41,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTEST_INI = REPO_ROOT / "pytest.ini"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 CLOSEOUT_PREP = REPO_ROOT / "scripts" / "closeout_prep.py"
+CLOUDBUILD = REPO_ROOT / "cloudbuild.yaml"
 
 
 def _testpaths():
@@ -133,6 +142,46 @@ def test_closeout_prep_runs_pytest_without_naming_suite_paths():
     for root in (p.rstrip("/") for p in _testpaths()):
         assert '"{}"'.format(root) not in args, (
             "check_tests() hardcodes suite path {!r}".format(root))
+
+
+def test_cloudbuild_verify_runs_pytest_without_naming_suite_paths():
+    """The third gate: the build whose result every deploy target trusts.
+
+    cloudbuild.yaml's verify target runs the suites once per SHA and then
+    writes build_checks/{sha}; gate-build-checks refuses any deploy target
+    without that record. So a verify step scoped to a hand-listed subset does
+    not merely skip a suite -- it makes the per-SHA record assert something
+    untrue, and every channel deploys on it.
+
+    Mutation: restore `python -m pytest backend/tests admin_backend/tests
+    tests ...` in the verify-backend step -- red, naming the roots.
+    """
+    text = io.open(CLOUDBUILD, encoding="utf-8").read()
+    # Invocation LINES only. A `#` comment inside a step's bash body may
+    # legitimately NAME the roots while explaining why they are absent from
+    # the command; scanning it would fail on the correct file and pass once
+    # the comment was deleted, i.e. guard prose rather than the command.
+    invocations = [line.strip() for line in text.splitlines()
+                   if "pytest" in line and not line.lstrip().startswith("#")]
+    assert invocations, (
+        "no pytest invocation found in " + CLOUDBUILD.as_posix()
+        + " -- the verify target no longer runs the python suites at all")
+
+    offenders = []
+    for cmd in invocations:
+        for root in (p.rstrip("/") for p in _testpaths()):
+            # Whole argument only: a DEEPER path would be a deliberately
+            # narrow run, while the bare root claims to be the full suite.
+            if re.search(r"(?<![\w/-])" + re.escape(root) + r"/?(?=\s|$)", cmd):
+                offenders.append(
+                    "{!r} names suite path {!r}".format(cmd.strip(), root))
+
+    assert not offenders, (
+        "cloudbuild.yaml's verify step hardcodes suite paths, so a new "
+        "testpaths root would be omitted from the gate that writes "
+        "build_checks/{sha}:\n  " + "\n  ".join(offenders)
+        + "\n\nUse a bare `python -m pytest -q -m \"not external\"` and let "
+          "pytest.ini testpaths decide which suites exist.")
 
 
 def test_every_suite_root_strips_k_service_at_import_time():

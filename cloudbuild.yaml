@@ -114,7 +114,17 @@ steps:
         pip install --quiet -r backend/requirements.txt
         # -m "not external" matches CI's flaky live-Gemini exclusion (those
         # tests need real Gemini credentials the build does not have).
-        python -m pytest backend/tests admin_backend/tests tests -m "not external" -q
+        #
+        # NO explicit suite paths, for the same reason ci.yml passes none: a
+        # bare `pytest` run from the repo root collects every root in
+        # pytest.ini's `testpaths`, so a NEW top-level suite is gated here the
+        # day it is declared rather than the day someone remembers to widen
+        # this line. Hardcoding the roots is the regression bd
+        # polyglot-pdf-3ave and bd polyglot-pdf-pnoik both shipped, and it is
+        # worse here than in CI: this step is what writes build_checks/{sha},
+        # the record every deploy target reads as "this commit's suites
+        # passed".
+        python -m pytest -q -m "not external"
 
   - id: verify-frontend
     name: node:22
@@ -185,6 +195,21 @@ steps:
         CHANNEL_ENV=$(read_channel_section "$CHANNEL_FILE" SET_ENV_VARS)
         CHANNEL_SECRETS=$(read_channel_section "$CHANNEL_FILE" SET_SECRETS)
         CHANNEL_SA=$(read_channel_value "$CHANNEL_FILE" SERVICE_ACCOUNT SERVICE_ACCOUNT)
+
+        # Same refusal as deploy-all.sh's backend stage, for the same reason:
+        # --set-env-vars REPLACES the service's whole env block, so a channel
+        # file with an empty [SET_ENV_VARS] would deploy the computed defaults
+        # alone -- every VERTEXAI, LINK_* and CORS_EXTRA_ORIGINS setting
+        # stripped off the running service. The missing-FILE case already
+        # aborts (read_channel_section exits 1 and set -e propagates it); this
+        # is the empty-SECTION case, which otherwise exits 0 with a trailing
+        # comma. One source, two consumers: the guard has to travel with it.
+        if [ -z "$CHANNEL_ENV" ]; then
+          echo "ABORT: $CHANNEL_FILE has no [SET_ENV_VARS] entries."
+          echo "--set-env-vars REPLACES the service's whole env block, so"
+          echo "deploying from an empty channel file would strip every setting."
+          exit 1
+        fi
 
         case "${_CHANNEL}" in
           staging) SERVICE="polyglot-backend-staging" ;;
