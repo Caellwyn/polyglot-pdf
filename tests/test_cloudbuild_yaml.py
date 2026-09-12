@@ -166,11 +166,11 @@ def test_every_suite_the_plan_names_runs_in_the_verify_target(by_id):
     )
 
     frontend = script_of(by_id["verify-frontend"])
-    assert "cd frontend" in frontend and "npm test" in frontend
+    assert "cd frontend" in frontend and "npm run test:run" in frontend
     assert "npm ci" in frontend
 
     console = script_of(by_id["verify-admin-console"])
-    assert "cd admin-console" in console and "npm test" in console
+    assert "cd admin-console" in console and "npm run test:run" in console
     assert "npm ci" in console
 
 
@@ -273,11 +273,11 @@ def test_the_backend_target_takes_its_env_from_the_channel_file(by_id, target):
     assert "read_channel_section" in body
     assert "SET_ENV_VARS" in body and "SET_SECRETS" in body
     assert "read_channel_value" in body and "SERVICE_ACCOUNT" in body
-    assert '--set-env-vars="$BACKEND_ENV"' in body
-    assert '"${SECRETS_FLAG[@]}"' in body
-    assert '"${SA_FLAG[@]}"' in body
+    assert '--set-env-vars="$$BACKEND_ENV"' in body
+    assert '"$${SECRETS_FLAG[@]}"' in body
+    assert '"$${SA_FLAG[@]}"' in body
     # The channel values must actually be appended, not merely read.
-    assert 'BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"' in body
+    assert 'BACKEND_ENV="$$BACKEND_ENV,$$CHANNEL_ENV"' in body
 
 
 def test_the_backend_target_refuses_an_empty_channel_env(by_id):
@@ -293,7 +293,7 @@ def test_the_backend_target_refuses_an_empty_channel_env(by_id):
     does not.
     """
     body = script_of(by_id["backend-deploy"])
-    refusal = body.find('if [ -z "$CHANNEL_ENV" ]; then')
+    refusal = body.find('if [ -z "$$CHANNEL_ENV" ]; then')
     assert refusal != -1, (
         "the backend deploy step does not refuse an empty [SET_ENV_VARS]; it "
         "would deploy with every channel setting stripped off the service"
@@ -306,7 +306,7 @@ def test_the_backend_target_refuses_an_empty_channel_env(by_id):
         "continues into the deploy:\n" + arm
     )
     # It must come BEFORE the append, or it guards nothing.
-    assert refusal < body.index('BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"'), (
+    assert refusal < body.index('BACKEND_ENV="$$BACKEND_ENV,$$CHANNEL_ENV"'), (
         "the refusal follows the append, so the stripped env is already built"
     )
 
@@ -608,3 +608,240 @@ def test_admin_channel_file_matches_the_wrapper():
                 f"deploy/channels/admin.env declares {needle} for {key}, but "
                 "deploy-admin.sh does not -- the two live copies have drifted"
             )
+
+
+# Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
+# body ONLY if the name is one of these or is declared under `substitutions:`
+# in the file itself; everything else is a bash variable that MUST be written
+# $$NAME. Source: Cloud Build "Substituting variable values" reference.
+CLOUD_BUILD_BUILTINS = frozenset(
+    {
+        "PROJECT_ID",
+        "PROJECT_NUMBER",
+        "BUILD_ID",
+        "LOCATION",
+        "COMMIT_SHA",
+        "SHORT_SHA",
+        "REVISION_ID",
+        "REPO_NAME",
+        "REPO_FULL_NAME",
+        "BRANCH_NAME",
+        "TAG_NAME",
+        "TRIGGER_NAME",
+        "TRIGGER_BUILD_CONFIG_PATH",
+        "SERVICE_ACCOUNT",
+        "SERVICE_ACCOUNT_EMAIL",
+    }
+)
+
+# $$NAME (escaped, reaches bash) must be consumed before $NAME is matched, or
+# the second alternative would see the trailing half of every escaped pair.
+_DOLLAR_REF = re.compile(
+    r"\$\$\{?[A-Za-z_][A-Za-z0-9_]*"          # escaped: fine, skip
+    r"|\$\{?([A-Za-z_][A-Za-z0-9_]*)"          # bare: must be a substitution
+)
+
+
+def _bare_substitution_refs(body: str) -> set[str]:
+    """Every $NAME in a step body that Cloud Build will try to substitute."""
+    return {m.group(1) for m in _DOLLAR_REF.finditer(body) if m.group(1)}
+
+
+def test_every_bare_dollar_reference_is_a_real_substitution():
+    """A bash variable spelled $NAME is silently blanked before bash runs.
+
+    Cloud Build substitutes over this file BEFORE the step's shell sees it. An
+    unmatched $NAME normally errors -- but a TRIGGER-invoked build sets
+    ALLOW_LOOSE by default and cannot disable it, and every build here is
+    trigger-invoked, so an unmatched reference becomes the EMPTY STRING and the
+    build proceeds. `gcloud run deploy "$SERVICE" --set-env-vars="$BACKEND_ENV"`
+    would reach gcloud as `gcloud run deploy "" --set-env-vars=""`: the exact
+    "config silently emptied" failure the channel files were introduced to
+    prevent.
+
+    The legal set is DERIVED -- the built-in list plus whatever the file itself
+    declares under `substitutions:` -- so adding a substitution widens it
+    automatically while adding a bash variable does not (CLAUDE.md scar #8:
+    pin the SET, not the instance).
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+    declared = set(spec.get("substitutions", {}))
+    assert declared, "cloudbuild.yaml declares no substitutions -- test is vacuous"
+    allowed = CLOUD_BUILD_BUILTINS | declared
+
+    offenders: dict[str, list[str]] = {}
+    for step in spec["steps"]:
+        body = step["args"][-1]
+        bad = sorted(_bare_substitution_refs(body) - allowed)
+        if bad:
+            offenders[step["id"]] = bad
+
+    assert not offenders, (
+        "these step bodies reference $NAME for names Cloud Build cannot "
+        "substitute, so each is replaced with the EMPTY STRING before bash "
+        "runs -- write them $$NAME:\n"
+        + "\n".join(f"  {sid}: {names}" for sid, names in offenders.items())
+    )
+
+
+def test_the_backend_deploy_step_escapes_its_shell_variables():
+    """The specific names finding 1 found blanked, pinned by name.
+
+    The derived test above is the general guard; this one fails with a direct
+    message if the backend deploy step specifically regresses, because that
+    step is the one whose blanking produced a live `gcloud run deploy ""`.
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+    steps = {s["id"]: s["args"][-1] for s in spec["steps"]}
+
+    for name in ("SERVICE", "BACKEND_ENV", "CHANNEL_ENV", "CHANNEL_FILE",
+                 "CHANNEL_SA", "CHANNEL_SECRETS", "SA_FLAG", "SECRETS_FLAG"):
+        body = steps["backend-deploy"]
+        assert f"$${name}" in body or f"$${{{name}" in body, (
+            f"backend-deploy no longer escapes ${name} as $${name}"
+        )
+        assert not re.search(rf"(?<!\$)\${{?{name}\b", body), (
+            f"backend-deploy has a BARE ${name} -- Cloud Build blanks it"
+        )
+
+    assert not re.search(r"(?<!\$)\$\{?SERVICE\b", steps["backend-reachability-gate"]), (
+        "the reachability gate has a bare $SERVICE; blanked, it calls "
+        "verify_service_publicly_reachable \"\", whose IAM read then fails and "
+        "is treated as INCONCLUSIVE -- it warns and returns 0, turning bd "
+        "polyglot-pdf-pidtg's gate into a no-op"
+    )
+
+
+# The node apps the verify target gates. schema-editor has a CI job too but no
+# cloudbuild verify step (it is not part of the deploy set this build file
+# serves), so the mapping is explicit rather than "every ci.yml node job".
+VERIFIED_NODE_APPS = {
+    "verify-frontend": "frontend",
+    "verify-admin-console": "admin-console",
+}
+
+
+def _ci_commands_for(app: str) -> list[str]:
+    """The npm commands ci.yml runs for one app, read from ci.yml itself.
+
+    Derived, not transcribed: when CI adds a step for an app, this widens and
+    the parity assertion below starts requiring it here too.
+    """
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    spec = yaml.safe_load(ci)
+    found: list[str] = []
+    for job in spec["jobs"].values():
+        for step in job.get("steps", []):
+            run = step.get("run", "")
+            wd = step.get("working-directory", "")
+            if wd == app and run.startswith("npm"):
+                found.append(run.strip())
+    return found
+
+
+@pytest.mark.parametrize("step_id,app", sorted(VERIFIED_NODE_APPS.items()))
+def test_the_verify_target_runs_the_same_npm_commands_as_ci(by_id, step_id, app):
+    """build_checks/{_SHA} means "this commit's suites passed" -- as CI judges it.
+
+    Two ways this step can mean LESS than CI's green, both of which it did:
+
+      1. `npm test` instead of `npm run test:run`. `test` maps to bare
+         `vitest`, whose watch mode resolves to `!isCI && process.stdin.isTTY`.
+         A build step has no TTY so it does not hang today, but that is the
+         runner's accident, not the command's contract -- and a hung verify
+         blocks every deploy for that SHA until the 3600s timeout.
+      2. No `npm run typecheck`. vitest is transpile-only, so a commit failing
+         `tsc --noEmit` still earned a success record -- the exact regression
+         bd polyglot-pdf-1rgr and bd polyglot-pdf-b6943 added those CI steps
+         for.
+
+    The expectation is DERIVED from ci.yml, so the two cannot drift silently in
+    either direction (CLAUDE.md scar #8).
+    """
+    body = script_of(by_id[step_id])
+    expected = _ci_commands_for(app)
+    assert expected, f"ci.yml declares no npm steps for {app} -- test is vacuous"
+
+    for command in expected:
+        assert command in body, (
+            f"ci.yml runs `{command}` for {app}, but cloudbuild.yaml's "
+            f"{step_id} step does not -- the build_checks record would vouch "
+            f"for a commit CI would reject"
+        )
+
+    # `npm test` is the watch-mode sibling; its presence means the step is
+    # running something other than the command CI runs. Scan the COMMAND
+    # lines only -- the step's own comment explains why `npm test` is
+    # wrong, and a whole-body search would match that prose and fail on an
+    # already-correct file.
+    command_lines = [
+        line for line in body.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    offenders = [l for l in command_lines if re.search(r"npm test\b", l)]
+    assert not offenders, (
+        f"{step_id} runs watch-mode `npm test`; ci.yml runs "
+        f"`npm run test:run`. Offending line(s): {offenders}"
+    )
+
+
+# Images that ship PEP 668's EXTERNALLY-MANAGED marker, under which a bare
+# `pip install` into the system interpreter exits non-zero. cloud-sdk is
+# Debian-based; Debian has shipped the marker since bookworm (12).
+PEP_668_IMAGES = ("cloudsdktool/cloud-sdk",)
+
+
+def test_no_step_pip_installs_into_an_externally_managed_interpreter():
+    """A bare `pip install` on a Debian-based image is refused by PEP 668.
+
+    `error: externally-managed-environment` exits non-zero, and every step here
+    runs under `set -euo pipefail`, so the step fails. That matters most for
+    gate-build-checks, which is the FIRST step of every deploy target: if it
+    cannot install its client the gate never reads build_checks at all.
+
+    The fix is the image, not a flag -- these steps need pip and
+    google-cloud-firestore but no gcloud, so an official python image is both
+    safer and smaller. `--break-system-packages` would paper over it.
+
+    Pinned as a PROPERTY of the whole file (no step may combine the two)
+    rather than as the current image of two named steps, so a new pip-using
+    step on a cloud-sdk image fails here too (CLAUDE.md scar #8).
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+
+    offenders = [
+        step["id"]
+        for step in spec["steps"]
+        if "pip install" in step["args"][-1]
+        and any(image in step["name"] for image in PEP_668_IMAGES)
+    ]
+
+    assert not offenders, (
+        "these steps run `pip install` on a Debian-based image whose PEP 668 "
+        "EXTERNALLY-MANAGED marker refuses it, failing the step under "
+        f"set -e: {offenders}. Use python:3.12 -- they need no gcloud."
+    )
+
+
+def test_the_build_check_steps_can_import_their_firestore_client():
+    """The two gate steps must be on an image where their pip install works.
+
+    The property test above forbids the broken combination; this one states
+    the positive requirement, so deleting the pip line (which would also
+    satisfy the property test) still fails: the steps genuinely need the
+    client, because record_build_check.py imports google.cloud.firestore.
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+    by_step = {step["id"]: step for step in spec["steps"]}
+
+    for step_id in ("gate-build-checks", "record-build-check"):
+        step = by_step[step_id]
+        body = step["args"][-1]
+        assert "google-cloud-firestore" in body, (
+            f"{step_id} does not install google-cloud-firestore, but "
+            "record_build_check.py imports google.cloud.firestore"
+        )
+        assert step["name"].startswith("python:"), (
+            f"{step_id} must run on an official python image (no PEP 668 "
+            f"marker); it is on {step['name']}"
+        )

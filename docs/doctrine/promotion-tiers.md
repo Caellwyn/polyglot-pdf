@@ -75,12 +75,14 @@ kit editing lock) is deliberately shared because sharing is the correct design:
    link's single use. `LINK_CHANNEL` is what sets this, and both deploy scripts
    set it explicitly.
 
-   **`LINK_TOKEN_SECRET` is deliberately the SAME on both channels.** Each
-   deploy script binds the identical Secret Manager secret
-   (`BACKEND_SECRETS_COMMON`), and that is the intended choice, not an
-   oversight: the signing key is not what separates the channels -- the `aud`
-   claim is, and it is checked on every redemption regardless of who signed the
-   token. Giving each channel its own key would add nothing (a cross-channel
+   **`LINK_TOKEN_SECRET` is deliberately the SAME on both channels.** Both
+   channels bind the identical Secret Manager secret -- it is declared in the
+   `[SET_SECRETS]` section of `deploy/channels/staging.env` and
+   `deploy/channels/demo.env`, and reaches `gcloud run deploy` as
+   `--set-secrets` via `deploy-all.sh`'s `read_channel_section`. That sameness
+   is the intended choice, not an oversight: the signing key is not what
+   separates the channels -- the `aud` claim is, and it is checked on every
+   redemption regardless of who signed the token. Giving each channel its own key would add nothing (a cross-channel
    link is already refused) while creating a real failure mode, since rotating
    one key silently invalidates links minted by the other. A shared key with a
    per-channel audience is the smaller surface.

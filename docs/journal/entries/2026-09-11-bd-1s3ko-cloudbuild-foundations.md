@@ -240,6 +240,87 @@ looking for the existing escape hatch before assuming a check is wrong.
   did not touch; left alone.
 - No CLAUDE.md change.
 
+**Cross-surface review round 3: four adopted, three deferred, nothing rejected.**
+
+*Adopted 1 -- the build file's bash variables were being blanked before bash
+ran.* Cloud Build substitutes over `cloudbuild.yaml` BEFORE handing a step's
+script to the shell, and it resolves every bare `$NAME`. A name that is neither
+a built-in nor declared under `substitutions:` is an unmatched reference, which
+normally errors -- but a TRIGGER-invoked build sets `ALLOW_LOOSE` by default
+and cannot turn it off, and every build here is trigger-invoked. So all nine
+bash variables in the two backend steps (`SERVICE`, `BACKEND_ENV`,
+`CHANNEL_ENV`, `CHANNEL_FILE`, `CHANNEL_SA`, `CHANNEL_SECRETS`, `SA_FLAG`,
+`SECRETS_FLAG`) were silently replaced with the EMPTY STRING. `gcloud run
+deploy "$SERVICE" --set-env-vars="$BACKEND_ENV"` would have reached gcloud as
+`gcloud run deploy "" --set-env-vars=""` -- the exact "config silently emptied"
+failure the channel files were introduced to prevent. Both implemented deploy
+targets were non-functional.
+
+What kept it from firing was an accident, not a guard: the empty-`[SET_ENV_VARS]`
+refusal also degraded to `if [ -z "" ]` and aborted, so the build failed safe
+with the misleading message `ABORT:  has no [SET_ENV_VARS] entries.` The
+reachability step had no such luck -- blanked, it called
+`verify_service_publicly_reachable ""`, whose IAM read fails, and
+`deploy-all.sh` deliberately treats a failed read as INCONCLUSIVE: it warns and
+returns 0. Bead `polyglot-pdf-pidtg`'s gate was a no-op.
+
+Every bash variable is now written `$$NAME`. The regression guard is DERIVED,
+not a list: `test_every_bare_dollar_reference_is_a_real_substitution` computes
+the legal set as Cloud Build's built-ins plus whatever the file itself declares
+under `substitutions:`, so adding a substitution widens it automatically while
+adding a bash variable does not (scar #8). Verified by simulating the
+substitution pass and EXECUTING the resulting script against a stubbed
+`gcloud`: before the fix the invocation carried an empty service name and empty
+env; after it, the full service name, env block, service account and secrets.
+
+*Adopted 2 -- the verify gate meant less than CI's green.* The `build_checks`
+record's whole meaning is "this commit's suites passed", but the two node steps
+ran `npm test` where `.github/workflows/ci.yml` runs `npm run test:run`, and
+neither ran `npm run typecheck` at all. `npm test` maps to bare `vitest`, whose
+watch mode resolves to `!isCI && process.stdin.isTTY` -- it does not hang today
+only because a build step has no TTY, which is the runner's accident rather
+than the command's contract, and a hung verify would block every deploy for
+that SHA until the 3600s timeout. The missing typecheck was the substantive
+half: vitest is transpile-only, so a commit failing `tsc --noEmit` still earned
+a success record, which is the regression beads `polyglot-pdf-1rgr` and
+`polyglot-pdf-b6943` added those CI steps to stop. Both steps now run ci.yml's
+commands, and the expectation is READ FROM `ci.yml` rather than transcribed, so
+the two cannot drift in either direction.
+
+*Adopted 3 -- `pip install` on the cloud-sdk image is refused by PEP 668.* The
+`cloud-sdk:slim` image is Debian-based, and Debian has shipped the
+EXTERNALLY-MANAGED marker since bookworm, under which a bare `pip install` into
+the system interpreter exits non-zero. Under `set -euo pipefail` that fails the
+step -- and `gate-build-checks` is the FIRST step of every deploy target, so
+the whole gating mechanism would have been inert. The reviewer could not
+execute the image and flagged it medium-confidence; rather than leave a
+maybe-broken gate, the two affected steps moved to `python:3.12`, which they
+should have been on anyway: both need only pip and `google-cloud-firestore`,
+and `record_build_check.py` invokes no gcloud at all. That removes the risk
+instead of papering over it with `--break-system-packages`. Pinned as a
+PROPERTY of the file (no step may combine `pip install` with a PEP 668 image)
+plus a positive assertion that the two gate steps still install the client they
+import -- so deleting the pip line, which would satisfy the property alone,
+still fails.
+
+*Adopted 4 -- a tier-2 doc named a deleted constant.*
+`docs/doctrine/promotion-tiers.md` still said both channels bind
+`LINK_TOKEN_SECRET` via `BACKEND_SECRETS_COMMON`, which this bead deleted. The
+DECISION it records is still true and now test-enforced by
+`test_both_channels_bind_the_same_secrets`; only the mechanism was stale. It
+now names the real path: `[SET_SECRETS]` in the channel files, reaching gcloud
+through `read_channel_section`. Enumerating the rest of the set found
+`technical_guide.md`'s reference already correct -- it calls the constant
+"formerly ... now deleted" -- so this was the only live one.
+
+*Deferred.* The `technical_guide.md` `Last updated:` stamp (bd
+`polyglot-pdf-cyk64`), plus the two out-of-scope items the reviewer filed:
+duplicate Epic 4 beads (`polyglot-pdf-48ktz`) and the uncreated build service
+account (`polyglot-pdf-w5jzk`). Beads `polyglot-pdf-j2cby` and
+`polyglot-pdf-6jqsd` were filed as routing records for findings fixed here.
+
+*Rejected.* None.
+
 Review outcomes recorded in the closeout ping.
 
 ## Files touched
@@ -253,7 +334,9 @@ Review outcomes recorded in the closeout ping.
 - `scripts/deploy_preflight.sh` (new) -- dirty / unpushed refusal.
 - `scripts/record_build_check.py` (new) -- `record` and `require`, fail-closed.
 - `scripts/setup-cloud-build.sh` (new) -- operator-run trigger provisioning.
-- `tests/test_cloudbuild_yaml.py` (new) -- 20 tests.
+- `tests/test_cloudbuild_yaml.py` (new) -- 27 tests (20, plus seven from
+  review round 3: the derived bare-`$NAME` guard, the backend step's
+  escaping, ci.yml npm parity for both apps, and the two PEP 668 guards).
 - `tests/test_deploy_preflight.py` (new) -- 14 tests, run under real bash.
 - `tests/test_deploy_channel_parity.py` -- rewritten as a file diff, 26 tests
   (25 plus the restored `secretAccessor` / API-enable guard, review round 1).
