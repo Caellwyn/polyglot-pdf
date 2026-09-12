@@ -83,6 +83,26 @@ describe('VerifyFieldModal gesture (bd polyglot-pdf-96um6)', () => {
     expect(props.onVerify, 'a stale flag must not verify the next field').not.toHaveBeenCalled();
   });
 
+  it('nor across a real UNMOUNT -- the pattern SchemaForm actually uses', () => {
+    // SchemaForm renders `{verifyingFieldId && <VerifyFieldModal/>}`, so the
+    // modal is destroyed and rebuilt per field. This pins that the shipped
+    // mount pattern is safe too, not just the isOpen-toggle one above -- so the
+    // reset is not load-bearing by accident of how one caller mounts it.
+    const props = {
+      fieldName: 'Family Name', value: 'Vasquez', selectedLanguage: 'English',
+      onVerify: vi.fn(), onCancel: vi.fn(),
+    };
+    const { rerender } = render(<>{true && <VerifyFieldModal isOpen {...props} />}</>);
+    fireEvent.keyDown(screen.getByTestId('verify-field-checkbox'), { key: ' ' });
+
+    rerender(<>{false && <VerifyFieldModal isOpen {...props} />}</>);  // unmount
+    rerender(<>{true && <VerifyFieldModal isOpen {...props} />}</>);   // fresh mount
+
+    fireEvent.click(screen.getByTestId('verify-field-checkbox'));
+
+    expect(props.onVerify).not.toHaveBeenCalled();
+  });
+
   it('a LABEL click forwards to the checkbox but does not verify', () => {
     const props = renderModal();
     fireEvent.click(document.querySelector('.verify-field-modal-checkbox-row') as HTMLElement);
