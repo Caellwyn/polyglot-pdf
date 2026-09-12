@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-11 (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -75,12 +75,14 @@ kit editing lock) is deliberately shared because sharing is the correct design:
    link's single use. `LINK_CHANNEL` is what sets this, and both deploy scripts
    set it explicitly.
 
-   **`LINK_TOKEN_SECRET` is deliberately the SAME on both channels.** Each
-   deploy script binds the identical Secret Manager secret
-   (`BACKEND_SECRETS_COMMON`), and that is the intended choice, not an
-   oversight: the signing key is not what separates the channels -- the `aud`
-   claim is, and it is checked on every redemption regardless of who signed the
-   token. Giving each channel its own key would add nothing (a cross-channel
+   **`LINK_TOKEN_SECRET` is deliberately the SAME on both channels.** Both
+   channels bind the identical Secret Manager secret -- it is declared in the
+   `[SET_SECRETS]` section of `deploy/channels/staging.env` and
+   `deploy/channels/demo.env`, and reaches `gcloud run deploy` as
+   `--set-secrets` via `deploy-all.sh`'s `read_channel_section`. That sameness
+   is the intended choice, not an oversight: the signing key is not what
+   separates the channels -- the `aud` claim is, and it is checked on every
+   redemption regardless of who signed the token. Giving each channel its own key would add nothing (a cross-channel
    link is already refused) while creating a real failure mode, since rotating
    one key silently invalidates links minted by the other. A shared key with a
    per-channel audience is the smaller surface.
@@ -242,6 +244,64 @@ live channels. Reviving a real prod channel is a maintainer decision requiring a
 reachable project, a full `scripts/setup-gcp-project.sh` bootstrap, real
 `VITE_FIREBASE_*` values in `.env.production`, and its own Auth user set.
 
+## Deploy preflight: a dirty or unpushed tree is refused
+
+Since bd `polyglot-pdf-1s3ko`, `deploy-staging.sh` and `deploy-demo.sh` source
+`scripts/deploy_preflight.sh` and refuse BEFORE anything else runs when:
+
+- **the working tree is dirty** -- `git status --porcelain` is non-empty,
+  untracked files included; or
+- **no remote branch contains `HEAD`** -- the commit exists only in this
+  checkout.
+
+Both protect the same claim. A Cloud Build build runs from a COMMIT, and
+`build_checks/{sha}` records that that commit's suites passed. A tarball build
+of a dirty tree would ship uncommitted code under a SHA the gate vouches for --
+the record would not be wrong about the commit, it would simply be about a
+different tree than the one that shipped. And a SHA that exists only on one
+laptop can never be re-built by the admin service, which triggers builds by SHA
+against the connected repository.
+
+The unpushed check asks which REMOTE branches contain the commit, not whether
+it is an ancestor of `dev`: a commit on a pushed feature branch is perfectly
+deployable, and that is the normal shape of a staging deploy. A refusal that
+names a branch you know you pushed means your remote refs are stale -- run
+`git fetch origin` and retry.
+
+This is a mechanical guard, not a new gate: it does not replace the
+per-instance permission ask below, it only removes a class of deploy that was
+never valid.
+
+## Deploy is moving into Cloud Build
+
+Bead `polyglot-pdf-1s3ko` landed the declarative half of Epic 4. **Nothing has
+run yet** -- the first real build needs the 2nd-generation Cloud Build GitHub
+connection, a one-time OAuth only the maintainer can do -- so the bash path
+above is still the deploy path today. What exists now:
+
+- **`cloudbuild.yaml`** at the repo root, one build file selected by the
+  `_TARGET` substitution (with `_CHANNEL` and `_SHA`). The `verify` and
+  `backend-staging` / `backend-demo` targets are implemented; every other
+  target name is declared as a step that fails with "target not implemented"
+  rather than being absent, because a target matching no step would build
+  nothing and report SUCCESS.
+- **The verify gate.** `_TARGET=verify` runs the backend, frontend and
+  admin-console suites ONCE for a SHA and writes `build_checks/{sha}`. Every
+  deploy target's FIRST step requires that record and fails without it, so
+  five targets for one commit pay one test run -- and a commit whose suites
+  failed cannot be deployed by any route, bash or console, because the gate is
+  inside the build rather than in a wrapper. It fails CLOSED: a Firestore read
+  that errors refuses the deploy.
+- **`deploy/channels/<channel>.env`**, the per-channel Cloud Run config as
+  plain data, read by BOTH `deploy-all.sh` and the build. See
+  [`../components/config-deployment.md`](../components/config-deployment.md)
+  for the format and the parity rule.
+- **`scripts/setup-cloud-build.sh`**, the operator-run provisioning step that
+  creates one manual trigger per target once the GitHub connection exists.
+
+Until the connection is made, treat this section as a description of what is
+declared, not of how anything currently deploys.
+
 ## The admin tier: its own staging, not a third channel
 
 The admin service (`admin_backend/`, Cloud Run `polyglot-admin`) and console
@@ -305,6 +365,8 @@ gcloud account and re-auth if needed.
 | Cloud Run | `polyglot-backend-staging` | `polyglot-backend` |
 | form kits on bare run | **skipped** (shared bucket) | deployed |
 | Firestore rules | never | deployed |
+| channel config | `deploy/channels/staging.env` | `deploy/channels/demo.env` |
+| Cloud Build target | `backend-staging` (declared, not yet run) | `backend-demo` (declared, not yet run) |
 
 The backend runs on Cloud Run co-located with Gemini and NEVER logs full PII
 bodies -- see [`../standards/hipaa-pii-policy.md`](../standards/hipaa-pii-policy.md).
