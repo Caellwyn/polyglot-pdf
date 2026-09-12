@@ -7,18 +7,28 @@ import { UsersPage } from './pages/UsersPage';
 import { KitCommercialsPage } from './pages/KitCommercialsPage';
 import { FirmsPage } from './pages/FirmsPage';
 import { FirmDetailPage } from './pages/FirmDetailPage';
+import { MonitoringPage } from './pages/MonitoringPage';
+import { UsagePage } from './pages/UsagePage';
+import { CostReportsPage } from './pages/CostReportsPage';
+import { AlertsPage } from './pages/AlertsPage';
+import { ErrorsPage } from './pages/ErrorsPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
-type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits' | 'firms';
+type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits' | 'firms'
+  | 'monitoring' | 'usage' | 'reports' | 'alerts' | 'errors';
 
 /**
  * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91,
- * polyglot-pdf-r8z9g, and polyglot-pdf-mzblw): the sign-in gate, then a
- * simple tabbed shell over the console's pages -- who-am-I, the audit log
- * list, the per-channel runtime-config editor, staff-account management
- * (users), kit commercials (per-form credit price and USD spend ceiling),
- * and firms (list/detail with ledger, grants, links and revoke).
+ * polyglot-pdf-r8z9g, polyglot-pdf-mzblw, and polyglot-pdf-i6dlb): the sign-in
+ * gate, then a simple tabbed shell over the console's pages -- who-am-I, the
+ * audit log list, the per-channel runtime-config editor, staff-account
+ * management (users), kit commercials (per-form credit price and USD spend
+ * ceiling), firms (list/detail with ledger, grants, links and revoke), and
+ * the five monitoring pages (bd polyglot-pdf-i6dlb, E3.11b): Monitoring
+ * (per-channel health), Usage (a firm's month rollup), Cost & income
+ * (BigQuery reports over a month range), Alerts (list + acknowledge), and
+ * Errors (Cloud Error Reporting group stats per channel).
  *
  * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
  * state is simple enough that a router would be pure ceremony for this
@@ -102,6 +112,11 @@ export const App: React.FC = () => {
             { id: 'users', label: 'Users' },
             { id: 'kits', label: 'Kit commercials' },
             { id: 'firms', label: 'Firms' },
+            { id: 'monitoring', label: 'Monitoring' },
+            { id: 'usage', label: 'Usage' },
+            { id: 'reports', label: 'Cost & income' },
+            { id: 'alerts', label: 'Alerts' },
+            { id: 'errors', label: 'Errors' },
           ] as const
         ).map((item) => (
           <button
@@ -137,6 +152,11 @@ export const App: React.FC = () => {
             <FirmsPage onAuthExpired={handleAuthExpired} onOpenFirm={setOpenFirmId} />
           )
         )}
+        {tab === 'monitoring' && <MonitoringPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'usage' && <UsagePage onAuthExpired={handleAuthExpired} />}
+        {tab === 'reports' && <CostReportsPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'alerts' && <AlertsPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'errors' && <ErrorsPage onAuthExpired={handleAuthExpired} />}
       </main>
     </div>
   );
