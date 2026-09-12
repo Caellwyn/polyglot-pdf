@@ -2,6 +2,52 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-12 (bd polyglot-pdf-i6dlb, E3.11b -- the five
+monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
+`pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
+fetched independently so one channel's failure never blanks the other's
+card; THREE backend states rendered distinctly -- `configured: false`,
+`configured: true, reachable: false`, and `reachable: true` with the
+backend's version SHA -- plus a fourth, the console's OWN fetch failing,
+shown as that card's own error text, never a blank card), `pages/
+UsagePage.tsx` (a firm picker over `GET /admin/firms` + a month/channel
+picker over `GET /admin/firms/{firm_id}/usage`; a month with an all-null
+`usage` object -- no rollup doc yet -- renders an explicit "no usage
+recorded" message rather than a table of zeros; `by_kit`/`by_employee`/
+`by_language` render as three separate tables, sorted by key for a stable
+render), `pages/CostReportsPage.tsx` (a Cost tab over `GET
+/admin/reports/cost` with `group_by`/channel, and an Income tab over `GET
+/admin/reports/income` with no channel selector at all -- mirroring that
+route's own refusal of one; BOTH tabs refuse a from/to range over 12
+months CLIENT-SIDE, before any network call, with the identical message
+`report_routes.py`'s own `_validated_range` returns; the `delayed`/`note`
+label renders only when the response's own `delayed` flag says so, never
+assumed), `pages/AlertsPage.tsx` (kind/firm filters -- the route has no
+`level` query param to filter on, so `level` renders only as a display
+column, never a filter -- defaulting to
+`acknowledged=false`; Acknowledge calls the PATCH exactly once per click
+via a per-row `busyId` guard then re-reads the CURRENT filtered list; a
+409 from acknowledging an already-acknowledged alert surfaces the route's
+own "already acknowledged by X" text next to that row rather than a
+generic banner, and does NOT trigger the success re-read -- mirrors
+`UsersPage.tsx`'s "a failed mutation must not trigger the success
+re-read" rule), and `pages/ErrorsPage.tsx` (channel tabs over `GET
+/admin/errors`, one fetch per tab switch; renders ONLY the five
+`ErrorGroup` fields adminApi.ts types -- count, first/last seen,
+error_type, top_frame -- by name, so a payload carrying any other key
+(a stray `message`, say) has no code path that would ever put it in the
+DOM, pinned by a test that feeds exactly that shape and asserts the
+sentinel value is absent from `document.body.textContent`, not just from
+a typed field). `App.tsx` gains five tabs (Monitoring, Usage, Cost &
+income, Alerts, Errors) alongside the existing six. `adminApi.ts` gains
+the typed calls and wire-contract exports: `getChannelHealth`,
+`getChannelErrors`, `getFirmUsage`, `getCostReport`, `getIncomeReport`,
+`listAlerts`, `acknowledgeAlert`, plus `MONITORING_CHANNELS`,
+`COST_GROUP_BY`, `MAX_REPORT_RANGE_MONTHS`, `ALERT_KINDS`, `ALERT_LEVELS`
+and their matching response-shape interfaces. Every new page is a plain
+mocked-`adminApi.ts` Vitest file, mutation-verified per assertion (revert
+the branch, watch it fail, restore).)*
+
 *Last updated: 2026-09-11 (bd polyglot-pdf-mpebj, E3.11a -- the monitoring
 console's READ routes: `GET /admin/firms/{firm_id}/usage` +
 `GET /admin/kits/{kit_id}/usage` (`admin_backend/routes/usage_routes.py`),
@@ -682,7 +728,11 @@ one.
   each, past the point a single-file "page" component was the more natural
   location), Firms (`pages/FirmsPage.tsx` + `pages/FirmDetailPage.tsx`, bd
   polyglot-pdf-r8z9g -- see below), Kit commercials
-  (`pages/KitCommercialsPage.tsx`, bd polyglot-pdf-mzblw -- see below).
+  (`pages/KitCommercialsPage.tsx`, bd polyglot-pdf-mzblw -- see below), and
+  the five monitoring pages (bd polyglot-pdf-i6dlb, E3.11b -- see below):
+  Monitoring (`pages/MonitoringPage.tsx`), Usage (`pages/UsagePage.tsx`),
+  Cost & income (`pages/CostReportsPage.tsx`), Alerts
+  (`pages/AlertsPage.tsx`), and Errors (`pages/ErrorsPage.tsx`).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
@@ -763,12 +813,56 @@ one.
   `display.label` a kit was seeded with (bd polyglot-pdf-zcbm1;
   currently cosmetic, since nothing in the repo reads `display.label`
   today).
+- **Monitoring pages** (bd polyglot-pdf-i6dlb, E3.11b): the FIFTH page
+  group under `pages/`, one page per bd polyglot-pdf-mpebj route.
+  `MonitoringPage.tsx` fetches `GET /admin/health` for BOTH channels
+  independently on mount into two side-by-side cards -- a slow or failing
+  channel never blocks or blanks the other's card. Each card renders one
+  of three backend states: `configured: false` ("Not configured"),
+  `configured: true, reachable: false` ("Unreachable"), or `reachable:
+  true` (the backend's version SHA); a card-level fetch failure (the
+  `/admin/health` call itself throwing) is a FOURTH state, that card's own
+  error text, still never a blank card. `UsagePage.tsx` loads the firm
+  list (`GET /admin/firms`) into a picker, then `GET
+  /admin/firms/{firm_id}/usage` for the chosen firm/month/channel; an
+  all-null `usage` object (no rollup doc for that month) renders an
+  explicit "No usage recorded" message rather than a table of zeros, and
+  `by_kit`/`by_employee`/`by_language` render as three sorted-by-key
+  tables. `CostReportsPage.tsx` has a Cost tab (`GET /admin/reports/cost`,
+  group-by firm/kit/employee, optional channel) and an Income tab (`GET
+  /admin/reports/income`, no channel selector -- that route refuses one);
+  BOTH refuse a from/to range over `MAX_REPORT_RANGE_MONTHS` (12) months
+  CLIENT-SIDE with the identical message `report_routes.py`'s own
+  `_validated_range` returns, before any network call, and the server's
+  own 422 text still governs anything the client check misses; the
+  `delayed`/`note` label renders only when the response's own `delayed`
+  flag is true. `AlertsPage.tsx` defaults to `acknowledged=false`
+  (unacknowledged-only), with kind/firm filters applied only on submit (a
+  `Filter` button, not live-as-you-type, so choosing a kind mid-edit does
+  not auto-fire a request); Acknowledge calls `PATCH
+  /admin/alerts/{id}/acknowledge` exactly once per click (a per-row
+  `busyId` disables the button while in flight) and re-reads the list on
+  SUCCESS only -- mirrors `UsersPage.tsx`'s "a failed mutation must not
+  trigger the success re-read" rule, so a 409 (already acknowledged by
+  someone else) shows that route's own message next to the row without a
+  spurious extra read. `ErrorsPage.tsx` has channel tabs over `GET
+  /admin/errors`, one fetch per tab switch, rendering ONLY the five
+  `ErrorGroup` fields `adminApi.ts` types (count, first/last seen,
+  error_type, top_frame) BY NAME -- no spread, no key iteration -- so a
+  payload carrying an extra key (a stray `message`) has no code path that
+  would ever reach the DOM; pinned by a test that feeds exactly that shape
+  and asserts a sentinel value is absent from `document.body.textContent`.
 - **API client:** `admin-console/src/utils/adminApi.ts` (`probeWhoAmI`,
   `listAuditRows`, `getChannelConfig`, `setChannelConfigKey`, `listUsers`,
   `createUser`, `setUserDisabled`, `setUserRole`, `listKits`,
   `getKitCommercial`, `setKitCommercial`, `listFirms`, `createFirm`,
   `getFirm`, `setFirmStatus`, `setFirmAllowedKits`, `setFirmKind`,
-  `grantCredits`, `adjustCredits`, `listFirmLinks`, `revokeLink`), each call
+  `grantCredits`, `adjustCredits`, `listFirmLinks`, `revokeLink`,
+  `getChannelHealth`, `getChannelErrors`, `getFirmUsage`, `getCostReport`,
+  `getIncomeReport`, `listAlerts`, `acknowledgeAlert` -- the last seven
+  added by bd polyglot-pdf-i6dlb, E3.11b, alongside the wire-contract
+  exports `MONITORING_CHANNELS`, `COST_GROUP_BY`, `MAX_REPORT_RANGE_MONTHS`,
+  `ALERT_KINDS`, `ALERT_LEVELS`), each call
   carrying `Authorization: Bearer <Firebase ID token>` fetched PER REQUEST
   from `admin-console/src/utils/adminAuth.ts` (never cached client-side, so
   a mid-session token refresh cannot leave a stale credential in memory). A
