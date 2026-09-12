@@ -123,9 +123,24 @@ describe('the SET of group-resolution sites is closed', () => {
     const harness = fs.readFileSync(
       path.join(__dirname, '../../../tests/e2e/voice-harness/harness.js'), 'utf8'
     )
+    // BOTH branches. Checking only the bracketed one left the plain-radio
+    // membership test unpinned -- deleting it kept all 12 guards green, which
+    // is the "a guard whose scope skips the vulnerable branch is theatre"
+    // failure this file exists to prevent, recurring one branch away from the
+    // branch it covers.
     expect(
       /bracketed\.indexOf\(own\) === -1/.test(harness),
-      'harness.js groupInputs must reject a non-member, as the app does'
+      'harness.js must reject a non-member on the BRACKETED branch'
+    ).toBe(true)
+    expect(
+      /radios\.indexOf\(own\) === -1/.test(harness),
+      'harness.js must reject a non-member on the PLAIN-RADIO branch too -- the ' +
+      'branch every real radio group actually takes'
+    ).toBe(true)
+    // And the type filter, the dimension that diverged in connection.ts.
+    expect(
+      /type === 'checkbox' \|\| bracketedAll\[b\]\.type === 'radio'/.test(harness),
+      'harness.js must carry the TYPE filter as well as membership'
     ).toBe(true)
   })
 })

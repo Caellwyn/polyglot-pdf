@@ -73,7 +73,24 @@ describe('FULL SPACE: no combination silently drops the answer', () => {
         const isGroupMember =
           (own === 'checkbox' || own === 'radio') &&
           (ownName === 'f[]' || (ownName === 'f' && own === 'radio'))
-        if (isGroupMember) return
+        if (isGroupMember) {
+          // Do not just SKIP these -- a skipped cell in a matrix named for
+          // enumerating the space is an uncovered cell. The group path here is
+          // deterministic: restore checks the option whose value matches, so a
+          // one-member group of the stored value ends CHECKED.
+          // Derive the expectation from what was actually STORED, not from a
+          // guess: the group branch value-matches, and this matrix stores a
+          // BOOLEAN for checkbox and the string 'v' for everything else, so a
+          // checkbox group member matches "true" against its option value.
+          const member = document.getElementById('f') as HTMLInputElement
+          const stored = own === 'checkbox' ? true : 'v'
+          const shouldBeChecked = String(stored) === member.value
+          expect(
+            member.checked,
+            `own=${own} ownName=${ownName} is a real group member -- value-match decides`
+          ).toBe(shouldBeChecked)
+          return
+        }
 
         const el = document.getElementById('f') as any
         const got = (own === 'checkbox' || own === 'radio') ? el.checked : el.value
