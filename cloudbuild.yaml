@@ -1,0 +1,274 @@
+# Cloud Build definition for every polyglot-pdf deploy target.
+#
+# bd polyglot-pdf-1s3ko (Epic 4 of docs/sprint_22_admin-console_plan.md). ONE
+# build file, selected by the _TARGET substitution, so the human path (the bash
+# wrappers) and the console path (the admin service, bead 4.3) drive the same
+# engine instead of two that drift.
+#
+# RUNS FROM GIT, NEVER FROM A TARBALL. .gcloudignore excludes frontend/,
+# schema-editor/, landing/, tests/ and docs/, so a tarball build literally
+# cannot build the site targets or run the suites -- and it would upload the
+# LOCAL tree while COMMIT_SHA is empty, letting uncommitted code deploy under a
+# SHA that build_checks then vouches for. Every build is therefore triggered
+# against the 2nd-generation GitHub connection at an explicit commit
+# (scripts/setup-cloud-build.sh), and the wrappers refuse a dirty or unpushed
+# tree first (scripts/deploy_preflight.sh).
+#
+# THE VERIFY GATE. _TARGET=verify runs the backend + frontend + admin-console
+# suites ONCE for a SHA and records build_checks/{_SHA}. Every DEPLOY target's
+# FIRST step requires that record, so five targets for one commit pay one test
+# run, and a commit whose suites failed cannot deploy by any route.
+#
+# _SHA vs COMMIT_SHA: COMMIT_SHA is populated by Cloud Build only when the
+# build runs from a connected repo. _SHA is passed explicitly and is what the
+# gate steps read and write, so the gate behaves identically however the build
+# was started. The wrappers pass --sha=<sha> and the same value as _SHA.
+#
+# Node 22 matches .github/workflows/ci.yml, so a suite that passes in CI is
+# running on the same runtime here.
+#
+# TARGETS. verify and backend-staging / backend-demo are implemented. The rest
+# are declared as named steps that fail loudly rather than being absent -- an
+# unknown target must not silently succeed. Bead polyglot-pdf-ywxoh (4.2)
+# fills them in.
+
+substitutions:
+  # Which target to run: verify | backend-staging | backend-demo |
+  # frontend-staging | frontend-demo | editor | form-kits | firestore-rules |
+  # admin-service | admin-console | landing
+  _TARGET: verify
+  # The channel whose deploy/channels/<channel>.env supplies the Cloud Run
+  # env, secrets and runtime service account: staging | demo | admin.
+  _CHANNEL: staging
+  # The commit being built and gated. Written by the verify target, required
+  # by every deploy target.
+  _SHA: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 3600s
+
+steps:
+  # --------------------------------------------------------------------
+  # Step 0 -- _SHA is not optional.
+  #
+  # An empty _SHA would make the verify target write an empty-keyed record and
+  # every deploy target read it, so ONE empty-SHA verify would vouch for every
+  # future empty-SHA deploy. Refuse before anything else runs.
+  # --------------------------------------------------------------------
+  - id: require-sha
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ -z "${_SHA}" ]; then
+          echo "ABORT: _SHA is empty."
+          echo "Every build is gated on a specific commit: the verify target"
+          echo "writes build_checks/{_SHA} and each deploy target reads it."
+          echo "Pass --substitutions=_SHA=<sha> (and --sha=<sha>)."
+          exit 1
+        fi
+        echo "Building target ${_TARGET} at ${_SHA} (channel ${_CHANNEL})."
+
+  # --------------------------------------------------------------------
+  # Step 1 -- the VERIFY GATE.
+  #
+  # For a DEPLOY target this is the FIRST real step and it REFUSES without a
+  # build_checks/{_SHA} success record. For the verify target itself it is a
+  # no-op (verify is what creates the record).
+  #
+  # scripts/record_build_check.py fails CLOSED: a Firestore read that errors
+  # refuses the deploy rather than waving it through.
+  # --------------------------------------------------------------------
+  - id: gate-build-checks
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" = "verify" ]; then
+          echo "Target is verify -- this build CREATES the record, nothing to gate."
+          exit 0
+        fi
+        echo "Requiring a successful verify record for ${_SHA} ..."
+        pip install --quiet google-cloud-firestore
+        python3 scripts/record_build_check.py require \
+          --sha "${_SHA}" --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # verify -- the three suites, once per SHA.
+  # --------------------------------------------------------------------
+  - id: verify-backend
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "verify" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet -r backend/requirements.txt
+        # -m "not external" matches CI's flaky live-Gemini exclusion (those
+        # tests need real Gemini credentials the build does not have).
+        python -m pytest backend/tests admin_backend/tests tests -m "not external" -q
+
+  - id: verify-frontend
+    name: node:22
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "verify" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        cd frontend && npm ci && npm test
+
+  - id: verify-admin-console
+    name: node:22
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "verify" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        cd admin-console && npm ci && npm test
+
+  - id: record-build-check
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "verify" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python3 scripts/record_build_check.py record \
+          --sha "${_SHA}" --status success --build-id "$BUILD_ID" \
+          --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # backend-<channel> -- docker build + push, then gcloud run deploy with the
+  # env/secrets/SA read from deploy/channels/${_CHANNEL}.env.
+  #
+  # This is exactly what deploy-all.sh's backend stage does today, reading the
+  # SAME channel file, which is the point of moving that config out of bash.
+  # --------------------------------------------------------------------
+  - id: backend-build-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in backend-*) ;; *) echo "skip (target ${_TARGET})"; exit 0 ;; esac
+        docker build -t "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" .
+        docker push "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}"
+
+  - id: backend-deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in backend-*) ;; *) echo "skip (target ${_TARGET})"; exit 0 ;; esac
+
+        CHANNEL_FILE="deploy/channels/${_CHANNEL}.env"
+        # deploy-all.sh's own parser, sourced rather than reimplemented: a
+        # second copy of the format is the drift the channel files exist to
+        # end. Sourcing stops before the deploy flow (that script guards on
+        # BASH_SOURCE), so only the helper functions are defined.
+        source ./deploy-all.sh
+        CHANNEL_ENV=$(read_channel_section "$CHANNEL_FILE" SET_ENV_VARS)
+        CHANNEL_SECRETS=$(read_channel_section "$CHANNEL_FILE" SET_SECRETS)
+        CHANNEL_SA=$(read_channel_value "$CHANNEL_FILE" SERVICE_ACCOUNT SERVICE_ACCOUNT)
+
+        case "${_CHANNEL}" in
+          staging) SERVICE="polyglot-backend-staging" ;;
+          demo)    SERVICE="polyglot-backend" ;;
+          *) echo "ABORT: backend target has no service for channel ${_CHANNEL}"; exit 1 ;;
+        esac
+
+        # The computed keys, matching deploy-all.sh's BACKEND_ENV exactly --
+        # including GIT_SHA=${_SHA}, which is what GET /version reports, and
+        # APP_MODULE, which selects the ASGI app inside the one shared image.
+        BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FORM_KITS_MODE=gcs"
+        BACKEND_ENV="$BACKEND_ENV,FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits"
+        BACKEND_ENV="$BACKEND_ENV,FORM_KITS_REMOTE_PREFIX=form-kits"
+        BACKEND_ENV="$BACKEND_ENV,CONFIRMATION_FIRESTORE_ENABLED=true"
+        BACKEND_ENV="$BACKEND_ENV,FIRMS_FIRESTORE_ENABLED=true"
+        BACKEND_ENV="$BACKEND_ENV,APP_MODULE=backend.main:app,GIT_SHA=${_SHA}"
+        BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"
+
+        SECRETS_FLAG=()
+        [ -n "$CHANNEL_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$CHANNEL_SECRETS")
+        SA_FLAG=()
+        [ -n "$CHANNEL_SA" ] && SA_FLAG=(--service-account "$CHANNEL_SA")
+
+        gcloud run deploy "$SERVICE" \
+          --image "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" \
+          --region us-central1 \
+          --platform managed \
+          --allow-unauthenticated \
+          --timeout=3600 \
+          --memory=1Gi \
+          --project "$PROJECT_ID" \
+          --set-env-vars="$BACKEND_ENV" \
+          "${SA_FLAG[@]}" \
+          "${SECRETS_FLAG[@]}"
+
+  - id: backend-reachability-gate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in backend-*) ;; *) echo "skip (target ${_TARGET})"; exit 0 ;; esac
+        case "${_CHANNEL}" in
+          staging) SERVICE="polyglot-backend-staging" ;;
+          demo)    SERVICE="polyglot-backend" ;;
+          *) echo "ABORT: no service for channel ${_CHANNEL}"; exit 1 ;;
+        esac
+        # --allow-unauthenticated only REQUESTS the public invoker binding; the
+        # request can be refused while the deploy still exits 0, leaving a
+        # service that 403s every request before the app sees it (bd
+        # polyglot-pdf-pidtg). Same logic as deploy-all.sh's
+        # verify_service_publicly_reachable, sourced from that script rather
+        # than copied -- bead polyglot-pdf-ywxoh (4.2) extracts it to
+        # scripts/verify_service_reachable.py so bash and the build share ONE
+        # implementation instead of this source-time coupling.
+        source ./deploy-all.sh
+        verify_service_publicly_reachable "$SERVICE" us-central1 "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # Targets bead polyglot-pdf-ywxoh (4.2) implements.
+  #
+  # Declared and FAILING, not absent: a target name that matches no step would
+  # run a build of zero steps and report SUCCESS, and the admin console would
+  # record a green deploy that deployed nothing.
+  # --------------------------------------------------------------------
+  - id: unimplemented-targets
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          verify|backend-staging|backend-demo)
+            echo "target ${_TARGET} is implemented"
+            exit 0
+            ;;
+          frontend-staging|frontend-demo|editor|form-kits|firestore-rules|admin-service|admin-console|landing)
+            echo "target not implemented"
+            exit 1
+            ;;
+          *)
+            echo "ABORT: unknown target ${_TARGET}"
+            exit 1
+            ;;
+        esac
