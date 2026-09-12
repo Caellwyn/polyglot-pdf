@@ -62,4 +62,13 @@ EXPOSE 8080
 #
 # Shell form on purpose: ${PORT} and ${APP_MODULE:-...} both need shell
 # expansion. Pinned by tests/test_dockerfile_app_module.py.
-CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}
+#
+# --no-access-log: /ws/fill carries its credential as `?token=` (a Firebase
+# ID token or a client magic-link token) and uvicorn's access line prints
+# the full request target at INFO, so with the access log on, every voice
+# connection wrote a live token into the container's stdout and Cloud
+# Logging. Pinned by tests/test_dockerfile_app_module.py. The WARNING cap on
+# the uvicorn.access logger in backend/utils/logging.py is the second,
+# independent guard (tests/test_logging_access_log.py) for a uvicorn started
+# without this flag. bd polyglot-pdf-6rj0j.
+CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log

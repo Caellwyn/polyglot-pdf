@@ -324,3 +324,23 @@ def test_the_admin_module_path_is_importable_as_written():
     module = importlib.import_module(module_path)
     assert hasattr(module, attr), (
         "{} has no attribute {!r}".format(module_path, attr))
+
+
+def test_the_cmd_disables_uvicorns_access_log():
+    """The WS credential rides the URL, so the access log must be OFF.
+
+    /ws/fill takes `?token=<Firebase ID token or magic-link token>` as a query
+    parameter, and uvicorn's access logger prints the full request line --
+    query string included -- at INFO on every connection, straight into the
+    container's stdout and so into Cloud Logging. `--no-access-log` turns that
+    logger off at the server, independent of the level cap
+    configure_logging() applies (the two guards are pinned separately: the
+    level cap in tests/test_logging_access_log.py). bd polyglot-pdf-6rj0j.
+
+    Mutation: drop --no-access-log from the CMD -> red.
+    """
+    cmd = _cmd_line()
+    assert "--no-access-log" in cmd.split(), (
+        "the Dockerfile CMD does not pass --no-access-log, so uvicorn prints "
+        "every /ws/fill?token=... request line into Cloud Logging:"
+        + chr(10) + "  " + cmd)

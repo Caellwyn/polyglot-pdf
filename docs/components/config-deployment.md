@@ -2,11 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-scaig: a fifth admin-service
-gate, `require_app_admin_or_owning_manager_or_employee`, scoped to one
-route only -- no deploy-time env var or config key changed; see the gate
-inventory section below and [admin-service.md](admin-service.md).) (bd
-polyglot-pdf-z4ljj: Epic 2 Track C bead C0, main-app admin wiring -- `deploy-all.sh`'s frontend stage now resolves a SECOND live Cloud Run URL, `VITE_ADMIN_API_BASE_URL` (from `polyglot-admin`), the same way it resolves `VITE_WS_URL`, reusing the same explicit-channel abort signal; both channel wrappers also export `VITE_APP_CHANNEL` so the built frontend's firm-console pages know their own channel for the admin service's required `?channel=` param; `frontend/src/shared/config.ts` gains `getAdminApiBaseUrl()`/`getAppChannel()`, and `frontend/src/console/adminApi.ts` is the new generic authenticated-fetch client C4/C5 build on.) (bd polyglot-pdf-8vgfh: the admin service's gate inventory -- ALL FOUR gates now exist, `require_google_oidc` having shipped with `POST /admin/links/sweep-expired`.) (bd polyglot-pdf-dmjl5: the admin service's gate inventory -- three of the four now exist (`require_app_admin_or_owning_manager` ships with the four `/admin/users` routes; `require_firm_manager` lives on the public backend over the shared `manager_firm_id` rule), so the earlier "require_app_admin is the only one that exists yet" no longer holds. No env var, deploy step or config key changed.) (bd polyglot-pdf-b6943: the admin console app -- `admin-console/`, mirroring `schema-editor/`'s sign-in gate and delivery-mode split; two new Hosting sites `polyglot-admin-demo`/`polyglot-admin-candidate` with NO `/api` rewrite; `deploy-admin-console.sh` deploys candidate first, then `--live`, resolving the admin service's URL into `VITE_ADMIN_API_BASE_URL` the same way `deploy-editor.sh` resolves the public backend's -- see `technical_guide.md`'s Surface contracts.) (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the ceiling actually in force at a client connect is the link token's own `cap_usd` claim over the global `LINK_COST_CEILING_USD`, not the global alone.) (bd polyglot-pdf-w828m: Epic 3 bead E3.4, session-end usage rollups -- the redemption/teardown write count above is corrected to include the rollup helper's own writes: TWO writes on first open, one read plus two writes on completion, one read plus one-or-two writes per connection teardown.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-11 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -484,8 +480,25 @@ public voice app) and `admin_backend/` (the privileged admin API, bd
 `polyglot-pdf-pnoik`) -- and its `CMD` picks which one to serve at RUNTIME:
 
 ```
-CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}
+CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log
 ```
+
+**`--no-access-log` is load-bearing for privacy** (bd `polyglot-pdf-6rj0j`,
+sprint 23 B0). uvicorn's access line prints the full request target at
+INFO, and `/ws/fill` carries its credential in the query string
+(`?token=<Firebase ID token or magic-link token>`), so with the access
+log on, every voice connection wrote a live, replayable token into the
+container's stdout and Cloud Logging. `configure_logging()`
+(`backend/utils/logging.py`) also caps the `uvicorn.access` logger at
+WARNING, so a uvicorn started WITHOUT the flag (the local launchers)
+drops the line too; the two guards are pinned separately
+(`tests/test_dockerfile_app_module.py`, `tests/test_logging_access_log.py`).
+The cost is diagnostic: there is no per-connection access line in the
+app stream. Cloud Run's own request log (`run.googleapis.com/requests`)
+still records status and latency per request -- and, until the WS
+credential moves out of the URL (sprint 23 bead C2), the URL itself,
+which the interim Cloud Logging exclusion on `httpRequest.requestUrl`
+covers.
 
 **Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
 `gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
