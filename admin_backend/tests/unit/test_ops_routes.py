@@ -39,7 +39,23 @@ def client():
 # GET /admin/errors.
 # --------------------------------------------------------------------------
 
-_SENTINEL_MESSAGE = "SENTINEL do-not-leak field_value=SSN-123-45-6789"
+_SENTINEL = "SENTINEL do-not-leak field_value=SSN-123-45-6789"
+
+# Shaped like the REAL Error Reporting API, not a convenient fiction: the
+# live v1beta1 discovery document's ErrorEvent schema has exactly
+# context/serviceContext/message/eventTime -- there is no "type" field.
+# "message" is shaped exactly like backend/utils/logging.py's
+# pii_safe_exception_info output: a traceback carrying the sentinel in a
+# frame line (proving a real leak shape is exercised, not an empty
+# message) and ending on the bare exception type name alone, which is the
+# only thing error_stats._error_type_from_message is allowed to recover.
+_SENTINEL_MESSAGE = (
+    'Traceback (most recent call last):\n'
+    '  File "backend/adapters/live_ai_gemini.py", line 3012, in '
+    '_handle_tool_call\n'
+    '  # {}\n'
+    'ValueError'
+).format(_SENTINEL)
 
 _RAW_GROUP_STATS_RESPONSE = {
     "errorGroupStats": [
@@ -50,7 +66,6 @@ _RAW_GROUP_STATS_RESPONSE = {
             "lastSeenTime": "2026-09-10T00:00:00Z",
             "representative": {
                 "message": _SENTINEL_MESSAGE,
-                "type": "ValueError",
                 "context": {
                     "reportLocation": {
                         "filePath": "backend/adapters/live_ai_gemini.py",
@@ -74,9 +89,11 @@ def test_errors_requires_a_known_channel(client, monkeypatch):
 
 def test_errors_returns_type_and_top_frame_only_never_the_message(
         client, monkeypatch):
-    """EXIT CRITERION 3. Mutation: add "message": representative.get(
-    "message") to _public_group_view's return dict -- the sentinel
-    assertion below goes red."""
+    """EXIT CRITERION 3. Mocks the REAL Error Reporting shape -- no
+    "type" field on representative, a message that looks like this
+    repo's own pii_safe_exception_info output. Mutation: add "message":
+    representative.get("message") to _public_group_view's return dict --
+    the sentinel assertion below goes red."""
     monkeypatch.setattr(
         error_stats, "_project_id", lambda: "test-project")
     monkeypatch.setattr(error_stats, "_access_token", lambda: "tok")
@@ -90,11 +107,13 @@ def test_errors_returns_type_and_top_frame_only_never_the_message(
     assert body["service"] == "polyglot-backend"
 
     raw_text = resp.text
-    assert _SENTINEL_MESSAGE not in raw_text, (
+    assert _SENTINEL not in raw_text, (
         "the raw exception message must never reach the response body")
 
     group = body["groups"][0]
     assert group["count"] == 42
+    # Recovered from the terminating line of representative.message, since
+    # the real API has no representative.type field at all.
     assert group["error_type"] == "ValueError"
     assert group["first_seen_time"] == "2026-09-01T00:00:00Z"
     assert group["last_seen_time"] == "2026-09-10T00:00:00Z"
@@ -104,6 +123,51 @@ def test_errors_returns_type_and_top_frame_only_never_the_message(
         "function_name": "_handle_tool_call",
     }
     assert "message" not in group
+
+
+def test_error_type_recovery_rejects_anything_not_a_bare_type_token(
+        client, monkeypatch):
+    """error_type must degrade to None (never guess) when the message's
+    last line is not a single bare identifier -- e.g. a real "Type:
+    message" rendering, or an empty message. Mutation: relax the " " / ":"
+    guard in _error_type_from_message -- this goes red."""
+    raw = {
+        "errorGroupStats": [
+            {
+                "group": {"groupId": "grp-2"},
+                "count": "1",
+                "firstSeenTime": "2026-09-01T00:00:00Z",
+                "lastSeenTime": "2026-09-01T00:00:00Z",
+                "representative": {
+                    "message": "ValueError: {}".format(_SENTINEL),
+                    "context": {"reportLocation": {}},
+                },
+            },
+            {
+                "group": {"groupId": "grp-3"},
+                "count": "1",
+                "firstSeenTime": "2026-09-01T00:00:00Z",
+                "lastSeenTime": "2026-09-01T00:00:00Z",
+                "representative": {
+                    "message": "",
+                    "context": {"reportLocation": {}},
+                },
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        error_stats, "_project_id", lambda: "test-project")
+    monkeypatch.setattr(error_stats, "_access_token", lambda: "tok")
+    monkeypatch.setattr(
+        error_stats, "_fetch_group_stats",
+        lambda project, token, service: raw)
+
+    resp = client.get("/admin/errors?channel=demo")
+    assert resp.status_code == 200, resp.text
+    groups = resp.json()["groups"]
+    assert groups[0]["error_type"] is None
+    assert groups[1]["error_type"] is None
+    assert _SENTINEL not in resp.text
 
 
 def test_errors_uses_the_staging_service_name_for_staging_channel(

@@ -19,24 +19,48 @@ new IAM grant.
 
 NEVER RETURNS A MESSAGE BODY -- ONLY TYPE + TOP FRAME (exit criterion 3;
 E3.8's PII rule, docs/standards/hipaa-pii-policy.md, reaching the console
-too). The groupStats API response's `representative.message` field is the
-rendered exception text Cloud Error Reporting stores for display -- and
-because Error Reporting groups on FRAMES, not on the message, an
-implementation detail changing the message text (a value interpolated into
-an f-string, say) does not even change which group an error lands in; the
-message is purely cosmetic to the grouping and is exactly what Surface
-contract 28a's own processor already strips from what REACHES Error
-Reporting in the first place (the exception TYPE and FRAMES, never the
-message). This module defends the SAME property a second time, on the READ
-side: `_public_group_view` below reads ONLY `representative.type` (or the
-first line of `representative.message` cannot be trusted to be type-only,
-so this module never reads `representative.message` at all) and the FIRST
-frame's `filePath`/`lineNumber`/`functionName` from
+too).
+
+`representative.type` DOES NOT EXIST ON THE REAL API. `ErrorEvent` (the
+schema of `groupStats.representative`) has exactly four properties --
+`context`, `serviceContext`, `message`, `eventTime` -- per the live
+v1beta1 discovery document (fetch it yourself: `curl -s
+"https://clouderrorreporting.googleapis.com/$discovery/rest?version=v1beta1"
+| python -c "import json,sys; print(list(json.load(sys.stdin)['schemas']
+['ErrorEvent']['properties']))"` prints exactly those four names). No
+schema in that API defines `type`, `errorType`, or `exceptionType` on a
+representative sample, so `representative.get("type")` always returns
+None; the field the API actually exposes is `representative.message`.
+
+`representative.message` IS SAFE TO READ HERE, because of what Surface
+contract 28a's WRITE side (backend/utils/logging.py's
+`pii_safe_exception_processor` / `pii_safe_exception_info`) already
+guarantees about it before it ever reaches Error Reporting: the
+`stack_trace` field that processor emits -- which Error Reporting ingests
+as a qualifying log entry's display message, becoming this group's
+`representative.message` -- carries ONLY frames (`file`, `line`,
+`function`) and, on the terminating line of each chained block, the bare
+exception TYPE NAME with nothing appended (`pii_safe_exception_info`'s own
+comment: "TYPE ONLY on the terminating line ... we print \"ValueError\"
+and stop"). So in THIS repo's own error paths, `representative.message`
+can never carry a field value -- the write side already closed that door.
+
+`_error_type_from_message` below reads the type back out WITHOUT
+reopening a way for some OTHER shape of message (a differently-rendered
+log entry, a future change to the processor) to leak a real message
+through by accident: it takes ONLY the LAST non-blank line, and returns it
+ONLY if that line is a single bare token (no whitespace, no ":") --
+exactly the shape `pii_safe_exception_info` guarantees and nothing an
+ordinary "ValueError: <message>" rendering would ever produce. Any other
+shape -- multiple words, a colon, an empty message -- yields `None`
+rather than a guess, so a message this module does not recognize as
+type-only degrades to "unknown" instead of leaking. The REST of the
+message (every frame line) is discarded outright: it is parsed only to
+find the last line, never stored, returned, or logged by this module. The
+FIRST frame's `filePath`/`lineNumber`/`functionName` still comes from
 `representative.context.reportLocation` -- the one location field Error
 Reporting's schema exposes on a group's representative sample, itself
-already frame-shaped (file/line/function, no source text), never the raw
-message string a sentinel-carrying test payload would otherwise leak
-through untouched.
+already frame-shaped (file/line/function, no source text).
 
 THE HTTP CALL IS THE ONE SEAM A TEST MONKEYPATCHES (this module's
 `_fetch_group_stats`), mirroring bigquery_reports.py's `_run_query` and
@@ -144,10 +168,37 @@ def _fetch_group_stats(project: str, token: str, service: str) -> dict:
     return resp.json()
 
 
+def _error_type_from_message(message: Optional[str]) -> Optional[str]:
+    """The bare exception type name from a `representative.message` string
+    this repo's own write side produced -- see module docstring for the
+    exact guarantee this leans on and why reading `representative.message`
+    is safe here.
+
+    Returns the LAST non-blank line ONLY IF that line is a single bare
+    token (no whitespace, no ":"). `pii_safe_exception_info` always ends
+    each rendered block with exactly that shape -- the exception class
+    name alone, e.g. "ValueError" -- and never appends a colon or a
+    message. Anything else (multiple words, a colon, an empty message)
+    returns None rather than guess: this function is deliberately narrow
+    so a message this module does not recognize as type-only degrades to
+    "unknown" instead of parsing further into it.
+    """
+    if not message:
+        return None
+    lines = [line.strip() for line in message.splitlines() if line.strip()]
+    if not lines:
+        return None
+    candidate = lines[-1]
+    if " " in candidate or ":" in candidate:
+        return None
+    return candidate
+
+
 def _public_group_view(group: dict) -> dict:
     """Count, first/last seen, and the group's representative TYPE and top
-    frame ONLY -- see module docstring for why `representative.message` is
-    never read here at all.
+    frame ONLY -- see module docstring for why reading
+    `representative.message` (to recover the type token) is safe here, and
+    why the rest of that message is never returned.
     """
     representative = group.get("representative") or {}
     report_location = (
@@ -158,7 +209,7 @@ def _public_group_view(group: dict) -> dict:
         "count": int(group.get("count") or 0),
         "first_seen_time": group.get("firstSeenTime"),
         "last_seen_time": group.get("lastSeenTime"),
-        "error_type": representative.get("type"),
+        "error_type": _error_type_from_message(representative.get("message")),
         "top_frame": {
             "file_path": report_location.get("filePath"),
             "line_number": report_location.get("lineNumber"),

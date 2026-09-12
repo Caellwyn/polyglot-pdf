@@ -35,8 +35,13 @@ SA's ADC token via `google.auth` -- `admin-backend-sa` already holds
 `setup-monitoring.sh`, so this bead grants nothing new), filtered to the
 channel's Cloud Run service name (`polyglot-backend` / `polyglot-backend-
 staging`) and returning count, first/last seen, and the group's
-representative TYPE and TOP FRAME ONLY -- `representative.message` is
-never read at all (E3.8's PII rule reaching the console too). `GET
+representative TYPE and TOP FRAME ONLY. The Error Reporting API has no
+`representative.type` field (the live discovery document's `ErrorEvent`
+schema is `context`/`serviceContext`/`message`/`eventTime` only) -- the
+type is recovered from `representative.message`'s own terminating line,
+which E3.8's write-side PII rule already guarantees is the bare exception
+type name and nothing else, so no message text ever reaches the console.
+`GET
 /admin/health` (`ops_routes.py`, `require_app_admin`) fans out to the
 requested channel's PUBLIC backend `/health` + `/version` over a
 short-timeout HTTP call, plus this service's own `/version` (an
@@ -332,7 +337,7 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/reports/income` | GET | `require_app_admin` | Parameterised BigQuery read over `income_month` (real firms only -- the view's own `firm_kind = 'live'` filter, contract 25). `?from=&to=` REQUIRED; `?channel=` optional. Same parameterisation, 12-month ceiling, and `delayed: true` as the cost report. A read, so no audit row. |
 | `/admin/alerts` | GET | `require_app_admin` | Lists `alerts/{id}` docs (bd polyglot-pdf-mpebj; docs: bd polyglot-pdf-bo95a), newest first, page-capped, an explicit key allowlist. Optional `?acknowledged=`/`?firm_id=`/`?kind=` filters (422 on an unrecognized `kind`). A read, so no audit row. |
 | `/admin/alerts/{alert_id}/acknowledge` | PATCH | `require_app_admin` | Acknowledge one alert -- sets `acknowledged_by` (the ACTOR's uid) + `acknowledged_at` in one Firestore transaction with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). 404 for an unknown id; 409 for one already acknowledged, naming who acknowledged it first. The ONE mutating route this bead adds. |
-| `/admin/errors` | GET | `require_app_admin` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd polyglot-pdf-mpebj, via `admin_backend/services/error_stats.py`), filtered to `polyglot-backend`/`polyglot-backend-staging`. `?channel=` REQUIRED. Returns count, first/last seen, and the group's representative TYPE and top FRAME ONLY -- the message body is never read (E3.8's PII rule). A read, so no audit row. |
+| `/admin/errors` | GET | `require_app_admin` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd polyglot-pdf-mpebj, via `admin_backend/services/error_stats.py`), filtered to `polyglot-backend`/`polyglot-backend-staging`. `?channel=` REQUIRED. Returns count, first/last seen, and the group's representative TYPE and top FRAME ONLY -- the API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's PII rule already guarantees is the bare type name with no message text; the rest of that message is never returned. A read, so no audit row. |
 | `/admin/health` | GET | `require_app_admin` | Fans out to one channel's PUBLIC backend `/health` + `/version` over a short-timeout HTTP call, plus this service's own `/version` (bd polyglot-pdf-mpebj). `?channel=` REQUIRED. `configured: false` when `BACKEND_URLS_JSON` has no entry for this channel; `reachable: false` (never a 500) when the entry exists but the HTTP calls fail -- `reachable` requires BOTH `/health` and `/version` to succeed. A read, so no audit row. |
 
 `channel` is always an explicit path parameter or query parameter

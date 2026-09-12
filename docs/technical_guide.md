@@ -165,7 +165,7 @@ its own table).
 | GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
 | GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
-| GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY -- `representative.message` is never read at all (E3.8's PII rule reaching the console). `ErrorReportingUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
+| GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY. The Error Reporting API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's write-side PII rule already guarantees is the bare exception type name with no message text -- the rest of that message is never returned (E3.8's PII rule reaching the console). `ErrorReportingUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
 | GET | `/admin/firms` | Every firm, with `kind`, `balance_credits` and `status` (bd `polyglot-pdf-zopqq`), unfiltered -- the bead names columns, not filters, so no composite index is owed the way `/admin/audit`'s filters are. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
 | POST | `/admin/firms` | Create a firm (bd `polyglot-pdf-zopqq`). Body `{firm_id, name, contact_email, kind, allowed_kits?, status?}` -- `kind` is REQUIRED with NO default (422 if missing or not `mock`/`live`), matching `upsert_firm`'s own required parameter. Writes the SAME field shape as `backend/services/firms.py::upsert_firm` but does NOT call it: this route needs the doc write and the audit row in one `@firestore.transactional` body (contract 15's in-transaction form), and `upsert_firm` does its own non-transactional read+write -- calling it from inside a transaction would add a second, transaction-illegal read. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/firms/{firm_id}` | One firm's profile, balance, and a page of ledger rows (bd `polyglot-pdf-zopqq`). **Runs `credit_ledger.reconcile_expired_for_firm` once per known channel (`demo`, `staging`) BEFORE reading the balance** -- a lazy, best-effort catch-up for expired unopened links the hourly sweep (bd `polyglot-pdf-8vgfh`, below) has not reached, so the balance shown reflects any refund that catch-up applies. A per-channel reconciliation failure is logged and skipped, never 500s the page. `?ledger_limit=` (default 50, max 200) pages the newest-first ledger view. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
@@ -2392,10 +2392,19 @@ explicitly is not.
   `admin_backend/services/error_stats.py`) -- the admin console's
   errors-per-channel view, reading Error Reporting's `groupStats` as
   `admin-backend-sa`, which holds `roles/errorreporting.viewer` from
-  `scripts/setup-monitoring.sh`. `_public_group_view` reads ONLY
-  `representative.type` and the report location's frame fields, never
-  `representative.message` -- this contract's PII rule reaching the
-  console.
+  `scripts/setup-monitoring.sh`. `_public_group_view` reads ONLY the report
+  location's frame fields and, for the type, the TERMINATING LINE of
+  `representative.message` -- the API defines no `representative.type`
+  field (its `ErrorEvent` schema is `context`/`serviceContext`/`message`/
+  `eventTime` only), so `error_stats._error_type_from_message` parses the
+  bare type token back out of the one field the API does expose. Reading
+  it is safe only because THIS producer already guarantees that field's
+  shape: the emitted `stack_trace` (what Error Reporting stores as
+  `representative.message`) ends each block with the type name alone, no
+  message text ever appended -- this contract's PII rule reaching the
+  console. The parser returns `None` for any line that is not a single
+  bare token, so a message it does not recognize as type-only degrades to
+  "unknown" instead of leaking.
 - **What silently breaks if they disagree:** restoring `format_exc_info`
   re-opens a P0 PII leak (the message can embed a field value, bd
   `polyglot-pdf-p84m`) with NO test failure anywhere except
@@ -2522,18 +2531,28 @@ share the bead and its cross-cutting rules rather than one data shape.
   `test_alert_routes.py`'s `test_a_forced_audit_failure_leaves_
   acknowledged_at_unset` (mutation-verified: moving the audit call after
   the transaction commits turns the pin red).
-- **Error stats read ONLY `representative.type` and the report location's
-  frame fields, NEVER `representative.message`** (contract 28a's PII rule
-  reaching the console): `admin_backend/services/error_stats.py`'s
-  `_public_group_view` builds its return dict by hand from named keys, so
-  a future field added to Error Reporting's `groupStats` response cannot
-  silently reach the console. *Breaks if a `"message": representative.
-  get("message")` line is added:* the exception message (which can embed
-  a field value, the same P0 this contract's sibling exists to prevent at
-  the LOGGING end) would leak to every app admin; pinned by
-  `test_ops_routes.py`'s sentinel test, which asserts the sentinel string
-  is absent from the RAW response TEXT, not merely from a typed field
-  (mutation-verified).
+- **Error stats read ONLY the report location's frame fields and the
+  TERMINATING LINE of `representative.message` (for the type token) --
+  NEVER the rest of that message** (contract 28a's PII rule reaching the
+  console). The Error Reporting API defines no `representative.type`
+  field (its `ErrorEvent` schema is `context`/`serviceContext`/`message`/
+  `eventTime` only, confirmed against the live v1beta1 discovery
+  document), so `admin_backend/services/error_stats.py`'s
+  `_error_type_from_message` parses the type back out of
+  `representative.message` -- safe only because the producer (contract
+  28a's write side, `pii_safe_exception_info`) already guarantees that
+  field ends with the bare exception type name and nothing else in this
+  repo's own error paths; the parser returns `None` for any line that is
+  not a single bare token, rather than guessing. `_public_group_view`
+  still builds its return dict by hand from named keys, so a future field
+  added to Error Reporting's `groupStats` response cannot silently reach
+  the console. *Breaks if a `"message": representative.get("message")`
+  line is added instead of the parsed token:* the raw exception message
+  (which can embed a field value, the same P0 this contract's sibling
+  exists to prevent at the LOGGING end) would leak to every app admin;
+  pinned by `test_ops_routes.py`'s sentinel test, which asserts the
+  sentinel string is absent from the RAW response TEXT, not merely from a
+  typed field (mutation-verified).
 - **`BACKEND_URLS_JSON`'s WIRE FORMAT IS "channel=url;channel=url", NOT
   literal JSON, despite the name matching the plan's own prose.** The
   value rides inside `deploy-admin.sh`'s `BACKEND_EXTRA_ENV`, which

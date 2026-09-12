@@ -113,8 +113,68 @@ The Opus outer cross-surface review returned `GAPS-FOUND (3)`. Breakdown:
   without a live query); the alerts list's full-collection Python-side
   filtering (deliberate, documented, TTL- and page-capped).
 
+### Cross-surface review round 2 -- adopt/reject/defer
+
+A second Opus outer cross-surface review returned `GAPS-FOUND (1)`. Breakdown:
+
+- **ADOPTED (blocker, code + doc fix):** `admin_backend/services/error_stats.py`'s
+  `_public_group_view` read `representative.get("type")` for `GET
+  /admin/errors`'s `error_type` field -- a field the Cloud Error Reporting
+  API does not have. Verified against the live v1beta1 discovery document
+  (`ErrorEvent`'s complete property set is `context`/`serviceContext`/
+  `message`/`eventTime` -- no schema in the API defines `type`,
+  `errorType`, or `exceptionType`), this meant `error_type` would read
+  `null` on every real response while the unit test stayed green, because
+  the test fixture was hand-authored with a `"type"` key the real API
+  never sends -- the same "a mock cannot tell you the real dependency is
+  forbidden" shape as CLAUDE.md scar #7, here applied to a response FIELD
+  instead of an IAM permission. Fixed by recovering the type from
+  `representative.message`'s own terminating line instead (new
+  `_error_type_from_message`): E3.8's write-side PII rule
+  (`pii_safe_exception_info`) already guarantees that field, once it
+  reaches Error Reporting as `representative.message`, ends each rendered
+  block with the bare exception type name and nothing else in this
+  repo's own error paths, so reading it back is safe -- but the parser is
+  deliberately narrow (rejects any line with a space or a colon, returning
+  `None` rather than guessing) so a message this module does not recognize
+  as type-only degrades to "unknown" instead of parsing further into it or
+  leaking. Updated the test fixture in `test_ops_routes.py` to the REAL
+  API shape (no `"type"` key; `"message"` shaped like this repo's actual
+  `pii_safe_exception_info` output, sentinel embedded in a frame line to
+  keep exercising a real leak shape) and added a new test pinning the
+  narrow-parse guard (`test_error_type_recovery_rejects_anything_not_a_
+  bare_type_token`, covering a real "Type: message" rendering and an empty
+  message). Both new/changed tests mutation-verified: reverting to
+  `representative.get("type")` against the corrected fixture reddens the
+  first; relaxing the space/colon guard reddens the second. Corrected the
+  same stale "`representative.type`" claim everywhere it appeared:
+  `docs/technical_guide.md` (the `/admin/errors` routes-table row, Surface
+  contract 28a's Consumers section, and contract 29's own error-stats
+  bullet) and `docs/components/admin-service.md` (the bead-19 narrative
+  paragraph and the admin routes table row).
+- **DEFERRED (pre-existing, filed as beads, not fixed here):**
+  `admin_backend/routes/alert_routes.py`'s "explicit key allowlist" review
+  gate does not actually gate anything, because `_ALERT_RESPONSE_KEYS` is
+  derived from `alerts.ALERT_FIELDS` rather than hand-listed the way
+  `usage_routes.py`'s allowlists are (bd `polyglot-pdf-927u5`); the
+  `timeRange.period` comment in `error_stats.py` names a `PERIOD_1_MONTH`
+  enum value the real API does not define (bd `polyglot-pdf-ez6ed`); and
+  `bigquery_reports.py`'s `_run_query` builds its client with no explicit
+  `location=` against a regional (`us-central1`) BigQuery dataset -- most
+  likely fine via BigQuery's own location inference, but unverified
+  against a live project since the unit tests monkeypatch `_run_query`
+  entirely (bd `polyglot-pdf-4sc22`).
+
 ## Lessons
 
+- When a route's job is to shape a THIRD-PARTY API's response, verify the
+  field names against that API's own schema (a discovery document, an
+  OpenAPI spec) before writing the hand-authored test fixture -- a fixture
+  written from the same (wrong) assumption as the code it tests will stay
+  green forever. Here the fixture invented a `"type"` key that
+  `groupStats.representative` (an `ErrorEvent`) does not have, so the test
+  proved nothing about the real field (`representative.message`) the API
+  actually returns.
 - The bead's own prose for an env var's VALUE shape is not always its
   final WIRE format when that value has to ride inside an existing
   comma-joined assembly mechanism -- check how the value actually reaches
