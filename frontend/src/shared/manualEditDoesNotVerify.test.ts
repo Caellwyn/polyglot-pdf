@@ -76,6 +76,29 @@ describe('a manual edit reports a value but never a verification (bd polyglot-pd
     expect(onManualEdit).toHaveBeenCalledWith('f1', 'Maria')
   })
 
+  it('TAB-THROUGH is covered because it IS a blur (bd polyglot-pdf-96um6 criterion 1)', () => {
+    // The criterion names three gestures -- blur, TAB-THROUGH, and clicking away.
+    // Only two were named by a test; tab-through was covered by mechanism (the
+    // notify rides on 'blur' and 'change', and moving focus off a field fires
+    // blur) but nothing SAID so, which is how a criterion goes fifteen rounds
+    // without anyone noticing it was never scored.
+    document.body.innerHTML = `
+      <input id="f1" name="f1" type="text" value="" />
+      <input id="f2" name="f2" type="text" value="" />`;
+    const onManualEdit = vi.fn();
+    createFieldManager({ schema: TWO_FIELD_SCHEMA, onManualEdit });
+
+    const first = document.getElementById('f1') as HTMLInputElement;
+    const second = document.getElementById('f2') as HTMLInputElement;
+    first.focus();
+    first.value = 'Vasquez';
+    second.focus();                                        // the Tab keypress
+    first.dispatchEvent(new FocusEvent('blur', { bubbles: false }));
+
+    expect(onManualEdit, 'tabbing out must notify like any other blur').toHaveBeenCalledTimes(1);
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Vasquez');
+  });
+
   it('the state written for a blurred field is NOT verified', () => {
     // Drives PRODUCTION's own write, not a re-implementation of it: the options
     // object comes from connection.ts's onManualEdit, so this test would pass
@@ -401,6 +424,16 @@ describe('CHECKBOX GROUPS survive the option[0] id (bd polyglot-pdf-96um6)', () 
     ).toBe(1)
   })
 })
+
+const TWO_FIELD_SCHEMA = {
+  source: 'web',
+  form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+  fields: [
+    { id: 'f1', name: 'F1', spoken_name: 'f one', type: 'text' },
+    { id: 'f2', name: 'F2', spoken_name: 'f two', type: 'text' },
+  ],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f1', 'f2'] }],
+} as unknown as FormSchema;
 
 describe('a GROUP edit reports the checked selection (bd polyglot-pdf-96um6)', () => {
   beforeEach(() => { sessionStorage.clear() })
