@@ -49,10 +49,14 @@ ADMIN_SA_NAME = "admin-backend-sa"
 #
 # Roles the plan DEFERS to the epic that first needs them are deliberately
 # ABSENT: cloudbuild.builds.editor + iam.serviceAccountUser, run.admin,
-# firebasehosting.admin (Epic 4); errorreporting.viewer, monitoring.viewer
-# (Epic 3 bead 8, not yet built). An unused grant is its own risk, so each
-# lands with its first consumer -- pinned by
-# test_admin_sa_holds_no_deferred_role_early below.
+# firebasehosting.admin (Epic 4). errorreporting.viewer and monitoring.viewer
+# were deferred here too until Epic 3 bead 8 (bd polyglot-pdf-e4dt8) shipped
+# and moved them OUT of DEFERRED_ROLES into EXPECTED_ADMIN_SA_ROLES below
+# (granted by scripts/setup-monitoring.sh, MONITORING_GRANTED_ROLES) -- their
+# first real consumer is bd polyglot-pdf-mpebj's GET /admin/errors
+# (admin_backend/services/error_stats.py); no route reads monitoring.viewer
+# yet. An unused grant is its own risk, so each lands with its first
+# consumer -- pinned by test_admin_sa_holds_no_deferred_role_early below.
 #
 # bigquery.jobUser + bigquery.dataViewer landed HERE (Epic 3 bead 6, E3.6):
 # they are granted by scripts/setup-telemetry.sh, NOT

@@ -29,7 +29,21 @@ test_admin_route_auth.py enforces by deriving the registered route set.
 bd polyglot-pdf-f0kuu adds kit commercial settings (GET /admin/kits, GET/PUT
 /admin/kits/{kit_id}/commercial), behind require_app_admin, reusing bead
 A3's backend/services/kit_commercials.py reader rather than adding a second
-one (admin_backend/routes/kit_routes.py).
+one (admin_backend/routes/kit_routes.py). bd polyglot-pdf-mpebj (E3.11a)
+adds the monitoring console's READ routes: GET /admin/firms/{firm_id}/usage
++ GET /admin/kits/{kit_id}/usage (admin_backend/routes/usage_routes.py, the
+E3.4 rollup docs), GET /admin/reports/cost + GET /admin/reports/income
+(admin_backend/routes/report_routes.py, parameterised BigQuery reads over
+the E3.6 views via admin_backend/services/bigquery_reports.py), GET
+/admin/alerts + PATCH /admin/alerts/{id}/acknowledge (admin_backend/routes/
+alert_routes.py, the E3.5 alert docs -- the one mutation here, audited
+in-transaction), and GET /admin/errors + GET /admin/health
+(admin_backend/routes/ops_routes.py: Error Reporting groupStats via
+admin_backend/services/error_stats.py, and a per-channel public-backend
+health/version fan-out over the new BACKEND_URLS_JSON env var). All behind
+require_app_admin except the firm usage route, which reuses
+require_app_admin_or_owning_manager (a manager reads only their own firm's
+usage, 404 not 403 for another firm -- mirroring bead B4's rule).
 
 THE ADMIN SERVICE HAS NO CHANNEL. It serves BOTH staging's and the demo's
 data, so nothing here may derive a Firestore collection name from
@@ -68,8 +82,9 @@ from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
 from admin_backend.routes import (
-    audit_routes, config_routes, credit_routes, firm_routes, kit_routes,
-    link_routes, sweep_routes, user_routes,
+    alert_routes, audit_routes, config_routes, credit_routes, firm_routes,
+    kit_routes, link_routes, ops_routes, report_routes, sweep_routes,
+    usage_routes, user_routes,
 )
 from admin_backend.routes import whoami as whoami_routes
 
@@ -167,3 +182,7 @@ app.include_router(credit_routes.router)
 app.include_router(link_routes.router)
 app.include_router(sweep_routes.router)
 app.include_router(kit_routes.router)
+app.include_router(usage_routes.router)
+app.include_router(report_routes.router)
+app.include_router(alert_routes.router)
+app.include_router(ops_routes.router)

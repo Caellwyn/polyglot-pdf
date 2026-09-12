@@ -196,6 +196,14 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/kits"),
         (("GET",), "/admin/kits/{kit_id}/commercial"),
         (("PUT",), "/admin/kits/{kit_id}/commercial"),
+        (("GET",), "/admin/firms/{firm_id}/usage"),
+        (("GET",), "/admin/kits/{kit_id}/usage"),
+        (("GET",), "/admin/reports/cost"),
+        (("GET",), "/admin/reports/income"),
+        (("GET",), "/admin/alerts"),
+        (("PATCH",), "/admin/alerts/{alert_id}/acknowledge"),
+        (("GET",), "/admin/errors"),
+        (("GET",), "/admin/health"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
@@ -217,6 +225,39 @@ def test_whoami_is_gated_by_require_app_admin_specifically():
     assert _dependency_names_for(route) == {"require_app_admin"}
     dependant = route.dependant
     assert any(sub.call is require_app_admin for sub in dependant.dependencies)
+
+
+def test_firm_usage_route_is_gated_by_the_composite_gate_specifically():
+    """Pins WHICH gate GET /admin/firms/{firm_id}/usage carries (bd
+    polyglot-pdf-mpebj, E3.11a): require_app_admin_or_owning_manager, NOT
+    require_app_admin -- a firm manager may read their own firm's usage
+    (usage_routes.py's own _require_owning_firm), mirroring link_routes.py's
+    listing route rather than kit_routes.py's admin-only reasoning.
+    Mutation: swap the dependency for require_app_admin on this one route --
+    red."""
+    route = next(
+        r for r in app.routes if r.path == "/admin/firms/{firm_id}/usage")
+    assert _dependency_names_for(route) == {
+        "require_app_admin_or_owning_manager"}
+
+
+def test_kit_usage_and_report_and_alert_and_ops_routes_are_gated_by_require_app_admin_specifically():
+    """The rest of bd polyglot-pdf-mpebj's new routes all carry the plain
+    require_app_admin gate (no firm-manager counterpart -- see each
+    module's own docstring for why). Mutation: swap any one of these for a
+    different gate -- red."""
+    admin_only_paths = (
+        "/admin/kits/{kit_id}/usage",
+        "/admin/reports/cost",
+        "/admin/reports/income",
+        "/admin/alerts",
+        "/admin/alerts/{alert_id}/acknowledge",
+        "/admin/errors",
+        "/admin/health",
+    )
+    for path in admin_only_paths:
+        route = next(r for r in app.routes if r.path == path)
+        assert _dependency_names_for(route) == {"require_app_admin"}, path
 
 
 def test_sweep_route_is_gated_by_require_google_oidc_specifically():

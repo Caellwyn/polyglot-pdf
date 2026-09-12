@@ -1,7 +1,65 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-11 (bd polyglot-pdf-mpebj, E3.11a -- the monitoring
+console's READ routes: `GET /admin/firms/{firm_id}/usage` +
+`GET /admin/kits/{kit_id}/usage` (`admin_backend/routes/usage_routes.py`),
+reading the E3.4 Firestore rollup docs (`firms/{id}/usage/{month}`,
+`kits/{id}/usage/{month}`) under an explicit key allowlist -- the firm
+route carries `require_app_admin_or_owning_manager` (a manager reads only
+their own firm, 404 not 403 for another, mirroring bead B4's rule), the
+kit route `require_app_admin` (a kit spans every firm, so there is no
+owning manager). `GET /admin/reports/cost` + `GET /admin/reports/income`
+(`admin_backend/routes/report_routes.py`, `require_app_admin`) run
+PARAMETERISED queries against the E3.6 BigQuery views
+(`cost_by_firm_month`/`cost_by_kit_month`/`cost_by_employee_month`/
+`income_month`) through a new `admin_backend/services/bigquery_reports.py`
+-- every `from`/`to`/`channel` value is bound as a `bigquery.
+ScalarQueryParameter`, never interpolated into SQL text, and `group_by`
+selects the view via a closed Python dict lookup (never a value reaching
+the FROM clause); a range wider than 12 months is a 422, and every
+response carries `delayed: true` plus a sink-lag note. `GET /admin/alerts`
++ `PATCH /admin/alerts/{id}/acknowledge` (`admin_backend/routes/
+alert_routes.py`, `require_app_admin`) list the E3.5 `alerts/{id}` docs
+(newest first, filterable by `acknowledged`/`firm_id`/`kind`, page-capped)
+and acknowledge one -- the ONE mutation this bead ships, setting
+`acknowledged_by` (the actor's uid) + `acknowledged_at` inside ONE
+Firestore transaction with its audit row (mirrors `firm_routes.py`'s
+`_apply_firm_patch` shape); acknowledging twice is a 409. `GET
+/admin/errors` (`admin_backend/routes/ops_routes.py`, `require_app_admin`)
+calls Cloud Error Reporting's `groupStats.list` REST endpoint (a new
+`admin_backend/services/error_stats.py`, authenticated with the runtime
+SA's ADC token via `google.auth` -- `admin-backend-sa` already holds
+`roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8`'s
+`setup-monitoring.sh`, so this bead grants nothing new), filtered to the
+channel's Cloud Run service name (`polyglot-backend` / `polyglot-backend-
+staging`) and returning count, first/last seen, and the group's
+representative TYPE and TOP FRAME ONLY. The Error Reporting API has no
+`representative.type` field (the live discovery document's `ErrorEvent`
+schema is `context`/`serviceContext`/`message`/`eventTime` only) -- the
+type is recovered from `representative.message`'s own terminating line,
+which E3.8's write-side PII rule already guarantees is the bare exception
+type name and nothing else, so no message text ever reaches the console.
+`GET
+/admin/health` (`ops_routes.py`, `require_app_admin`) fans out to the
+requested channel's PUBLIC backend `/health` + `/version` over a
+short-timeout HTTP call, plus this service's own `/version` (an
+in-process read, not a second hop); `reachable` is true only when BOTH
+calls succeed, and one channel's outage yields a PARTIAL result
+(`reachable: false`), never a 500. The per-channel backend base URLs come
+from a new admin-service-only env var, `BACKEND_URLS_JSON` -- despite the
+name, its WIRE FORMAT is `"channel=url;channel=url"`, not literal JSON:
+`deploy-admin.sh` builds it via two `gcloud run services describe` calls
+(the same mechanism `deploy-all.sh` uses for `VITE_WS_URL`) and appends it
+to `BACKEND_EXTRA_ENV`, which rides inside `deploy-all.sh`'s own
+comma-joined `--set-env-vars` block -- a literal JSON object's `,` between
+key/value pairs would be silently split apart there, the same reason
+`CORS_EXTRA_ORIGINS` is semicolon-separated rather than comma-separated. A
+channel with no entry in `BACKEND_URLS_JSON` reads `configured: false`,
+distinct from `reachable: false` (configured, but unreachable). See
+Surface contract 26's extension below for the usage-rollup read shape and
+Surface contract 25 for the BigQuery views this bead reads.)*
 *Last updated: 2026-09-09 (bd polyglot-pdf-scaig: an employee-role staff
 account could not reach `GET /admin/firms/{firm_id}/links` at all -- the
 route's only gate, `require_app_admin_or_owning_manager`, has exactly two
@@ -273,6 +331,14 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/kits` | GET | `require_app_admin` | Every kit in the form-kit store (bd polyglot-pdf-f0kuu, Track B bead B3), each joined with its resolved commercial doc (or the global defaults) via the same reader the single-kit GET below and the mint transaction use. A read, so no audit row. |
 | `/admin/kits/{kit_id}/commercial` | GET | `require_app_admin` | One kit's resolved `credit_cost`/`cap_usd` (bd polyglot-pdf-f0kuu), via `backend/services/kit_commercials.py::resolve_commercial` -- the SAME reader bead A3's mint transaction calls (Surface contract 24 in [technical_guide.md](../technical_guide.md)); this bead adds no second reader. `source` is `"kit"` when a commercial doc exists, `"default"` otherwise. A read, so no audit row. |
 | `/admin/kits/{kit_id}/commercial` | PUT | `require_app_admin` | Set a kit's `credit_cost`/`burn_cap_usd`/`display` (bd polyglot-pdf-f0kuu). Refuses BEFORE any write on a malformed `credit_cost` (must be a positive int), `burn_cap_usd` (must be a positive finite float) or `display` (a small string map) -- 422, deliberately stricter than the read side's fallback: a bad edit must never reach the store as a "successful" write. Audited in the same `@firestore.transactional` body as the write. |
+| `/admin/firms/{firm_id}/usage` | GET | `require_app_admin_or_owning_manager` | One firm's usage rollup for one month (bd polyglot-pdf-mpebj, E3.11a) -- `firms/{firm_id}/usage/{month}` (bd polyglot-pdf-w828m), an explicit key allowlist. `?month=YYYY-MM` and `?channel=` are both REQUIRED (422 if missing/malformed). A manager reaches only their own firm (404 for any other, same as an unknown firm_id); an app admin reaches any. A missing rollup doc is an empty reading, not a 404 -- only a nonexistent firm_id 404s. A read, so no audit row. |
+| `/admin/kits/{kit_id}/usage` | GET | `require_app_admin` | One kit's usage rollup for one month -- `kits/{kit_id}/usage/{month}`, an explicit key allowlist. `?month=`/`?channel=` REQUIRED. `require_app_admin` only (a kit spans every firm, so there is no owning manager). Does NOT 404 on a kit with no separate profile doc. A read, so no audit row. |
+| `/admin/reports/cost` | GET | `require_app_admin` | Parameterised BigQuery read over `cost_by_{firm\|kit\|employee}_month` (bd polyglot-pdf-mpebj, via `admin_backend/services/bigquery_reports.py`). `?from=&to=&group_by=` REQUIRED (422 on missing/malformed/a range over 12 months); `?channel=` optional. Every value is bound as a `bigquery.ScalarQueryParameter`, never interpolated SQL text. Carries `delayed: true` plus a sink-lag note. A read, so no audit row. |
+| `/admin/reports/income` | GET | `require_app_admin` | Parameterised BigQuery read over `income_month` (real firms only -- the view's own `firm_kind = 'live'` filter, contract 25). `?from=&to=` REQUIRED; `?channel=` optional. Same parameterisation, 12-month ceiling, and `delayed: true` as the cost report. A read, so no audit row. |
+| `/admin/alerts` | GET | `require_app_admin` | Lists `alerts/{id}` docs (bd polyglot-pdf-mpebj; docs: bd polyglot-pdf-bo95a), newest first, page-capped, an explicit key allowlist. Optional `?acknowledged=`/`?firm_id=`/`?kind=` filters (422 on an unrecognized `kind`). A read, so no audit row. |
+| `/admin/alerts/{alert_id}/acknowledge` | PATCH | `require_app_admin` | Acknowledge one alert -- sets `acknowledged_by` (the ACTOR's uid) + `acknowledged_at` in one Firestore transaction with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). 404 for an unknown id; 409 for one already acknowledged, naming who acknowledged it first. The ONE mutating route this bead adds. |
+| `/admin/errors` | GET | `require_app_admin` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd polyglot-pdf-mpebj, via `admin_backend/services/error_stats.py`), filtered to `polyglot-backend`/`polyglot-backend-staging`. `?channel=` REQUIRED. Returns count, first/last seen, and the group's representative TYPE and top FRAME ONLY -- the API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's PII rule already guarantees is the bare type name with no message text; the rest of that message is never returned. A read, so no audit row. |
+| `/admin/health` | GET | `require_app_admin` | Fans out to one channel's PUBLIC backend `/health` + `/version` over a short-timeout HTTP call, plus this service's own `/version` (bd polyglot-pdf-mpebj). `?channel=` REQUIRED. `configured: false` when `BACKEND_URLS_JSON` has no entry for this channel; `reachable: false` (never a 500) when the entry exists but the HTTP calls fail -- `reachable` requires BOTH `/health` and `/version` to succeed. A read, so no audit row. |
 
 `channel` is always an explicit path parameter or query parameter
 (validated against `("demo", "staging")`), never derived from the
@@ -539,16 +605,16 @@ constant fails CI):
 | `roles/logging.logWriter` | project | Structured logs to Cloud Logging, same as the public backend. |
 | `roles/secretmanager.secretAccessor` | project | Read Secret-Manager-backed values (the link-signing secret, an email-provider key) -- a missing binding here fails LOUDLY at Cloud Run deploy time, not silently. |
 | `roles/storage.objectAdmin` | the form-kits bucket ONLY | Publish/retire form kits. The public backend holds only `roles/storage.objectViewer` on the same bucket. |
-| `roles/bigquery.jobUser` | project | Run BigQuery queries against the telemetry views (Epic 3 bead 6). Granted by `scripts/setup-telemetry.sh`, not this script -- see that script's own comment for why the BigQuery grants live there instead of here. |
+| `roles/bigquery.jobUser` | project | Run BigQuery queries against the telemetry views (Epic 3 bead 6; the actual queries are bd `polyglot-pdf-mpebj`'s `admin_backend/services/bigquery_reports.py`). Granted by `scripts/setup-telemetry.sh`, not this script -- see that script's own comment for why the BigQuery grants live there instead of here. |
 | `roles/bigquery.dataViewer` | the telemetry dataset ONLY | Read the cost/income views. Dataset-scoped, not project-wide, so a compromised admin-backend-sa credential cannot read an unrelated BigQuery dataset in the same project. Also granted by `scripts/setup-telemetry.sh`. |
+| `roles/errorreporting.viewer` | project | Read Cloud Error Reporting's `groupStats` (bd `polyglot-pdf-mpebj`'s `GET /admin/errors`, `admin_backend/services/error_stats.py`). Granted by `scripts/setup-monitoring.sh` (bd `polyglot-pdf-e4dt8`), not this script. |
+| `roles/monitoring.viewer` | project | Read Cloud Monitoring data for a future console metrics view. Also granted by `scripts/setup-monitoring.sh`; no route reads it yet. |
 
 Deferred, deliberately absent until the epic that first needs them (an
 unused grant is its own risk): `roles/cloudbuild.builds.editor` +
 `roles/iam.serviceAccountUser` on the Cloud Build SA, `roles/run.admin` +
 `roles/iam.serviceAccountUser` on `polyglot-backend-sa` (resource-scoped),
-`roles/firebasehosting.admin` (Epic 4, deploy control plane);
-`roles/errorreporting.viewer`, `roles/monitoring.viewer` (Epic 3 bead 8,
-error reporting + monitoring, not yet built).
+`roles/firebasehosting.admin` (Epic 4, deploy control plane).
 
 ## CORS
 
@@ -796,3 +862,36 @@ script TEXT, the same operator-script pattern as
 `tests/test_setup_firestore_ttl_script.py`. `admin-console/src/components/
 *.test.tsx` and `admin-console/src/pages/*.test.tsx` cover the console
 pages (Vitest, same harness as `schema-editor/`).
+
+**bd polyglot-pdf-mpebj (E3.11a) adds:** `test_usage_routes.py` (the
+required month/channel validation, the doc-id resolution matching
+`usage_rollups.py`'s own demo-bare/other-suffixed convention, the explicit
+key allowlist, "a missing rollup doc is an empty reading, not a 404", and
+the firm route's manager 404-not-403 scoping); `test_report_routes.py`
+(the required from/to/group_by validation, the 12-month range ceiling
+pinned in BOTH directions -- exactly 12 months allowed, 13 refused --
+every value asserted as a bound `bigquery.ScalarQueryParameter` that never
+appears literally in the SQL text, the `delayed: true` + note on every
+response, and a `BigQueryUnavailable` -> 503 mapping, all against
+`bigquery_reports.py`'s own `_run_query` seam rather than a real BigQuery
+client); `test_alert_routes.py` (list filters and ordering, and
+acknowledge's atomicity pin over the SAME real-transaction fake Firestore
+shape `test_sweep_routes.py`/`test_kit_routes.py` use -- a forced audit
+failure leaves `acknowledged_at` unset, and acknowledging twice is a 409
+that leaves the first acknowledger's identity and audit-row count
+untouched); `test_ops_routes.py` (the required `?channel=` on both routes;
+`GET /admin/errors` returns type + top frame only for a mocked
+`groupStats` payload carrying a sentinel message, with the sentinel
+asserted absent from the raw response TEXT, not just from a typed field;
+`GET /admin/health` returns a partial result -- `reachable: false`, never
+a 500 -- when the backend is unreachable, requires BOTH `/health` and
+`/version` to succeed for `reachable: true`, and parses `BACKEND_URLS_JSON`
+'s real `"channel=url;channel=url"` wire format, including the
+missing-entry-is-`configured: false` and malformed-segment-degrades cases).
+`test_admin_route_auth.py` and `test_admin_audit_coverage.py` both grew:
+the former with the eight new routes in the registered-set pin plus two
+gate-specificity tests (the firm-usage route's composite gate; every other
+new route's plain `require_app_admin`), the latter with the one new
+mutating route (`PATCH /admin/alerts/{alert_id}/acknowledge`,
+`MUTATION_KIND_FIRESTORE`, its own transaction) and its synthetic-check
+tie-back.
