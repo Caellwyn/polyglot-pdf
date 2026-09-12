@@ -2595,6 +2595,39 @@ share the bead and its cross-cutting rules rather than one data shape.
   needs no GCP permission at all (it calls each public backend's own
   unauthenticated `/health`/`/version`, the same way any external caller
   would).
+
+**Console consumer (Epic 3 bead E3.11b, bd polyglot-pdf-i6dlb):** five
+`admin-console/src/pages/*.tsx` pages are the first console readers of
+every route this contract documents, via new `adminApi.ts` calls
+(`getChannelHealth`, `getChannelErrors`, `getFirmUsage`, `getCostReport`,
+`getIncomeReport`, `listAlerts`, `acknowledgeAlert`). `MonitoringPage.tsx`
+fetches `GET /admin/health` for both channels INDEPENDENTLY (one channel's
+failure never blanks the other's card) and renders the THREE backend
+states this contract's health bullet describes as visibly distinct card
+states, plus a fourth (the console's own fetch failing) as that card's own
+error text -- never a blank card. `UsagePage.tsx` reads `GET
+/admin/firms/{firm_id}/usage` (contract 26's read side, via B1's `GET
+/admin/firms` for the picker); an all-null `usage` object (no rollup doc
+this month) renders an explicit empty-state message rather than a table of
+zeros. `CostReportsPage.tsx` reads both report routes over a Cost/Income
+tab pair and REPLICATES `_validated_range`'s 12-month ceiling and message
+text CLIENT-SIDE, before any network call -- the server's own 422 remains
+the actual enforcement point (this is a UX backstop, not a trust
+boundary); the income tab has no channel control at all, matching that
+route's own refusal of one. `ErrorsPage.tsx` reads `GET /admin/errors`
+per channel tab and renders ONLY the five allowlisted `ErrorGroup` fields
+BY NAME, never a spread -- extending this contract's own "never surface
+the raw message" rule one hop further downstream, pinned by a page-level
+test that feeds an extra `message` key on the mocked response and asserts
+it is absent from `document.body.textContent`. `AlertsPage.tsx` is the
+first console reader/writer of contract 21's `alerts/{id}` docs: kind/firm
+filters plus an `acknowledged=false` default, one `PATCH .../acknowledge`
+per click (a per-row busy guard blocks a double-click), and a re-read on
+SUCCESS ONLY -- a 409 (already acknowledged by someone else) shows that
+route's own message next to the row without an extra re-read, mirroring
+`UsersPage.tsx`'s established "a failed mutation must not trigger the
+success re-read" rule.
+
 ### 30. Per-channel deploy config + the per-SHA build gate (Epic 4 bead E4.1, bd polyglot-pdf-1s3ko)
 
 Two contracts share this entry because they are two halves of one move: taking

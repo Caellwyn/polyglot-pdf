@@ -779,3 +779,320 @@ export async function revokeLink(
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not revoke the link'));
   return (await res.json()) as RevokeLinkResult;
 }
+
+// ---------------------------------------------------------------------------
+// Monitoring (bd polyglot-pdf-i6dlb, E3.11b), driving admin_backend/routes/
+// ops_routes.py, usage_routes.py, report_routes.py and alert_routes.py --
+// health, per-firm usage rollups, BigQuery cost/income reports, and alerts.
+// ---------------------------------------------------------------------------
+
+/** The two channels every monitoring route below takes (ops_routes.py's /
+ * usage_routes.py's / report_routes.py's own KNOWN_CHANNELS, restated here
+ * as a wire contract like LINK_CHANNELS above). */
+export const MONITORING_CHANNELS = ['demo', 'staging'] as const;
+export type MonitoringChannel = (typeof MONITORING_CHANNELS)[number];
+
+/** One channel's backend probe, from GET /admin/health's `backend` key
+ * (ops_routes.py's `_fetch_backend_probe` / the `configured: false`
+ * shortcut). `configured: false` means BACKEND_URLS_JSON has no entry for
+ * this channel (nobody has wired it yet); `configured: true, reachable:
+ * false` means the URL exists but the HTTP calls themselves failed --
+ * these are DELIBERATELY DISTINCT states (module docstring), so a page
+ * reading this must render them differently rather than collapsing both
+ * into one generic "down" card. */
+export interface BackendHealthProbe {
+  configured: boolean;
+  reachable: boolean;
+  health: Record<string, unknown> | null;
+  version: Record<string, unknown> | null;
+}
+
+/** The admin service's OWN version block on every /admin/health response --
+ * a plain in-process read, never a second HTTP hop (module docstring). */
+export interface AdminServiceVersion {
+  version: string;
+  git_sha: string;
+  app_module: string;
+}
+
+/** GET /admin/health's response shape. */
+export interface ChannelHealth {
+  channel: MonitoringChannel;
+  backend: BackendHealthProbe;
+  admin_service: AdminServiceVersion;
+}
+
+/** One channel's health: the public backend's own /health + /version (or
+ * an unconfigured/unreachable state, never a 500) plus the admin service's
+ * own version. The channel query param is REQUIRED by the route. */
+export async function getChannelHealth(channel: MonitoringChannel): Promise<ChannelHealth> {
+  const res = await adminFetch('/admin/health?channel=' + encodeURIComponent(channel));
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load channel health'));
+  return (await res.json()) as ChannelHealth;
+}
+
+/** One error group from GET /admin/errors' `groups` array
+ * (error_stats.py's `_public_group_view` -- count, first/last seen, and
+ * the group's TYPE and top FRAME only; no message body ever rides along,
+ * per the P0 PII rule this route's own module docstring explains). */
+export interface ErrorGroup {
+  group_id: string | null;
+  count: number;
+  first_seen_time: string | null;
+  last_seen_time: string | null;
+  error_type: string | null;
+  top_frame: {
+    file_path: string | null;
+    line_number: number | null;
+    function_name: string | null;
+  };
+}
+
+/** GET /admin/errors' response shape. */
+export interface ChannelErrors {
+  channel: MonitoringChannel;
+  service: string;
+  groups: ErrorGroup[];
+}
+
+/** One channel's Error Reporting group stats (a week's window,
+ * error_stats.py's own `_fetch_group_stats`). The channel query param is
+ * REQUIRED. */
+export async function getChannelErrors(channel: MonitoringChannel): Promise<ChannelErrors> {
+  const res = await adminFetch('/admin/errors?channel=' + encodeURIComponent(channel));
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load channel errors'));
+  return (await res.json()) as ChannelErrors;
+}
+
+/** A firm-month usage rollup's allowlisted fields (usage_routes.py's
+ * `_FIRM_USAGE_KEYS`) -- by_kit/by_employee/by_language are passed through
+ * as stored maps, keyed by kit id / uid / language code respectively, each
+ * value itself `{sessions, cost_usd}`-shaped (usage_rollups.py's own
+ * increments), read here as loosely-typed records since this client does
+ * not interpret them further. */
+export interface FirmUsageRollup {
+  connections_ended: number | null;
+  sessions_completed: number | null;
+  cost_usd_total: number | null;
+  links_opened: number | null;
+  links_completed: number | null;
+  by_kit: Record<string, { sessions?: number; cost_usd?: number }> | null;
+  by_employee: Record<string, { sessions?: number; cost_usd?: number }> | null;
+  by_language: Record<string, { sessions?: number; cost_usd?: number }> | null;
+  kind: string | null;
+  channel: string | null;
+}
+
+/** GET /admin/firms/{firm_id}/usage's response shape. `usage` has every key
+ * null for a month with no rollup doc yet -- usage_routes.py's own "a
+ * missing doc is an empty reading, not a 404" rule -- so a page must treat
+ * an all-null `usage` as "no data this month", not as an error. */
+export interface FirmUsagePage {
+  firm_id: string;
+  month: string;
+  channel: MonitoringChannel;
+  usage: FirmUsageRollup;
+}
+
+/** This firm's usage rollup for one month. `month` and `channel` are BOTH
+ * REQUIRED by the route (422 if missing/malformed). */
+export async function getFirmUsage(
+  firmId: string, month: string, channel: MonitoringChannel,
+): Promise<FirmUsagePage> {
+  const params = new URLSearchParams({ month, channel });
+  const res = await adminFetch(
+    '/admin/firms/' + encodeURIComponent(firmId) + '/usage?' + params.toString(),
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the firm usage'));
+  return (await res.json()) as FirmUsagePage;
+}
+
+/** The three `group_by` values the cost report accepts
+ * (bigquery_reports.COST_VIEWS's own key set, mirrored here as a wire
+ * contract). */
+export const COST_GROUP_BY = ['firm', 'kit', 'employee'] as const;
+export type CostGroupBy = (typeof COST_GROUP_BY)[number];
+
+/** One row from GET /admin/reports/cost's `rows` array
+ * (bigquery_reports.query_cost_report's SELECT list: month, the group
+ * column -- firm_id/kit_id/employee_id depending on `group_by` -- channel,
+ * usage_kind, call_count, cost_usd). The group column's NAME varies by
+ * `group_by`, so this client reads it generically rather than typing three
+ * near-identical row shapes; callers select it with the same `group_by`
+ * value they requested.
+ *
+ * cost_usd IS NULLABLE. sql/telemetry_views.sql computes it as
+ * SUM(SAFE_CAST(...cost_estimate_usd AS FLOAT64)) with no COALESCE --
+ * BigQuery's SUM returns NULL (not 0) for a group whose inputs are all
+ * NULL or fail the cast, which happens whenever a cost-bearing event lands
+ * without a cost_estimate_usd in its metadata; the row still exists
+ * because COUNT(*) does not depend on that column. CostReportsPage.tsx's
+ * formatUsd renders this as "--", never assume it can call .toFixed()
+ * directly. */
+export interface CostReportRow {
+  month: string;
+  channel: string | null;
+  usage_kind: string | null;
+  call_count: number;
+  cost_usd: number | null;
+  firm_id?: string;
+  kit_id?: string;
+  employee_id?: string;
+  [key: string]: unknown;
+}
+
+/** GET /admin/reports/cost's response shape. `delayed`/`note` are ALWAYS
+ * present (BigQuery sink lag, report_routes.py's own DELAYED_NOTE) -- a
+ * page must show this note whenever `delayed` is true, never assume it is
+ * always true without reading the flag (report_routes.py's docstring
+ * frames this as a bead requirement, not a hard-coded constant this client
+ * should re-derive). */
+export interface CostReportPage {
+  group_by: CostGroupBy;
+  from: string;
+  to: string;
+  channel: MonitoringChannel | null;
+  rows: CostReportRow[];
+  delayed: boolean;
+  note: string;
+}
+
+export interface CostReportFilters {
+  channel?: MonitoringChannel;
+}
+
+/** The inclusive month-span ceiling the server enforces
+ * (report_routes.py's `_MAX_RANGE_MONTHS`), mirrored here as a wire
+ * contract so this client's own client-side backstop (CostReportsPage.tsx)
+ * refuses the SAME range the server would 422 on, without a round trip. */
+export const MAX_REPORT_RANGE_MONTHS = 12;
+
+/** Cost rows grouped by firm/kit/employee over [from, to] (both "YYYY-MM",
+ * inclusive). `from`/`to`/`group_by` are all REQUIRED by the route; the
+ * route itself 422s a range wider than 12 months (report_routes.py's
+ * `_validated_range`) -- this client does not silently swallow that
+ * refusal: see CostReportsPage.tsx for the client-side backstop that
+ * mirrors it ahead of the network call, and errorDetail surfacing the
+ * server's own 422 text for anything that check misses. */
+export async function getCostReport(
+  groupBy: CostGroupBy, from: string, to: string, filters: CostReportFilters = {},
+): Promise<CostReportPage> {
+  const params = new URLSearchParams({ group_by: groupBy, from, to });
+  if (filters.channel) params.set('channel', filters.channel);
+  const res = await adminFetch('/admin/reports/cost?' + params.toString());
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the cost report'));
+  return (await res.json()) as CostReportPage;
+}
+
+/** One row from GET /admin/reports/income's `rows` array
+ * (bigquery_reports.query_income_report's SELECT list). `channel` is
+ * always null on every row (income_month's own view definition -- the
+ * admin service that writes grants has no channel of its own), kept here
+ * only because the wire row carries the column. */
+export interface IncomeReportRow {
+  month: string;
+  entry_type: string;
+  channel: null;
+  entry_count: number;
+  /** NULLABLE for the same reason CostReportRow.cost_usd is: income_month's
+   * SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64)) has no COALESCE
+   * either (sql/telemetry_views.sql), so an income-month group whose
+   * entries all fail the cast returns NULL, not 0. */
+  usd_amount: number | null;
+}
+
+/** GET /admin/reports/income's response shape. Same `delayed`/`note`
+ * contract as the cost report. NO `channel` filter exists on this route
+ * (income_month rows carry none -- report_routes.py's own
+ * `_validated_income_channel` REFUSES one with a 422 rather than silently
+ * returning zero rows), so this client's function accepts none either. */
+export interface IncomeReportPage {
+  from: string;
+  to: string;
+  rows: IncomeReportRow[];
+  delayed: boolean;
+  note: string;
+}
+
+/** Income rows (real firms only -- the view's own `firm_kind = 'live'`
+ * filter) over [from, to] (both "YYYY-MM", inclusive). Both REQUIRED. */
+export async function getIncomeReport(from: string, to: string): Promise<IncomeReportPage> {
+  const params = new URLSearchParams({ from, to });
+  const res = await adminFetch('/admin/reports/income?' + params.toString());
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the income report'));
+  return (await res.json()) as IncomeReportPage;
+}
+
+/** The three alert `kind` values (backend/services/alerts.py's own
+ * vocabulary, mirrored here as a wire contract). */
+export const ALERT_KINDS = ['link_exhausted', 'credit_low', 'credit_exhausted'] as const;
+export type AlertKind = (typeof ALERT_KINDS)[number];
+
+/** The two alert `level` values (alerts.py's LEVEL_WARNING/LEVEL_CRITICAL). */
+export const ALERT_LEVELS = ['warning', 'critical'] as const;
+export type AlertLevel = (typeof ALERT_LEVELS)[number];
+
+/** One row from GET /admin/alerts' `alerts` array (alert_routes.py's
+ * `_public_alert_view`, built from alerts.ALERT_FIELDS plus the doc id --
+ * an explicit key allowlist, never a raw doc spread). `acknowledged_by`/
+ * `acknowledged_at` are both null until someone acknowledges it. */
+export interface AlertRow {
+  id: string;
+  firm_id: string | null;
+  kind: AlertKind;
+  level: AlertLevel;
+  ts: number | null;
+  context: Record<string, unknown> | null;
+  acknowledged_by: string | null;
+  acknowledged_at: number | null;
+  emailed_at: number | null;
+  expire_at: unknown;
+}
+
+/** GET /admin/alerts' response shape. */
+export interface AlertsPage {
+  alerts: AlertRow[];
+}
+
+export interface ListAlertsFilters {
+  acknowledged?: boolean;
+  firmId?: string;
+  kind?: AlertKind;
+}
+
+/** Alert docs, newest first, all THREE filters optional (`acknowledged`,
+ * `firm_id`, `kind` -- alert_routes.py's own query params). */
+export async function listAlerts(filters: ListAlertsFilters = {}): Promise<AlertsPage> {
+  const params = new URLSearchParams();
+  if (filters.acknowledged !== undefined) {
+    params.set('acknowledged', String(filters.acknowledged));
+  }
+  if (filters.firmId) params.set('firm_id', filters.firmId);
+  if (filters.kind) params.set('kind', filters.kind);
+  const qs = params.toString();
+  const res = await adminFetch('/admin/alerts' + (qs ? '?' + qs : ''));
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the alerts list'));
+  return (await res.json()) as AlertsPage;
+}
+
+/** PATCH /admin/alerts/{id}/acknowledge's response shape. */
+export interface AcknowledgeAlertResult {
+  id: string;
+  acknowledged_by: string;
+  acknowledged_at: number;
+  request_id: string;
+}
+
+/** Acknowledge one alert. A SECOND acknowledge on the same alert is a 409
+ * (alert_routes.py's own transaction: "already acknowledged", naming who
+ * got there first) -- surfaced via errorDetail like every other route's
+ * refusal, so a caller sees the server's own message rather than a generic
+ * one. This function makes exactly one PATCH call per invocation; callers
+ * (AlertsPage.tsx) are responsible for not calling it twice per click. */
+export async function acknowledgeAlert(alertId: string): Promise<AcknowledgeAlertResult> {
+  const res = await adminFetch('/admin/alerts/' + encodeURIComponent(alertId) + '/acknowledge', {
+    method: 'PATCH',
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not acknowledge the alert'));
+  return (await res.json()) as AcknowledgeAlertResult;
+}
