@@ -243,7 +243,9 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    (`backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json`). Kit-coupled
    tests are legitimate ONLY when the shipped artifact IS the subject ("every
    shipped kit lints clean"), and those stay cheap because they name no field.
-   `w7`/`f1040` remain tracked as a documented exception -- do not add a third.
+   `f1040` is the LAST tracked kit and is a documented exception -- it is not in
+   the bucket, so git is its only copy. `w7` was untracked on 2026-09-11 once its
+   tracked copy had drifted from the published one. Do NOT add another.
 
 ---
 

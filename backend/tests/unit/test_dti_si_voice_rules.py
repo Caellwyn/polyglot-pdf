@@ -493,8 +493,9 @@ def test_real_long_selects_are_never_force_recited():
     field to radio in a kit, silently restoring the "zero, one, two, ...
     eleven" recital.
 
-    Why frozen rather than discovered: kits are bucket-canonical, and NEITHER
-    git-tracked kit (w7, f1040) contains a single `select` field -- so any
+    Why frozen rather than discovered: kits are bucket-canonical, and the one
+    remaining git-tracked kit (f1040 -- w7 was untracked 2026-09-11) contains no
+    `select` field, as w7 did not either -- so any
     version of this test that reads the working tree passes only on a machine
     that happens to have pulled the right kit, and skips in CI. Two earlier
     attempts did exactly that: first a skipif naming form-kits/i-90/, then

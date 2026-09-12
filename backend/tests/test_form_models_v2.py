@@ -61,10 +61,11 @@ def discovered_kits() -> list:
     kit in their scratch tree sees these fail -- which is the correct signal:
     the schema IS malformed. CI only ever sees what git tracks.
 
-    KNOWN LIMIT: git tracks only w7 and f1040, while the CANONICAL collection is
-    the GCS bucket (.gitignore's form-kits note). So this guard is real but
-    NARROW -- it proves the invariant holds for the two kits CI can see, not for
-    every published kit. Closing that means running against a pulled or
+    KNOWN LIMIT: git tracks only f1040 now (w7 was untracked 2026-09-11), while
+    the CANONICAL collection is the GCS bucket (.gitignore's form-kits note). So
+    this guard is real but NARROW -- it proves the invariant holds for the one
+    kit CI can see, not for every published kit, and that margin got thinner
+    with w7. Closing that means running against a pulled or
     synthetic corpus, which is bd polyglot-pdf-1mgkq's job. Do NOT "fix" the
     narrowness by hardcoding kit names back in; that is the coupling 1mgkq
     exists to remove.
@@ -246,15 +247,17 @@ def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
 
 
 # Known-outstanding violations of the rule below, pinned as an EQUALITY so the
-# set can only SHRINK. Empty is the goal; an entry here is a live defect with a
-# bead, not an exemption.
+# set can only SHRINK. EMPTY IS THE GOAL, and it is empty: an entry here is a
+# live defect with a bead, never an exemption, so do not add one to make a
+# failing kit pass -- fix the kit.
 #
-# w7 countries_of_citizenship: required, read_only, nothing writes it, no
-# unlock, and its PDF widget is NOT locked -- pure schema drift on a shipped
-# kit, so a W-7 cannot be completed by voice for that field. The fix is KIT DATA
-# and must go through the schema editor (bd polyglot-pdf-nck2q, which also
-# enumerates the 8 non-required siblings with the same drift).
-_KNOWN_REQUIRED_READONLY = {"w7": ["countries_of_citizenship"]}
+# It last held w7 countries_of_citizenship (required + read_only with nothing
+# writing it, against an UNLOCKED pdf widget, so a W-7 could not be completed by
+# voice for that field). The maintainer fixed it in the schema editor and the
+# published kit now carries zero read_only fields; w7 was then untracked
+# (2026-09-11) because the git copy had drifted from what the app serves. Both
+# halves of bd polyglot-pdf-nck2q are done.
+_KNOWN_REQUIRED_READONLY: dict[str, list[str]] = {}
 
 
 @pytest.mark.parametrize("kit", discovered_kits())

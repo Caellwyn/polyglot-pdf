@@ -93,11 +93,11 @@ form-kits/*/*_acroform.json
 # which accepts *instructions*.pdf AND the abbreviated *instr*.pdf shape (its
 # docstring cites i-90instr.pdf) -- matching only the long form would leave the
 # abbreviated one tracked.
-# Only w7-instructions.pdf predates this rule and stays tracked; new booklets are
-# kept LOCAL so a multi-megabyte binary does not land in a repo with no LFS.
+# Booklets are kept LOCAL so a multi-megabyte binary does not land in a repo with
+# no LFS. w7-instructions.pdf was the one tracked exception; it went with the w7
+# kit when that was untracked (2026-09-11), so no exception remains.
 form-kits/*/*instructions*.pdf
 form-kits/*/*instr*.pdf
-!form-kits/w7/w7-instructions.pdf
 
 # Superseded kit revisions (bd polyglot-pdf-w3zw). The archive lives in the GCS
 # bucket -- the authenticated store scripts/read_kit_revision.py reads -- and is
@@ -172,15 +172,20 @@ pitch/ignored_pitch/
 #
 # Pull the bucket down with scripts/pull-form-kits.sh when you need kits locally.
 #
-# w7 and f1040 stay TRACKED for now and are the exception, not the pattern
+# f1040 is the LAST tracked kit and is the exception, not the pattern
 # (w9-heldout is also tracked but is NOT a kit -- it is a deliberately held-out
 # PDF with no schema.json, see its NOTE.md, and _translation is shared glossary
 # data rather than a form):
-# f1040 is NOT in the bucket (git is currently its only copy, so untracking it
-# would delete it), and both still back kit-coupled tests. Migrating them --
-# publish to the bucket, then untrack -- is bd polyglot-pdf-1mgkq's job, since
-# it has to land with the test work that stops depending on them. Do NOT add a
-# third.
+# f1040 is NOT in the bucket -- git is currently its only copy, so untracking it
+# would DELETE it. It stays until it is published, then it goes the same way w7
+# did. Do NOT add another.
+#
+# w7 was UNTRACKED on 2026-09-11 (maintainer decision, bd polyglot-pdf-nck2q).
+# It had drifted: the tracked copy still carried 53 fields and 9 read_only flags
+# while the published kit had 46 and zero -- so CI was testing a form the app
+# does not serve. Every tracked w7 file was verified present in the bucket
+# (status: complete, 46/46 reviewed) before removal; nothing was lost. Pull it
+# back with scripts/pull-form-kits.sh.
 #
 # HAZARD THIS RULE DOES NOT COVER (bd polyglot-pdf-xyfu8): `git` ignoring a kit
 # does NOT stop a deploy publishing it. deploy-all.sh's --form-kits stage
@@ -195,7 +200,6 @@ pitch/ignored_pitch/
 form-kits/*/
 !form-kits/_translation/
 !form-kits/w9-heldout/
-!form-kits/w7/
 !form-kits/f1040/
 
 # Stray zero-byte artifact from tooling, not produced by any repo script.
