@@ -102,6 +102,34 @@ every kit-reading test keeps passing here while CI sees nothing. Only a clean
 clone shows the truth -- the same check that should have caught two earlier
 misses (`verify-in-a-clean-clone-not-your-worktree`).
 
+## Not shippable alone -- the finding that ends this session
+
+The untracking is correct and the guard is honest again, but the branch **cannot
+merge as it stands**: removing w7 from git turned ~35 tests RED and produced 11
+collection errors. Confirmed in a clean clone as well as the worktree, so this is
+what CI sees.
+
+They are not skips. A subset of kit-reading tests carry NO skip guard and open
+`form-kits/w7/schema.json` directly, so the file's absence is a FileNotFoundError
+at import or first assert. Measured individually:
+
+    unit/test_date_format_resolution.py                 3 failed / 20 passed
+    unit/test_field_validator_constraint_resolution.py  2 failed /  5 passed
+    ...plus the collection errors, which fail before any test runs
+
+Others guard correctly and skip cleanly (`test_w7_field_widget_mapping.py`, 9
+skipped) -- that is the shape the rest should have had.
+
+So the plan of "land the untracking, then clean up separately" is not available:
+the cause and its consequence are one change. Either the cleanup happens in this
+branch, or the untracking waits behind it. Recorded on bd `polyglot-pdf-q3u5r`
+with both options and the measurement.
+
+**The temptation to avoid:** adding skip guards to the failing tests would make
+the branch green in about ten minutes. It would also convert ~35 red tests into
+~35 silently-dead ones -- precisely what `q3u5r` exists to delete. A guard here
+buys a green CI by hiding the thing that should be removed.
+
 ## Doc freshness
 
 - `CLAUDE.md` -- scar #10 updated (tier 1, no stamp convention).
