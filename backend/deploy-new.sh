@@ -11,119 +11,56 @@ set -e
 # it is not (bd polyglot-pdf-pidtg, extended to this script by bd
 # polyglot-pdf-6oi9s).
 #
-# WHY THIS EXISTS. A `gcloud run` deployment with --allow-unauthenticated only
-# REQUESTS an
-# allUsers -> roles/run.invoker binding, but that request can be REFUSED while
-# the deploy still succeeds and exits 0. The domain-restricted-sharing org
-# policy (constraints/iam.allowedPolicyMemberDomains) rejects allUsers; gcloud
-# creates the service, prints a NON-FATAL warning, and exits 0 -- leaving a
-# service that 403s every request at Cloud Run's own gate, BEFORE any
-# application code runs. The app then shows an auth error that has nothing to do
-# with app auth, sending the operator to debug the wrong layer entirely.
+# THE GATE ITSELF LIVES IN scripts/verify_service_reachable.py NOW (bd
+# polyglot-pdf-ywxoh, 4.2). Four bash scripts used to each carry a
+# byte-identical copy of this function's BODY (deploy-all.sh, backend/deploy-
+# new.sh, deploy-editor.sh, deploy-admin-console.sh) -- pinned equal by
+# tests/test_deploy_reachability_gate.py. cloudbuild.yaml's build steps need
+# the SAME check and cannot source a bash function, so rather than add a
+# FIFTH hand copy for the build, the check itself moved to one python module
+# that both the build and every bash wrapper call. This function is now a
+# THIN SHELL WRAPPER around that module -- kept so every call site below
+# reads exactly as it always has (`verify_service_publicly_reachable "$SVC"
+# "$REGION" "$PROJECT" [warn]`), with its bare-command shape (no pipe, no
+# subshell, no `if`) still load-bearing: `exit 1` inside this function must
+# still terminate the CALLING script, which a subshell would swallow.
 #
-# It bites only a NEW service: an existing one's binding predates the policy and
-# is not retroactively stripped. So the scripts that create services are exactly
-# where this must be checked.
+# ${BASH_SOURCE[0]} here is THIS FILE (the function is defined inline, not
+# sourced from elsewhere), so the module path resolves correctly regardless
+# of the caller's own cwd or SCRIPT_DIR/REPO_ROOT naming.
 #
-# --flatten='bindings[].members' is LOAD-BEARING, and both halves of the query
-# were got wrong once each before this was right:
-#   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
-#      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
-#      binding was missing and the service still 403'd everything.
-#   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
-#      evaluated against the WHOLE policy resource, not per binding, and
-#      `value(bindings.role)` emits every role ';'-joined on ONE line, so
-#      `grep -qx` stopped matching as soon as a service had a SECOND binding.
-# --flatten makes each member/role pair its own record, so the filter is
-# genuinely per-binding and each surviving role prints on its own line.
-#
-# BOTH failure directions matter. Failing OPEN hides the bug behind a green
-# check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
-# deleted -- taking the real check with it. An inconclusive IAM READ therefore
-# WARNS rather than aborting: being unable to check is not proof of breakage.
-#
-# stderr is NOT merged into the value (no 2>&1): a gcloud component-update nag
-# landing in the variable could otherwise satisfy a text match on its own.
+# find_manifest_python-STYLE interpreter resolution, inlined rather than
+# shared: python3 is not guaranteed on Windows Git Bash, and a python3
+# App-Execution-Alias stub can exist on PATH without being able to run.
 #
 # Args: $1 service name, $2 region, $3 project id, $4 severity ("fatal"
 # default, or "warn").
-#
-# SEVERITY. Exits 1 when the service is definitively unreachable; pass "warn" to
-# downgrade that to a warning and return 0. The frontend stage passes "warn"
-# because there the backend is pre-existing and possibly someone else's to fix
-# (bd polyglot-pdf-816te); the backend stage takes the default, because a deploy
-# that just CREATED an unreachable service must never exit 0
-# (bd polyglot-pdf-pidtg).
-#
-# AN ARGUMENT, NOT AN ENV VAR, and that distinction is the point. The first cut
-# read VERIFY_FAIL_IS_FATAL from the environment, which cannot tell "the frontend
-# stage set this for one call" from "it was ambient in the operator's shell" --
-# so an exported VERIFY_FAIL_IS_FATAL=false silently disarmed the BACKEND abort,
-# reproducing the exact bug this gate exists to stop (caught by the pre-PR
-# cross-surface review). A positional argument can only come from a real call
-# site.
-#
-# MUST match the sibling copies EXACTLY. This block is duplicated in THREE
-# scripts -- deploy-all.sh, backend/deploy-new.sh and deploy-editor.sh -- and
-# tests/test_deploy_reachability_gate.py pins all three byte-identical.
-# Any edit here must be made in all three.
 verify_service_publicly_reachable() {
-    local svc="$1" region="$2" project="$3" severity="${4:-fatal}" invoker_roles
-    # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
-    # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
-    # (a pre-PR review caught the extraction silently moving them to stderr and
-    # dropping the colour). The bootstrap script defines no such helpers, so it
-    # falls back to plain stderr -- which is why the function must not simply
-    # call log_warn/log_error unconditionally.
-    _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
-    _gate_error() { if declare -f log_error >/dev/null 2>&1; then log_error "$1"; else echo "[ERROR] $1" >&2; fi; }
-    invoker_roles=$(gcloud run services get-iam-policy "$svc" \
-        --region "$region" --project "$project" \
-        --flatten='bindings[].members' \
-        --filter='bindings.members:allUsers' \
-        --format='value(bindings.role)') || invoker_roles="__QUERY_FAILED__"
-
-    if [ "$invoker_roles" = "__QUERY_FAILED__" ]; then
-    _gate_warn "Could not read the IAM policy for $svc -- skipping the"
-    _gate_warn "reachability check. If the app cannot reach the backend, verify manually:"
-    _gate_warn "  gcloud run services get-iam-policy $svc --region $region --project $project"
-        return 0
-    fi
-    if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
-        return 0
-    fi
-    # Plain ASCII '=' -- a free choice, not a constraint. An earlier comment here
-    # claimed the shell could not carry a box-drawing glyph because the tests
-    # decode it as cp1252 on Windows; that was the TEST's defect (a
-    # subprocess.run without encoding=), since fixed, and this function is
-    # byte-identical in the sibling copy, which has no box-drawing at all.
-    # ASCII simply travels everywhere without depending on the reader's codec.
-    _gate_error "==========================================================="
-    if [ "$severity" = "warn" ]; then
-        _gate_error "  WARNING: the service is NOT publicly reachable"
+    local svc="$1" region="$2" project="$3" severity="${4:-fatal}"
+    local self_dir module py cand rc
+    self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # This function is defined inline in FOUR files at two different repo
+    # depths (the three root-level wrappers, and backend/deploy-new.sh one
+    # directory down), so the module is looked up at both candidate paths
+    # relative to THIS file rather than assuming the repo root.
+    if [ -f "$self_dir/scripts/verify_service_reachable.py" ]; then
+        module="$self_dir/scripts/verify_service_reachable.py"
     else
-        _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+        module="$self_dir/../scripts/verify_service_reachable.py"
     fi
-    _gate_error "==========================================================="
-    _gate_error "Service '$svc' has no allUsers invoker binding, so"
-    _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
-    _gate_error ""
-    _gate_error "--allow-unauthenticated was passed, but the binding was refused --"
-    _gate_error "almost always the domain-restricted-sharing org policy."
-    _gate_error ""
-    _gate_error "Fix it with:"
-    _gate_error "  gcloud run services add-iam-policy-binding $svc \\"
-    _gate_error "    --region $region --project $project \\"
-    _gate_error "    --member=allUsers --role=roles/run.invoker"
-    _gate_error ""
-    _gate_error "If that is itself refused, the org policy must be relaxed for this"
-    _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
-    _gate_error "See bd polyglot-pdf-pidtg."
-    if [ "$severity" = "warn" ]; then
-        _gate_warn "Continuing anyway (this stage treats an unreachable backend as a warning)."
-        return 0
+    for cand in ${MANIFEST_PYTHON_CANDIDATES:-python3 python py}; do
+        if "$cand" -c "pass" >/dev/null 2>&1; then py="$cand"; break; fi
+    done
+    if [ -z "$py" ]; then
+        echo "[ERROR] No python interpreter found -- cannot run the reachability gate; aborting deploy." >&2
+        exit 1
     fi
-    exit 1
+    "$py" "$module" "$svc" "$region" "$project" --severity "$severity"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        exit 1
+    fi
+    return 0
 }
 
 # Default service name
