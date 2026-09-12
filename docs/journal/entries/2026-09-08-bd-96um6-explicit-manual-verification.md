@@ -171,12 +171,63 @@ at a different altitude. The grep guards were kept but demoted: they catch a rul
 being DELETED, never one being WEAKENED, and the behaviour tests that call the
 real exported functions are what actually protect it.
 
+### I briefed fifteen reviewers with a rubric I had paraphrased
+
+Caught at closeout, scoring the scorecard against `bd show` instead of memory.
+The bead has TWO exit criteria. Every review brief I wrote listed THREE, and the
+list was wrong in both directions:
+
+- I DROPPED the real criterion 1 -- "blur, tab-through, and clicking away leave a
+  manually-typed field UNVERIFIED... and the field is re-offered by the
+  next-field search" -- and renumbered the Enter gesture into its place.
+- I ADDED a third criterion about translations, which is the TRANSLATION
+  REQUIREMENT in the bead's NOTES, not an exit criterion.
+
+No gap shipped: the real criterion 1 is covered (`manualEditDoesNotVerify.test.ts`,
+32 tests, including the re-offer half via `computeNextField`), and the translation
+requirement is covered by the derived `SPOKEN_LANGUAGES` test. Both verified at
+closeout against the bead's actual text.
+
+But fifteen rounds of reviewers scored a rubric I had retyped from memory, and
+none of them could have caught it: **the criteria are the one input a reviewer
+takes entirely on trust from the orchestrator.** Everything else it can check
+against the code; the rubric it cannot.
+
+The fix is mechanical and belongs in the loop, not in anyone's discipline: PASTE
+the `## Exit criteria` block out of `bd show` into the review brief. Do not
+retype it, do not summarize it, do not reconstruct it from the last round's
+prompt. This is the same failure as every other in this bead -- I checked the
+thing I was looking at and not the thing I was quoting -- and it is the one that
+ran the longest before anything caught it.
+
 ## Doc freshness
 
 - `docs/standards/ws-protocol.md` -- the `manual_field_update` row documents the
   new `verified` key, its default, and why absent means unverified. Its citation
   was also still a line number that had drifted; re-anchored to the symbol, the
   same fix bd `polyglot-pdf-9bsnj` applied to its siblings.
+
+Closeout flagged SIX stale docs. I resolved each on evidence rather than by
+bumping stamps, because a stamp bump with no prose review is the exact thing the
+freshness gate exists to catch:
+
+- THREE track nothing this branch touched -- `terminology.md`, `testing.md`,
+  `validation-delegation.md`. Computed the intersection mechanically (changed-file
+  list against each doc's `**Tracks:**` globs) rather than eyeballing it. They
+  were stale before this branch and are left alone.
+- THREE do track files I changed, and NONE is made wrong by the change:
+  - `ws-protocol.md` -- already updated ON this branch and already stamped for
+    this bead; its residual staleness is only that `webFormConnection.ts` changed
+    again afterwards, for reasons this doc does not describe.
+  - `voice-and-vad.md` -- its ONLY match for "verif" is the phrase "wire-verified"
+    in an unrelated sentence about clip parking. Nothing about the verify gesture.
+  - `technical_guide.md` -- never mentions `manual_field_update` at all, and its
+    client-reply-builders list names confirm/skip/switch/spellback, not
+    `sendManualFieldUpdate`. Also the deliberate NO-STAMP doc (bd
+    `polyglot-pdf-abn4o`), so a bump would have reverted that fix.
+
+Reviewed and left, all six. The rule is "does this doc now say something FALSE",
+not "is its date older than a file it tracks".
 
 ## Files touched
 
