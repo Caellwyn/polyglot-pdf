@@ -2595,3 +2595,75 @@ share the bead and its cross-cutting rules rather than one data shape.
   needs no GCP permission at all (it calls each public backend's own
   unauthenticated `/health`/`/version`, the same way any external caller
   would).
+### 30. Per-channel deploy config + the per-SHA build gate (Epic 4 bead E4.1, bd polyglot-pdf-1s3ko)
+
+Two contracts share this entry because they are two halves of one move: taking
+the deploy out of bash-only and giving Cloud Build something it can read.
+**Neither has run in production yet** -- the first build needs the
+2nd-generation Cloud Build GitHub connection (a maintainer OAuth step), so
+`deploy-staging.sh` / `deploy-demo.sh` remain the live deploy path.
+
+**29a. The channel file: `deploy/channels/<channel>.env`.**
+
+- **Format (the contract):** plain `KEY=value` lines under three section
+  headers -- `[SET_ENV_VARS]`, `[SET_SECRETS]`, `[SERVICE_ACCOUNT]` -- each
+  mapped to the matching `gcloud run deploy` flag. `#` comments and blank
+  lines are ignored. NO shell expansion: values are literal, so a value that
+  must be computed at deploy time is supplied by the caller instead.
+  `deploy/channels/README.md` is the reference.
+- **Files:** `staging.env`, `demo.env` (the parity pair) and `admin.env`.
+- **Consumer 1 (bash):** `deploy-all.sh`'s `read_channel_section` /
+  `read_channel_value`, selected by the `DEPLOY_CHANNEL` env var the wrapper
+  passes. The backend stage layers the file's `[SET_ENV_VARS]` AFTER its own
+  computed keys (`GOOGLE_CLOUD_PROJECT`, the `FORM_KITS_*` trio, `APP_MODULE`,
+  `GIT_SHA`) and BEFORE `BACKEND_EXTRA_ENV`, which now carries only
+  deploy-time-only values (`deploy-admin.sh`'s `ADMIN_SERVICE_URL`).
+  `[SET_SECRETS]` and `[SERVICE_ACCOUNT]` become the defaults for
+  `BACKEND_SECRETS` / `BACKEND_SERVICE_ACCOUNT`; an explicit caller value still
+  wins.
+- **Consumer 2 (Cloud Build):** `cloudbuild.yaml`'s `backend-deploy` step
+  **sources `deploy-all.sh`** and calls the SAME two functions, rather than
+  reimplementing the format. A second parser would be the drift the files
+  exist to end, one level up.
+- **Producers of the values:** formerly the inline `BACKEND_EXTRA_ENV` /
+  `BACKEND_SECRETS_COMMON` / `SA_EMAIL` constants in each wrapper, all now
+  deleted. `SERVICE_ACCOUNT` is explicit and versioned for the first time.
+- **Pinned by:** `tests/test_deploy_channel_parity.py` -- the two files must
+  agree key-for-key and value-for-value except `LINK_BASE_URL`, `LINK_CHANNEL`
+  and `GIT_SHA`; `deploy-all.sh` and both wrappers must set NO channel key
+  inline (derived from the shipped file, not a hand-typed list); each wrapper
+  must pass `DEPLOY_CHANNEL` inside its `./deploy-all.sh` env prefix; and each
+  section must reach its own gcloud flag. `admin.env` is outside the parity
+  pair (one admin service, both channels' data) and is pinned equal to
+  `deploy-admin.sh`'s still-inline copy by
+  `tests/test_cloudbuild_yaml.py::test_admin_channel_file_matches_the_wrapper`
+  until bead `polyglot-pdf-ywxoh` (4.2) switches the wrapper over.
+
+**29b. The verify gate: Firestore `build_checks/{sha}`.**
+
+- **Producer:** `scripts/record_build_check.py record`, run as the LAST step of
+  `cloudbuild.yaml`'s `verify` target under the build SA's ADC. Document shape:
+  `{status, build_id, ts, sha}` -- `status` is `"success"`, `ts` is a
+  timezone-aware UTC ISO string, `build_id` is Cloud Build's `$BUILD_ID`.
+- **Consumer:** `scripts/record_build_check.py require`, the FIRST real step of
+  every deploy target (`gate-build-checks`). It exits 1 when the document is
+  missing, when `status` is anything but `success`, or when Firestore cannot be
+  read at all -- it fails CLOSED, because a gate that waves a deploy through
+  because it could not check is not a gate. The `verify` target itself is the
+  one exemption (it is what creates the record).
+- **Why this shape:** five deploy targets for one commit pay ONE test run, and
+  a commit whose suites failed cannot deploy by ANY route -- bash-triggered or
+  console-triggered -- because the gate lives inside the build rather than in a
+  wrapper. `build_checks` is NOT the deploy audit trail; `deployments/{id}`
+  (bead 4.3) is. It answers one question: have this commit's suites passed? So
+  it carries no channel and no target.
+- **Keyed on `_SHA`, not `COMMIT_SHA`:** Cloud Build populates `COMMIT_SHA`
+  only for a build from a connected repo, so the gate reads and writes the
+  explicit substitution and behaves identically however the build was started.
+  An empty `_SHA` is refused by the build's very first step -- one empty-SHA
+  verify would otherwise vouch for every future empty-SHA deploy.
+- **Pinned by:** `tests/test_cloudbuild_yaml.py` -- the substitution names, the
+  verify target's three suites, and (the load-bearing one) that the gate step's
+  INDEX is lower than every step that runs `gcloud run deploy`, `docker push`
+  or `firebase deploy`. Asserting the gate merely EXISTS passes with it moved
+  after the deploy.
