@@ -9,8 +9,13 @@ import { describe, it, expect, beforeEach } from 'vitest'
  * option[0] an id made both paths LIVE, and both then treated the group as a
  * single boolean checkbox.
  *
- * These mirror the two loops' branch logic. The functions are module-private,
- * so this pins the DOM contract they implement rather than importing them.
+ * These MIRROR the two loops' branch logic, for historical reasons: they predate
+ * the functions being exported. connectionGroupBehaviour.test.ts now CALLS the
+ * real ones, and that file is what actually protects the behaviour -- a mirror
+ * passed with the fix reverted twice in this bead. What survives here is the
+ * source-shape properties a behaviour test cannot see (branch ORDER, and that
+ * the group lookup is delegated to groupMembership.ts rather than re-inlined).
+ * See the scope note above that describes block for the honest limits.
  */
 function renderGroup() {
   document.body.innerHTML = `

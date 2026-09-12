@@ -194,6 +194,28 @@ describe('Enter opens the verify modal (bd polyglot-pdf-96um6)', () => {
     expect(screen.getByTestId('verify-field-value').textContent).toBe('Vasquez');
   });
 
+  it('ENTER on a control that shares a field id but is NOT a schema field', () => {
+    // The honest version of "the wrapper's other subtrees are safe". A bare
+    // <div> overlay can never resolve a field no matter which guard you break,
+    // so a test firing Enter at one asserts nothing -- I wrote that first and
+    // the mutation proved it could not fail. This uses a control that DOES
+    // carry an id, so the `schema.fields.find` guard is the thing under test.
+    render(<SchemaForm schema={VERIFY_SCHEMA} kitId="test" />);
+    typeInto('f1', 'Vasquez');
+
+    const stranger = document.createElement('input');
+    stranger.id = 'not_a_schema_field';
+    stranger.value = 'something';
+    document.querySelector('.schema-form__view-container')!.appendChild(stranger);
+
+    fireEvent.keyDown(stranger, { key: 'Enter' });
+
+    expect(
+      screen.queryByTestId('verify-field-modal'),
+      'an id that is not a schema field must not open the verify modal'
+    ).toBeNull();
+  });
+
   it('ENTER on an EMPTY field does NOT open it -- there is nothing to verify', () => {
     // And Enter keeps its existing meaning there, which is the behaviour people
     // may rely on (it reaches <form onSubmit>).

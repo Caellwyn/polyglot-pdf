@@ -936,10 +936,23 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         );
       })()}
 
-      {/* Enter->verify is bound HERE, around BOTH views (bd polyglot-pdf-96um6).
-          It was originally on the <form>, which is the Simplified view ONLY -- so
-          the PDF view had no keyboard verify path at all, reproducing the exact
-          hole this bead exists to close. Fresh-eyes caught it. */}
+      {/* Enter->verify is bound HERE (bd polyglot-pdf-96um6). It was originally on
+          the <form>, which is the Simplified view ONLY -- so the PDF view had no
+          keyboard verify path at all, reproducing the exact hole this bead exists
+          to close. Fresh-eyes caught it.
+
+          SCOPE, stated accurately: this div wraps more than the two views -- the
+          voice overlay, the download section and FilledPreviewModal are inside it
+          too, so their Enter events bubble through this handler. That is safe
+          because handleFormKeyDown resolves a SCHEMA FIELD from the event target
+          and returns early when it finds none, which is what every control in
+          those subtrees yields.
+
+          Pinned by "ENTER on a control that shares a field id but is NOT a
+          schema field" in SchemaForm.verify.test.tsx. An earlier attempt fired
+          Enter at the mocked overlay instead -- that test COULD NOT FAIL, because
+          the mock is a bare <div> with no id or name, so no guard it claimed to
+          test was ever reached. */}
       <div onKeyDown={handleFormKeyDown} className="schema-form__view-container">
       {viewMode === 'preview' ? (
         <PdfViewErrorBoundary
