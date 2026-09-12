@@ -170,16 +170,14 @@ def test_income_report_requires_from_and_to(client, captured_queries):
 def test_income_report_uses_income_month_view_and_bound_parameters(
         client, captured_queries):
     resp = client.get(
-        "/admin/reports/income?from=2026-01&to=2026-03&channel=staging")
+        "/admin/reports/income?from=2026-01&to=2026-03")
     assert resp.status_code == 200, resp.text
     call = captured_queries[0]
     assert "income_month" in call["sql"]
     param_values = {p.name: p.value for p in call["parameters"]}
     assert param_values["from_month"] == "2026-01"
     assert param_values["to_month"] == "2026-03"
-    assert param_values["channel"] == "staging"
     assert "2026-01" not in call["sql"]
-    assert "'staging'" not in call["sql"]
 
 
 def test_income_report_refuses_a_range_wider_than_12_months(
@@ -206,17 +204,28 @@ def test_income_report_maps_bigquery_unavailable_to_503(client, monkeypatch):
     assert resp.status_code == 503, resp.text
 
 
-def test_income_report_channel_is_optional(client, captured_queries):
-    """Unlike usage_routes.py's REQUIRED channel, a report with no
-    ?channel= must succeed -- an unfiltered read across both channels
-    (see report_routes.py's own _validated_channel docstring)."""
+def test_income_report_has_no_channel_parameter(client, captured_queries):
+    """Unlike the cost report, income has NO channel filter at all -- a
+    request with no ?channel= must succeed and never bind a `channel`
+    query parameter (income_month rows carry no channel to filter on; see
+    bigquery_reports.query_income_report's docstring)."""
     resp = client.get("/admin/reports/income?from=2026-01&to=2026-01")
     assert resp.status_code == 200, resp.text
     param_names = {p.name for p in captured_queries[0]["parameters"]}
     assert "channel" not in param_names
 
 
-def test_income_report_unknown_channel_is_422(client, captured_queries):
+@pytest.mark.parametrize("channel", ["demo", "staging", "prod"])
+def test_income_report_refuses_any_channel_value(
+        client, captured_queries, channel):
+    """income_month rows are always channel=NULL (sql/telemetry_views.sql):
+    a `channel = @channel` filter can never match a row, so the route
+    refuses ANY channel value -- including a KNOWN one -- rather than
+    silently returning zero rows for a filter that can never work. This is
+    the mpebj cross-surface review finding: the route must not accept a
+    parameter it can only ever answer wrong."""
     resp = client.get(
-        "/admin/reports/income?from=2026-01&to=2026-01&channel=prod")
-    assert resp.status_code == 422
+        "/admin/reports/income?from=2026-01&to=2026-01&channel={}".format(
+            channel))
+    assert resp.status_code == 422, resp.text
+    assert captured_queries == []

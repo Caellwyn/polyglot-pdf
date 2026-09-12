@@ -141,7 +141,17 @@ def _validated_channel(channel: Optional[str]) -> Optional[str]:
     channel, a report route with no ?channel= legitimately means "both
     channels combined" (the views themselves carry a `channel` column per
     row, so an unfiltered query still tells the two apart in the response
-    rows -- there is no cross-channel MERGING that would hide one)."""
+    rows -- there is no cross-channel MERGING that would hide one).
+
+    THIS REASONING HOLDS ONLY FOR THE COST VIEWS. income_month's `channel`
+    column is different in kind, not just in value: sql/telemetry_views.sql
+    documents that the admin service writing purchase/subscription_grant
+    ledger entries has no channel of its own, so every row income_month can
+    ever produce carries `channel IS NULL`. A `channel = @channel` filter
+    against a non-null value can therefore never match a single row --
+    silently returning "0 income" for the one route whose job is reporting
+    real money, rather than an error explaining why. See
+    _validated_income_channel below, which the income route uses instead."""
     if channel is None:
         return None
     if channel not in KNOWN_CHANNELS:
@@ -151,6 +161,26 @@ def _validated_channel(channel: Optional[str]) -> Optional[str]:
                 ", ".join(KNOWN_CHANNELS)),
         )
     return channel
+
+
+def _validated_income_channel(channel: Optional[str]) -> None:
+    """income_month rows never carry a non-null `channel` (see
+    _validated_channel's docstring and sql/telemetry_views.sql) -- so
+    `?channel=` on the income route can only ever produce a confidently
+    empty result set, never a real answer. Refuse it outright (422) rather
+    than silently returning zero rows for a filter that can never match.
+    """
+    if channel is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "channel is not supported on the income report: income "
+                "ledger entries carry no channel (the admin service that "
+                "writes them has none), so a channel filter would always "
+                "return zero rows"
+            ),
+        )
+    return None
 
 
 def _validated_group_by(group_by: Optional[str]) -> str:
@@ -209,17 +239,20 @@ async def get_income_report(
     channel: Annotated[Optional[str], Query()] = None,
 ) -> dict:
     """Income rows from income_month (real firms only -- the view's own
-    firm_kind = 'live' filter, contract 25), filtered to [from, to] and an
-    optional channel. `from`/`to` are both REQUIRED. Carries `delayed: true`
-    and DELAYED_NOTE, same as the cost report.
+    firm_kind = 'live' filter, contract 25), filtered to [from, to].
+    `from`/`to` are both REQUIRED. `?channel=` is REFUSED (422) rather than
+    silently accepted: income_month rows carry no channel (see
+    _validated_income_channel), so filtering on one can only ever return
+    zero rows. Carries `delayed: true` and DELAYED_NOTE, same as the cost
+    report.
     """
     from_month, to_month = _validated_range(from_, to)
-    channel = _validated_channel(channel)
+    _validated_income_channel(channel)
 
     try:
         rows = await asyncio.to_thread(
             bigquery_reports.query_income_report,
-            from_month=from_month, to_month=to_month, channel=channel,
+            from_month=from_month, to_month=to_month,
         )
     except bigquery_reports.BigQueryUnavailable as exc:
         _log.error("admin_income_report_failed", from_month=from_month,
@@ -228,6 +261,6 @@ async def get_income_report(
                             detail="income report unavailable") from exc
 
     return {
-        "from": from_month, "to": to_month, "channel": channel,
+        "from": from_month, "to": to_month,
         "rows": rows, "delayed": True, "note": DELAYED_NOTE,
     }

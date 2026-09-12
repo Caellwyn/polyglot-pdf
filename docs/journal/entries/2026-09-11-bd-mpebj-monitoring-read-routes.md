@@ -62,6 +62,57 @@ No new IAM grant: `admin-backend-sa` already holds `bigquery.jobUser` +
 dataset `bigquery.dataViewer` (bd rd3s8) and `errorreporting.viewer` (bd
 e4dt8) from earlier beads in this epic.
 
+### Cross-surface review round -- adopt/reject/defer
+
+The Opus outer cross-surface review returned `GAPS-FOUND (3)`. Breakdown:
+
+- **ADOPTED (blocker, code fix):** `GET /admin/reports/income?channel=`
+  could never return a real answer for any channel value -- `income_month`
+  rows are always `channel IS NULL` (the admin service writing
+  purchase/subscription_grant ledger entries has no channel of its own;
+  `sql/telemetry_views.sql`'s own view comment already said so), so a
+  `channel = @channel` filter silently returned zero rows for the one
+  route whose job is reporting real money. Fixed by refusing `?channel=`
+  outright (422, new `_validated_income_channel`) and removing the dead
+  `channel` parameter from `bigquery_reports.query_income_report` entirely
+  (CLAUDE.md scar #7: remove the parameter, don't default it off). The
+  flagged test (`test_report_routes.py:173`) mocked `_run_query`, so it
+  proved the parameter was BOUND but could never prove the query would
+  MATCH a row -- same "mock proves the call, not the answer" shape as scar
+  #7, applied to data instead of IAM. Replaced with a parametrized test
+  (`test_income_report_refuses_any_channel_value`, over `demo`/`staging`/
+  an unrecognized value -- ALL 422) plus
+  `test_income_report_has_no_channel_parameter`; mutation-verified by
+  reverting the guard and confirming all three parametrizations go red.
+- **ADOPTED (blocker, doc fix):** `docs/technical_guide.md`'s `/admin/errors`
+  routes-table row named the wrong exception (`BigQueryUnavailable`,
+  copy-pasted from the cost-report row above it) for the 503 mapping;
+  the real exception is `ErrorReportingUnavailable`. Fixed.
+- **ADOPTED (blocker, doc fix):** Surface contract 28a's Consumers section
+  still read "(a later bead)" for the errors-per-channel console view this
+  bead ships. Fixed -- and, since this is the enumerate-the-set trap
+  (CLAUDE.md scar #8), also swept for and fixed the SAME stale "later
+  bead" / "none yet in this bead" pattern on contract 21 (alerts) and
+  contract 25 (cost/income views) and the `acknowledged_by`/
+  `acknowledged_at` field note -- all four were the identical unaddressed
+  consumer this bead adds, left unupdated everywhere except contract 26
+  (which the original diff DID update).
+- **DEFERRED (pre-existing, filed as beads, not fixed here):** the four
+  stacked `*Last updated:` stamps in `docs/components/admin-service.md`
+  (bd `polyglot-pdf-u5l0f` -- pre-existing at three, this bead's own stamp
+  made it four) and the bare `import requests` outside its try/except in
+  `ops_routes.py`/`error_stats.py`, unguarded unlike
+  `bigquery_reports.py`'s sibling import (bd `polyglot-pdf-c92sa` --
+  currently unreachable since `requests` is pinned into the shared image,
+  but inconsistent with the established pattern).
+- **NOT FLAGGED, reviewed and confirmed correct:** `_rollup_doc_id`'s
+  mirrored-not-imported duplication of `usage_rollups._month_key` (traced
+  both, they agree exactly including the default channel constant);
+  `bigquery.Client()`'s implicit location resolution against the
+  regional dataset (resolves via the dataset reference, not flaggable
+  without a live query); the alerts list's full-collection Python-side
+  filtering (deliberate, documented, TTL- and page-capped).
+
 ## Lessons
 
 - The bead's own prose for an env var's VALUE shape is not always its

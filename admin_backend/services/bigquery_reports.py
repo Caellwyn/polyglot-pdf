@@ -173,22 +173,30 @@ def query_cost_report(
 
 
 def query_income_report(
-    *, from_month: str, to_month: str, channel: Optional[str] = None,
+    *, from_month: str, to_month: str,
 ) -> list[dict[str, Any]]:
-    """Rows from income_month, filtered to [from_month, to_month] inclusive
-    and, optionally, one channel. income_month's own view definition already
-    hard-codes firm_kind = 'live' (contract 25) -- this function adds no
-    second filter for that; a caller cannot widen it back to mock firms by
-    any parameter this function accepts.
+    """Rows from income_month, filtered to [from_month, to_month] inclusive.
+    income_month's own view definition already hard-codes firm_kind = 'live'
+    (contract 25) -- this function adds no second filter for that; a caller
+    cannot widen it back to mock firms by any parameter this function
+    accepts.
+
+    NO channel PARAMETER, ON PURPOSE (bd polyglot-pdf-mpebj cross-surface
+    review). income_month rows carry a `channel` column, but every value in
+    it is NULL: sql/telemetry_views.sql documents that the admin service
+    writing purchase/subscription_grant ledger entries has no channel of
+    its own. A `channel = @channel` filter can therefore never match a
+    single row -- report_routes.py's income route refuses `?channel=`
+    outright (422) rather than accept a parameter that can only ever
+    silently return zero rows, so this function never receives one. A
+    parameter nothing can safely turn on is a trap for the next caller;
+    removed rather than defaulted off (CLAUDE.md scar #7).
     """
     where = ["month >= @from_month", "month <= @to_month"]
     parameters = [
         _str_param("from_month", from_month),
         _str_param("to_month", to_month),
     ]
-    if channel is not None:
-        where.append("channel = @channel")
-        parameters.append(_str_param("channel", channel))
 
     sql = (
         "SELECT month, entry_type, channel, entry_count, usd_amount "

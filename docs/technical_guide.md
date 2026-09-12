@@ -165,7 +165,7 @@ its own table).
 | GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
 | GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
-| GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY -- `representative.message` is never read at all (E3.8's PII rule reaching the console). `BigQueryUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
+| GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY -- `representative.message` is never read at all (E3.8's PII rule reaching the console). `ErrorReportingUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
 | GET | `/admin/firms` | Every firm, with `kind`, `balance_credits` and `status` (bd `polyglot-pdf-zopqq`), unfiltered -- the bead names columns, not filters, so no composite index is owed the way `/admin/audit`'s filters are. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
 | POST | `/admin/firms` | Create a firm (bd `polyglot-pdf-zopqq`). Body `{firm_id, name, contact_email, kind, allowed_kits?, status?}` -- `kind` is REQUIRED with NO default (422 if missing or not `mock`/`live`), matching `upsert_firm`'s own required parameter. Writes the SAME field shape as `backend/services/firms.py::upsert_firm` but does NOT call it: this route needs the doc write and the audit row in one `@firestore.transactional` body (contract 15's in-transaction form), and `upsert_firm` does its own non-transactional read+write -- calling it from inside a transaction would add a second, transaction-illegal read. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/firms/{firm_id}` | One firm's profile, balance, and a page of ledger rows (bd `polyglot-pdf-zopqq`). **Runs `credit_ledger.reconcile_expired_for_firm` once per known channel (`demo`, `staging`) BEFORE reading the balance** -- a lazy, best-effort catch-up for expired unopened links the hourly sweep (bd `polyglot-pdf-8vgfh`, below) has not reached, so the balance shown reflects any refund that catch-up applies. A per-channel reconciliation failure is logged and skipped, never 500s the page. `?ledger_limit=` (default 50, max 200) pages the newest-first ledger view. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
@@ -184,7 +184,7 @@ its own table).
 | POST | `/admin/links/sweep-expired` | The hourly expired-link refund sweep (bd `polyglot-pdf-8vgfh`, plan: "Refund on unopened expiry"). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the FOURTH and last admin-service gate, its first consumer. Cloud Scheduler presents a Google-signed OIDC token; the gate checks the token's `aud` against this route's own URL -- the bare `ADMIN_SERVICE_URL` env var (service root) with the route's own path appended -- AND its `email` claim against the scheduler job's service account (`SWEEP_SCHEDULER_SA_EMAIL` env var); both env vars are set automatically by `deploy-admin.sh` on every run -- on a public (`--allow-unauthenticated`) service, a matching audience alone is forgeable by anyone with a GCP project, so it is not by itself proof of caller identity. Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every channel in `KNOWN_CHANNELS`. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit, which itself re-reads `link_redemptions` first and refuses an opened link -- this route adds no refund logic of its own. Each committed refund's audit row is written IN THE SAME Firestore transaction as the refund via `refund_expired_link`'s `extra_writes` parameter (bd `polyglot-pdf-8vgfh`'s extension to that A5 helper) -- the SAME extra_writes-delegated shape of Surface contract 15's `MUTATION_KIND_FIRESTORE` the credit routes above use (see `_EXTRA_WRITES_TRANSACTION_OPENERS`). A per-link failure is logged and skipped rather than aborting the whole pass. Returns `{results: [{channel, refunded, skipped}], total_refunded, total_skipped}` -- counts only; the ledger entry and the audit row are the durable record. `admin_backend/routes/sweep_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/credit_ledger.py` |
 | POST | `/admin/links/{jti}/revoke` | Revoke a minted link (bd `polyglot-pdf-jmiys`, Track B bead B4). `?channel=` REQUIRED. One `@firestore.transactional` body (mirrors `firm_routes.py`'s `_apply_firm_patch` shape -- there is no balance mutation to join via `credit_ledger`'s `extra_writes` hook, since revoke touches only the link's own `status`) sets `status=revoked` with `revoked_by`/`revoked_at`, audited in the SAME transaction. Only a `minted` record may transition (409, naming the current status, otherwise). Gate: `require_app_admin_or_owning_manager` -- a manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti); an app admin may revoke any. This status flip is what Epic 2 Track A bead A3's open gate (`backend/routes/link_routes.py`) must refuse on once it lands -- see Surface contract 22. `admin_backend/routes/link_routes.py` |
 | GET | `/admin/reports/cost` | Parameterised BigQuery read over `cost_by_{firm\|kit\|employee}_month` (bd `polyglot-pdf-mpebj`, E3.11a, via new `admin_backend/services/bigquery_reports.py`; docs: Surface contract 25 for the views, Surface contract 29 for this route's own wire contract). `?from=&to=&group_by=` REQUIRED (422 on missing/malformed, or an inclusive range over 12 months); `?channel=` optional. Every value is bound as a `bigquery.ScalarQueryParameter`, never interpolated SQL text; `group_by` selects the view via a closed Python dict, never a value reaching the FROM clause. Carries `delayed: true` plus a sink-lag note on every response. `BigQueryUnavailable` maps to 503. A read, so no audit row. `admin_backend/routes/report_routes.py` |
-| GET | `/admin/reports/income` | Parameterised BigQuery read over `income_month` (bd `polyglot-pdf-mpebj`, E3.11a) -- real firms only, via the view's own `firm_kind = 'live'` filter (Surface contract 25). `?from=&to=` REQUIRED (same validation as the cost report); `?channel=` optional. Same parameterisation, 12-month ceiling, and `delayed: true` as the cost report. A read, so no audit row. `admin_backend/routes/report_routes.py` |
+| GET | `/admin/reports/income` | Parameterised BigQuery read over `income_month` (bd `polyglot-pdf-mpebj`, E3.11a) -- real firms only, via the view's own `firm_kind = 'live'` filter (Surface contract 25). `?from=&to=` REQUIRED (same validation as the cost report); `?channel=` is REFUSED (422) -- income rows carry no channel (the admin service writing ledger entries has none), so a channel filter could only ever return zero rows. Same parameterisation and `delayed: true` as the cost report. A read, so no audit row. `admin_backend/routes/report_routes.py` |
 | GET | `/admin/users` | The firm's staff pool (bd `polyglot-pdf-dmjl5`). `?firm_id=` for an app admin; a firm manager sends none and gets their own. `list_users()` plus a CLIENT-SIDE claims filter -- Firebase Auth has no server-side query over custom claims -- which is affordable only because the pool is firm staff, editors and devs: clients never get accounts, so this list does not grow with a firm's caseload and no members mirror is needed. Response is `{firm_id, users, truncated}`; each row is an EXPLICIT key allowlist, so a future internal claim does not reach the console the day it appears. A read, so no audit row. `admin_backend/routes/user_routes.py` |
 | POST | `/admin/users` | Create a staff account for a firm and return a password-**reset link** (bd `polyglot-pdf-dmjl5`). Body `{email, firm_role, firm_id?, display_name?}`. Gate: `require_app_admin_or_owning_manager` -- an app admin MUST name a firm (422 otherwise), a firm manager may NOT name one (403, even their own; see Surface contract 19). Creates the Firebase account with an unguessable random password that is never returned or logged, then stamps ONLY `firm_id` + `firm_role` merged over existing claims. NO outbound email in this epic: the console displays the link. 409 on a duplicate address; 422 on a role outside `{manager, employee}` or a firm slug failing `FIRM_ID_RE`. Audited pending-then-committed (contract 15). `admin_backend/routes/user_routes.py`, `admin_backend/services/user_admin.py` |
 | PATCH | `/admin/users/{uid}/disable` | Disable or re-enable a staff account (bd `polyglot-pdf-dmjl5`). Body `{disabled, firm_id?}` -- an explicit value, not a toggle, so a retrying console cannot land in whichever state the race decided. Claims are untouched: disabling is not deleting, and a deleted uid would take its audit trail's subject with it. The account must already be in the resolved firm, else the SAME 404 a nonexistent uid gets (a 403 would confirm a guessed uid names a real account). `admin_backend/routes/user_routes.py` |
@@ -1698,9 +1698,11 @@ per occurrence -- the load-bearing property this contract exists to pin.
   credit alert; NEVER a field value, per
   `docs/standards/hipaa-pii-policy.md` and
   `docs/standards/stateless-architecture.md`), `acknowledged_by`,
-  `acknowledged_at`, `emailed_at` (all three `None` until a later bead --
-  the admin console's acknowledge action and Epic 3's dispatcher,
-  respectively), `expire_at` (a datetime 90 days past the alert's own `ts`,
+  `acknowledged_at`, `emailed_at` -- all three `None` on creation;
+  `acknowledged_by`/`acknowledged_at` are set by `PATCH
+  /admin/alerts/{alert_id}/acknowledge` (bd polyglot-pdf-mpebj, contract 29),
+  `emailed_at` remains `None` until Epic 3's dispatcher bead lands --
+  `expire_at` (a datetime 90 days past the alert's own `ts`,
   for the TTL policy `scripts/setup-firestore-ttl.sh` already declares on
   this collection).
 - **Never raises into the paid path (exit criterion 2).** `_write`'s
@@ -1723,9 +1725,14 @@ per occurrence -- the load-bearing property this contract exists to pin.
 - **`firestore.rules` denies `alerts/{alertId}` to all clients**, pinned by
   the same set-derived test as every other Admin-SDK-only collection
   (contract 15's neighbour, `test_firestore_rules_text.py`).
-- **Consumer:** none yet in this bead -- the admin console's alerts list
-  (acknowledge) and Epic 3's `POST /admin/alerts/dispatch` email sender are
-  later beads, both reading/writing the same doc shape this contract fixes.
+- **Consumer:** `GET /admin/alerts` + `PATCH
+  /admin/alerts/{alert_id}/acknowledge` (bd polyglot-pdf-mpebj, E3.11a,
+  `admin_backend/routes/alert_routes.py`) -- the FIRST real reader/writer of
+  this doc shape. The list route returns an explicit key allowlist
+  (`_ALERT_RESPONSE_KEYS`); acknowledge sets `acknowledged_by`/
+  `acknowledged_at` in the same `@firestore.transactional` body as its audit
+  row. Epic 3's `POST /admin/alerts/dispatch` email sender (which would set
+  `emailed_at`) remains a later bead.
 
 ### 22. Link listing + revoke: admin routes -> the mint record's `status` -> A3's open gate (Epic 2 Track B bead B4, bd polyglot-pdf-jmiys)
 
@@ -2076,12 +2083,17 @@ a deploy script.
   `${BILLING_EXPORT_TABLE}` (a required second script argument; the Cloud
   Billing export itself is a separate maintainer console step, Epic 3
   bead 7).
-- **Consumers:** the admin console's cost/income dashboards (a later bead) query
-  `cost_by_firm_month`, `cost_by_kit_month`, `cost_by_employee_month`,
-  `hosting_cost_by_service_month` and `income_month` directly; `admin-backend-sa`
-  is the identity that runs those queries (`roles/bigquery.jobUser` +
-  dataset-scoped `roles/bigquery.dataViewer`, both granted by this script rather
-  than `scripts/setup-admin-service.sh`).
+- **Consumers:** `GET /admin/reports/cost` + `GET /admin/reports/income`
+  (bd polyglot-pdf-mpebj, E3.11a, `admin_backend/services/bigquery_reports.py`)
+  -- the admin console's cost/income dashboards, the FIRST real readers of
+  these views. The cost route queries `cost_by_firm_month`,
+  `cost_by_kit_month` or `cost_by_employee_month` (selected by `group_by`);
+  the income route queries `income_month`. Neither route queries
+  `hosting_cost_by_service_month` (Epic 3 bead 7's Cloud Billing export
+  dashboard remains a later bead). `admin-backend-sa` is the identity that
+  runs those queries (`roles/bigquery.jobUser` + dataset-scoped
+  `roles/bigquery.dataViewer`, both granted by this script rather than
+  `scripts/setup-admin-service.sh`).
 - **The sink filter is three DIFFERENT jsonPayload shapes ORed together, not
   one field name.** *Breaks if collapsed to a single clause:* `jsonPayload.
   event_type IN (...)` alone would match `ledger_export` (contract 18's
@@ -2375,10 +2387,15 @@ explicitly is not.
   and frame source text are NEVER emitted.
 - **Consumers:** (1) **Cloud Error Reporting**, which ingests an entry as an
   error when it carries an uppercase `severity` of ERROR-or-above plus a
-  stack-trace-shaped field, and GROUPS on the frames. (2) The admin console's
-  errors-per-channel view (a later bead) reading Error Reporting's
-  `groupStats` as `admin-backend-sa`, which holds
-  `roles/errorreporting.viewer` from `scripts/setup-monitoring.sh`.
+  stack-trace-shaped field, and GROUPS on the frames. (2) `GET
+  /admin/errors` (bd polyglot-pdf-mpebj, E3.11a,
+  `admin_backend/services/error_stats.py`) -- the admin console's
+  errors-per-channel view, reading Error Reporting's `groupStats` as
+  `admin-backend-sa`, which holds `roles/errorreporting.viewer` from
+  `scripts/setup-monitoring.sh`. `_public_group_view` reads ONLY
+  `representative.type` and the report location's frame fields, never
+  `representative.message` -- this contract's PII rule reaching the
+  console.
 - **What silently breaks if they disagree:** restoring `format_exc_info`
   re-opens a P0 PII leak (the message can embed a field value, bd
   `polyglot-pdf-p84m`) with NO test failure anywhere except
@@ -2450,15 +2467,16 @@ share the bead and its cross-cutting rules rather than one data shape.
 
 - **Cost/income reports are the ONE HOME for "never interpolate a caller
   value into SQL text."** `admin_backend/services/bigquery_reports.py`'s
-  `query_cost_report`/`query_income_report` bind `from_month`, `to_month`
-  and `channel` as `bigquery.ScalarQueryParameter`s (`@from_month` etc. in
-  the SQL string), never an f-string substitution; `group_by` selects
-  which of the three cost views to query through `COST_VIEWS`, a closed
-  Python dict -- there is no code path from a `group_by` value to the
-  FROM clause at all, which is the strongest form of this guarantee since
-  BigQuery's client API has no parameterised-IDENTIFIER form in the first
-  place. `admin_backend/routes/report_routes.py`'s own `_validated_range`
-  refuses (422) a missing/malformed `from`/`to`, `to` before `from`, or an
+  `query_cost_report`/`query_income_report` bind `from_month` and
+  `to_month` (plus `channel`, COST ONLY -- see below) as
+  `bigquery.ScalarQueryParameter`s (`@from_month` etc. in the SQL string),
+  never an f-string substitution; `group_by` selects which of the three
+  cost views to query through `COST_VIEWS`, a closed Python dict -- there
+  is no code path from a `group_by` value to the FROM clause at all, which
+  is the strongest form of this guarantee since BigQuery's client API has
+  no parameterised-IDENTIFIER form in the first place.
+  `admin_backend/routes/report_routes.py`'s own `_validated_range` refuses
+  (422) a missing/malformed `from`/`to`, `to` before `from`, or an
   inclusive span past 12 calendar months, BEFORE `bigquery_reports.py` is
   ever called -- so that module can assume a sane range and never defends
   against one itself. *Breaks if collapsed to string formatting:* a
@@ -2467,6 +2485,24 @@ share the bead and its cross-cutting rules rather than one data shape.
   that the bound parameter carries the value AND that the value never
   appears literally in the SQL text (a route reverted to f-string
   interpolation would still pass a presence-only check).
+- **Income has NO `channel` filter, on purpose.** `income_month`'s rows
+  carry a `channel` column, but every value in it is SQL NULL: contract
+  25's `sql/telemetry_views.sql` view definition and
+  `backend/services/credit_ledger.py`'s own module docstring both record
+  that the admin service writing `purchase`/`subscription_grant` ledger
+  entries has no channel of its own, so `channel = @channel` could never
+  match a row. `GET /admin/reports/income` therefore refuses `?channel=`
+  outright (422, `_validated_income_channel`) rather than accept a filter
+  that can only ever silently return zero rows -- the cost report's
+  `?channel=` stays because the cost views' rows DO carry a real channel
+  (they come from the public backends, which have one). *Breaks if
+  `?channel=` is quietly re-accepted:* an operator filtering income by
+  channel gets a confidently-rendered "$0" for real money, with no
+  indication that the filter itself is the reason; pinned by
+  `test_report_routes.py::test_income_report_refuses_any_channel_value`
+  (parametrized over both known channels and an unknown one -- ALL are
+  422, not only the unrecognized value) and
+  `::test_income_report_has_no_channel_parameter`.
 - **Every response from both report routes carries `delayed: true` plus a
   fixed sink-lag note** (`report_routes.DELAYED_NOTE`) -- the E3.6 sink
   (contract 25) lags live traffic by seconds to minutes, and a console
