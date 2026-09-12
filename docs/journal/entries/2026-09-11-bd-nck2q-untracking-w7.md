@@ -199,6 +199,34 @@ frozen constraint test, and dropping the two-option threshold below 17 reddens
 the frozen padded-yes-no witness. A conversion that cannot fail is worse than a
 deletion, because it looks like coverage.
 
+### The one the clean clone caught
+
+The worktree run went green. The clean clone did not, and the difference was the
+most consequential guard in the whole cleanup:
+`test_plain_meaning_examples_are_not_terms_the_shipped_KITS_use`.
+
+It enforces a LEGAL boundary. The SI lets the assistant answer "what does X
+mean" only where X is not a term the forms use as an eligibility category --
+because asking what "spouse" means on a form where it names a filing-status
+category is asking which category applies. That is advice wearing definitional
+clothing. The guard has caught that exact mistake TWICE in review, each time
+after a human had read the text and passed it.
+
+It globbed `form-kits/*/schema.json`. In a worktree that still has kits on disk,
+it ran. In CI it would find nothing -- and its own non-vacuity assert is the only
+reason that was visible rather than a silent retirement.
+
+CONVERTED, emphatically not deleted: it now reads a frozen vocabulary captured
+from the published W-7 and from f1040 at the commit that removed it, plus a
+premise check that the fixture still contains "spouse" so a later re-capture
+cannot quietly defang it. Mutation-verified with the HISTORICAL mistake --
+planting `'what does spouse mean'` into the SI reddens it.
+
+**The generalisable part:** the cheap check (does it read a kit PATH?) found six
+of these. The two it missed reached kits another way -- one through
+`git ls-files`, one through a glob -- and the one that mattered most was in the
+second group. A grep for the path spelling is not a grep for the dependency.
+
 ## Doc freshness
 
 - `CLAUDE.md` -- scar #10 now states that NO kit is tracked and that a rule
