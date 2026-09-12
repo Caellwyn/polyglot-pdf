@@ -111,6 +111,12 @@ MUTATION_KINDS = {
     # shape) -- there is no other writer's transaction to join via
     # extra_writes, since this route is the only writer of kits/{kit_id}.
     ("PUT", "/admin/kits/{kit_id}/commercial"): MUTATION_KIND_FIRESTORE,
+    # Alert acknowledge (bd polyglot-pdf-mpebj, E3.11a). Opens its OWN
+    # transaction (mirrors firm_routes.py's _apply_firm_patch shape) --
+    # there is no other writer's transaction to join via extra_writes,
+    # since this route is the only writer of alerts/{id}.acknowledged_by /
+    # .acknowledged_at.
+    ("PATCH", "/admin/alerts/{alert_id}/acknowledge"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.
@@ -616,4 +622,21 @@ def test_the_shipped_kit_routes_pass_the_synthetic_firestore_check():
         inspect.getsourcefile(kit_routes)).read_text(encoding="utf-8")
     assert _firestore_verdict(source), (
         "kit_routes.py does not satisfy the same in-transaction check the "
+        "synthetic cases are graded against")
+
+
+def test_the_shipped_alert_routes_pass_the_synthetic_firestore_check():
+    """The alert_routes.py counterpart of the config tie-back above (bd
+    polyglot-pdf-mpebj, E3.11a): acknowledge_alert opens its OWN transaction
+    (like firm_routes.py, link_routes.py's revoke, and kit_routes.py's put),
+    so it is graded against the plain in-transaction form, not the
+    extra_writes extension -- this route is the only writer of
+    alerts/{id}.acknowledged_by/.acknowledged_at, so there is no other
+    transaction to join."""
+    from admin_backend.routes import alert_routes
+
+    source = pathlib.Path(
+        inspect.getsourcefile(alert_routes)).read_text(encoding="utf-8")
+    assert _firestore_verdict(source), (
+        "alert_routes.py does not satisfy the same in-transaction check the "
         "synthetic cases are graded against")
