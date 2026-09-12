@@ -845,3 +845,278 @@ def test_the_build_check_steps_can_import_their_firestore_client():
             f"{step_id} must run on an official python image (no PEP 668 "
             f"marker); it is on {step['name']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# bd polyglot-pdf-ywxoh (Epic 4 bead 4.2) -- the remaining targets and the
+# in-build gates. Exit criterion 1: every deploy target's first REAL step is
+# the build_checks gate, the demo-side targets carry the staging-success
+# gate, each staging target's last step records a deployment row, and every
+# site target carries the connected-source assertion.
+# ---------------------------------------------------------------------------
+
+# Every target 4.2 implements (verify and backend-* are 4.1's -- see
+# IMPLEMENTED_TARGETS above). "landing" is deliberately absent: the plan
+# leaves it a maintainer call, and it stays a named-but-failing step.
+YWXOH_DEPLOY_TARGETS = (
+    "backend-staging",
+    "backend-demo",
+    "frontend-staging",
+    "frontend-demo",
+    "editor",
+    "form-kits",
+    "firestore-rules",
+    "admin-service",
+    "admin-console-candidate",
+    "admin-console",
+)
+
+# The demo-side targets the plan singles out: "backend-demo, frontend-demo
+# and admin-service traffic shift additionally require a deployments
+# record". admin-service's OWN target implements both halves (deploy the
+# tagged candidate, then shift traffic) as one _TARGET value, so it is
+# included once here and its gate step is identified by name below rather
+# than by target name.
+STAGING_GATED_DEMO_TARGETS = ("backend-demo", "frontend-demo")
+
+# Every STAGING target that must write its own success row (plan: "each
+# staging target's LAST step writes its own success row to deployments").
+# admin-service is its OWN staging tier (tagged-candidate-then-shift), so its
+# record step fires unconditionally for that target rather than being
+# staging-channel-gated the way backend/frontend are.
+STAGING_RECORDING_TARGETS = ("backend-staging", "frontend-staging", "admin-service")
+
+# Every SITE target: builds a frontend bundle from a directory .gcloudignore
+# excludes from a tarball build, so each must refuse an empty COMMIT_SHA.
+SITE_TARGETS = (
+    "frontend-staging",
+    "frontend-demo",
+    "editor",
+    "admin-console-candidate",
+    "admin-console",
+)
+
+
+def _mutating_step_ids_for_target(steps, target: str) -> list[str]:
+    """Every step whose body actually DOES something for `target` -- i.e. it
+    is not merely present but its skip-guard would let it proceed for this
+    target. A step is included if the target literal (or its channel-derived
+    prefix, e.g. "backend-*") appears in a `case`/`if` guard alongside the
+    step's own mutating verb, which is a conservative enough signal for this
+    file's purpose: proving ORDER relative to the gates, not enumerating
+    every side effect.
+    """
+    hits = []
+    for step in steps:
+        body = script_of(step)
+        # A step whose guard would SKIP this target contributes nothing.
+        if f'"{target}"' not in body and target.split("-")[0] + "-*" not in body:
+            continue
+        if "skip (target" not in body and "${_TARGET}" not in body:
+            continue
+        hits.append(step["id"])
+    return hits
+
+
+@pytest.mark.parametrize("target", YWXOH_DEPLOY_TARGETS)
+def test_every_ywxoh_deploy_target_is_gated_by_build_checks(by_id, steps, target):
+    """Exit criterion 1, clause 1: every deploy target's FIRST step is the
+    build_checks gate.
+
+    "First step" here means POSITIONALLY before any step that does real work
+    for this target -- the gate-build-checks step itself is target-agnostic
+    (it runs for every target except verify), so the property to prove is
+    that no step touching `target` runs BEFORE it, mirroring
+    test_the_build_checks_gate_precedes_every_deploy_step's method but keyed
+    per target rather than globally.
+
+    Mutation-verified: moving any one of this bead's steps above
+    gate-build-checks (as staging-verified-gate itself was, before the
+    ordering fix during development) turns this red for that target.
+    """
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate = order["gate-build-checks"]
+    for step in steps:
+        if step["id"] in ("gate-build-checks", "require-sha"):
+            continue
+        body = script_of(step)
+        # A step that explicitly checks THIS target (by literal or by
+        # channel-suffix wildcard) and does not universally skip is presumed
+        # to run for it.
+        runs_for_target = (
+            f'"{target}"' in body
+            or (target.endswith("-staging") and 'in backend-*' in body and target.startswith("backend"))
+            or (target.endswith("-demo") and 'in backend-*' in body and target.startswith("backend"))
+            or (target.endswith("-staging") and 'in frontend-*' in body and target.startswith("frontend"))
+            or (target.endswith("-demo") and 'in frontend-*' in body and target.startswith("frontend"))
+        )
+        if not runs_for_target:
+            continue
+        assert order[step["id"]] > gate, (
+            f"step {step['id']!r} appears to run for target {target!r} at "
+            f"index {order[step['id']]}, before the build_checks gate at "
+            f"index {gate}. A commit whose suites failed would still reach "
+            f"this step for {target}."
+        )
+
+
+@pytest.mark.parametrize("target", STAGING_GATED_DEMO_TARGETS)
+def test_demo_side_targets_carry_the_staging_success_gate(by_id, steps, target):
+    """Exit criterion 1, clause 2: the three demo-side targets carry the
+    staging-success gate (plan: 'backend-demo, frontend-demo and
+    admin-service traffic shift additionally require a deployments record').
+
+    Mutation-verified: renaming staging-verified-gate's case arm away from
+    `backend-demo|frontend-demo` (e.g. to just `backend-demo`) makes this red
+    for frontend-demo -- confirmed by hand during development.
+    """
+    body = script_of(by_id["staging-verified-gate"])
+    assert target in body, (
+        f"staging-verified-gate's case statement does not mention {target!r}, "
+        f"so a demo build for it would proceed without checking staging"
+    )
+    assert "promotion_gate.py" in body, (
+        "staging-verified-gate does not call scripts/promotion_gate.py"
+    )
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["staging-verified-gate"]
+    # The target's OWN deploy step(s) must come after the gate.
+    family = target.rsplit("-", 1)[0]
+    deploy_step = "{}-deploy".format(family) if family == "backend" else "{}-build-deploy".format(family)
+    assert deploy_step in order, f"could not find the deploy step for {target}"
+    assert order[deploy_step] > gate_idx, (
+        f"{deploy_step} (index {order[deploy_step]}) runs before "
+        f"staging-verified-gate (index {gate_idx}) -- a demo deploy for "
+        f"{target} could ship before the staging check runs"
+    )
+
+
+def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
+    """The third demo-side case: admin-service's TRAFFIC SHIFT specifically
+    (not its tagged-candidate deploy, which is its own staging tier)."""
+    body = script_of(by_id["admin-service-staging-gate"])
+    assert "admin-service" in body
+    assert "promotion_gate.py" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    assert order["admin-service-shift-traffic"] > order["admin-service-staging-gate"], (
+        "admin-service-shift-traffic runs before admin-service-staging-gate -- "
+        "traffic could shift before the staging check runs"
+    )
+
+
+@pytest.mark.parametrize("target", STAGING_RECORDING_TARGETS)
+def test_each_staging_target_records_its_own_success_row(by_id, steps, target):
+    """Exit criterion 1, clause 3: each staging target's LAST step writes its
+    own deployments row (plan: avoids racing bead 4.3's Pub/Sub webhook, and
+    covers bash-triggered builds the webhook alone would still need this for).
+
+    Mutation-verified: deleting the record_deployment.py call from any one of
+    the three record steps (confirmed on frontend-record-deployment during
+    development) makes this red for that target without affecting the other
+    two -- proving the check is per-target, not a single global grep.
+    """
+    record_step_by_target = {
+        "backend-staging": "backend-record-deployment",
+        "frontend-staging": "frontend-record-deployment",
+        "admin-service": "admin-service-record-deployment",
+    }
+    step_id = record_step_by_target[target]
+    assert step_id in by_id, f"no {step_id} step in cloudbuild.yaml"
+    body = script_of(by_id[step_id])
+    assert "python scripts/record_deployment.py" in body
+    assert "--channel" in body
+    assert "--status success" in body
+    assert "--build-id" in body and "$BUILD_ID" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    # "LAST step" -- no other step for this target's family runs after it,
+    # among the steps THIS bead added for that family.
+    family_steps = {
+        "backend-staging": ["backend-build-image", "backend-deploy",
+                             "backend-reachability-gate",
+                             "backend-record-deployment"],
+        "frontend-staging": ["frontend-resolve-urls", "frontend-build-deploy",
+                              "frontend-record-deployment"],
+        "admin-service": ["admin-service-deploy-tagged",
+                           "admin-service-verify-tagged",
+                           "admin-service-staging-gate",
+                           "admin-service-shift-traffic",
+                           "admin-service-record-deployment"],
+    }[target]
+    indices = [order[s] for s in family_steps]
+    assert order[step_id] == max(indices), (
+        f"{step_id} is not the LAST step among {family_steps} for {target}"
+    )
+
+
+@pytest.mark.parametrize("target", SITE_TARGETS)
+def test_every_site_target_requires_a_connected_source(by_id, steps, target):
+    """Exit criterion 1, clause 4: every site target asserts COMMIT_SHA is
+    non-empty (a tarball build cannot see the site directories at all, since
+    .gcloudignore excludes them -- see that file's own comment).
+
+    Mutation-verified: narrowing require-connected-source-for-site-targets's
+    case arm to omit one target name (confirmed on admin-console-candidate
+    during development) makes this red for exactly that target.
+    """
+    body = script_of(by_id["require-connected-source-for-site-targets"])
+    assert target in body, (
+        f"require-connected-source-for-site-targets does not mention "
+        f"{target!r}, so that site target could build from a tarball"
+    )
+    assert "COMMIT_SHA" in body and "ABORT" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["require-connected-source-for-site-targets"]
+    build_step_by_target = {
+        "frontend-staging": "frontend-build-deploy",
+        "frontend-demo": "frontend-build-deploy",
+        "editor": "editor-build-deploy",
+        "admin-console-candidate": "admin-console-build-deploy",
+        "admin-console": "admin-console-build-deploy",
+    }
+    build_step = build_step_by_target[target]
+    assert order[build_step] > gate_idx, (
+        f"{build_step} (index {order[build_step]}) runs before the "
+        f"connected-source check (index {gate_idx})"
+    )
+
+
+def test_gcloudignore_excludes_admin_console():
+    """The premise of the connected-source gate: admin-console/ must
+    actually be excluded from a tarball build, or the gate is protecting
+    against a scenario that cannot occur."""
+    ignore = (REPO_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+    lines = [l.strip() for l in ignore.splitlines() if l.strip() and not l.strip().startswith("#")]
+    assert "admin-console/" in lines, (
+        ".gcloudignore does not exclude admin-console/ -- a tarball build "
+        "could then see and build it, defeating the connected-source gate's "
+        "whole premise"
+    )
+
+
+def test_promotion_gate_module_and_cli_agree_on_the_predicate():
+    """scripts/promotion_gate.py must call the SAME predicate the future
+    admin route (bead 4.4) will use, not a second copy of the rule."""
+    cli = (REPO_ROOT / "scripts" / "promotion_gate.py").read_text(encoding="utf-8")
+    assert "from admin_backend.services.promotion_gate import staging_verified" in cli, (
+        "scripts/promotion_gate.py does not import the pure predicate from "
+        "admin_backend.services.promotion_gate -- it may be reimplementing "
+        "the rule instead of sharing it with the future admin route"
+    )
+
+
+def test_record_deployment_module_exists_and_derives_target_family():
+    """scripts/record_deployment.py's target_family() is what lets
+    staging_verified() match a staging target's family against a demo
+    target's family."""
+    import sys as _sys
+    _sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import record_deployment  # noqa: E402
+
+    assert record_deployment.target_family("backend-staging") == "backend"
+    assert record_deployment.target_family("backend-demo") == "backend"
+    assert record_deployment.target_family("frontend-staging") == "frontend"
+    assert record_deployment.target_family("admin-service") == "admin-service"

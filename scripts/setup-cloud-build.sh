@@ -92,6 +92,7 @@ TARGETS=(
     "form-kits:demo"
     "firestore-rules:demo"
     "admin-service:admin"
+    "admin-console-candidate:admin"
     "admin-console:admin"
     "landing:demo"
 )

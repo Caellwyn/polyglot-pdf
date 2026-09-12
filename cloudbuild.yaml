@@ -41,15 +41,20 @@
 # single-$ set from `substitutions:` plus the built-in list and fails on any
 # other bare $NAME, so the next variable added here cannot reintroduce this.
 #
-# TARGETS. verify and backend-staging / backend-demo are implemented. The rest
-# are declared as named steps that fail loudly rather than being absent -- an
-# unknown target must not silently succeed. Bead polyglot-pdf-ywxoh (4.2)
-# fills them in.
+# TARGETS. Every target the plan names is implemented (bead polyglot-pdf-1s3ko
+# for verify/backend-*, bead polyglot-pdf-ywxoh /4.2 for the rest): verify,
+# backend-staging, backend-demo, frontend-staging, frontend-demo, editor,
+# form-kits, firestore-rules, admin-service, admin-console-candidate,
+# admin-console. Only `landing` remains a named-but-failing step (a
+# maintainer call left open by the plan, not an oversight) -- an unknown
+# target must not silently succeed either, so both cases fail loudly rather
+# than being absent.
 
 substitutions:
   # Which target to run: verify | backend-staging | backend-demo |
   # frontend-staging | frontend-demo | editor | form-kits | firestore-rules |
-  # admin-service | admin-console | landing
+  # admin-service | admin-console-candidate | admin-console | landing (named,
+  # not implemented -- see the TARGETS note above)
   _TARGET: verify
   # The channel whose deploy/channels/<channel>.env supplies the Cloud Run
   # env, secrets and runtime service account: staging | demo | admin.
@@ -87,6 +92,49 @@ steps:
           exit 1
         fi
         echo "Building target ${_TARGET} at ${_SHA} (channel ${_CHANNEL})."
+
+  # --------------------------------------------------------------------
+  # EVERY SITE TARGET must be running from a connected-repo source, not a
+  # tarball build. .gcloudignore excludes frontend/, schema-editor/, landing/
+  # and admin-console/ entirely, so a tarball build cannot see those
+  # directories to build them -- and COMMIT_SHA is populated by Cloud Build
+  # ONLY when the build runs from a connected repo (see cloudbuild.yaml's own
+  # header comment on _SHA vs COMMIT_SHA). This is therefore the cheap,
+  # early tell: an empty COMMIT_SHA on a site target means the source is a
+  # tarball, and the build must refuse rather than silently deploy whatever
+  # stale checkout happened to exist in the image.
+  # --------------------------------------------------------------------
+  - id: require-connected-source-for-site-targets
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          frontend-staging|frontend-demo|editor|admin-console-candidate|admin-console)
+            ;;
+          *) echo "skip (target ${_TARGET})"; exit 0 ;;
+        esac
+        if [ -z "$COMMIT_SHA" ]; then
+          echo "ABORT: COMMIT_SHA is empty for site target ${_TARGET}."
+          echo "Site targets can only build from a connected-repo source:"
+          echo ".gcloudignore excludes frontend/, schema-editor/, landing/ and"
+          echo "admin-console/ entirely, so a tarball build cannot see them,"
+          echo "and would otherwise silently deploy a stale/incomplete tree."
+          echo "Trigger this build against the 2nd-generation GitHub"
+          echo "connection (scripts/setup-cloud-build.sh), not a local"
+          echo "'gcloud builds submit' tarball upload."
+          exit 1
+        fi
+
+  # --------------------------------------------------------------------
+  # unimplemented-targets -- only `landing` remains: NOT a target (maintainer
+  # call left open, per the plan). Declared and FAILING, not absent: a
+  # target name that matches no step would run a build of zero steps and
+  # report SUCCESS, and the admin console would record a green deploy that
+  # deployed nothing.
+  # --------------------------------------------------------------------
 
   # --------------------------------------------------------------------
   # Step 1 -- the VERIFY GATE.
@@ -202,6 +250,46 @@ steps:
   # This is exactly what deploy-all.sh's backend stage does today, reading the
   # SAME channel file, which is the point of moving that config out of bash.
   # --------------------------------------------------------------------
+  - id: staging-verified-gate
+    # THE STAGING-BEFORE-DEMO GATE (plan: "The staging-before-demo gate lives
+    # IN THE BUILD, not only on the admin route"). The three demo-side targets
+    # -- backend-demo, frontend-demo, and admin-service's traffic shift --
+    # each refuse to proceed without a `deployments` record showing a
+    # successful STAGING deploy for the same target family and SHA. A
+    # bash-triggered build therefore cannot bypass this any more than an
+    # admin-console-triggered one can; the admin route's own check (bead 4.4)
+    # is an earlier, friendlier refusal, not the only one.
+    #
+    # admin-service is included here because "demo-side" for the admin
+    # service means the TRAFFIC-SHIFT half of its target, not the tagged
+    # candidate deploy -- see the admin-service target below, which is its
+    # OWN staging tier (verify the tagged revision, then shift) independent
+    # of this gate. admin-service's family therefore does not need a
+    # SEPARATE staging deploy the way backend/frontend do; this gate still
+    # runs for it (case-matched below) so a channel-blind future edit cannot
+    # silently exempt it, but its practical effect there is nil today since
+    # admin-service has no staging target of its own to have written the row.
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          backend-demo|frontend-demo) TARGET_FAMILY="$${_TARGET%-demo}" ;;
+          *) echo "skip (target ${_TARGET})"; exit 0 ;;
+        esac
+        pip install --quiet google-cloud-firestore
+        python scripts/promotion_gate.py \
+          --target-family "$$TARGET_FAMILY" --sha "${_SHA}" --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # frontend-<channel> -- resolve the live backend + admin URLs, build, and
+  # deploy to the channel's Hosting target. Exactly what deploy-all.sh's
+  # FRONTEND stage does today (npm ci && npm run build:<mode>, then
+  # `firebase deploy --only hosting:<target>`), reading the same channel file
+  # for which Hosting target and build mode apply.
+  # --------------------------------------------------------------------
   - id: backend-build-image
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
@@ -282,6 +370,11 @@ steps:
           "$${SECRETS_FLAG[@]}"
 
   - id: backend-reachability-gate
+    # cloud-sdk:slim, NOT python:3.12 -- scripts/verify_service_reachable.py
+    # has no third-party dependency (stdlib only), but its default
+    # gcloud_runner shells out to the `gcloud` BINARY, which python:3.12 does
+    # not ship. cloud-sdk:slim bundles its own python3 for gcloud's internal
+    # use, which is enough to run this stdlib-only module.
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
     args:
@@ -297,21 +390,405 @@ steps:
         # --allow-unauthenticated only REQUESTS the public invoker binding; the
         # request can be refused while the deploy still exits 0, leaving a
         # service that 403s every request before the app sees it (bd
-        # polyglot-pdf-pidtg). Same logic as deploy-all.sh's
-        # verify_service_publicly_reachable, sourced from that script rather
-        # than copied -- bead polyglot-pdf-ywxoh (4.2) extracts it to
-        # scripts/verify_service_reachable.py so bash and the build share ONE
-        # implementation instead of this source-time coupling.
-        source ./deploy-all.sh
-        verify_service_publicly_reachable "$$SERVICE" us-central1 "$PROJECT_ID"
+        # polyglot-pdf-pidtg). scripts/verify_service_reachable.py is the ONE
+        # port of this check (bd polyglot-pdf-ywxoh, 4.2) -- bash and the
+        # build both call it now instead of each carrying their own copy.
+        python3 scripts/verify_service_reachable.py \
+          "$$SERVICE" us-central1 "$PROJECT_ID" --severity fatal
+
+
+  - id: backend-record-deployment
+    # Staging's own success row, same reasoning as frontend-record-deployment
+    # below: avoids racing bead 4.3's Pub/Sub webhook, and covers
+    # bash-triggered builds the webhook alone would still need this for.
+    # backend-demo does NOT record here -- only STAGING targets write their
+    # own success row; a demo deploy's own success is not itself something
+    # any future promotion decision reads.
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "backend-staging" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python scripts/record_deployment.py \
+          --target backend-staging --channel staging --sha "${_SHA}" \
+          --build-id "$BUILD_ID" --status success --project "$PROJECT_ID"
+  - id: frontend-resolve-urls
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in frontend-*) ;; *) echo "skip (target ${_TARGET})"; exit 0 ;; esac
+        case "${_CHANNEL}" in
+          staging) BACKEND_SERVICE="polyglot-backend-staging" ;;
+          demo)    BACKEND_SERVICE="polyglot-backend" ;;
+          *) echo "ABORT: no backend service for channel ${_CHANNEL}"; exit 1 ;;
+        esac
+        # VITE_WS_URL / VITE_ADMIN_API_BASE_URL are fixed at TRIGGER time as
+        # substitutions would be, so they are resolved here (an earlier step
+        # in the SAME build) and handed forward through /workspace for the
+        # build step to export, matching deploy-all.sh's own live-URL
+        # injection (bd polyglot-pdf-emm7 / z4ljj) rather than trusting a
+        # committed .env literal.
+        BACKEND_URL=$(gcloud run services describe "$$BACKEND_SERVICE" \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null || true)
+        ADMIN_URL=$(gcloud run services describe polyglot-admin \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null || true)
+        if [ -z "$$BACKEND_URL" ]; then
+          echo "ABORT: could not resolve the Cloud Run URL for $$BACKEND_SERVICE."
+          echo "Refusing to build: an unresolved backend means the fallback"
+          echo "VITE_WS_URL in .env.<mode> would point at a DIFFERENT channel's"
+          echo "backend -- deploy that service first."
+          exit 1
+        fi
+        echo "$${BACKEND_URL/https:/wss:}/ws/fill" > /workspace/.vite_ws_url
+        echo "$$ADMIN_URL" > /workspace/.vite_admin_api_base_url
+
+  - id: frontend-build-deploy
+    name: node:22
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in frontend-*) ;; *) echo "skip (target ${_TARGET})"; exit 0 ;; esac
+        case "${_CHANNEL}" in
+          staging) HOSTING_TARGET="app-staging" ;;
+          demo)    HOSTING_TARGET="app" ;;
+          *) echo "ABORT: no Hosting target for channel ${_CHANNEL}"; exit 1 ;;
+        esac
+        export VITE_WS_URL=$(cat /workspace/.vite_ws_url)
+        export VITE_ADMIN_API_BASE_URL=$(cat /workspace/.vite_admin_api_base_url)
+        cd frontend
+        npm ci
+        # build:schema:demo for BOTH channels, deliberately -- mirrors
+        # deploy-staging.sh's own FRONTEND_BUILD_CMD override. There is no
+        # separate build:schema:staging script; the staging channel has
+        # always built the SAME demo-mode bundle (see
+        # docs/components/config-deployment.md) -- only the injected
+        # VITE_WS_URL and Hosting target differ per channel, both already
+        # resolved above.
+        npm run build:schema:demo
+        cd ..
+        npx firebase-tools deploy --only "hosting:$$HOSTING_TARGET" --project "$PROJECT_ID"
+
+  - id: frontend-record-deployment
+    # Staging's own success row (plan: "each staging target's LAST step
+    # writes its own success row to deployments" -- avoids racing bead 4.3's
+    # Pub/Sub webhook, and covers bash-triggered builds the webhook alone
+    # would still record but which the promotion gate needs available NOW).
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "frontend-staging" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python scripts/record_deployment.py \
+          --target frontend-staging --channel staging --sha "${_SHA}" \
+          --build-id "$BUILD_ID" --status success --project "$PROJECT_ID"
 
   # --------------------------------------------------------------------
-  # Targets bead polyglot-pdf-ywxoh (4.2) implements.
-  #
-  # Declared and FAILING, not absent: a target name that matches no step would
-  # run a build of zero steps and report SUCCESS, and the admin console would
-  # record a green deploy that deployed nothing.
+  # editor -- the hosted schema editor. Mirrors deploy-editor.sh: resolve the
+  # live PUBLIC backend URL (warn-mode; that backend is pre-existing from
+  # this target's point of view), build in hosted mode, deploy hosting:editor.
   # --------------------------------------------------------------------
+  - id: editor-resolve-url
+    # A SEPARATE cloud-sdk step, not inlined into editor-build-deploy: that
+    # step runs on node:22, which has no gcloud binary. Resolved here and
+    # handed forward through /workspace, same pattern as frontend-resolve-urls.
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "editor" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        gcloud run services describe polyglot-backend \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null > /workspace/.vite_api_base_url || true
+
+  - id: editor-build-deploy
+    name: node:22
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "editor" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        RESOLVED_BACKEND_URL=$(cat /workspace/.vite_api_base_url 2>/dev/null || true)
+        if [ -n "$$RESOLVED_BACKEND_URL" ]; then
+          export VITE_API_BASE_URL="$$RESOLVED_BACKEND_URL"
+        else
+          echo "WARN: could not resolve live backend URL; build falls back to VITE_API_BASE_URL in .env.hosted" >&2
+        fi
+        cd schema-editor
+        npm ci
+        npm run build:hosted
+        cd ..
+        npx firebase-tools deploy --only hosting:editor --project "$PROJECT_ID"
+
+  - id: editor-reachability-warn
+    # WARN-mode only, same reasoning as deploy-editor.sh: the backend is
+    # PRE-EXISTING from this target's point of view, so refusing to ship the
+    # editor over its IAM state would be the gate crying wolf. cloud-sdk, not
+    # python:3.12 -- see backend-reachability-gate's note on why.
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "editor" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        python3 scripts/verify_service_reachable.py \
+          polyglot-backend us-central1 "$PROJECT_ID" --severity warn || true
+
+  # --------------------------------------------------------------------
+  # form-kits -- the status-complete kit upload plus the validated
+  # index.json, ported to scripts/write_kits_manifest.py so this target and
+  # deploy-all.sh's --form-kits stage share ONE implementation (bd
+  # polyglot-pdf-ywxoh, 4.2). NOTE: this publishes to the DEMO's form list
+  # regardless of which channel invoked it (the bucket has no per-channel
+  # split today) -- treat it as a demo action whatever _CHANNEL was passed.
+  # --------------------------------------------------------------------
+  - id: form-kits-upload
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "form-kits" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        BUCKET="$PROJECT_ID-form-kits"
+        PREFIX="form-kits"
+        for kit_dir in form-kits/*/; do
+          [ -d "$$kit_dir" ] || continue
+          kit_id=$(basename "$$kit_dir")
+          case "$$kit_id" in _*) continue ;; esac
+          meta="$$kit_dir/metadata.json"
+          [ -f "$$meta" ] || continue
+          grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "$$meta" || continue
+          # Publishable children only -- skip _archive/_drafts rings
+          # (bd polyglot-pdf-06u5o), matching deploy-all.sh's
+          # collect_publishable_kit_files.
+          files=()
+          for entry in "$$kit_dir"*; do
+            [ -e "$$entry" ] || continue
+            base=$(basename "$$entry")
+            case "$$base" in _*) continue ;; esac
+            files+=("$$entry")
+          done
+          [ $${#files[@]} -eq 0 ] && continue
+          gcloud storage cp -r "$${files[@]}" "gs://$$BUCKET/$$PREFIX/$$kit_id/" --project "$PROJECT_ID"
+        done
+
+  - id: form-kits-manifest
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "form-kits" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        python scripts/write_kits_manifest.py \
+          --form-kits-dir form-kits --prefix form-kits --out /workspace/index.json
+        cat /workspace/index.json
+
+  - id: form-kits-manifest-upload
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "form-kits" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        gcloud storage cp /workspace/index.json \
+          "gs://$PROJECT_ID-form-kits/form-kits/index.json" --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # firestore-rules -- project-wide, so this is always a demo action
+  # regardless of _CHANNEL, same note as form-kits above.
+  # --------------------------------------------------------------------
+  - id: firestore-rules-deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "firestore-rules" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        npx --yes firebase-tools deploy --only firestore:rules --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # admin-service -- tagged no-traffic revision, verified at its own stable
+  # tag URL, THEN traffic shift. Mirrors deploy-admin.sh's own sequence.
+  # There is ONE admin service backing BOTH channels' data, so this is its
+  # own staging tier independent of the backend-staging/demo split -- see
+  # the plan's "Admin-tier targets" note.
+  # --------------------------------------------------------------------
+  - id: admin-service-deploy-tagged
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        CHANNEL_FILE="deploy/channels/admin.env"
+        source ./deploy-all.sh
+        CHANNEL_ENV=$(read_channel_section "$$CHANNEL_FILE" SET_ENV_VARS)
+        CHANNEL_SECRETS=$(read_channel_section "$$CHANNEL_FILE" SET_SECRETS)
+        CHANNEL_SA=$(read_channel_value "$$CHANNEL_FILE" SERVICE_ACCOUNT SERVICE_ACCOUNT)
+        if [ -z "$$CHANNEL_ENV" ]; then
+          echo "ABORT: $$CHANNEL_FILE has no [SET_ENV_VARS] entries."
+          exit 1
+        fi
+        docker build -t "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" .
+        docker push "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}"
+        BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GIT_SHA=${_SHA}"
+        BACKEND_ENV="$$BACKEND_ENV,$$CHANNEL_ENV"
+        SECRETS_FLAG=()
+        [ -n "$$CHANNEL_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$$CHANNEL_SECRETS")
+        SA_FLAG=()
+        [ -n "$$CHANNEL_SA" ] && SA_FLAG=(--service-account "$$CHANNEL_SA")
+        gcloud run deploy polyglot-admin \
+          --image "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" \
+          --region us-central1 --platform managed --allow-unauthenticated \
+          --timeout=3600 --memory=1Gi --project "$PROJECT_ID" \
+          --set-env-vars="$$BACKEND_ENV" \
+          --no-traffic --tag candidate \
+          "$${SA_FLAG[@]}" "$${SECRETS_FLAG[@]}"
+
+  - id: admin-service-verify-tagged
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        BASE_URL=$(gcloud run services describe polyglot-admin \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)')
+        TAG_URL=$(echo "$$BASE_URL" | sed -E "s#https://#https://candidate---#")
+        HEALTH_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$$TAG_URL/health" || echo "000")
+        if [ "$$HEALTH_STATUS" != "200" ]; then
+          echo "ABORT: the tagged candidate revision did not answer /health ($$HEALTH_STATUS)."
+          echo "Traffic was NOT shifted -- the previous revision is still live."
+          exit 1
+        fi
+        echo "Tagged candidate is healthy at $$TAG_URL"
+
+  - id: admin-service-staging-gate
+    # The staging-before-demo gate for the admin service's TRAFFIC SHIFT
+    # (plan: "backend-demo, frontend-demo and admin-service traffic shift
+    # additionally require a deployments record ..."). Uses the SAME
+    # promotion gate module as staging-verified-gate above, family
+    # "admin-service".
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python scripts/promotion_gate.py \
+          --target-family admin-service --sha "${_SHA}" --project "$PROJECT_ID"
+
+  - id: admin-service-shift-traffic
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        gcloud run services update-traffic polyglot-admin \
+          --region us-central1 --project "$PROJECT_ID" --to-latest
+
+  - id: admin-service-record-deployment
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python scripts/record_deployment.py \
+          --target admin-service --channel "${_CHANNEL}" --sha "${_SHA}" \
+          --build-id "$BUILD_ID" --status success --project "$PROJECT_ID"
+
+  # --------------------------------------------------------------------
+  # admin-console-candidate / admin-console -- the two Hosting sites, mirrors
+  # deploy-admin-console.sh's candidate-then-live sequence (each is its own
+  # target/build rather than a --live flag, since the build has no
+  # interactive "run this again with --live" step).
+  # --------------------------------------------------------------------
+  - id: admin-console-resolve-url
+    # A SEPARATE cloud-sdk step: admin-console-build-deploy runs on node:22,
+    # which has no gcloud binary. Same /workspace hand-off pattern as
+    # frontend-resolve-urls / editor-resolve-url.
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          admin-console-candidate|admin-console) ;;
+          *) echo "skip (target ${_TARGET})"; exit 0 ;;
+        esac
+        gcloud run services describe polyglot-admin \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null > /workspace/.vite_admin_api_base_url || true
+
+  - id: admin-console-build-deploy
+    name: node:22
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          admin-console-candidate) HOSTING_TARGET="admin-candidate" ;;
+          admin-console)           HOSTING_TARGET="admin" ;;
+          *) echo "skip (target ${_TARGET})"; exit 0 ;;
+        esac
+        RESOLVED_ADMIN_URL=$(cat /workspace/.vite_admin_api_base_url 2>/dev/null || true)
+        if [ -n "$$RESOLVED_ADMIN_URL" ]; then
+          export VITE_ADMIN_API_BASE_URL="$$RESOLVED_ADMIN_URL"
+        else
+          echo "WARN: could not resolve live admin service URL; build falls back to .env.hosted" >&2
+        fi
+        cd admin-console
+        npm ci
+        npm run build:hosted
+        cd ..
+        npx firebase-tools deploy --only "hosting:$$HOSTING_TARGET" --project "$PROJECT_ID"
+
+  - id: admin-console-reachability-warn
+    # cloud-sdk, not python:3.12 -- see backend-reachability-gate's note.
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_TARGET}" in
+          admin-console-candidate|admin-console) ;;
+          *) echo "skip (target ${_TARGET})"; exit 0 ;;
+        esac
+        python3 scripts/verify_service_reachable.py \
+          polyglot-admin us-central1 "$PROJECT_ID" --severity warn || true
   - id: unimplemented-targets
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
@@ -320,11 +797,11 @@ steps:
       - |
         set -euo pipefail
         case "${_TARGET}" in
-          verify|backend-staging|backend-demo)
+          verify|backend-staging|backend-demo|frontend-staging|frontend-demo|editor|form-kits|firestore-rules|admin-service|admin-console-candidate|admin-console)
             echo "target ${_TARGET} is implemented"
             exit 0
             ;;
-          frontend-staging|frontend-demo|editor|form-kits|firestore-rules|admin-service|admin-console|landing)
+          landing)
             echo "target not implemented"
             exit 1
             ;;

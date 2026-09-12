@@ -8,11 +8,18 @@
 .gitignore
 
 # Frontends build separately (Firebase Hosting), never in this image.
+# admin-console/ (bd polyglot-pdf-ywxoh, 4.2): the admin console's OWN Vite
+# app, built and deployed by cloudbuild.yaml's admin-console-candidate /
+# admin-console targets, same reasoning as frontend/ and schema-editor/. Every
+# site target therefore asserts it is running from a connected-repo source
+# (COMMIT_SHA non-empty) rather than a tarball build, which cannot see this
+# directory at all.
 frontend/
 schema-editor/
 landing/
 pitch/
 token-monitor/
+admin-console/
 
 # Node deps anywhere.
 node_modules/
