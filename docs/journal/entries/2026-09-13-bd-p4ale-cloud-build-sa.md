@@ -115,6 +115,60 @@ with four findings; here is what happened to each:
   was mutation-verified as part of that fix rather than filed
   separately.
 
+### Fresh-eyes review round 2 -- adopt/reject/defer
+
+Round 2 returned GAPS-FOUND(2); here is what happened to each:
+
+- **ADOPTED (fixed):**
+  `test_the_actas_bindings_are_scoped_to_each_sa_not_the_project`'s
+  negative half searched for the literal substring
+  `"iam.serviceAccountUser"` inside matched `gcloud projects
+  add-iam-policy-binding` call blocks. Since the role is passed through a
+  bash variable (`--role="$role"`), a mutation that instead adds
+  `"roles/iam.serviceAccountUser"` straight into the `PROJECT_ROLES`
+  array (granting it project-wide by the wrong path) never inserted that
+  literal string into any matched block, so the test would not have
+  caught that specific mutation. Replaced/supplemented the check with the
+  same array-membership assertion the bucket-role sibling test already
+  uses (`role not in _named_array(text, "PROJECT_ROLES")`), keeping the
+  original call-block search as a belt-and-suspenders check for the
+  differently-shaped mutation (a hardcoded role on a brand-new call).
+  Mutation-verified: added `"roles/iam.serviceAccountUser"` to
+  `PROJECT_ROLES` in the real script, ran the single test, watched it
+  fail with the new assertion's message; reverted, watched it pass
+  again (7/7 in the file).
+- **REFUTED (rubric-wording gap, no code change):** exit criterion 2's
+  literal text ("DEFERRED_ROLES is empty") does not match
+  `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s
+  `DEFERRED_ROLES = {"roles/cloudbuild.builds.editor"}` (one entry, not
+  empty). The reviewer's own analysis calls this "an exit-criterion
+  authoring imprecision rather than a code defect": the bead's own
+  description text says only that `iam.serviceAccountUser` moves OUT of
+  `DEFERRED_ROLES` and that `run.admin`/`firebasehosting.admin` are
+  DELETED -- it never says the whole set goes to empty, and
+  `roles/cloudbuild.builds.editor` (bead 4.3's future `builds.create`
+  call) was already deferred before this bead touched the set and
+  genuinely still awaits that not-yet-built route. Re-reading the bead
+  body (`bd show polyglot-pdf-p4ale`) confirms the description and the
+  criterion disagree on scope; the code, comment, and journal entry are
+  all internally consistent with the description and with each other.
+  No code changed for this finding -- it is recorded here as a
+  refutation, not fixed.
+- **Three "beyond the rubric" observations, no new bead** (reviewer's own
+  disposition: "Filed beads: none"): (1) the same array-membership gap as
+  the adopted fix above, on the same test -- covered by the fix; (2)
+  `_iam_section_gcloud_gate_violations`'s line-prefix detection
+  (`stripped.startswith("gcloud ")`) cannot see a mutating call issued
+  through command substitution (`VAR="$(gcloud ...)"`) -- traced by hand,
+  not exploited today (the one instance of that shape in the script is a
+  read-only `describe` call already sitting inside a dead `false`-gated
+  block), so left as a known blind spot rather than a live defect; (3)
+  the trigger-creation loop's `cmd=(gcloud ...)` + `"${cmd[@]}"` exec
+  shape is likewise invisible to the same walker, but that loop and its
+  gating predate this bead (bead 4.1) and are not part of this diff.
+  Neither (2) nor (3) is exploited by anything in this bead's own diff,
+  and the reviewer explicitly did not ask for a bead, so none was filed.
+
 ## Lessons
 
 The "deferred vs. deleted" distinction (scar #8's enumerate-the-set

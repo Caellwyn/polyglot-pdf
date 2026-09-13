@@ -271,10 +271,26 @@ def test_the_actas_bindings_are_scoped_to_each_sa_not_the_project():
         r'--role="roles/iam\.serviceAccountUser"', text), (
         "scripts/setup-cloud-build.sh's actAs loop does not grant "
         "roles/iam.serviceAccountUser.")
-    # And the negative half: this role must never appear on a
-    # `gcloud projects add-iam-policy-binding` invocation anywhere in the
-    # script (that would be the project-wide leak this test exists to
-    # catch).
+    # And the negative half: this role must never be a member of
+    # PROJECT_ROLES, the array actually iterated by the
+    # `gcloud projects add-iam-policy-binding` loop. A call-block text
+    # search alone would miss a mutation that adds the role straight into
+    # PROJECT_ROLES -- the role is interpolated into that loop via
+    # `--role="$role"`, so the literal string "iam.serviceAccountUser"
+    # never appears inside the matched call block even though the grant IS
+    # project-wide. Same array-membership shape as the bucket-role sibling
+    # test above (test_the_bucket_role_is_granted_on_the_bucket_not_the_
+    # project), which pins the same class of vulnerability on the storage
+    # role (fresh-eyes finding, bd polyglot-pdf-p4ale round 2).
+    assert "roles/iam.serviceAccountUser" not in _named_array(
+        text, "PROJECT_ROLES"), (
+        "roles/iam.serviceAccountUser is granted PROJECT-WIDE (present in "
+        "PROJECT_ROLES) -- it must be scoped to each runtime SA "
+        "individually via the ACTAS_TARGETS loop instead.")
+    # Belt-and-suspenders: also confirm no `gcloud projects
+    # add-iam-policy-binding` call block contains the literal role string
+    # (catches a mutation that hardcodes the role directly into a NEW call
+    # rather than adding it to PROJECT_ROLES).
     project_binding_blocks = re.findall(
         r'gcloud projects add-iam-policy-binding.*?(?=\n\n|\Z)', text,
         re.DOTALL)
