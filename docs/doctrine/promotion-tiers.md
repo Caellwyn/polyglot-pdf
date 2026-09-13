@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -298,6 +298,25 @@ above is still the deploy path today. What exists now:
   for the format and the parity rule.
 - **`scripts/setup-cloud-build.sh`**, the operator-run provisioning step that
   creates one manual trigger per target once the GitHub connection exists.
+  It now also provisions the build's OWN identity, `polyglot-cloudbuild-sa`
+  (bd `polyglot-pdf-p4ale`, E4.5) -- a dedicated SA, never the legacy
+  default Cloud Build SA, holding `run.admin`, `firebasehosting.admin`,
+  `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter` and
+  `datastore.user` project-wide, `storage.objectAdmin` on the form-kits
+  bucket only, and resource-scoped actAs (`roles/iam.serviceAccountUser`)
+  on BOTH `polyglot-backend-sa` and `admin-backend-sa` -- deploying a
+  revision that runs as a given SA is itself privileged on that SA, so the
+  build needs this binding on each runtime identity it deploys as. The
+  Pub/Sub service agent also gets `roles/iam.serviceAccountTokenCreator`
+  here, for the OIDC token bead 4.3's build-status webhook will need.
+  `admin-backend-sa` gains the mirror grant -- actAs on
+  `polyglot-cloudbuild-sa` ONLY -- so its future trigger route can submit a
+  build that runs as the build identity; see
+  [`../components/admin-service.md`](../components/admin-service.md) and
+  [`../components/config-deployment.md`](../components/config-deployment.md)
+  for the full role tables and the two pinning test files
+  (`admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py`,
+  `tests/test_setup_cloud_build_script.py`).
 
 Until the connection is made, treat this section as a description of what is
 declared, not of how anything currently deploys.
