@@ -260,15 +260,15 @@ steps:
     # admin-console-triggered one can; the admin route's own check (bead 4.4)
     # is an earlier, friendlier refusal, not the only one.
     #
-    # admin-service is included here because "demo-side" for the admin
-    # service means the TRAFFIC-SHIFT half of its target, not the tagged
-    # candidate deploy -- see the admin-service target below, which is its
-    # OWN staging tier (verify the tagged revision, then shift) independent
-    # of this gate. admin-service's family therefore does not need a
-    # SEPARATE staging deploy the way backend/frontend do; this gate still
-    # runs for it (case-matched below) so a channel-blind future edit cannot
-    # silently exempt it, but its practical effect there is nil today since
-    # admin-service has no staging target of its own to have written the row.
+    # admin-service is NOT case-matched below -- it falls into the `*) skip`
+    # arm here. "demo-side" for the admin service means the TRAFFIC-SHIFT
+    # half of its target, not the tagged candidate deploy, and admin-service
+    # has its own staging tier (verify the tagged revision, then shift)
+    # independent of this gate, so it does not need this generic gate too.
+    # Its actual demo-side gating is the SEPARATE admin-service-staging-gate
+    # step below, which calls the same promotion_gate.py module with family
+    # "admin-service" -- do not assume removing/refactoring that step is safe
+    # because this step "already covers it"; it does not.
     name: python:3.12
     entrypoint: bash
     args:
@@ -632,7 +632,23 @@ steps:
   # There is ONE admin service backing BOTH channels' data, so this is its
   # own staging tier independent of the backend-staging/demo split -- see
   # the plan's "Admin-tier targets" note.
+  #
+  # The docker build/push is its OWN step on gcr.io/cloud-builders/docker
+  # (the dedicated image that ships the Docker CLI), mirroring
+  # backend-build-image above -- gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+  # (used by every other admin-service step here) does not bundle `docker`.
   # --------------------------------------------------------------------
+  - id: admin-service-build-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        docker build -t "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" .
+        docker push "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}"
+
   - id: admin-service-deploy-tagged
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
@@ -650,8 +666,6 @@ steps:
           echo "ABORT: $$CHANNEL_FILE has no [SET_ENV_VARS] entries."
           exit 1
         fi
-        docker build -t "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" .
-        docker push "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}"
         BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GIT_SHA=${_SHA}"
         BACKEND_ENV="$$BACKEND_ENV,$$CHANNEL_ENV"
         SECRETS_FLAG=()

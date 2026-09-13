@@ -871,6 +871,44 @@ YWXOH_DEPLOY_TARGETS = (
     "admin-console",
 )
 
+
+@pytest.mark.parametrize("target", YWXOH_DEPLOY_TARGETS)
+def test_every_ywxoh_target_is_in_the_implemented_pass_through_arm(by_id, target):
+    """The inverse of test_every_unimplemented_target_fails_loudly: a REAL
+    target must not be silently absent from unimplemented-targets' implemented
+    case arm, which would hard-abort a legitimately implemented target in
+    production ("ABORT: unknown target") with zero test signal.
+
+    test_every_unimplemented_target_fails_loudly only ever checked the OLD
+    3-target IMPLEMENTED_TARGETS list (bead 4.1's verify/backend-staging/
+    backend-demo) against this arm -- none of this bead's 8 new targets were
+    pinned here, so a target silently dropped into the catch-all `*) ABORT`
+    branch would have passed that test untouched. This test is keyed off
+    YWXOH_DEPLOY_TARGETS (independently maintained, not derived from the yaml
+    body the way test_the_trigger_script_names_a_trigger_for_every_target is)
+    so it actually catches that regression.
+
+    Mutation-verified: removing "editor" from the implemented case-arm's
+    pattern list at cloudbuild.yaml's unimplemented-targets step (so `editor`
+    falls through to the `*) ABORT: unknown target` branch) turns this red
+    for target="editor" without affecting the other 9 targets.
+    """
+    body = script_of(by_id["unimplemented-targets"])
+    lines = [line.strip() for line in body.splitlines()]
+    implemented_idx = next(
+        i for i, line in enumerate(lines) if line.startswith("case ")
+    )
+    not_implemented_idx = lines.index('echo "target not implemented"')
+    implemented_arm = "\n".join(lines[implemented_idx:not_implemented_idx])
+    target_pattern = re.compile(r'(?<![\w-])' + re.escape(target) + r'(?![\w-])')
+    assert target_pattern.search(implemented_arm), (
+        f"{target} is a real ywxoh (bead 4.2) target but does not appear in "
+        "unimplemented-targets' implemented pass-through arm -- a build for "
+        f"{target} would fall through to the ABORT: unknown target branch "
+        "and hard-fail in production"
+    )
+
+
 # The demo-side targets the plan singles out: "backend-demo, frontend-demo
 # and admin-service traffic shift additionally require a deployments
 # record". admin-service's OWN target implements both halves (deploy the

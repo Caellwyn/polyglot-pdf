@@ -97,6 +97,51 @@ deny blocks -- neither has a legitimate browser caller, and a client-SDK
 write to either could forge a gate result (a fake successful staging deploy,
 or a fake passing test run).
 
+## What shipped -- fresh-eyes round 1 fixes
+
+The fresh-eyes review found one blocker and two rubric-fails; all three
+adopted (fixed in place), one nit filed as a follow-up bead:
+
+- **ADOPTED (blocker):** `admin-service-deploy-tagged` ran `docker build`/
+  `docker push` on `gcr.io/google.com/cloudsdktool/cloud-sdk:slim`, which
+  does not bundle the Docker CLI -- every other docker build/push pair in
+  this file (`backend-build-image`) deliberately runs on the dedicated
+  `gcr.io/cloud-builders/docker` image. Split the docker build/push into
+  its own new step, `admin-service-build-image`, on the correct image,
+  ordered before `admin-service-deploy-tagged`. Without this fix the first
+  real `_TARGET=admin-service` build would fail at "docker: command not
+  found" and never deploy a tagged candidate revision.
+- **ADOPTED (exit criterion 1 fail):** `tests/test_cloudbuild_yaml.py`'s
+  `unimplemented-targets` coverage only ever checked the OLD 3-target
+  `IMPLEMENTED_TARGETS` list (bead 4.1's `verify`/`backend-staging`/
+  `backend-demo`) against the step's implemented pass-through arm; none of
+  this bead's 8 new targets were pinned there, so a target silently dropped
+  into the catch-all `*) ABORT: unknown target` branch would have passed
+  untouched. Added `test_every_ywxoh_target_is_in_the_implemented_pass_
+  through_arm`, parametrized over the independently-maintained
+  `YWXOH_DEPLOY_TARGETS`, and mutation-verified it (removing `editor` from
+  the pass-through arm turns exactly that parametrization red, the other 9
+  stay green).
+- **ADOPTED (misleading comment):** `staging-verified-gate`'s header comment
+  claimed admin-service "is included here... this gate still runs for it
+  (case-matched below)", but the case statement two lines later only
+  matches `backend-demo|frontend-demo` -- admin-service falls into the
+  `*) skip` arm and this step is a pure no-op for it. Code and tests were
+  already correct (admin-service's actual demo-side gating is the separate
+  `admin-service-staging-gate` step); only the comment's claim about its own
+  step was false. Rewrote the comment to state plainly that admin-service is
+  NOT case-matched here and point at the step that actually gates it.
+- **DEFERRED (nit, filed as bead `polyglot-pdf-yg26r`):** an unused
+  `import re` in `scripts/write_kits_manifest.py`, and `form-kits-upload`'s
+  Cloud Build port dropping the schema-file-existence check
+  `deploy-all.sh`'s bash original performs (a kit marked complete but
+  missing its schema file gets uploaded rather than skipped with a
+  warning -- a latent, low-severity gap since `write_kits_manifest.py`'s
+  `index.json` build excludes it regardless).
+
+Full backend + root suites re-run green after the fixes (1645 root tests
+passed / 46 skipped; backend suite re-run in full).
+
 ## Lessons
 
 Building the new `cloudbuild.yaml` steps surfaced the SAME ordering bug
