@@ -208,6 +208,65 @@ def test_actas_targets_are_actually_granted_not_just_declared():
     ), "no per-target actAs add-iam-policy-binding call"
 
 
+def _iam_section_gcloud_gate_violations(iam_section: str):
+    """Structurally walk the IAM section's if/else/fi nesting and return
+    every real gcloud call NOT lexically inside an active
+    `if [ "$DRY_RUN" = false ]` (or `if [ "$DRY_RUN" = true ]` -> else)
+    branch.
+
+    Unlike a fixed-window backward text search, this tracks actual if/fi
+    nesting depth with a stack, so a call is only considered "gated" when
+    it sits between the governing `if` and its OWN matching `fi` -- a
+    gcloud call placed shortly after an unrelated, already-closed guard
+    (rather than inside it) is correctly reported as ungated. (Fresh-eyes
+    finding, bd polyglot-pdf-p4ale round 1: the old 20-line backward
+    lookback matched the Pub/Sub block's already-closed `if` for a mutated
+    call inserted right after that block's own `fi`.)
+
+    Frame shape: [dry_run_guard, in_then] where dry_run_guard is
+    "false"/"true"/None (None = an ordinary if, e.g. the nested
+    `if ! gcloud ... describe` existence check, which inherits its
+    enclosing frame's gating rather than gating anything itself) and
+    in_then flips to False after an `else` at that nesting depth.
+    """
+    violations = []
+    stack = []  # list of [dry_run_guard, in_then]
+    lines = iam_section.splitlines()
+    if_re = re.compile(r'^\s*if\b')
+    dry_run_false_re = re.compile(r'DRY_RUN"\s*=\s*false')
+    dry_run_true_re = re.compile(r'DRY_RUN"\s*=\s*true')
+    else_re = re.compile(r'^\s*else\b')
+    fi_re = re.compile(r'^\s*fi\b')
+
+    def currently_gated_false():
+        for guard, in_then in stack:
+            if guard == "false" and in_then:
+                return True
+            if guard == "true" and not in_then:
+                return True
+        return False
+
+    for line in lines:
+        stripped = line.strip()
+        if if_re.match(line):
+            if dry_run_false_re.search(line):
+                stack.append(["false", True])
+            elif dry_run_true_re.search(line):
+                stack.append(["true", True])
+            else:
+                stack.append([None, True])
+            continue
+        if else_re.match(line) and stack:
+            stack[-1][1] = False
+            continue
+        if fi_re.match(line) and stack:
+            stack.pop()
+            continue
+        if stripped.startswith("gcloud ") and not currently_gated_false():
+            violations.append(stripped)
+    return violations
+
+
 def test_dry_run_never_calls_gcloud():
     """--dry-run prints every command instead of running it.
 
@@ -217,32 +276,19 @@ def test_dry_run_never_calls_gcloud():
     invocation in the IAM section must be gated behind
     `[ "$DRY_RUN" = false ]` (mirroring the pre-existing trigger loop's own
     gate).
+
+    Mutation: insert an ungated `gcloud ...` call anywhere in the IAM
+    section -- including right after an unrelated, already-closed
+    `if [ "$DRY_RUN" = false ]; ... fi` block (not just inside one) -- red.
     """
     text = _script_text()
     iam_section_start = text.index("THE BUILD IDENTITY: polyglot-cloudbuild-sa")
     iam_section = text[iam_section_start:]
     gcloud_calls = re.findall(r'^\s*gcloud\b[^\n]*', iam_section, re.MULTILINE)
-    # Every real (non-DRY-RUN-echoed) gcloud invocation in the IAM section
-    # must appear only inside an `if [ "$DRY_RUN" = false ]` branch. We
-    # approximate this by requiring that each such call's nearest preceding
-    # "if [ "$DRY_RUN"" line (within 20 lines) says false, not true.
-    lines = iam_section.splitlines()
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if not stripped.startswith("gcloud "):
-            continue
-        # Walk backward for the governing DRY_RUN check.
-        guard = None
-        for j in range(i - 1, max(-1, i - 20), -1):
-            if 'DRY_RUN" = false' in lines[j]:
-                guard = "false"
-                break
-            if 'DRY_RUN" = true' in lines[j]:
-                guard = "true"
-                break
-        assert guard == "false", (
-            "a gcloud call in the IAM section is not gated behind "
-            '`if [ "$DRY_RUN" = false ]`: {!r}'.format(stripped))
+    violations = _iam_section_gcloud_gate_violations(iam_section)
+    assert not violations, (
+        "gcloud call(s) in the IAM section are not lexically inside an "
+        'active `if [ "$DRY_RUN" = false ]` branch: {!r}'.format(violations))
     assert gcloud_calls, (
         "no gcloud calls found in the IAM section -- this test would be "
         "vacuous")

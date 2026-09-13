@@ -67,6 +67,54 @@ dry-run-safety checks). `test_admin_sa_iam_envelope.py` itself gains the
 actAs role in its envelope and two new scope-pinning tests mirroring its
 existing bucket-scope pair.
 
+### Fresh-eyes review round 1 -- adopt/reject/defer
+
+The pre-PR fresh-eyes review (bd polyglot-pdf-p4ale) returned GAPS-FOUND
+with four findings; here is what happened to each:
+
+- **ADOPTED (blocker-class, fixed):**
+  `test_dry_run_never_calls_gcloud`'s 20-line backward-lookback guard
+  detection could match an unrelated, already-closed `if [ "$DRY_RUN" =
+  false ]` block for a gcloud call placed shortly AFTER it rather than
+  inside it -- reviewer mutation-verified this by inserting an ungated
+  `gcloud ... --role="roles/owner"` right after the Pub/Sub block's `fi`;
+  the old test passed when it should have failed. Replaced the fixed-
+  window text search with a real if/else/fi nesting-depth stack
+  (`_iam_section_gcloud_gate_violations` in
+  `tests/test_setup_cloud_build_script.py`) so a call is only "gated"
+  when it lexically sits inside its own governing `if`'s still-open
+  branch. Mutation-verified against both the reviewer's exact
+  reproduction and the second instance the reviewer predicted (an
+  ungated call dropped between the PROJECT_ROLES and BUCKET_ROLES
+  loops) -- both now correctly fail; the unmodified script still passes
+  cleanly (22/22).
+- **ADOPTED (blocker-class, fixed):** `EXPECTED_ACTAS_TARGETS` in
+  `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` was
+  declared and never consulted -- `test_build_sa_has_actas_bindings_on_
+  both_runtime_sas` hardcoded the two SA variable names as literals
+  instead. Rewrote the test to derive both the expected SA-variable
+  names and the ACTAS_TARGETS array membership check from the constant
+  itself (new `_named_array_block` helper alongside the file's existing
+  `_named_array`). Mutation-verified two ways: removing one target from
+  the script's `ACTAS_TARGETS` array now fails the test, and adding a
+  bogus entry to `EXPECTED_ACTAS_TARGETS` itself now also fails it --
+  the constant is genuinely load-bearing now, not decorative.
+- **DEFERRED (nit, not fixed here):** `roles/run.admin` is granted
+  project-wide even though the section's own comments argue against
+  project-wide grants elsewhere -- the reviewer flagged this as a
+  comment-completeness gap, not a functional bug or a rubric-fail (Cloud
+  Run has no narrower built-in role for cross-service revision
+  management, and this shape is inherited unchanged from
+  `setup-gcp-project.sh`, not introduced by this diff). Filed as
+  polyglot-pdf-nacfo.1 ("chore(nits): deferred review nits from
+  polyglot-pdf-p4ale") rather than touched inline.
+- **NOTED, no bead needed:** the reviewer's fourth item (the same
+  20-line-lookback root cause could also misfire between the
+  PROJECT_ROLES/BUCKET_ROLES/ACTAS_TARGETS loops themselves) is not a
+  separate defect -- it is covered by the same structural fix above and
+  was mutation-verified as part of that fix rather than filed
+  separately.
+
 ## Lessons
 
 The "deferred vs. deleted" distinction (scar #8's enumerate-the-set

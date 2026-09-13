@@ -124,6 +124,22 @@ def _named_array(text: str, name: str) -> set:
     return set(re.findall(r'"(roles/[^"]+)"', block.group(1)))
 
 
+def _named_array_block(text: str, name: str) -> str:
+    """The raw `<name>=( ... )` array body text.
+
+    Unlike `_named_array`, this does not filter to `roles/...` entries --
+    used for arrays like ACTAS_TARGETS whose entries are `$VAR` references,
+    not role strings.
+    """
+    block = re.search(
+        r"^{}=\((.*?)^\)".format(re.escape(name)), text,
+        re.MULTILINE | re.DOTALL)
+    assert block, (
+        "scripts/setup-cloud-build.sh has no {}=( ... ) array.".format(
+            name))
+    return block.group(1)
+
+
 def test_build_sa_project_role_pin_matches_the_setup_script():
     """The hand-refreshed pin and the provisioning script name ONE role set.
 
@@ -195,20 +211,43 @@ def test_build_sa_has_actas_bindings_on_both_runtime_sas():
     SA. Missing either binding means one deploy target (backend-* or
     admin-service) fails at deploy time with a permission error that no
     role-count-only test would catch.
+
+    Driven off EXPECTED_ACTAS_TARGETS (not hand-listed here), so a future
+    edit to that constant actually changes what this test checks -- before
+    this fix the constant was declared and never consulted, which is a
+    maintenance trap: an editor updating it would see no test reaction at
+    all (fresh-eyes finding, bd polyglot-pdf-p4ale round 1).
     """
     text = _setup_script_text()
-    for sa_var in ("PUBLIC_BACKEND_SA", "ADMIN_BACKEND_SA"):
-        assert re.search(
-            r'^{}="'.format(re.escape(sa_var)), text, re.MULTILINE), (
-            "scripts/setup-cloud-build.sh no longer defines {} -- the "
-            "actAs target variable this test expects.".format(sa_var))
-    assert re.search(
-        r'ACTAS_TARGETS=\(\s*"\$PUBLIC_BACKEND_SA"\s*"\$ADMIN_BACKEND_SA"\s*\)',
-        text), (
-        "scripts/setup-cloud-build.sh's ACTAS_TARGETS array no longer names "
-        "exactly $PUBLIC_BACKEND_SA and $ADMIN_BACKEND_SA -- one of the two "
-        "runtime SAs the build deploys revisions as would be missing its "
-        "actAs binding.")
+    # Each pinned target must be the short-name half of a `<VAR>="<name>@
+    # $PROJECT..."` definition, and that VAR must be one of the entries in
+    # the ACTAS_TARGETS=( ... ) array -- both halves ("a variable exists
+    # for it" and "the array actually uses that variable") must hold for
+    # every member of EXPECTED_ACTAS_TARGETS.
+    sa_var_by_target = {}
+    for target in EXPECTED_ACTAS_TARGETS:
+        match = re.search(
+            r'^([A-Z_]+)="{}@\$PROJECT'.format(re.escape(target)), text,
+            re.MULTILINE)
+        assert match, (
+            "scripts/setup-cloud-build.sh defines no variable for actAs "
+            "target {!r} (pinned in EXPECTED_ACTAS_TARGETS) as "
+            '<VAR>="{}@$PROJECT..."'.format(target, target))
+        sa_var_by_target[target] = match.group(1)
+
+    actas_targets_block = _named_array_block(text, "ACTAS_TARGETS")
+    array_vars = set(re.findall(r'"\$([A-Z_]+)"', actas_targets_block))
+    for target, sa_var in sa_var_by_target.items():
+        assert sa_var in array_vars, (
+            "scripts/setup-cloud-build.sh's ACTAS_TARGETS array does not "
+            'include "${}" ({!r}, pinned in EXPECTED_ACTAS_TARGETS) -- '
+            "that runtime SA would be missing its actAs binding".format(
+                sa_var, target))
+    assert array_vars == set(sa_var_by_target.values()), (
+        "ACTAS_TARGETS names a variable beyond the ones "
+        "EXPECTED_ACTAS_TARGETS pins ({}) -- update the constant to match "
+        "scripts/setup-cloud-build.sh, or remove the stray "
+        "entry".format(sorted(sa_var_by_target.values())))
 
 
 def test_the_actas_bindings_are_scoped_to_each_sa_not_the_project():
