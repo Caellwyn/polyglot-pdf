@@ -761,7 +761,18 @@ steps:
           fi
         fi
         LIVE_ENV="$$LIVE_ENV,BACKEND_URLS_JSON=$$BACKEND_URLS_PARTS"
-        BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GIT_SHA=${_SHA}"
+        # admin.env's [SET_ENV_VARS] carries only APP_MODULE,
+        # CORS_EXTRA_ORIGINS and SWEEP_SCHEDULER_SA_EMAIL -- FORM_KITS_MODE,
+        # FORM_KITS_GCS_BUCKET and FORM_KITS_REMOTE_PREFIX are computed here
+        # exactly as backend-deploy computes them, not read from the channel
+        # file. Without them get_form_kit_store() (backend/services/
+        # form_kits.py) falls back to FORM_KITS_MODE's "local" default and
+        # GET /admin/kits silently returns an empty list on a green build
+        # (review round: bd polyglot-pdf-ywxoh).
+        BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FORM_KITS_MODE=gcs"
+        BACKEND_ENV="$$BACKEND_ENV,FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits"
+        BACKEND_ENV="$$BACKEND_ENV,FORM_KITS_REMOTE_PREFIX=form-kits"
+        BACKEND_ENV="$$BACKEND_ENV,GIT_SHA=${_SHA}"
         BACKEND_ENV="$$BACKEND_ENV,$$LIVE_ENV"
         SECRETS_FLAG=()
         [ -n "$$CHANNEL_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$$CHANNEL_SECRETS")

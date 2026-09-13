@@ -420,6 +420,63 @@ passed, likewise matching), and root suite (1658 passed / 46 skipped -- the
 prior round's 1654 baseline plus the 4 new tests this round added) re-run
 green from the worktree with `PYTHONPATH` set to it.
 
+## What shipped -- cross-surface review round 3 fixes
+
+The Opus-5 outer cross-surface review's one blocker this round, adopted;
+three nit-level findings filed as their own beads rather than fixed here
+(the reviewer's report names the beads directly, so no separate
+deferred-nits bead was needed).
+
+- **ADOPTED (blocker): `admin-service-deploy-tagged`'s `--set-env-vars`
+  omitted the `FORM_KITS_MODE` / `FORM_KITS_GCS_BUCKET` /
+  `FORM_KITS_REMOTE_PREFIX` trio the bash path (`deploy-all.sh:509`, via
+  `deploy-admin.sh` -> `./deploy-all.sh --backend`) sets, and
+  `--set-env-vars` replaces the whole env block.** `admin.env`'s own
+  `[SET_ENV_VARS]` carries only `APP_MODULE`, `CORS_EXTRA_ORIGINS` and
+  `SWEEP_SCHEDULER_SA_EMAIL`, so none of the three reached the service from
+  either source. Consequence in an untouched file:
+  `backend/services/form_kits.py:1592`'s `get_form_kit_store()` reads
+  `settings.FORM_KITS_MODE`, defaults to `"local"`
+  (`backend/config.py:998`), and falls through to a `LocalFormKitStore`
+  with no `form-kits/` in the image -- so `GET /admin/kits`
+  (`admin_backend/routes/kit_routes.py:373`) would silently return
+  `{"kits": []}` on a green Cloud Build admin-service deploy, wiping
+  whatever a prior `deploy-admin.sh` run had set. The round 2 fix already
+  added `ADMIN_SERVICE_URL`/`BACKEND_URLS_JSON` this same way but missed
+  this trio; this round's test explicitly widens the SET the prior test
+  pinned rather than adding a parallel check, per CLAUDE.md scar #8 (pin
+  the set, not the instance). Fixed by prepending the three keys to
+  `BACKEND_ENV` in `admin-service-deploy-tagged` with the exact values
+  `backend-deploy` computes (`cloudbuild.yaml:363-365`:
+  `FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits`,
+  `FORM_KITS_REMOTE_PREFIX=form-kits`). Both
+  `test_admin_service_deploy_tagged_env_set_is_complete` (widened to check
+  all five keys, including that the three FORM_KITS values themselves --
+  not just their names -- appear in the step body) and
+  `test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime`
+  (widened to assert the FORM_KITS trio reaches the stubbed `gcloud run
+  deploy` invocation's actual argv, not just the step's source text) were
+  mutation-verified: reverting the three new `BACKEND_ENV` lines turned
+  both red.
+- **FILED AS BEADS, not fixed here:** `docs/technical_guide.md` contract
+  31d's connected-source guarded-set sentence omits `form-kits`
+  (`polyglot-pdf-2ixdu`); the Cloud Build `form-kits-upload` step's
+  selection criteria diverge from `deploy-all.sh`'s bash loop and
+  `write_kits_manifest.py`'s own filter in three small ways, producing
+  orphan bucket objects for a complete-but-schemaless kit rather than a
+  correctness break (`polyglot-pdf-y14t1`); `write_kits_manifest.py`'s dead
+  `import re` and `promotion_gate.py`'s illegal-`_TARGET` remedy string for
+  the `admin-service` family (`polyglot-pdf-u05km`). All three are nits per
+  the review (no behavioral break on the path exercised today), and the
+  reviewer had already filed all three as beads in the same report, so no
+  additional "deferred nits" bead was created.
+
+Full backend suite (3825 passed / 67 skipped / 3 deselected / 1 xfailed,
+matching the prior round's baseline) and root suite (1658 passed / 46
+skipped, matching the prior round's baseline exactly -- no new root-level
+tests this round) re-run green from the worktree with `PYTHONPATH` set to
+it; `tests/test_cloudbuild_yaml.py` alone re-run at 72 passed.
+
 ## Lessons
 
 Building the new `cloudbuild.yaml` steps surfaced the SAME ordering bug

@@ -621,15 +621,26 @@ def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
     own comment records the incident). Pin the COMPLETE set this Cloud
     Build step must assemble, not just the three keys
     test_admin_channel_file_matches_the_wrapper already checks against
-    admin.env -- a step that silently drops either live-resolved key
-    disables the refund sweep's OIDC audience
-    (admin_backend/routes/sweep_routes.py::_audience) or blanks
+    admin.env -- a step that silently drops any of these keys disables the
+    refund sweep's OIDC audience
+    (admin_backend/routes/sweep_routes.py::_audience), blanks
     GET /admin/health's channel fan-out
-    (admin_backend/routes/ops_routes.py::_backend_urls) with a green build
-    and no alert (CLAUDE.md scar #8: pin the set, not the instance).
+    (admin_backend/routes/ops_routes.py::_backend_urls), or (FORM_KITS_MODE/
+    FORM_KITS_GCS_BUCKET/FORM_KITS_REMOTE_PREFIX -- a second cross-surface
+    review round on the same bead) makes get_form_kit_store()
+    (backend/services/form_kits.py) fall back to FORM_KITS_MODE's "local"
+    default so GET /admin/kits (admin_backend/routes/kit_routes.py) silently
+    returns an empty kit list -- all with a green build and no alert
+    (CLAUDE.md scar #8: pin the set, not the instance).
     """
     body = script_of(by_id["admin-service-deploy-tagged"])
-    for var in ("ADMIN_SERVICE_URL", "BACKEND_URLS_JSON"):
+    for var in (
+        "ADMIN_SERVICE_URL",
+        "BACKEND_URLS_JSON",
+        "FORM_KITS_MODE",
+        "FORM_KITS_GCS_BUCKET",
+        "FORM_KITS_REMOTE_PREFIX",
+    ):
         assert var in body, (
             f"admin-service-deploy-tagged never mentions {var} -- it will "
             "be silently absent from the deployed service's env block, "
@@ -641,6 +652,9 @@ def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
     deploy_idx = body.rindex("gcloud run deploy polyglot-admin")
     admin_url_idx = body.find("ADMIN_SERVICE_URL=$(gcloud run services describe")
     backend_urls_idx = body.find("BACKEND_URLS_PARTS=")
+    form_kits_mode_idx = body.find("FORM_KITS_MODE=gcs")
+    form_kits_bucket_idx = body.find("FORM_KITS_GCS_BUCKET=")
+    form_kits_prefix_idx = body.find("FORM_KITS_REMOTE_PREFIX=")
     assert 0 <= admin_url_idx < deploy_idx, (
         "ADMIN_SERVICE_URL is not resolved via a live gcloud lookup before "
         "the gcloud run deploy call"
@@ -649,8 +663,26 @@ def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
         "BACKEND_URLS_JSON's parts are not assembled before the gcloud run "
         "deploy call"
     )
+    assert 0 <= form_kits_mode_idx < deploy_idx, (
+        "FORM_KITS_MODE is not assembled before the gcloud run deploy call"
+    )
+    assert 0 <= form_kits_bucket_idx < deploy_idx, (
+        "FORM_KITS_GCS_BUCKET is not assembled before the gcloud run deploy call"
+    )
+    assert 0 <= form_kits_prefix_idx < deploy_idx, (
+        "FORM_KITS_REMOTE_PREFIX is not assembled before the gcloud run deploy call"
+    )
     set_env_vars_idx = body.index('--set-env-vars="$$BACKEND_ENV"')
     assert admin_url_idx < set_env_vars_idx and backend_urls_idx < set_env_vars_idx
+    assert form_kits_mode_idx < set_env_vars_idx
+    assert form_kits_bucket_idx < set_env_vars_idx
+    assert form_kits_prefix_idx < set_env_vars_idx
+    # The values themselves must match backend-deploy's exact computation
+    # (cloudbuild.yaml's backend-deploy step / deploy-all.sh:509), not just
+    # the variable names -- a step could mention FORM_KITS_GCS_BUCKET while
+    # pointing it at the wrong bucket.
+    assert "FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits" in body
+    assert "FORM_KITS_REMOTE_PREFIX=form-kits" in body
 
 
 def test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime(tmp_path, by_id):
@@ -741,6 +773,15 @@ def test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime(tmp_pa
         "BACKEND_URLS_JSON=demo=https://polyglot-backend-fake.a.run.app;"
         "staging=https://polyglot-backend-staging-fake.a.run.app" in invoked
     ), f"gcloud run deploy was not passed the live-resolved BACKEND_URLS_JSON: {invoked!r}"
+    assert "FORM_KITS_MODE=gcs" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_MODE: {invoked!r}"
+    )
+    assert "FORM_KITS_GCS_BUCKET=test-project-form-kits" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_GCS_BUCKET: {invoked!r}"
+    )
+    assert "FORM_KITS_REMOTE_PREFIX=form-kits" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_REMOTE_PREFIX: {invoked!r}"
+    )
 
 
 # Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
