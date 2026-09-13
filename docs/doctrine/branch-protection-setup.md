@@ -76,8 +76,8 @@ maintainer's Codex subscription ended 2026-07-08). Review is now entirely
 Claude-based -- a fresh-eyes inner loop plus one outer adversarial pass (Opus
 for a source diff, Haiku for docs-only, none for trivial), run as
 orchestrator-driven subagents (see
-[`review-flow.md`](review-flow.md)) -- so no bot reads `.github/copilot-instructions.md`
-or the "If you are reviewing a PR" section of [`AGENTS.md`](../../AGENTS.md); those
-files are kept only as inert history. There is nothing to configure at the
+[`review-flow.md`](review-flow.md)) -- so no bot reads the "If you are reviewing
+a PR" section of [`AGENTS.md`](../../AGENTS.md) (kept only as inert history;
+`.github/copilot-instructions.md` was deleted). There is nothing to configure at the
 branch-protection layer for review: the ruleset never gated on a bot, and the CI
 status checks remain the only mechanical merge blocker.

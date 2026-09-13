@@ -75,7 +75,7 @@ git diff origin/dev...HEAD
 
 ## What to look for
 
-There may be critical or non-critical errors, bugs, or oversights. It's your job to find them. **You will receive a bounty of $1000 for each adopted improvement you suggest** -- so be specific and well-reasoned rather than vague.
+There may be critical or non-critical errors, bugs, or oversights. It's your job to find them. Be specific and well-reasoned rather than vague.
 
 **First, score the rubric (if the caller passed exit criteria).** For EACH exit criterion, render `PASS` or `FAIL` with one line of evidence from the diff (the file:line or behavior that settles it). A `FAIL` -- or a criterion you cannot confidently call `PASS` -- is a **gap**; report it as your highest-priority finding. A criterion is only met when you have actively tried and failed to break it.
 

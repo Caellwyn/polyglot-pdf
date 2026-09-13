@@ -160,12 +160,10 @@ estimated_cost = sum over each (model, arm) of:
    experimental arm (an isolation control), never as the default. Full rule:
    [`docs/standards/testing.md`](../../../docs/standards/testing.md#live-endpoint-probes-and-spikes-deploy-fidelity-is-mandatory).
    (bd memory `live-probes-must-mirror-deploy-config`)
-3. **Serialize runs.** Concurrent live sessions are not a stability problem
-   (Vertex handles ~1000 concurrent live sessions/project fine -- the old
-   "one session at a time" claim was overturned, bd memory
-   `vertex-live-one-session-at-a-time`) but still run probes serially so
-   per-run cost/latency/token numbers aren't confounded by a second session's
-   traffic.
+3. **Serialize runs.** Vertex handles ~1000 concurrent live sessions per
+   project (bd memory `vertex-live-one-session-at-a-time`), so this is not a
+   stability rule: run probes serially so per-run cost/latency/token numbers
+   aren't confounded by a second session's traffic.
 4. **Patch config on every importing module, not just the definer.** If the
    probe monkeypatches something like `get_settings()` to change model/arm
    config mid-run, `from backend.config import get_settings` is a BY-REFERENCE

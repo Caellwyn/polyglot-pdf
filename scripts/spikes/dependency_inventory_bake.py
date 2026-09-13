@@ -29,7 +29,7 @@ OTHER hand-verified kit; f1040 is explicitly NOT trusted as ground truth
 right now -- any w7 gain must be read as tuned-on-target until a fresh verified
 kit exists. Stated, not hidden.
 
-Backend: local `claude` CLI (claude-opus-4-8), free in-env -- no metered spend.
+Backend: local `claude` CLI (claude-opus-5), free in-env -- no metered spend.
 
 Usage:
     python scripts/spikes/dependency_inventory_bake.py --arms B0,B1 --forms w7
@@ -212,7 +212,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--arms", default="B0,B1")
     ap.add_argument("--forms", default="w7")
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--round", type=int, default=1,
                     help="round tag in each JSONL row (rep is per-invocation)")

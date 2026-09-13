@@ -17,7 +17,7 @@ This skill launches the polyglot-pdf app on the developer's machine so you can:
   tools for rapid UI tweaks.
 
 It does NOT deploy -- it is the LOCAL test stage. Deployment is a separate manual
-step via `deploy-*.sh`. As of 2026-06-10 the agent MAY run a deploy
+step via `deploy-*.sh`. The agent may run a deploy
 (`deploy-staging.sh` for the test channel, `deploy-demo.sh` for the demo), but
 only after exercising the change here first, with explicit per-instance
 maintainer permission, and with a post-deploy test-drive -- see the deploy gates

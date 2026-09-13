@@ -650,8 +650,6 @@ Keep the working tree clean between rounds (`git status --short`). Both loops ru
 
 Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 `NO-GAPS`), or the review was skipped per the Step 5.6 gate. So the PR opens with review already done: **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (the two-call watcher pattern is gone -- there was no bot to wait on). Then make the merge decision.
 
-**There is NO trigger comment and NO watcher.** Do NOT put an `@codex review` line in the PR body, do NOT use the `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all retired dead path.
-
 1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
    ```bash
    git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev

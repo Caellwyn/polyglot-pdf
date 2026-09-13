@@ -45,10 +45,10 @@ field. No human speaks.
 
 ## The setup that actually works (do NOT improvise these)
 
-1. **Chrome MCP, not Claude Preview.** Preview is an opaque-origin sandbox
-   (`origin null`, storage denied) -- this app needs real `sessionStorage`. Use
-   `mcp__Claude_in_Chrome__*`: `list_connected_browsers` -> `select_browser` ->
-   `tabs_context_mcp {createIfEmpty:true}` -> `navigate`.
+1. **A real-origin browser.** This app needs a working `sessionStorage`, so
+   drive it through a browser-automation tool that serves real origins (the
+   in-app Browser pane or the Chrome connector both do; an opaque-origin
+   sandbox does not). Open a tab, then `navigate` to the frontend URL.
 2. **Frontend in `--mode demo`** (else `firebase/config.ts` throws
    `auth/invalid-api-key` and the app never mounts).
 3. **CORS-allowed port** for the frontend: 5173-5177 (`backend/main.py`
@@ -93,7 +93,7 @@ Then in a Chrome tab (see RUNBOOK steps 2-7 for the exact JS):
 5. Run and poll:
    ```js
    window.__vffReport = null;
-   window.__VFF_HARNESS.runCycle({ fieldId:'p1_line1_aliennumber', expectDigits:'1234567',
+   window.__VFF_HARNESS.runCycle({ fieldId:'<v2 field id -- see bd polyglot-pdf-tcemw>', expectDigits:'1234567',
      digitsBuf: window.__vffDigits, yesBuf: window.__vffYes }).then(r => window.__vffReport = r);
    ```
    Poll `window.__vffReport` until non-null -> `{ verdict:'PASS'|'FAIL'|'FLAKY', steps, reason? }`.
@@ -105,10 +105,8 @@ cycle (reload + redo) up to 3x and report the rate + model (2.5 default vs 3.1
 premium, which skips tool calls more). On non-PASS, capture
 `read_console_messages` and the backend stdout.
 
-## Known issue the harness catches
+## What the harness is for
 
-bd polyglot-pdf-0ux (FIXED 2026-06-09): on native-audio the `update_form_fields`
-FunctionResponse could be sent without an `id`, crashing the receive loop AFTER
-the first fill -- fill PASSED but confirm/advance FLAKY-timed-out. Fixed by
-echoing the `call_id` on both receive paths; kept here as the canonical example
-of the failure class the harness catches.
+It catches FunctionResponse plumbing regressions on native-audio fills (a
+missing `call_id` echo shows up as fill PASSED, confirm/advance FLAKY), which
+unit tests against a mocked session cannot see.
