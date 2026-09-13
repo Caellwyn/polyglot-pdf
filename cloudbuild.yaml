@@ -94,15 +94,21 @@ steps:
         echo "Building target ${_TARGET} at ${_SHA} (channel ${_CHANNEL})."
 
   # --------------------------------------------------------------------
-  # EVERY SITE TARGET must be running from a connected-repo source, not a
-  # tarball build. .gcloudignore excludes frontend/, schema-editor/, landing/
-  # and admin-console/ entirely, so a tarball build cannot see those
-  # directories to build them -- and COMMIT_SHA is populated by Cloud Build
-  # ONLY when the build runs from a connected repo (see cloudbuild.yaml's own
-  # header comment on _SHA vs COMMIT_SHA). This is therefore the cheap,
-  # early tell: an empty COMMIT_SHA on a site target means the source is a
-  # tarball, and the build must refuse rather than silently deploy whatever
-  # stale checkout happened to exist in the image.
+  # EVERY SITE TARGET, PLUS form-kits, must be running from a connected-repo
+  # source, not a tarball build. .gcloudignore excludes frontend/,
+  # schema-editor/, landing/, admin-console/ AND form-kits/ entirely, so a
+  # tarball build cannot see any of those directories to build/read them --
+  # and COMMIT_SHA is populated by Cloud Build ONLY when the build runs from
+  # a connected repo (see cloudbuild.yaml's own header comment on _SHA vs
+  # COMMIT_SHA). This is therefore the cheap, early tell: an empty
+  # COMMIT_SHA on one of these targets means the source is a tarball, and
+  # the build must refuse rather than silently deploy whatever stale
+  # checkout happened to exist in the image. form-kits is NOT a "site"
+  # target (it deploys no Hosting site) but shares the exact same failure
+  # mode: a missing form-kits/ makes write_kits_manifest.py emit a valid,
+  # EMPTY manifest (forms: []) and exit 0, which would overwrite the
+  # DEMO's live form list with zero forms on a green build (review round:
+  # bd polyglot-pdf-ywxoh).
   # --------------------------------------------------------------------
   - id: require-connected-source-for-site-targets
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
@@ -112,16 +118,17 @@ steps:
       - |
         set -euo pipefail
         case "${_TARGET}" in
-          frontend-staging|frontend-demo|editor|admin-console-candidate|admin-console)
+          frontend-staging|frontend-demo|editor|admin-console-candidate|admin-console|form-kits)
             ;;
           *) echo "skip (target ${_TARGET})"; exit 0 ;;
         esac
         if [ -z "$COMMIT_SHA" ]; then
-          echo "ABORT: COMMIT_SHA is empty for site target ${_TARGET}."
-          echo "Site targets can only build from a connected-repo source:"
-          echo ".gcloudignore excludes frontend/, schema-editor/, landing/ and"
-          echo "admin-console/ entirely, so a tarball build cannot see them,"
-          echo "and would otherwise silently deploy a stale/incomplete tree."
+          echo "ABORT: COMMIT_SHA is empty for target ${_TARGET}."
+          echo "This target can only build from a connected-repo source:"
+          echo ".gcloudignore excludes frontend/, schema-editor/, landing/,"
+          echo "admin-console/ and form-kits/ entirely, so a tarball build"
+          echo "cannot see them, and would otherwise silently deploy a"
+          echo "stale/incomplete tree (or, for form-kits, an EMPTY manifest)."
           echo "Trigger this build against the 2nd-generation GitHub"
           echo "connection (scripts/setup-cloud-build.sh), not a local"
           echo "'gcloud builds submit' tarball upload."
@@ -275,8 +282,17 @@ steps:
       - -c
       - |
         set -euo pipefail
-        case "${_TARGET}" in
-          backend-demo|frontend-demo) TARGET_FAMILY="$${_TARGET%-demo}" ;;
+        # TGT is a real bash variable holding the substitution value --
+        # a bare "$${_TARGET%-demo}" is a no-op suffix-strip on the literal
+        # token "_TARGET" (nothing ever assigns that name), which crashes
+        # under set -u with "_TARGET: unbound variable" on every
+        # backend-demo/frontend-demo build (review round: bd
+        # polyglot-pdf-ywxoh). Assigning TGT first, then stripping the
+        # suffix off TGT, fixes it -- every other "${_TARGET}" in this
+        # file is fine as-is because those uses never shell-strip it.
+        TGT="${_TARGET}"
+        case "$$TGT" in
+          backend-demo|frontend-demo) TARGET_FAMILY="$${TGT%-demo}" ;;
           *) echo "skip (target ${_TARGET})"; exit 0 ;;
         esac
         pip install --quiet google-cloud-firestore
@@ -447,6 +463,25 @@ steps:
           echo "backend -- deploy that service first."
           exit 1
         fi
+        # Same refusal for the admin service, matching
+        # deploy-all.sh:885-892 -- _CHANNEL is ALWAYS an explicit channel
+        # here (staging or demo, never "unset"), so this target is always
+        # in the branch that script aborts under. Falling back silently
+        # would leave VITE_ADMIN_API_BASE_URL unexported, and
+        # frontend-build-deploy exports whatever this step writes
+        # UNCONDITIONALLY -- an empty export overrides the committed
+        # frontend/.env.demo fallback rather than deferring to it, so a
+        # silent skip here would ship a build whose firm-console calls
+        # become relative paths routed by Hosting's /api/** rewrite to
+        # the VOICE backend, not the admin service.
+        if [ -z "$$ADMIN_URL" ]; then
+          echo "ABORT: could not resolve the Cloud Run URL for polyglot-admin."
+          echo "Refusing to build: an unresolved admin service means"
+          echo "VITE_ADMIN_API_BASE_URL would go out empty, and firm-console"
+          echo "calls would be routed to the voice backend instead --"
+          echo "deploy that service first (e.g. ./deploy-admin.sh)."
+          exit 1
+        fi
         echo "$${BACKEND_URL/https:/wss:}/ws/fill" > /workspace/.vite_ws_url
         echo "$$ADMIN_URL" > /workspace/.vite_admin_api_base_url
 
@@ -464,7 +499,22 @@ steps:
           *) echo "ABORT: no Hosting target for channel ${_CHANNEL}"; exit 1 ;;
         esac
         export VITE_WS_URL=$(cat /workspace/.vite_ws_url)
-        export VITE_ADMIN_API_BASE_URL=$(cat /workspace/.vite_admin_api_base_url)
+        # VITE_APP_CHANNEL (bd polyglot-pdf-z4ljj, C0): both channels build
+        # the SAME Vite mode (build:schema:demo below), so import.meta.env.MODE
+        # cannot tell them apart -- this is the one thing that can, and
+        # frontend/src/shared/config.ts::getAppChannel() falls back to 'demo'
+        # when it is unset. deploy-staging.sh and deploy-demo.sh both export
+        # this explicitly before calling deploy-all.sh; a staging build that
+        # never sets it would silently claim to be the demo channel on every
+        # firm-scoped admin-service call (?channel=demo), reading and writing
+        # the DEMO's Firestore data from the staging site.
+        export VITE_APP_CHANNEL="${_CHANNEL}"
+        RESOLVED_ADMIN_API_BASE_URL=$(cat /workspace/.vite_admin_api_base_url 2>/dev/null || true)
+        if [ -n "$$RESOLVED_ADMIN_API_BASE_URL" ]; then
+          export VITE_ADMIN_API_BASE_URL="$$RESOLVED_ADMIN_API_BASE_URL"
+        else
+          echo "WARN: could not resolve live admin service URL; build falls back to VITE_ADMIN_API_BASE_URL in .env.<mode>" >&2
+        fi
         cd frontend
         npm ci
         # build:schema:demo for BOTH channels, deliberately -- mirrors

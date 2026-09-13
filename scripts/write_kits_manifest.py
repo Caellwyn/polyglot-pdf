@@ -44,6 +44,7 @@ ASCII only.
 from __future__ import annotations
 
 import argparse
+import sys
 import datetime
 import json
 import re
@@ -179,7 +180,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    manifest = build_manifest(Path(args.form_kits_dir), args.prefix)
+    form_kits_dir = Path(args.form_kits_dir)
+    # Refuse a MISSING directory outright rather than silently emitting a
+    # valid, empty manifest (bd polyglot-pdf-ywxoh review round): a caller
+    # that cannot see form-kits/ at all -- e.g. a Cloud Build tarball
+    # source, which .gcloudignore excludes form-kits/ from -- is almost
+    # always a wrong invocation, not "zero kits exist". An EXISTING but
+    # empty/all-draft directory still produces forms: [] on purpose (a
+    # legitimate state during initial setup, pinned by
+    # tests/test_write_kits_manifest.py); only a directory that is not
+    # there at all is refused. cloudbuild.yaml's form-kits target also
+    # guards this earlier (require-connected-source-for-site-targets) --
+    # this is the second, independent layer for any OTHER caller (a bare
+    # python scripts/write_kits_manifest.py run from the wrong cwd, say).
+    if not form_kits_dir.is_dir():
+        print(
+            "[write_kits_manifest] ERROR: --form-kits-dir "
+            + str(form_kits_dir)
+            + " does not exist -- refusing to write an empty manifest "
+            "that could overwrite a real one. Check the working "
+            "directory / --form-kits-dir value.",
+            file=sys.stderr,
+        )
+        return 1
+
+    manifest = build_manifest(form_kits_dir, args.prefix)
     out_path = Path(args.out)
     out_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(

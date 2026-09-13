@@ -187,3 +187,43 @@ def test_cli_prefix_flows_into_the_paths(tmp_path):
     main(["--form-kits-dir", str(tmp_path), "--out", str(out), "--prefix", "custom-prefix"])
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["forms"][0]["schemaPath"] == "/custom-prefix/k1/schema.json"
+
+
+def test_cli_refuses_a_missing_form_kits_dir(tmp_path, capsys):
+    """(Not in the original handoff, caught by cross-surface review of bd
+    polyglot-pdf-ywxoh.) build_manifest() itself is intentionally lenient on
+    a missing directory (test_nonexistent_form_kits_dir_produces_an_empty_manifest
+    above pins that as a library-level contract), but the CLI entry point --
+    the thing cloudbuild.yaml's form-kits target and deploy-all.sh actually
+    invoke -- must refuse outright rather than silently write an empty
+    manifest that could overwrite the demo's real one (e.g. a Cloud Build
+    tarball build, which .gcloudignore excludes form-kits/ from).
+    """
+    missing = tmp_path / "does-not-exist"
+    out = tmp_path / "index.json"
+    rc = main(["--form-kits-dir", str(missing), "--out", str(out), "--prefix", "form-kits"])
+    assert rc != 0, "main() returned success for a nonexistent --form-kits-dir"
+    assert not out.exists(), (
+        "main() wrote an output file even though it refused the missing directory"
+    )
+    captured = capsys.readouterr()
+    assert "ERROR" in captured.err, (
+        f"no ERROR message on stderr for a missing --form-kits-dir; "
+        f"stderr was: {captured.err!r}"
+    )
+
+
+def test_cli_still_succeeds_on_an_existing_empty_directory(tmp_path):
+    """The missing-dir refusal above must not overreach: an EXISTING
+    directory with zero (or zero complete) kits is a legitimate state
+    (initial bring-up, or every kit still in draft) and must still produce
+    a valid, empty manifest -- exactly test_nonexistent_form_kits_dir's
+    library-level behavior, now proven to survive at the CLI layer too.
+    """
+    empty_dir = tmp_path / "form-kits"
+    empty_dir.mkdir()
+    out = tmp_path / "index.json"
+    rc = main(["--form-kits-dir", str(empty_dir), "--out", str(out), "--prefix", "form-kits"])
+    assert rc == 0
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["forms"] == []

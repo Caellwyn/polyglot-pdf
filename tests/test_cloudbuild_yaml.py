@@ -1054,6 +1054,106 @@ def test_demo_side_targets_carry_the_staging_success_gate(by_id, steps, target):
     )
 
 
+@pytest.mark.parametrize("target", STAGING_GATED_DEMO_TARGETS)
+def test_staging_verified_gate_actually_evaluates_at_runtime(by_id, target, tmp_path):
+    """Exit criterion 1, clause 2, RUNTIME half.
+
+    test_demo_side_targets_carry_the_staging_success_gate (above) only
+    substring-matches the case statement; it cannot tell a live case arm from
+    one that crashes before it is ever reached. This test actually RUNS
+    staging-verified-gate's script with Cloud Build's substitution pass
+    simulated textually (the same replacement Cloud Build performs on
+    "${_TARGET}" et al. before handing the script to bash) and a stub
+    `python`/`pip` on PATH standing in for the real interpreter, then
+    asserts the stub was actually invoked with the right --target-family.
+
+    Regression guard for a real incident: "$${_TARGET%-demo}" (a $$-escaped
+    suffix-strip applied directly to the substitution token, rather than to a
+    bash variable holding its value) parses fine, passes
+    test_every_step_script_is_valid_bash (syntax only), and substring-matches
+    the assertions above -- but crashes EVERY backend-demo/frontend-demo
+    build with "_TARGET: unbound variable" under this file's set -euo
+    pipefail, because Cloud Build substitutions are not bash variables and $$
+    defers the expression to bash verbatim. Reverting the TGT="${_TARGET}"
+    assignment and taking "$${TGT%-demo}" directly on "${_TARGET}" instead
+    reproduces exactly that crash (confirmed by hand during the ywxoh review
+    round that found this).
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["staging-verified-gate"])
+    # Simulate Cloud Build's OWN substitution pass: "${_TARGET}" and
+    # "${_SHA}" are replaced textually before bash ever sees the script;
+    # only $$-escaped tokens are left for bash. Real Cloud Build would
+    # reject an empty _SHA well before this step (require-sha runs first),
+    # so a nonempty placeholder is the realistic case.
+    # Cloud Build ALSO collapses every "$$" to a literal "$" before bash
+    # ever sees the script (that is what "$$" escaping means) -- do that
+    # LAST so it never touches the "${_TARGET}"/"${_SHA}" substitution
+    # braces themselves.
+    rendered = (
+        script.replace("${_TARGET}", target)
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "invoked_with.txt"
+    # Extensionless shell-script stubs, chmod +x, PATH-prepended with bash's
+    # OWN idea of the directory (tmp_path.as_posix()) -- a Windows-style
+    # "C:/..." PATH entry is not resolved the same way inside Git Bash, and a
+    # .bat/.exe stub is not found via `command -v python` at all (mirrors
+    # tests/test_deploy_reachability_gate.py's _run_wrapper).
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        "#!/bin/bash\n"
+        f'echo "$@" > "{marker.as_posix()}"\n'
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_python.chmod(0o755)
+    fake_pip = tmp_path / "pip"
+    fake_pip.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8", newline="\n")
+    fake_pip.chmod(0o755)
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{tmp_path.as_posix()}"\n'
+        'export PATH="$PWD:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"staging-verified-gate crashed for target {target!r} instead of "
+        f"reaching promotion_gate.py:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        f"staging-verified-gate for target {target!r} exited 0 without ever "
+        f"invoking the (stubbed) python interpreter -- it likely hit the "
+        f"'*) skip' arm instead of the intended case"
+    )
+    invoked = marker.read_text(encoding="utf-8")
+    expected_family = target.rsplit("-", 1)[0]
+    assert f"--target-family {expected_family}" in invoked, (
+        f"staging-verified-gate invoked python with {invoked!r}, which does "
+        f"not contain the expected '--target-family {expected_family}'"
+    )
+
+
 def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
     """The third demo-side case: admin-service's TRAFFIC SHIFT specifically
     (not its tagged-candidate deploy, which is its own staging tier)."""
@@ -1196,6 +1296,44 @@ def test_every_site_target_requires_a_connected_source(by_id, steps, target):
     )
 
 
+def test_form_kits_requires_a_connected_source(by_id, steps):
+    """(Not in the original handoff, caught by cross-surface review of bd
+    polyglot-pdf-ywxoh.) form-kits is NOT a "site" target -- it deploys no
+    Hosting site -- but shares the exact failure mode SITE_TARGETS are
+    guarded against: .gcloudignore excludes form-kits/ from a tarball
+    build's source, and scripts/write_kits_manifest.py silently emits a
+    valid, EMPTY manifest (forms: []) when the directory it is pointed at
+    does not exist, exiting 0. Without this gate, a tarball-sourced
+    `form-kits` build would overwrite the demo's live form list with zero
+    forms on an apparently clean build.
+
+    Mutation-verified: removing "form-kits" from
+    require-connected-source-for-site-targets's case arm (confirmed by hand
+    during the ywxoh review round that found this) makes this red.
+    """
+    body = script_of(by_id["require-connected-source-for-site-targets"])
+    # A whole-word, CASE-ARM-anchored match: "form-kits" as a bare case
+    # pattern (bounded by "|"/")" on either side), not merely a substring
+    # of an explanatory comment or echo string elsewhere in the same
+    # step -- a prose mention would satisfy a plain "in body" check
+    # while the case arm itself still omitted the target entirely.
+    assert re.search(r'(?<![\w-])form-kits(?![\w-])[|)]', body), (
+        "require-connected-source-for-site-targets's CASE ARM does not "
+        "list form-kits (a mention elsewhere in the step, e.g. a comment, "
+        "does not count) -- a tarball build for that target could "
+        "proceed against a form-kits/ directory it cannot actually see"
+    )
+    assert "COMMIT_SHA" in body and "ABORT" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["require-connected-source-for-site-targets"]
+    for step_id in ("form-kits-upload", "form-kits-manifest"):
+        assert order[step_id] > gate_idx, (
+            f"{step_id} (index {order[step_id]}) runs before the "
+            f"connected-source check (index {gate_idx})"
+        )
+
+
 def test_gcloudignore_excludes_admin_console():
     """The premise of the connected-source gate: admin-console/ must
     actually be excluded from a tarball build, or the gate is protecting
@@ -1232,3 +1370,134 @@ def test_record_deployment_module_exists_and_derives_target_family():
     assert record_deployment.target_family("backend-demo") == "backend"
     assert record_deployment.target_family("frontend-staging") == "frontend"
     assert record_deployment.target_family("admin-service") == "admin-service"
+
+
+def test_frontend_build_exports_vite_app_channel(by_id):
+    """(Not in the original handoff, caught by cross-surface review of bd
+    polyglot-pdf-ywxoh.) frontend/src/shared/config.ts::getAppChannel()
+    reads VITE_APP_CHANNEL and falls back to 'demo' when it is unset --
+    deploy-staging.sh and deploy-demo.sh both export it explicitly for
+    exactly that reason (bd polyglot-pdf-z4ljj), because both channels build
+    the identical Vite mode (build:schema:demo) and import.meta.env.MODE
+    cannot tell them apart. Without this, a Cloud Build frontend-staging
+    build would silently claim to be the demo channel on every firm-scoped
+    admin-service call, reading and writing the DEMO's Firestore data from
+    the staging site.
+    """
+    body = script_of(by_id["frontend-build-deploy"])
+    assert 'export VITE_APP_CHANNEL="${_CHANNEL}"' in body, (
+        "frontend-build-deploy does not export VITE_APP_CHANNEL from "
+        "${_CHANNEL} -- a staging build would default to the 'demo' "
+        "channel and touch the wrong Firestore data"
+    )
+    # Must run before the actual build command, not after.
+    build_idx = body.index("npm run build:schema:demo")
+    channel_idx = body.index('export VITE_APP_CHANNEL="${_CHANNEL}"')
+    assert channel_idx < build_idx, (
+        "VITE_APP_CHANNEL is exported AFTER the build runs, so it would "
+        "never reach the bundle"
+    )
+
+
+def test_frontend_resolve_urls_aborts_on_unresolved_admin_service(by_id):
+    """(Not in the original handoff.) frontend-resolve-urls already aborts
+    when the backend URL cannot be resolved; it must do the SAME for the
+    admin service, matching deploy-all.sh:885-892's "an explicit channel was
+    selected -> abort" rule (Cloud Build's _CHANNEL is always an explicit
+    channel here). Silently falling back would leave
+    /workspace/.vite_admin_api_base_url empty, and frontend-build-deploy
+    would then ship a build whose firm-console calls become relative paths
+    that Hosting's /api/** rewrite routes to the VOICE backend instead of
+    the admin service.
+    """
+    body = script_of(by_id["frontend-resolve-urls"])
+    assert "polyglot-admin" in body, (
+        "frontend-resolve-urls no longer resolves the admin service URL"
+    )
+    admin_abort_idx = body.find('ADMIN_URL"')
+    assert admin_abort_idx != -1 and "ABORT" in body[admin_abort_idx:], (
+        "frontend-resolve-urls does not ABORT on an unresolved ADMIN_URL -- "
+        "it would silently ship an empty VITE_ADMIN_API_BASE_URL instead"
+    )
+
+
+@pytest.mark.parametrize("channel", ["staging", "demo"])
+def test_frontend_build_deploy_actually_exports_channel_at_runtime(by_id, channel, tmp_path):
+    """RUNTIME half of test_frontend_build_exports_vite_app_channel: proves
+    the export line is actually reached and evaluates to the right value,
+    not merely present in the source text. Stubs npm/npx/cd's targets so the
+    script runs to completion without a real Node toolchain or network
+    Firebase deploy, and captures the environment at the point the (stubbed)
+    npm is invoked.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["frontend-build-deploy"])
+    rendered = (
+        script.replace("${_TARGET}", "frontend-" + channel)
+        .replace("${_CHANNEL}", channel)
+        # The real script reads its handoff files from Cloud Build's
+        # fixed /workspace path; redirect that to tmp_path (bash's OWN
+        # posix rendering of it) so this test does not need write access
+        # to an actual /workspace.
+        .replace("/workspace/", tmp_path.as_posix() + "/")
+        .replace("$$", "$")
+    )
+
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / ".vite_ws_url").write_text("wss://example/ws/fill", encoding="utf-8")
+    (tmp_path / ".vite_admin_api_base_url").write_text(
+        "https://polyglot-admin-example.a.run.app", encoding="utf-8"
+    )
+
+    marker = tmp_path / "npm_env.txt"
+    fake_npm = tmp_path / "npm"
+    fake_npm.write_text(
+        "#!/bin/bash\n"
+        f'env > "{marker.as_posix()}"\n'
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_npm.chmod(0o755)
+    fake_npx = tmp_path / "npx"
+    fake_npx.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8", newline="\n")
+    fake_npx.chmod(0o755)
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{tmp_path.as_posix()}"\n'
+        'export PATH="$PWD:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+    assert result.returncode == 0, (
+        f"frontend-build-deploy crashed for channel {channel!r}:\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        f"frontend-build-deploy for channel {channel!r} never reached the "
+        f"(stubbed) npm -- stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    env_text = marker.read_text(encoding="utf-8")
+    assert f"VITE_APP_CHANNEL={channel}" in env_text, (
+        f"npm's environment does not contain VITE_APP_CHANNEL={channel} -- "
+        f"env dump:\n{env_text}"
+    )
+    assert "VITE_ADMIN_API_BASE_URL=https://polyglot-admin-example.a.run.app" in env_text, (
+        "npm's environment does not contain the resolved "
+        "VITE_ADMIN_API_BASE_URL"
+    )

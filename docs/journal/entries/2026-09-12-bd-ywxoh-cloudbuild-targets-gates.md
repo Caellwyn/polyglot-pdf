@@ -202,6 +202,113 @@ Full backend suite (3825 passed / 67 skipped / 3 deselected / 1 xfailed) and
 root suite (1645 passed / 46 skipped) re-run green after the round-2 fix,
 from the worktree with `PYTHONPATH` set to it.
 
+## What shipped -- cross-surface review round fixes
+
+The Opus-5 outer cross-surface review found three BLOCKERs, all in
+`cloudbuild.yaml` steps no unit test executes at runtime -- each adopted
+(fixed in place, with a new mutation-verified runtime test); the pre-existing
+`grep`-vs-JSON-parse divergence and the missing `kit_schema_file` check in
+`form-kits-upload` were refuted as pre-existing/harmless per the review's own
+trace, not fixed. One nit filed as a follow-up bead.
+
+- **ADOPTED (blocker): `staging-verified-gate`'s `TARGET_FAMILY` derivation
+  crashed with "`_TARGET`: unbound variable" on every `backend-demo`/
+  `frontend-demo` build.** `TARGET_FAMILY="$${_TARGET%-demo}"` applies a bash
+  suffix-strip directly to the literal substitution token `_TARGET` --
+  Cloud Build substitutions are not bash variables, and `$$` defers the
+  expression to bash verbatim, so under `set -euo pipefail` this failed
+  before ever reaching `promotion_gate.py`. The staging-before-demo gate
+  therefore never actually ran; it failed CLOSED (nothing unsafe shipped),
+  but the gate the bead exists to add was not in force. Fixed by assigning
+  the substitution to a real bash variable first (`TGT="${_TARGET}"`) and
+  stripping the suffix off `TGT`. New test
+  `test_staging_verified_gate_actually_evaluates_at_runtime` renders the
+  step's script with Cloud Build's own substitution pass simulated
+  textually and actually EXECUTES it under bash with a stubbed `python`/
+  `pip`, asserting the stub is reached with the right `--target-family` --
+  closing the gap the existing substring-matching test
+  (`test_demo_side_targets_carry_the_staging_success_gate`) could not see
+  (syntax-valid and pattern-matching text is not the same as a script that
+  runs). Mutation-verified: reverting to the un-assigned `$${_TARGET%-demo}`
+  reproduces the exact `_TARGET: unbound variable` crash.
+- **ADOPTED (blocker): `frontend-*` builds never set `VITE_APP_CHANNEL`,
+  so a staging build would silently claim the demo channel and touch the
+  demo's Firestore data.** Both channels build the identical Vite mode
+  (`build:schema:demo`), so `import.meta.env.MODE` cannot distinguish them;
+  `frontend/src/shared/config.ts::getAppChannel()` reads `VITE_APP_CHANNEL`
+  and falls back to `'demo'` when unset, and that value is appended as
+  `?channel=` on every firm-scoped admin-service call. `deploy-staging.sh`/
+  `deploy-demo.sh` both export it explicitly for exactly this reason (bd
+  polyglot-pdf-z4ljj); the build step never did. Fixed by exporting
+  `VITE_APP_CHANNEL="${_CHANNEL}"` in `frontend-build-deploy` before the
+  build runs. Second half of the same finding: `frontend-resolve-urls`
+  already aborted when the live BACKEND URL could not be resolved, but
+  silently fell through when the ADMIN service URL could not be resolved,
+  and `frontend-build-deploy` then exported that empty value
+  UNCONDITIONALLY -- overriding the committed `frontend/.env.demo` fallback
+  and leaving `getAdminApiBaseUrl()` returning `''`, so firm-console calls
+  would become relative paths Hosting's `/api/**` rewrite routes to the
+  VOICE backend instead of the admin service. Fixed both ends: added the
+  same ABORT-on-unresolved behavior for the admin URL (matching
+  `deploy-all.sh:885-892`'s "an explicit channel was selected -> abort"
+  rule, which always applies here since Cloud Build's `_CHANNEL` is never
+  unset), and additionally guarded the export in `frontend-build-deploy`
+  itself (matching `editor-build-deploy`'s existing `if [ -n "$$..." ]`
+  pattern) as defense in depth. Four new tests, two static (the export/abort
+  text is present) and two that actually RUN the rendered scripts under bash
+  with stubbed `npm`/`gcloud` to prove the environment `npm` sees actually
+  contains the right `VITE_APP_CHANNEL` and `VITE_ADMIN_API_BASE_URL`
+  values. Mutation-verified against the pre-fix step bodies.
+- **ADOPTED (blocker): a `form-kits` build sourced from a tarball would
+  silently overwrite the demo's live form list with an EMPTY manifest and
+  exit 0.** `.gcloudignore` excludes `form-kits/`, and `form-kits` was not
+  in `require-connected-source-for-site-targets`'s case list; a tarball
+  build therefore proceeded with `form-kits/` absent, and
+  `write_kits_manifest.py`'s `build_manifest()` treats a missing directory
+  as "zero kits" by design (a deliberately lenient, already-pinned
+  library-level contract for legitimate early-bring-up states) -- so the
+  manifest step wrote `{"forms": []}` and the upload step happily shipped
+  it over the real one. Two independent fixes, both applied: (1) added
+  `form-kits` to `require-connected-source-for-site-targets`'s case arm, so
+  a tarball-sourced `form-kits` build now refuses for the same reason the
+  site targets do; (2) `write_kits_manifest.py`'s CLI `main()` now refuses
+  outright (exit 1, no file written) when `--form-kits-dir` does not exist
+  at all, as a second independent layer for any OTHER caller -- WITHOUT
+  changing `build_manifest()`'s own pure-function contract, which stays
+  lenient on a missing directory (pinned by the pre-existing
+  `test_nonexistent_form_kits_dir_produces_an_empty_manifest`) since an
+  EXISTING-but-empty/all-draft directory is a legitimate state during
+  initial setup. New tests: a connected-source-gate test using a case-arm-
+  anchored regex (not a bare substring match, which a stray comment mention
+  of "form-kits" would have satisfied even with the case arm itself
+  unfixed -- caught by hand while writing the mutation-verify pass) and two
+  CLI-level tests (refuses a missing directory; still succeeds on an
+  existing empty one). Mutation-verified all three.
+- **REFUTED (per the review's own trace, not fixed):** the review noted two
+  findings and explicitly classified both as pre-existing or harmless
+  rather than gaps to close, and this round agrees: `form-kits-upload`'s
+  inline `grep -Eq '"status".*"complete"'` is byte-faithful to
+  `deploy-all.sh`'s own `kit_is_complete`, so the grep-vs-JSON-parse
+  divergence between the upload loop and the manifest builder already
+  ships in bash today -- this diff does not worsen it. Separately, the
+  upload loop's omission of the `kit_schema_file` check the manifest
+  builder applies only means a schema-less kit's FILES get uploaded to GCS
+  while its manifest entry stays absent (unreachable, not broken) -- also
+  not a regression this diff introduces. Neither required a code change.
+- **DEFERRED (nit, filed as bead `polyglot-pdf-ucyw0`):** `docs/technical_
+  guide.md`'s `Last updated` stamp was not bumped despite the ~145 lines
+  this bead added (Surface contract 31), and `scripts/setup-cloud-build.sh`'s
+  TARGETS comment still says "the ones ... has not implemented yet" (plural)
+  when only `landing` remains unimplemented. Neither affects behavior.
+
+Full backend suite (3825 passed / 67 skipped / 3 deselected / 1 xfailed,
+matching the review's own baseline exactly), admin_backend suite (515
+passed, likewise matching), and root suite (1654 passed / 46 skipped -- the
+review's 1645 baseline plus the 9 new tests this round added: 2 for the
+`staging-verified-gate` fix, 4 for the `VITE_APP_CHANNEL`/admin-URL fix, 3
+for the `form-kits` connected-source fix) re-run green from the worktree
+with `PYTHONPATH` set to it.
+
 ## Lessons
 
 Building the new `cloudbuild.yaml` steps surfaced the SAME ordering bug
