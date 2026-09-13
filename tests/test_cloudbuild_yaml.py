@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -610,6 +611,138 @@ def test_admin_channel_file_matches_the_wrapper():
             )
 
 
+def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
+    """(Not in the original handoff, cross-surface review round: bd
+    polyglot-pdf-ywxoh.) admin.env's own [SET_ENV_VARS] comment says
+    ADMIN_SERVICE_URL and BACKEND_URLS_JSON are DELIBERATELY absent from the
+    file because they need a live gcloud lookup -- deploy-admin.sh resolves
+    both and folds them into BACKEND_EXTRA_ENV precisely because
+    --set-env-vars REPLACES the service's entire env block (that script's
+    own comment records the incident). Pin the COMPLETE set this Cloud
+    Build step must assemble, not just the three keys
+    test_admin_channel_file_matches_the_wrapper already checks against
+    admin.env -- a step that silently drops either live-resolved key
+    disables the refund sweep's OIDC audience
+    (admin_backend/routes/sweep_routes.py::_audience) or blanks
+    GET /admin/health's channel fan-out
+    (admin_backend/routes/ops_routes.py::_backend_urls) with a green build
+    and no alert (CLAUDE.md scar #8: pin the set, not the instance).
+    """
+    body = script_of(by_id["admin-service-deploy-tagged"])
+    for var in ("ADMIN_SERVICE_URL", "BACKEND_URLS_JSON"):
+        assert var in body, (
+            f"admin-service-deploy-tagged never mentions {var} -- it will "
+            "be silently absent from the deployed service's env block, "
+            "wiping whatever an earlier deploy-admin.sh run had set"
+        )
+    # Both live lookups must run BEFORE the gcloud run deploy that consumes
+    # them, and their resolved values must actually reach --set-env-vars
+    # (not merely appear somewhere in the script, e.g. only in a comment).
+    deploy_idx = body.rindex("gcloud run deploy polyglot-admin")
+    admin_url_idx = body.find("ADMIN_SERVICE_URL=$(gcloud run services describe")
+    backend_urls_idx = body.find("BACKEND_URLS_PARTS=")
+    assert 0 <= admin_url_idx < deploy_idx, (
+        "ADMIN_SERVICE_URL is not resolved via a live gcloud lookup before "
+        "the gcloud run deploy call"
+    )
+    assert 0 <= backend_urls_idx < deploy_idx, (
+        "BACKEND_URLS_JSON's parts are not assembled before the gcloud run "
+        "deploy call"
+    )
+    set_env_vars_idx = body.index('--set-env-vars="$$BACKEND_ENV"')
+    assert admin_url_idx < set_env_vars_idx and backend_urls_idx < set_env_vars_idx
+
+
+def test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime(tmp_path, by_id):
+    """RUNTIME half of the test above: proves the resolved URLs actually
+    reach the `gcloud run deploy` invocation's --set-env-vars string, not
+    merely that the variable names appear in the source text. Stubs gcloud
+    to answer `run services describe` with canned per-service URLs and
+    captures the full argv of the final `run deploy` call.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-deploy-tagged"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "deploy_argv.txt"
+    fake_gcloud = tmp_path / "gcloud"
+    fake_gcloud.write_text(
+        "#!/bin/bash\n"
+        "if [ \"$1 $2\" = \"run services\" ] && [ \"$3\" = \"describe\" ]; then\n"
+        "  case \"$4\" in\n"
+        "    polyglot-admin) echo 'https://polyglot-admin-fake.a.run.app' ;;\n"
+        "    polyglot-backend) echo 'https://polyglot-backend-fake.a.run.app' ;;\n"
+        "    polyglot-backend-staging) echo 'https://polyglot-backend-staging-fake.a.run.app' ;;\n"
+        "    *) exit 1 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1 $2\" = \"run deploy\" ]; then\n"
+        f'  echo "$@" > "{marker.as_posix()}"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_gcloud.chmod(0o755)
+
+    # A Windows-drive-letter PATH entry ("C:/...", what tmp_path.as_posix()
+    # produces) is NOT resolved by Git Bash's PATH lookup at all -- it finds
+    # neither the stub NOR reports a conflict, it just silently falls
+    # through to whatever real `gcloud` is on the system PATH (verified:
+    # this repo's REAL Cloud SDK gcloud is on PATH and would otherwise hang
+    # this test on an interactive API-enablement prompt). Ask bash itself
+    # for tmp_path's mount-mapped POSIX path (e.g. "/tmp/...") instead of
+    # trusting pathlib's own slash-flipping.
+    bash_tmp_dir = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert bash_tmp_dir, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{bash_tmp_dir}:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-deploy-tagged crashed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        "admin-service-deploy-tagged never reached the (stubbed) "
+        f"gcloud run deploy call:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    invoked = marker.read_text(encoding="utf-8")
+    assert "ADMIN_SERVICE_URL=https://polyglot-admin-fake.a.run.app" in invoked, (
+        f"gcloud run deploy was not passed the live-resolved ADMIN_SERVICE_URL: {invoked!r}"
+    )
+    assert (
+        "BACKEND_URLS_JSON=demo=https://polyglot-backend-fake.a.run.app;"
+        "staging=https://polyglot-backend-staging-fake.a.run.app" in invoked
+    ), f"gcloud run deploy was not passed the live-resolved BACKEND_URLS_JSON: {invoked!r}"
+
+
 # Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
 # body ONLY if the name is one of these or is declared under `substitutions:`
 # in the file itself; everything else is a bash variable that MUST be written
@@ -820,6 +953,39 @@ def test_no_step_pip_installs_into_an_externally_managed_interpreter():
         "these steps run `pip install` on a Debian-based image whose PEP 668 "
         "EXTERNALLY-MANAGED marker refuses it, failing the step under "
         f"set -e: {offenders}. Use python:3.12 -- they need no gcloud."
+    )
+
+
+def test_no_step_runs_npx_or_npm_on_a_non_node_image():
+    """`npx`/`npm` need Node; gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    (gcloud + Debian + Python only, no Node) does not have it -- a step that
+    calls either on that image fails outright with "command not found"
+    under set -e (review round: bd polyglot-pdf-ywxoh: firestore-rules-
+    deploy shipped on cloud-sdk:slim calling `npx firebase-tools`, and no
+    test executed the step to catch it).
+
+    Pinned as a PROPERTY of the whole file (no step may combine `npx`/`npm`
+    with a non-node image), not as a fact about firestore-rules-deploy by
+    name, so a future step that adds an npx/npm call on the wrong image
+    fails here too (CLAUDE.md scar #8) -- mirroring
+    test_no_step_pip_installs_into_an_externally_managed_interpreter's shape
+    for the analogous node/gcloud image split.
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+
+    offenders = [
+        step["id"]
+        for step in spec["steps"]
+        if re.search(r"(?:^|[\s\"'`|;&(])(?:npx|npm)\b", step["args"][-1])
+        and not step["name"].startswith("node:")
+    ]
+
+    assert not offenders, (
+        "these steps call npx/npm but do not run on a node: image, so the "
+        f"call fails with 'command not found' under set -e: {offenders}. "
+        "Move the step to node:22 (matching every other npx/npm step here), "
+        "or split the npx/npm call into its own node:22 step if the "
+        "remainder of the step genuinely needs gcloud/docker."
     )
 
 
@@ -1355,6 +1521,54 @@ def test_promotion_gate_module_and_cli_agree_on_the_predicate():
         "scripts/promotion_gate.py does not import the pure predicate from "
         "admin_backend.services.promotion_gate -- it may be reimplementing "
         "the rule instead of sharing it with the future admin route"
+    )
+
+
+def test_promotion_gate_cli_actually_imports_under_its_real_invocation():
+    """A substring match on the import line (the test above) cannot catch a
+    broken sys.path: cloudbuild.yaml's staging-verified-gate and
+    admin-service-staging-gate steps both invoke this as
+    `python scripts/promotion_gate.py` from /workspace (the build's
+    repo-root checkout) -- NOT as `python -m scripts.promotion_gate` and NOT
+    from inside scripts/. That invocation form puts scripts/ (this file's
+    own directory), not the repo root, on sys.path[0], so a plain
+    `from admin_backend... import ...` at module scope raises
+    ModuleNotFoundError before argparse even runs (review round: bd
+    polyglot-pdf-ywxoh -- every prior test here stubbed out the `python`
+    binary entirely and so never caught this). Actually spawn the real
+    interpreter, cwd'd at the repo root exactly as Cloud Build does, and
+    assert it reaches argument parsing (a `--target-family`/`--sha` usage or
+    argparse error is fine; a traceback naming ModuleNotFoundError is not).
+
+    PYTHONPATH is explicitly stripped from the child's environment: this
+    repo's own test-running convention (PYTHONPATH=<worktree> for pytest)
+    would otherwise put the repo root on sys.path FOR us and hide exactly
+    the bug this test exists to catch (mutation-verified: with the
+    subprocess inheriting the parent's PYTHONPATH, this test stayed green
+    against the pre-fix module -- Cloud Build's own container carries no
+    such variable, so inheriting it here would test a scenario that cannot
+    happen in production).
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, "scripts/promotion_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    assert "ModuleNotFoundError" not in result.stderr, (
+        "scripts/promotion_gate.py could not import admin_backend when run "
+        "the way cloudbuild.yaml actually invokes it (python "
+        "scripts/promotion_gate.py from the repo root) -- sys.path[0] is "
+        "the script's own scripts/ directory in this invocation form, not "
+        f"the repo root:\n{result.stderr}"
+    )
+    assert result.returncode == 0, (
+        f"scripts/promotion_gate.py --help exited {result.returncode} "
+        f"instead of printing help:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
     )
 
 

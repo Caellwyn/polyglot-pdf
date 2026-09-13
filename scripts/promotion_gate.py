@@ -25,8 +25,20 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
-from admin_backend.services.promotion_gate import staging_verified
+# Make `admin_backend.*` importable under this script's REAL invocation:
+# cloudbuild.yaml runs it as `python scripts/promotion_gate.py` from
+# /workspace, which puts /workspace/scripts (this file's own directory), not
+# /workspace, on sys.path[0] -- and admin_backend is a repo-root package.
+# Without this, the import below raises ModuleNotFoundError on every actual
+# build (review round: bd polyglot-pdf-ywxoh). Same convention as
+# scripts/read_confirmations.py and scripts/bootstrap_admin_user.py:110.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from admin_backend.services.promotion_gate import staging_verified  # noqa: E402
 
 
 def _client(project: str | None):

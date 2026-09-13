@@ -667,7 +667,17 @@ steps:
   # regardless of _CHANNEL, same note as form-kits above.
   # --------------------------------------------------------------------
   - id: firestore-rules-deploy
-    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    # node:22, NOT cloud-sdk:slim: this step's only tool is `npx
+    # firebase-tools`, and cloud-sdk:slim is gcloud + Debian + Python only --
+    # it ships no Node/npx at all, so `npx` fails outright with "command not
+    # found" on that image (review round: bd polyglot-pdf-ywxoh; every other
+    # npx/npm step in this file -- verify-frontend, verify-admin-console,
+    # frontend-build-deploy, editor-build-deploy, admin-console-build-deploy
+    # -- already runs on node:22). No gcloud call is needed here (firebase
+    # deploy authenticates through the build SA's ADC the same as every
+    # other firebase-tools step), so unlike admin-console-resolve-url this
+    # needs no separate cloud-sdk step to split gcloud out.
+    name: node:22
     entrypoint: bash
     args:
       - -c
@@ -716,8 +726,43 @@ steps:
           echo "ABORT: $$CHANNEL_FILE has no [SET_ENV_VARS] entries."
           exit 1
         fi
+        # ADMIN_SERVICE_URL and BACKEND_URLS_JSON are DELIBERATELY not in
+        # admin.env (its own [SET_ENV_VARS] comment) -- Google assigns the
+        # admin service's own URL only at first deploy, and the admin
+        # service has no channel of its own so it cannot derive either
+        # public backend's URL the way a channel derives its sibling's.
+        # deploy-admin.sh resolves both live and folds them into
+        # BACKEND_EXTRA_ENV; --set-env-vars REPLACES the service's entire
+        # env block (that script's own comment records the incident this
+        # mirrors), so omitting them here would silently wipe the refund
+        # sweep's OIDC audience and blank GET /admin/health's channel fan-out
+        # on every Cloud Build admin-service deploy (review round: bd
+        # polyglot-pdf-ywxoh). "2>/dev/null || true" makes a not-yet-deployed
+        # service resolve to empty rather than aborting (set -e), matching
+        # deploy-admin.sh's own first-deploy behavior.
+        ADMIN_SERVICE_URL=$(gcloud run services describe polyglot-admin \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null || true)
+        LIVE_ENV="$$CHANNEL_ENV"
+        [ -n "$$ADMIN_SERVICE_URL" ] && LIVE_ENV="$$LIVE_ENV,ADMIN_SERVICE_URL=$$ADMIN_SERVICE_URL"
+        BACKEND_URLS_PARTS=""
+        DEMO_BACKEND_URL=$(gcloud run services describe polyglot-backend \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null || true)
+        [ -n "$$DEMO_BACKEND_URL" ] && BACKEND_URLS_PARTS="demo=$$DEMO_BACKEND_URL"
+        STAGING_BACKEND_URL=$(gcloud run services describe polyglot-backend-staging \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.url)' 2>/dev/null || true)
+        if [ -n "$$STAGING_BACKEND_URL" ]; then
+          if [ -n "$$BACKEND_URLS_PARTS" ]; then
+            BACKEND_URLS_PARTS="$$BACKEND_URLS_PARTS;staging=$$STAGING_BACKEND_URL"
+          else
+            BACKEND_URLS_PARTS="staging=$$STAGING_BACKEND_URL"
+          fi
+        fi
+        LIVE_ENV="$$LIVE_ENV,BACKEND_URLS_JSON=$$BACKEND_URLS_PARTS"
         BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GIT_SHA=${_SHA}"
-        BACKEND_ENV="$$BACKEND_ENV,$$CHANNEL_ENV"
+        BACKEND_ENV="$$BACKEND_ENV,$$LIVE_ENV"
         SECRETS_FLAG=()
         [ -n "$$CHANNEL_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$$CHANNEL_SECRETS")
         SA_FLAG=()

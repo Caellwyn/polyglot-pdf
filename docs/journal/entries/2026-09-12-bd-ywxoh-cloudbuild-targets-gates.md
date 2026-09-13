@@ -309,6 +309,117 @@ review's 1645 baseline plus the 9 new tests this round added: 2 for the
 for the `form-kits` connected-source fix) re-run green from the worktree
 with `PYTHONPATH` set to it.
 
+## What shipped -- cross-surface review round 2 fixes
+
+The Opus-5 outer cross-surface review found three more BLOCKERs, all again
+in `cloudbuild.yaml` paths no test executed at runtime -- all three adopted
+(fixed in place, each with a new mutation-verified test); the one non-
+blocker finding (`admin-service-staging-gate` is tautological within its
+own build) was filed as its own bead rather than fixed here, per the
+review's own read that the fix is a design call overlapping bead
+`polyglot-pdf-tb3kp`'s territory.
+
+- **ADOPTED (blocker): `scripts/promotion_gate.py` could not import its own
+  predicate under its REAL invocation, so every gated build step
+  (`backend-demo`, `frontend-demo`, `admin-service`) died with a raw
+  `ModuleNotFoundError` traceback instead of returning a 0/1 verdict.**
+  `cloudbuild.yaml` invokes it as `python scripts/promotion_gate.py` from
+  `/workspace`, which puts `/workspace/scripts` (this file's own directory),
+  not `/workspace`, on `sys.path[0]` -- and `admin_backend` is a repo-root
+  package, so the module-scope `from admin_backend... import
+  staging_verified` raised before `argparse` ever ran. The prior round's
+  test (`test_promotion_gate_module_and_cli_agree_on_the_predicate`) only
+  substring-matched the import line, and the one test that DID execute a
+  build step (`test_staging_verified_gate_actually_evaluates_at_runtime`)
+  stubbed out the `python` binary entirely, so neither could see this.
+  Fixed with a `sys.path.insert(0, <repo root>)` before the import, matching
+  the convention already used by ~14 other `scripts/*.py` files that import
+  repo-root packages (`scripts/read_confirmations.py`,
+  `scripts/bootstrap_admin_user.py:110`). New test
+  `test_promotion_gate_cli_actually_imports_under_its_real_invocation`
+  spawns the REAL interpreter (not a stub) against the real file, cwd'd at
+  the repo root exactly as Cloud Build does, with `PYTHONPATH` explicitly
+  stripped from the child's environment -- this repo's own pytest-running
+  convention (`PYTHONPATH=<worktree>`) would otherwise put the repo root on
+  `sys.path` FOR the test and hide the exact bug it exists to catch (a real
+  trap this round found while writing the test: the first version of the
+  test passed against the UNFIXED module because it inherited the test
+  runner's own `PYTHONPATH`). Mutation-verified against the pre-fix module
+  with `PYTHONPATH` unset.
+- **ADOPTED (blocker): `admin-service-deploy-tagged`'s `--set-env-vars`
+  omitted `ADMIN_SERVICE_URL` and `BACKEND_URLS_JSON`, silently wiping both
+  on every Cloud Build admin-service deploy.** `--set-env-vars` REPLACES the
+  service's entire env block (the exact incident `deploy-admin.sh`'s own
+  comment records), and `admin.env` deliberately excludes both keys because
+  each needs a live `gcloud run services describe` lookup at deploy time --
+  `deploy-admin.sh` resolves them inline, but the Cloud Build step built its
+  env from only the channel file's three static keys. Consequence in
+  untouched files: `admin_backend/routes/sweep_routes.py`'s `_audience()`
+  returns `""` with no `ADMIN_SERVICE_URL`, so the refund sweep's OIDC gate
+  503s; `admin_backend/routes/ops_routes.py`'s `_backend_urls()` returns
+  `{}`, so `GET /admin/health` reports every channel `configured: false`.
+  The existing `test_admin_channel_file_matches_the_wrapper` could not see
+  this -- it only pins the three keys admin.env DOES declare. Fixed by
+  porting `deploy-admin.sh`'s exact live-lookup logic (three `gcloud run
+  services describe` calls, the same `2>/dev/null || true` not-yet-deployed
+  fallback, the same `demo=<url>;staging=<url>` wire format for
+  `BACKEND_URLS_JSON`) into the Cloud Build step before its `gcloud run
+  deploy` call. Two new tests: one pins the COMPLETE env var set as a
+  property (not the three admin.env already covers, per CLAUDE.md scar #8),
+  the other actually EXECUTES the rendered step under bash with a stubbed
+  `gcloud` and asserts the live-resolved URLs reach the final `gcloud run
+  deploy` invocation's `--set-env-vars` string. Writing that second test
+  surfaced a Windows/Git-Bash-specific trap: a `tmp_path.as_posix()` PATH
+  entry (`C:/Users/...`) is not resolved by Git Bash's PATH lookup AT ALL --
+  not a stub-vs-real conflict, the lookup silently falls through to
+  whatever real binary of that name is on the system PATH with no error.
+  (This nearly hung the test on the REAL `gcloud`'s interactive
+  API-not-enabled prompt against a fake project, and on inspection affects
+  at least one PRE-EXISTING test in this same file the same way --
+  `test_staging_verified_gate_actually_evaluates_at_runtime`'s `python`/
+  `pip` stubs are never actually reached either, though its assertions
+  happen to still pass against the real interpreter; not touched here since
+  it is out of this round's scope -- filed as bead `polyglot-pdf-ym9gl`.)
+  Fixed for the new test by
+  asking bash itself for `tmp_path`'s mount-mapped POSIX path
+  (`subprocess.run([bash, "-c", "pwd"], cwd=tmp_path)`) rather than trusting
+  `pathlib`'s own slash-flipping. Both new tests mutation-verified against
+  the pre-fix step body.
+- **ADOPTED (blocker): `firestore-rules-deploy` ran `npx firebase-tools` on
+  `gcr.io/google.com/cloudsdktool/cloud-sdk:slim`, which ships no Node/npx
+  at all.** It was the only one of six `npx`/`npm` steps in the file not on
+  `node:22`; the target fails outright with "npx: command not found" on its
+  first real run, and `firestore-rules` is the target that ships this
+  bead's own new `deployments`/`build_checks` deny blocks, so the rules stay
+  unprotected until someone deploys them by the old bash path. Fixed by
+  moving the step to `node:22` (no gcloud call is needed in this step, so
+  unlike `admin-console-resolve-url` it needs no separate cloud-sdk step
+  split out). New test `test_no_step_runs_npx_or_npm_on_a_non_node_image`
+  pins this as a PROPERTY of the whole file (no step may combine `npx`/`npm`
+  with a non-node image), mirroring
+  `test_no_step_pip_installs_into_an_externally_managed_interpreter`'s
+  existing shape for the analogous pip/PEP-668 image split, so a future
+  step reintroducing this mistake fails here too regardless of which step
+  it is. Mutation-verified: reverting the image to `cloud-sdk:slim` turns
+  exactly this test red, naming `firestore-rules-deploy`.
+- **FILED AS A BEAD, not fixed here (`polyglot-pdf-xa4kx`):**
+  `admin-service-staging-gate` reads a `deployments` row that
+  `admin-service-record-deployment` unconditionally wrote three steps
+  earlier in the SAME build, so the gate can never fail -- the traffic
+  shift IS genuinely gated, but by `admin-service-verify-tagged`'s `/health`
+  probe, not by the promotion gate the step's own comment and
+  `docs/technical_guide.md` contract 31c both claim. Left as a bead rather
+  than fixed inline because the fix is a design call (drop the step, or
+  split the target into two builds so the row and the gate live in
+  different builds the way backend/frontend already do) that overlaps bead
+  `polyglot-pdf-tb3kp`'s (4.3/4.4) territory.
+
+Full backend suite (3825 passed / 67 skipped / 3 deselected / 1 xfailed,
+matching the prior round's baseline exactly), admin_backend suite (515
+passed, likewise matching), and root suite (1658 passed / 46 skipped -- the
+prior round's 1654 baseline plus the 4 new tests this round added) re-run
+green from the worktree with `PYTHONPATH` set to it.
+
 ## Lessons
 
 Building the new `cloudbuild.yaml` steps surfaced the SAME ordering bug
