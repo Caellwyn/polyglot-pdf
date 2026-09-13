@@ -54,7 +54,18 @@ conservative for now" hedges in CLAUDE.md's escalation section, and the
 effort-400 Workflow fallback, which is still load-bearing and self-flagged for
 removal once the upstream bug is fixed.
 
-Fresh-eyes / outer review outcome: recorded below once the loops run.
+Review record: fresh-eyes (Sonnet) NO-GAPS in one round, all three exit
+criteria PASS. Opus cross-surface review, one pass, GAPS-FOUND (2), both
+dispositioned without a code change: (1) `tests/e2e/voice-harness/RUNBOOK.md`
+still names the retired `p1_line1_aliennumber` field id -- pre-existing on
+`origin/dev`, owned by bd `polyglot-pdf-tcemw`; (2) the same runbook still
+mandates the Chrome MCP tool sequence the skill no longer names -- a docs
+consistency nit, filed with (1) as bd `polyglot-pdf-gicvm`. The retired
+`scripts/pr_review_watcher.py` comment citing the deleted file is bd
+`polyglot-pdf-cknwq`. The reviewer also traced two contracts the inner
+enumeration omitted (the CLAUDE.md dead-path sentence removal against
+`tests/test_claude_md_review_flow*.py`, and the bounty-line removal against
+`tests/test_reviewer_agents_are_read_only.py`): both green.
 
 ## Lessons
 
