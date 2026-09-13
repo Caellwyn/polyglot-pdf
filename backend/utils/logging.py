@@ -333,16 +333,20 @@ def configure_logging() -> None:
 	# per-logger; the binary-suppress filter now lives on the root handler above,
 	# so it already covers records these loggers propagate to root -- no per-logger
 	# addFilter needed.
+	# uvicorn.access is in this list on purpose, not exempted: its INFO line is
+	# the full request target, and /ws/fill carries the caller's credential
+	# in the query string (?token=), so an access line at INFO writes a live
+	# Firebase ID token or magic-link token into stdout -> Cloud Logging. The
+	# deployed image also passes --no-access-log (Dockerfile); this cap is the
+	# independent guard for a uvicorn started without that flag. Pinned by
+	# tests/test_logging_access_log.py (bd polyglot-pdf-6rj0j).
 	noisy_loggers = [
 		"websockets", "websockets.protocol", "websockets.server", "websockets.client",
-		"uvicorn.protocols.websockets", "uvicorn", "uvicorn.error",
+		"uvicorn.protocols.websockets", "uvicorn", "uvicorn.error", "uvicorn.access",
 		"wsproto", "asyncio", "httpx"
 	]
 
 	for logger_name in noisy_loggers:
 		logger = logging.getLogger(logger_name)
 		logger.setLevel(logging.WARNING)
-	
-	# Keep uvicorn access logs at INFO level for visibility
-	logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 

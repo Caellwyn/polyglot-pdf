@@ -2,7 +2,7 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-12 (bd polyglot-pdf-i6dlb, E3.11b -- the five
+*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
 monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
 `pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
 fetched independently so one channel's failure never blanks the other's
@@ -328,7 +328,7 @@ actually serves is a RUNTIME choice, not a build-time one --
 a build arg.
 
 - `Dockerfile`'s `CMD` is `uvicorn ${APP_MODULE:-backend.main:app} --host
-  0.0.0.0 --port ${PORT}`. Unset or empty resolves to the public backend
+  0.0.0.0 --port ${PORT} --no-access-log`. Unset or empty resolves to the public backend
   (the `:-` form covers both cases).
 - `admin_backend/main.py`'s `DEFAULT_APP_MODULE = "backend.main:app"` is the
   SAME string, read by `_active_app_module()` the same way the container

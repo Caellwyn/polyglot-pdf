@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declares the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, and names the remaining targets as failing steps bead polyglot-pdf-ywxoh fills in. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-service
+*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: uvicorn's access log is OFF on the deployed image -- `--no-access-log` on the `Dockerfile` CMD plus a WARNING cap on the `uvicorn.access` logger -- because the `/ws/fill` credential rides the URL; see "One image, two services". No env var or config key changed.) (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declares the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, and names the remaining targets as failing steps bead polyglot-pdf-ywxoh fills in. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-service
 gate, `require_app_admin_or_owning_manager_or_employee`, scoped to one
 route only -- no deploy-time env var or config key changed; see the gate
 inventory section below and [admin-service.md](admin-service.md).) (bd
@@ -535,8 +535,27 @@ public voice app) and `admin_backend/` (the privileged admin API, bd
 `polyglot-pdf-pnoik`) -- and its `CMD` picks which one to serve at RUNTIME:
 
 ```
-CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}
+CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log
 ```
+
+**`--no-access-log` is load-bearing for privacy** (bd `polyglot-pdf-6rj0j`,
+sprint 23 B0). uvicorn's access line prints the full request target at
+INFO, and `/ws/fill` carries its credential in the query string
+(`?token=<Firebase ID token or magic-link token>`), so with the access
+log on, every voice connection wrote a live, replayable token into the
+container's stdout and Cloud Logging. `configure_logging()`
+(`backend/utils/logging.py`) also caps the `uvicorn.access` logger at
+WARNING, so a uvicorn started WITHOUT the flag (the local launchers)
+drops the line too; the two guards are pinned separately
+(`tests/test_dockerfile_app_module.py`, `tests/test_logging_access_log.py`).
+The cost is diagnostic: there is no per-connection access line in the
+app stream. Cloud Run's own request log (`run.googleapis.com/requests`)
+still records status and latency per request -- and, until the WS
+credential moves out of the URL (sprint 23 bead C2), the URL itself.
+That request-log copy is NOT mitigated by this flag; an interim Cloud
+Logging exclusion on `httpRequest.requestUrl` is a separate live-change
+ask tracked on bd `polyglot-pdf-6rj0j`, applied only when the maintainer
+approves it.
 
 **Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
 `gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
