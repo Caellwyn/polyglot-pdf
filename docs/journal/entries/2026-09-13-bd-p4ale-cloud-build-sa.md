@@ -169,6 +169,51 @@ Round 2 returned GAPS-FOUND(2); here is what happened to each:
   Neither (2) nor (3) is exploited by anything in this bead's own diff,
   and the reviewer explicitly did not ask for a bead, so none was filed.
 
+### Fresh-eyes review round 3 -- adopt/reject/defer
+
+Round 3 returned GAPS-FOUND(1) plus two nits; here is what happened to
+each:
+
+- **ADOPTED (blocker, fixed):** round 2's own "beyond the rubric"
+  observation #2 (the `_iam_section_gcloud_gate_violations` line-prefix
+  detection, `stripped.startswith("gcloud ")`, cannot see a mutating
+  gcloud call issued through command substitution) was re-examined by
+  round 3 and reclassified from "not exploited today, known blind spot"
+  to a **blocker**: round 3 independently mutation-verified it by moving
+  the Pub/Sub block's own `PROJECT_NUMBER="$(gcloud projects describe
+  ...)"` line out of its `if [ "$DRY_RUN" = false ]` guard on a scratch
+  copy -- the detector returned zero violations, i.e. the test's own
+  docstring promise ("insert an ungated `gcloud ...` call anywhere in
+  the IAM section ... red") did not hold for this real, in-script call
+  shape. Added `_real_gcloud_invocation()` to
+  `tests/test_setup_cloud_build_script.py`, recognizing both a bare
+  `gcloud ...` line and a `VAR="$(gcloud ...)"` /
+  `VAR=$(gcloud ...)` command-substitution assignment as real,
+  executing calls, while still excluding `echo "..."` lines that only
+  MENTION gcloud in a DRY-RUN preview string or an `[ERROR]` usage hint.
+  Mutation-verified against the reviewer's exact reproduction (moving
+  the real script's `PROJECT_NUMBER=` line above its guarding `if`) --
+  now correctly fails; restored, the unmodified script passes cleanly
+  again (22/22 in the file). Full backend suite (3837 passed) and root
+  tests (1685 passed) re-run clean after the fix.
+- **DEFERRED (nit, not fixed here):** `scripts/setup-admin-service.sh`'s
+  new "5. actAs on polyglot-cloudbuild-sa" comment header (line 168)
+  collides with the pre-existing "5. Cloud Scheduler" header nine lines
+  further down (line 196) -- comment-only, no behavior change. Filed as
+  polyglot-pdf-nacfo.2 rather than touched inline (round 3 itself did
+  not file a bead for its nits, per its own "Filed beads: none").
+- **DEFERRED (nit, not fixed here):** a comment inside
+  `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`'s
+  `EXPECTED_ADMIN_SA_ROLES` cross-references a test function by a name
+  that no longer matches
+  (`test_admin_sa_actas_role_is_scoped_to_the_cloud_build_sa` vs. the
+  actual `test_the_actas_role_is_scoped_to_the_cloud_build_sa_not_the_
+  project`) -- comment-only, doesn't affect test behavior or CI. Filed
+  as polyglot-pdf-nacfo.2 alongside the section-numbering nit above.
+- **Round 1's `run.admin` nit (nacfo.1) was correctly NOT re-litigated**
+  by round 3, which explicitly named it as already-triaged and left it
+  alone.
+
 ## Lessons
 
 The "deferred vs. deleted" distinction (scar #8's enumerate-the-set
@@ -197,6 +242,9 @@ directly. Review outcomes recorded in the closeout ping.
 - `admin_backend/tests/unit/test_admin_sa_iam_envelope.py` -- envelope,
   deferral, and new scope-pinning tests updated/added.
 - `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` -- new.
-- `tests/test_setup_cloud_build_script.py` -- new.
+- `tests/test_setup_cloud_build_script.py` -- new; round 3 added
+  `_real_gcloud_invocation()` so the dry-run gate detector also catches a
+  gcloud call issued via command substitution (`VAR="$(gcloud ...)"`),
+  not just a bare `gcloud ...` line.
 - `docs/components/config-deployment.md`, `docs/components/admin-service.md`,
   `docs/doctrine/promotion-tiers.md` -- IAM detail added, stamps bumped.

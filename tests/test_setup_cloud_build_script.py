@@ -208,11 +208,36 @@ def test_actas_targets_are_actually_granted_not_just_declared():
     ), "no per-target actAs add-iam-policy-binding call"
 
 
+def _real_gcloud_invocation(stripped: str):
+    """Return the invocation text if `stripped` is a REAL, executing
+    gcloud call, or None if it is not.
+
+    Two shapes count as real calls: a bare `gcloud ...` command, and a
+    command-substitution assignment like `VAR="$(gcloud ...)"` or
+    `VAR=$(gcloud ...)` -- both actually run gcloud. An `echo "..."` line
+    that merely mentions the word gcloud in a DRY-RUN preview string or an
+    [ERROR] usage hint does NOT count: it never executes anything.
+    (Fresh-eyes finding, bd polyglot-pdf-p4ale round 2: the old
+    `stripped.startswith("gcloud ")` check required gcloud to be the
+    line's first token, so the command-substitution shape --
+    `PROJECT_NUMBER="$(gcloud projects describe ...)"`, a real, executing
+    call sitting in the Pub/Sub block -- was invisible to the gate
+    detector. A mutation that pulled that exact line out of its
+    `if [ "$DRY_RUN" = false ]` guard produced zero violations.)
+    """
+    if stripped.startswith("gcloud "):
+        return stripped
+    match = re.match(r'^[A-Za-z_][A-Za-z0-9_]*="?\$\((gcloud\b.*)', stripped)
+    if match:
+        return match.group(1)
+    return None
+
+
 def _iam_section_gcloud_gate_violations(iam_section: str):
     """Structurally walk the IAM section's if/else/fi nesting and return
-    every real gcloud call NOT lexically inside an active
-    `if [ "$DRY_RUN" = false ]` (or `if [ "$DRY_RUN" = true ]` -> else)
-    branch.
+    every real gcloud call (see `_real_gcloud_invocation`) NOT lexically
+    inside an active `if [ "$DRY_RUN" = false ]` (or
+    `if [ "$DRY_RUN" = true ]` -> else) branch.
 
     Unlike a fixed-window backward text search, this tracks actual if/fi
     nesting depth with a stack, so a call is only considered "gated" when
@@ -262,8 +287,9 @@ def _iam_section_gcloud_gate_violations(iam_section: str):
         if fi_re.match(line) and stack:
             stack.pop()
             continue
-        if stripped.startswith("gcloud ") and not currently_gated_false():
-            violations.append(stripped)
+        invocation = _real_gcloud_invocation(stripped)
+        if invocation is not None and not currently_gated_false():
+            violations.append(invocation)
     return violations
 
 
@@ -279,7 +305,11 @@ def test_dry_run_never_calls_gcloud():
 
     Mutation: insert an ungated `gcloud ...` call anywhere in the IAM
     section -- including right after an unrelated, already-closed
-    `if [ "$DRY_RUN" = false ]; ... fi` block (not just inside one) -- red.
+    `if [ "$DRY_RUN" = false ]; ... fi` block (not just inside one), or as
+    an ungated `VAR="$(gcloud ...)"` command-substitution assignment
+    (round 2's exact gap: moving the Pub/Sub block's
+    `PROJECT_NUMBER="$(gcloud projects describe ...)"` line above its
+    guarding `if`) -- red.
     """
     text = _script_text()
     iam_section_start = text.index("THE BUILD IDENTITY: polyglot-cloudbuild-sa")
