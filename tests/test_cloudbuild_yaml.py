@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -610,6 +611,179 @@ def test_admin_channel_file_matches_the_wrapper():
             )
 
 
+def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
+    """(Not in the original handoff, cross-surface review round: bd
+    polyglot-pdf-ywxoh.) admin.env's own [SET_ENV_VARS] comment says
+    ADMIN_SERVICE_URL and BACKEND_URLS_JSON are DELIBERATELY absent from the
+    file because they need a live gcloud lookup -- deploy-admin.sh resolves
+    both and folds them into BACKEND_EXTRA_ENV precisely because
+    --set-env-vars REPLACES the service's entire env block (that script's
+    own comment records the incident). Pin the COMPLETE set this Cloud
+    Build step must assemble, not just the three keys
+    test_admin_channel_file_matches_the_wrapper already checks against
+    admin.env -- a step that silently drops any of these keys disables the
+    refund sweep's OIDC audience
+    (admin_backend/routes/sweep_routes.py::_audience), blanks
+    GET /admin/health's channel fan-out
+    (admin_backend/routes/ops_routes.py::_backend_urls), or (FORM_KITS_MODE/
+    FORM_KITS_GCS_BUCKET/FORM_KITS_REMOTE_PREFIX -- a second cross-surface
+    review round on the same bead) makes get_form_kit_store()
+    (backend/services/form_kits.py) fall back to FORM_KITS_MODE's "local"
+    default so GET /admin/kits (admin_backend/routes/kit_routes.py) silently
+    returns an empty kit list -- all with a green build and no alert
+    (CLAUDE.md scar #8: pin the set, not the instance).
+    """
+    body = script_of(by_id["admin-service-deploy-tagged"])
+    for var in (
+        "ADMIN_SERVICE_URL",
+        "BACKEND_URLS_JSON",
+        "FORM_KITS_MODE",
+        "FORM_KITS_GCS_BUCKET",
+        "FORM_KITS_REMOTE_PREFIX",
+    ):
+        assert var in body, (
+            f"admin-service-deploy-tagged never mentions {var} -- it will "
+            "be silently absent from the deployed service's env block, "
+            "wiping whatever an earlier deploy-admin.sh run had set"
+        )
+    # Both live lookups must run BEFORE the gcloud run deploy that consumes
+    # them, and their resolved values must actually reach --set-env-vars
+    # (not merely appear somewhere in the script, e.g. only in a comment).
+    deploy_idx = body.rindex("gcloud run deploy polyglot-admin")
+    admin_url_idx = body.find("ADMIN_SERVICE_URL=$(gcloud run services describe")
+    backend_urls_idx = body.find("BACKEND_URLS_PARTS=")
+    form_kits_mode_idx = body.find("FORM_KITS_MODE=gcs")
+    form_kits_bucket_idx = body.find("FORM_KITS_GCS_BUCKET=")
+    form_kits_prefix_idx = body.find("FORM_KITS_REMOTE_PREFIX=")
+    assert 0 <= admin_url_idx < deploy_idx, (
+        "ADMIN_SERVICE_URL is not resolved via a live gcloud lookup before "
+        "the gcloud run deploy call"
+    )
+    assert 0 <= backend_urls_idx < deploy_idx, (
+        "BACKEND_URLS_JSON's parts are not assembled before the gcloud run "
+        "deploy call"
+    )
+    assert 0 <= form_kits_mode_idx < deploy_idx, (
+        "FORM_KITS_MODE is not assembled before the gcloud run deploy call"
+    )
+    assert 0 <= form_kits_bucket_idx < deploy_idx, (
+        "FORM_KITS_GCS_BUCKET is not assembled before the gcloud run deploy call"
+    )
+    assert 0 <= form_kits_prefix_idx < deploy_idx, (
+        "FORM_KITS_REMOTE_PREFIX is not assembled before the gcloud run deploy call"
+    )
+    set_env_vars_idx = body.index('--set-env-vars="$$BACKEND_ENV"')
+    assert admin_url_idx < set_env_vars_idx and backend_urls_idx < set_env_vars_idx
+    assert form_kits_mode_idx < set_env_vars_idx
+    assert form_kits_bucket_idx < set_env_vars_idx
+    assert form_kits_prefix_idx < set_env_vars_idx
+    # The values themselves must match backend-deploy's exact computation
+    # (cloudbuild.yaml's backend-deploy step / deploy-all.sh:509), not just
+    # the variable names -- a step could mention FORM_KITS_GCS_BUCKET while
+    # pointing it at the wrong bucket.
+    assert "FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits" in body
+    assert "FORM_KITS_REMOTE_PREFIX=form-kits" in body
+
+
+def test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime(tmp_path, by_id):
+    """RUNTIME half of the test above: proves the resolved URLs actually
+    reach the `gcloud run deploy` invocation's --set-env-vars string, not
+    merely that the variable names appear in the source text. Stubs gcloud
+    to answer `run services describe` with canned per-service URLs and
+    captures the full argv of the final `run deploy` call.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-deploy-tagged"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "deploy_argv.txt"
+    fake_gcloud = tmp_path / "gcloud"
+    fake_gcloud.write_text(
+        "#!/bin/bash\n"
+        "if [ \"$1 $2\" = \"run services\" ] && [ \"$3\" = \"describe\" ]; then\n"
+        "  case \"$4\" in\n"
+        "    polyglot-admin) echo 'https://polyglot-admin-fake.a.run.app' ;;\n"
+        "    polyglot-backend) echo 'https://polyglot-backend-fake.a.run.app' ;;\n"
+        "    polyglot-backend-staging) echo 'https://polyglot-backend-staging-fake.a.run.app' ;;\n"
+        "    *) exit 1 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1 $2\" = \"run deploy\" ]; then\n"
+        f'  echo "$@" > "{marker.as_posix()}"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_gcloud.chmod(0o755)
+
+    # A Windows-drive-letter PATH entry ("C:/...", what tmp_path.as_posix()
+    # produces) is NOT resolved by Git Bash's PATH lookup at all -- it finds
+    # neither the stub NOR reports a conflict, it just silently falls
+    # through to whatever real `gcloud` is on the system PATH (verified:
+    # this repo's REAL Cloud SDK gcloud is on PATH and would otherwise hang
+    # this test on an interactive API-enablement prompt). Ask bash itself
+    # for tmp_path's mount-mapped POSIX path (e.g. "/tmp/...") instead of
+    # trusting pathlib's own slash-flipping.
+    bash_tmp_dir = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert bash_tmp_dir, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{bash_tmp_dir}:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-deploy-tagged crashed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        "admin-service-deploy-tagged never reached the (stubbed) "
+        f"gcloud run deploy call:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    invoked = marker.read_text(encoding="utf-8")
+    assert "ADMIN_SERVICE_URL=https://polyglot-admin-fake.a.run.app" in invoked, (
+        f"gcloud run deploy was not passed the live-resolved ADMIN_SERVICE_URL: {invoked!r}"
+    )
+    assert (
+        "BACKEND_URLS_JSON=demo=https://polyglot-backend-fake.a.run.app;"
+        "staging=https://polyglot-backend-staging-fake.a.run.app" in invoked
+    ), f"gcloud run deploy was not passed the live-resolved BACKEND_URLS_JSON: {invoked!r}"
+    assert "FORM_KITS_MODE=gcs" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_MODE: {invoked!r}"
+    )
+    assert "FORM_KITS_GCS_BUCKET=test-project-form-kits" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_GCS_BUCKET: {invoked!r}"
+    )
+    assert "FORM_KITS_REMOTE_PREFIX=form-kits" in invoked, (
+        f"gcloud run deploy was not passed FORM_KITS_REMOTE_PREFIX: {invoked!r}"
+    )
+
+
 # Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
 # body ONLY if the name is one of these or is declared under `substitutions:`
 # in the file itself; everything else is a bash variable that MUST be written
@@ -823,6 +997,39 @@ def test_no_step_pip_installs_into_an_externally_managed_interpreter():
     )
 
 
+def test_no_step_runs_npx_or_npm_on_a_non_node_image():
+    """`npx`/`npm` need Node; gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    (gcloud + Debian + Python only, no Node) does not have it -- a step that
+    calls either on that image fails outright with "command not found"
+    under set -e (review round: bd polyglot-pdf-ywxoh: firestore-rules-
+    deploy shipped on cloud-sdk:slim calling `npx firebase-tools`, and no
+    test executed the step to catch it).
+
+    Pinned as a PROPERTY of the whole file (no step may combine `npx`/`npm`
+    with a non-node image), not as a fact about firestore-rules-deploy by
+    name, so a future step that adds an npx/npm call on the wrong image
+    fails here too (CLAUDE.md scar #8) -- mirroring
+    test_no_step_pip_installs_into_an_externally_managed_interpreter's shape
+    for the analogous node/gcloud image split.
+    """
+    spec = yaml.safe_load(CLOUDBUILD.read_text(encoding="utf-8"))
+
+    offenders = [
+        step["id"]
+        for step in spec["steps"]
+        if re.search(r"(?:^|[\s\"'`|;&(])(?:npx|npm)\b", step["args"][-1])
+        and not step["name"].startswith("node:")
+    ]
+
+    assert not offenders, (
+        "these steps call npx/npm but do not run on a node: image, so the "
+        f"call fails with 'command not found' under set -e: {offenders}. "
+        "Move the step to node:22 (matching every other npx/npm step here), "
+        "or split the npx/npm call into its own node:22 step if the "
+        "remainder of the step genuinely needs gcloud/docker."
+    )
+
+
 def test_the_build_check_steps_can_import_their_firestore_client():
     """The two gate steps must be on an image where their pip install works.
 
@@ -845,3 +1052,707 @@ def test_the_build_check_steps_can_import_their_firestore_client():
             f"{step_id} must run on an official python image (no PEP 668 "
             f"marker); it is on {step['name']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# bd polyglot-pdf-ywxoh (Epic 4 bead 4.2) -- the remaining targets and the
+# in-build gates. Exit criterion 1: every deploy target's first REAL step is
+# the build_checks gate, the demo-side targets carry the staging-success
+# gate, each staging target's last step records a deployment row, and every
+# site target carries the connected-source assertion.
+# ---------------------------------------------------------------------------
+
+# Every target 4.2 implements (verify and backend-* are 4.1's -- see
+# IMPLEMENTED_TARGETS above). "landing" is deliberately absent: the plan
+# leaves it a maintainer call, and it stays a named-but-failing step.
+YWXOH_DEPLOY_TARGETS = (
+    "backend-staging",
+    "backend-demo",
+    "frontend-staging",
+    "frontend-demo",
+    "editor",
+    "form-kits",
+    "firestore-rules",
+    "admin-service",
+    "admin-console-candidate",
+    "admin-console",
+)
+
+
+@pytest.mark.parametrize("target", YWXOH_DEPLOY_TARGETS)
+def test_every_ywxoh_target_is_in_the_implemented_pass_through_arm(by_id, target):
+    """The inverse of test_every_unimplemented_target_fails_loudly: a REAL
+    target must not be silently absent from unimplemented-targets' implemented
+    case arm, which would hard-abort a legitimately implemented target in
+    production ("ABORT: unknown target") with zero test signal.
+
+    test_every_unimplemented_target_fails_loudly only ever checked the OLD
+    3-target IMPLEMENTED_TARGETS list (bead 4.1's verify/backend-staging/
+    backend-demo) against this arm -- none of this bead's 8 new targets were
+    pinned here, so a target silently dropped into the catch-all `*) ABORT`
+    branch would have passed that test untouched. This test is keyed off
+    YWXOH_DEPLOY_TARGETS (independently maintained, not derived from the yaml
+    body the way test_the_trigger_script_names_a_trigger_for_every_target is)
+    so it actually catches that regression.
+
+    Mutation-verified: removing "editor" from the implemented case-arm's
+    pattern list at cloudbuild.yaml's unimplemented-targets step (so `editor`
+    falls through to the `*) ABORT: unknown target` branch) turns this red
+    for target="editor" without affecting the other 9 targets.
+    """
+    body = script_of(by_id["unimplemented-targets"])
+    lines = [line.strip() for line in body.splitlines()]
+    implemented_idx = next(
+        i for i, line in enumerate(lines) if line.startswith("case ")
+    )
+    not_implemented_idx = lines.index('echo "target not implemented"')
+    implemented_arm = "\n".join(lines[implemented_idx:not_implemented_idx])
+    target_pattern = re.compile(r'(?<![\w-])' + re.escape(target) + r'(?![\w-])')
+    assert target_pattern.search(implemented_arm), (
+        f"{target} is a real ywxoh (bead 4.2) target but does not appear in "
+        "unimplemented-targets' implemented pass-through arm -- a build for "
+        f"{target} would fall through to the ABORT: unknown target branch "
+        "and hard-fail in production"
+    )
+
+
+# The demo-side targets the plan singles out: "backend-demo, frontend-demo
+# and admin-service traffic shift additionally require a deployments
+# record". admin-service's OWN target implements both halves (deploy the
+# tagged candidate, then shift traffic) as one _TARGET value, so it is
+# included once here and its gate step is identified by name below rather
+# than by target name.
+STAGING_GATED_DEMO_TARGETS = ("backend-demo", "frontend-demo")
+
+# Every STAGING target that must write its own success row (plan: "each
+# staging target's LAST step writes its own success row to deployments").
+# admin-service is its OWN staging tier (tagged-candidate-then-shift), so its
+# record step fires unconditionally for that target rather than being
+# staging-channel-gated the way backend/frontend are. UNLIKE backend/frontend,
+# admin-service's record step does NOT run last -- it runs before its own
+# admin-service-staging-gate (which reads the very row it writes, in the same
+# build) and before admin-service-shift-traffic. See
+# test_each_staging_target_records_its_own_success_row's docstring.
+STAGING_RECORDING_TARGETS = ("backend-staging", "frontend-staging", "admin-service")
+
+# Every SITE target: builds a frontend bundle from a directory .gcloudignore
+# excludes from a tarball build, so each must refuse an empty COMMIT_SHA.
+SITE_TARGETS = (
+    "frontend-staging",
+    "frontend-demo",
+    "editor",
+    "admin-console-candidate",
+    "admin-console",
+)
+
+
+def _mutating_step_ids_for_target(steps, target: str) -> list[str]:
+    """Every step whose body actually DOES something for `target` -- i.e. it
+    is not merely present but its skip-guard would let it proceed for this
+    target. A step is included if the target literal (or its channel-derived
+    prefix, e.g. "backend-*") appears in a `case`/`if` guard alongside the
+    step's own mutating verb, which is a conservative enough signal for this
+    file's purpose: proving ORDER relative to the gates, not enumerating
+    every side effect.
+    """
+    hits = []
+    for step in steps:
+        body = script_of(step)
+        # A step whose guard would SKIP this target contributes nothing.
+        if f'"{target}"' not in body and target.split("-")[0] + "-*" not in body:
+            continue
+        if "skip (target" not in body and "${_TARGET}" not in body:
+            continue
+        hits.append(step["id"])
+    return hits
+
+
+@pytest.mark.parametrize("target", YWXOH_DEPLOY_TARGETS)
+def test_every_ywxoh_deploy_target_is_gated_by_build_checks(by_id, steps, target):
+    """Exit criterion 1, clause 1: every deploy target's FIRST step is the
+    build_checks gate.
+
+    "First step" here means POSITIONALLY before any step that does real work
+    for this target -- the gate-build-checks step itself is target-agnostic
+    (it runs for every target except verify), so the property to prove is
+    that no step touching `target` runs BEFORE it, mirroring
+    test_the_build_checks_gate_precedes_every_deploy_step's method but keyed
+    per target rather than globally.
+
+    Mutation-verified: moving any one of this bead's steps above
+    gate-build-checks (as staging-verified-gate itself was, before the
+    ordering fix during development) turns this red for that target.
+    """
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate = order["gate-build-checks"]
+    # A whole-word match: the target name bounded by non-identifier
+    # characters on both sides, so it matches EITHER a quoted literal
+    # ("backend-staging") or a bare case-arm pattern (admin-console-candidate|
+    # admin-console) ;;) without matching a longer name that merely CONTAINS
+    # this one as a substring (e.g. "admin-console" must not match inside
+    # "admin-console-candidate").
+    target_pattern = re.compile(
+        r'(?<![\w-])' + re.escape(target) + r'(?![\w-])'
+    )
+    for step in steps:
+        if step["id"] in (
+            "gate-build-checks",
+            "require-sha",
+            # A DELIBERATE pre-gate step: cheap and structural (an empty
+            # COMMIT_SHA check), placed BEFORE gate-build-checks on purpose
+            # so a tarball-sourced site build fails fast without waiting on
+            # the (possibly expensive, possibly inconclusive) build_checks
+            # read. It names every site target in its case statement but is
+            # not "real work" in the sense this test guards -- it deploys
+            # nothing and mutates nothing.
+            "require-connected-source-for-site-targets",
+        ):
+            continue
+        body = script_of(step)
+        # A step that explicitly checks THIS target (by literal, by bare
+        # case-arm name, or by channel-suffix wildcard) and does not
+        # universally skip is presumed to run for it.
+        runs_for_target = (
+            target_pattern.search(body) is not None
+            or (target.endswith("-staging") and 'in backend-*' in body and target.startswith("backend"))
+            or (target.endswith("-demo") and 'in backend-*' in body and target.startswith("backend"))
+            or (target.endswith("-staging") and 'in frontend-*' in body and target.startswith("frontend"))
+            or (target.endswith("-demo") and 'in frontend-*' in body and target.startswith("frontend"))
+        )
+        if not runs_for_target:
+            continue
+        assert order[step["id"]] > gate, (
+            f"step {step['id']!r} appears to run for target {target!r} at "
+            f"index {order[step['id']]}, before the build_checks gate at "
+            f"index {gate}. A commit whose suites failed would still reach "
+            f"this step for {target}."
+        )
+
+
+@pytest.mark.parametrize("target", STAGING_GATED_DEMO_TARGETS)
+def test_demo_side_targets_carry_the_staging_success_gate(by_id, steps, target):
+    """Exit criterion 1, clause 2: the three demo-side targets carry the
+    staging-success gate (plan: 'backend-demo, frontend-demo and
+    admin-service traffic shift additionally require a deployments record').
+
+    Mutation-verified: renaming staging-verified-gate's case arm away from
+    `backend-demo|frontend-demo` (e.g. to just `backend-demo`) makes this red
+    for frontend-demo -- confirmed by hand during development.
+    """
+    body = script_of(by_id["staging-verified-gate"])
+    assert target in body, (
+        f"staging-verified-gate's case statement does not mention {target!r}, "
+        f"so a demo build for it would proceed without checking staging"
+    )
+    assert "promotion_gate.py" in body, (
+        "staging-verified-gate does not call scripts/promotion_gate.py"
+    )
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["staging-verified-gate"]
+    # The target's OWN deploy step(s) must come after the gate.
+    family = target.rsplit("-", 1)[0]
+    deploy_step = "{}-deploy".format(family) if family == "backend" else "{}-build-deploy".format(family)
+    assert deploy_step in order, f"could not find the deploy step for {target}"
+    assert order[deploy_step] > gate_idx, (
+        f"{deploy_step} (index {order[deploy_step]}) runs before "
+        f"staging-verified-gate (index {gate_idx}) -- a demo deploy for "
+        f"{target} could ship before the staging check runs"
+    )
+
+
+@pytest.mark.parametrize("target", STAGING_GATED_DEMO_TARGETS)
+def test_staging_verified_gate_actually_evaluates_at_runtime(by_id, target, tmp_path):
+    """Exit criterion 1, clause 2, RUNTIME half.
+
+    test_demo_side_targets_carry_the_staging_success_gate (above) only
+    substring-matches the case statement; it cannot tell a live case arm from
+    one that crashes before it is ever reached. This test actually RUNS
+    staging-verified-gate's script with Cloud Build's substitution pass
+    simulated textually (the same replacement Cloud Build performs on
+    "${_TARGET}" et al. before handing the script to bash) and a stub
+    `python`/`pip` on PATH standing in for the real interpreter, then
+    asserts the stub was actually invoked with the right --target-family.
+
+    Regression guard for a real incident: "$${_TARGET%-demo}" (a $$-escaped
+    suffix-strip applied directly to the substitution token, rather than to a
+    bash variable holding its value) parses fine, passes
+    test_every_step_script_is_valid_bash (syntax only), and substring-matches
+    the assertions above -- but crashes EVERY backend-demo/frontend-demo
+    build with "_TARGET: unbound variable" under this file's set -euo
+    pipefail, because Cloud Build substitutions are not bash variables and $$
+    defers the expression to bash verbatim. Reverting the TGT="${_TARGET}"
+    assignment and taking "$${TGT%-demo}" directly on "${_TARGET}" instead
+    reproduces exactly that crash (confirmed by hand during the ywxoh review
+    round that found this).
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["staging-verified-gate"])
+    # Simulate Cloud Build's OWN substitution pass: "${_TARGET}" and
+    # "${_SHA}" are replaced textually before bash ever sees the script;
+    # only $$-escaped tokens are left for bash. Real Cloud Build would
+    # reject an empty _SHA well before this step (require-sha runs first),
+    # so a nonempty placeholder is the realistic case.
+    # Cloud Build ALSO collapses every "$$" to a literal "$" before bash
+    # ever sees the script (that is what "$$" escaping means) -- do that
+    # LAST so it never touches the "${_TARGET}"/"${_SHA}" substitution
+    # braces themselves.
+    rendered = (
+        script.replace("${_TARGET}", target)
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "invoked_with.txt"
+    # Extensionless shell-script stubs, chmod +x, PATH-prepended with bash's
+    # OWN idea of the directory (tmp_path.as_posix()) -- a Windows-style
+    # "C:/..." PATH entry is not resolved the same way inside Git Bash, and a
+    # .bat/.exe stub is not found via `command -v python` at all (mirrors
+    # tests/test_deploy_reachability_gate.py's _run_wrapper).
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        "#!/bin/bash\n"
+        f'echo "$@" > "{marker.as_posix()}"\n'
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_python.chmod(0o755)
+    fake_pip = tmp_path / "pip"
+    fake_pip.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8", newline="\n")
+    fake_pip.chmod(0o755)
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{tmp_path.as_posix()}"\n'
+        'export PATH="$PWD:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"staging-verified-gate crashed for target {target!r} instead of "
+        f"reaching promotion_gate.py:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        f"staging-verified-gate for target {target!r} exited 0 without ever "
+        f"invoking the (stubbed) python interpreter -- it likely hit the "
+        f"'*) skip' arm instead of the intended case"
+    )
+    invoked = marker.read_text(encoding="utf-8")
+    expected_family = target.rsplit("-", 1)[0]
+    assert f"--target-family {expected_family}" in invoked, (
+        f"staging-verified-gate invoked python with {invoked!r}, which does "
+        f"not contain the expected '--target-family {expected_family}'"
+    )
+
+
+def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
+    """The third demo-side case: admin-service's TRAFFIC SHIFT specifically
+    (not its tagged-candidate deploy, which is its own staging tier)."""
+    body = script_of(by_id["admin-service-staging-gate"])
+    assert "admin-service" in body
+    assert "promotion_gate.py" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    assert order["admin-service-shift-traffic"] > order["admin-service-staging-gate"], (
+        "admin-service-shift-traffic runs before admin-service-staging-gate -- "
+        "traffic could shift before the staging check runs"
+    )
+    # admin-service has no separate staging build -- its OWN
+    # record-deployment step must satisfy its OWN gate, in the same build,
+    # so the record step has to run FIRST. (Bootstrap-deadlock regression
+    # guard: this was reversed until the ywxoh fresh-eyes review caught that
+    # no build could ever satisfy a gate checked before anything wrote the
+    # row it looks for.)
+    assert order["admin-service-record-deployment"] < order["admin-service-staging-gate"], (
+        "admin-service-record-deployment runs AFTER admin-service-staging-gate -- "
+        "the gate can never find a row, since nothing wrote one yet in this build "
+        "(a bootstrap deadlock: admin-service deploys would fail every time)"
+    )
+
+
+@pytest.mark.parametrize("target", STAGING_RECORDING_TARGETS)
+def test_each_staging_target_records_its_own_success_row(by_id, steps, target):
+    """Exit criterion 1, clause 3: each staging target writes its own
+    deployments row (plan: avoids racing bead 4.3's Pub/Sub webhook, and
+    covers bash-triggered builds the webhook alone would still need this for).
+
+    "LAST step" (the plan's literal phrasing) holds for backend-staging and
+    frontend-staging, which record AFTER their own deploy in a build no
+    later step depends on reading. admin-service is the deliberate
+    exception: it has no separate staging build, so its OWN
+    admin-service-staging-gate has to read a row THIS SAME build wrote --
+    which means admin-service-record-deployment must run BEFORE the gate
+    (and therefore before the traffic shift too), not last. See that step's
+    comment in cloudbuild.yaml for the bootstrap-deadlock this avoids.
+
+    Every target's record step is also pinned to the LITERAL channel value
+    "staging" (not just "some --channel flag exists") -- the exact gap a
+    prior review round found: admin-service's trigger fixes _CHANNEL to
+    "admin" (scripts/setup-cloud-build.sh), so a step written as
+    `--channel "${_CHANNEL}"` would silently record "admin" and the staging
+    gate could never be satisfied. Asserting the flag's PRESENCE alone does
+    not catch that -- only the literal value does.
+
+    Mutation-verified: deleting the record_deployment.py call from any one of
+    the three record steps (confirmed on frontend-record-deployment during
+    development) makes this red for that target without affecting the other
+    two -- proving the check is per-target, not a single global grep.
+    Separately mutation-verified: reverting `--channel staging` back to
+    `--channel "${_CHANNEL}"` on admin-service-record-deployment makes the
+    literal-value assertion below red without touching the two siblings.
+    """
+    record_step_by_target = {
+        "backend-staging": "backend-record-deployment",
+        "frontend-staging": "frontend-record-deployment",
+        "admin-service": "admin-service-record-deployment",
+    }
+    step_id = record_step_by_target[target]
+    assert step_id in by_id, f"no {step_id} step in cloudbuild.yaml"
+    body = script_of(by_id[step_id])
+    assert "python scripts/record_deployment.py" in body
+    assert "--channel" in body
+    assert "--status success" in body
+    assert "--build-id" in body and "$BUILD_ID" in body
+    # The literal value, not just the flag's presence -- see docstring.
+    assert re.search(r'--channel\s+staging(\s|$)', body), (
+        f"{step_id} does not record the LITERAL channel value \"staging\" "
+        f"(found: {body!r}) -- a demo/traffic-shift gate reading for "
+        f"channel==\"staging\" would never find this row"
+    )
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    if target == "admin-service":
+        # The deliberate exception: record BEFORE the gate it satisfies (and
+        # therefore before the traffic shift), not last. Pinned in detail by
+        # test_admin_service_traffic_shift_carries_the_staging_gate above;
+        # here just confirm it precedes its own deploy-tagged/verify-tagged
+        # predecessors' natural successor, i.e. it isn't sitting somewhere
+        # nonsensical like before the tagged deploy even happens.
+        assert order[step_id] > order["admin-service-verify-tagged"], (
+            f"{step_id} runs before admin-service-verify-tagged -- it would "
+            "record success for a candidate that was never health-checked"
+        )
+        assert order[step_id] < order["admin-service-shift-traffic"], (
+            f"{step_id} runs after admin-service-shift-traffic -- traffic "
+            "would have already moved before this build's own success row "
+            "was durable"
+        )
+        return
+
+    # "LAST step" -- no other step for this target's family runs after it,
+    # among the steps THIS bead added for that family.
+    family_steps = {
+        "backend-staging": ["backend-build-image", "backend-deploy",
+                             "backend-reachability-gate",
+                             "backend-record-deployment"],
+        "frontend-staging": ["frontend-resolve-urls", "frontend-build-deploy",
+                              "frontend-record-deployment"],
+    }[target]
+    indices = [order[s] for s in family_steps]
+    assert order[step_id] == max(indices), (
+        f"{step_id} is not the LAST step among {family_steps} for {target}"
+    )
+
+
+@pytest.mark.parametrize("target", SITE_TARGETS)
+def test_every_site_target_requires_a_connected_source(by_id, steps, target):
+    """Exit criterion 1, clause 4: every site target asserts COMMIT_SHA is
+    non-empty (a tarball build cannot see the site directories at all, since
+    .gcloudignore excludes them -- see that file's own comment).
+
+    Mutation-verified: narrowing require-connected-source-for-site-targets's
+    case arm to omit one target name (confirmed on admin-console-candidate
+    during development) makes this red for exactly that target.
+    """
+    body = script_of(by_id["require-connected-source-for-site-targets"])
+    assert target in body, (
+        f"require-connected-source-for-site-targets does not mention "
+        f"{target!r}, so that site target could build from a tarball"
+    )
+    assert "COMMIT_SHA" in body and "ABORT" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["require-connected-source-for-site-targets"]
+    build_step_by_target = {
+        "frontend-staging": "frontend-build-deploy",
+        "frontend-demo": "frontend-build-deploy",
+        "editor": "editor-build-deploy",
+        "admin-console-candidate": "admin-console-build-deploy",
+        "admin-console": "admin-console-build-deploy",
+    }
+    build_step = build_step_by_target[target]
+    assert order[build_step] > gate_idx, (
+        f"{build_step} (index {order[build_step]}) runs before the "
+        f"connected-source check (index {gate_idx})"
+    )
+
+
+def test_form_kits_requires_a_connected_source(by_id, steps):
+    """(Not in the original handoff, caught by cross-surface review of bd
+    polyglot-pdf-ywxoh.) form-kits is NOT a "site" target -- it deploys no
+    Hosting site -- but shares the exact failure mode SITE_TARGETS are
+    guarded against: .gcloudignore excludes form-kits/ from a tarball
+    build's source, and scripts/write_kits_manifest.py silently emits a
+    valid, EMPTY manifest (forms: []) when the directory it is pointed at
+    does not exist, exiting 0. Without this gate, a tarball-sourced
+    `form-kits` build would overwrite the demo's live form list with zero
+    forms on an apparently clean build.
+
+    Mutation-verified: removing "form-kits" from
+    require-connected-source-for-site-targets's case arm (confirmed by hand
+    during the ywxoh review round that found this) makes this red.
+    """
+    body = script_of(by_id["require-connected-source-for-site-targets"])
+    # A whole-word, CASE-ARM-anchored match: "form-kits" as a bare case
+    # pattern (bounded by "|"/")" on either side), not merely a substring
+    # of an explanatory comment or echo string elsewhere in the same
+    # step -- a prose mention would satisfy a plain "in body" check
+    # while the case arm itself still omitted the target entirely.
+    assert re.search(r'(?<![\w-])form-kits(?![\w-])[|)]', body), (
+        "require-connected-source-for-site-targets's CASE ARM does not "
+        "list form-kits (a mention elsewhere in the step, e.g. a comment, "
+        "does not count) -- a tarball build for that target could "
+        "proceed against a form-kits/ directory it cannot actually see"
+    )
+    assert "COMMIT_SHA" in body and "ABORT" in body
+
+    order = {step["id"]: i for i, step in enumerate(steps)}
+    gate_idx = order["require-connected-source-for-site-targets"]
+    for step_id in ("form-kits-upload", "form-kits-manifest"):
+        assert order[step_id] > gate_idx, (
+            f"{step_id} (index {order[step_id]}) runs before the "
+            f"connected-source check (index {gate_idx})"
+        )
+
+
+def test_gcloudignore_excludes_admin_console():
+    """The premise of the connected-source gate: admin-console/ must
+    actually be excluded from a tarball build, or the gate is protecting
+    against a scenario that cannot occur."""
+    ignore = (REPO_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+    lines = [l.strip() for l in ignore.splitlines() if l.strip() and not l.strip().startswith("#")]
+    assert "admin-console/" in lines, (
+        ".gcloudignore does not exclude admin-console/ -- a tarball build "
+        "could then see and build it, defeating the connected-source gate's "
+        "whole premise"
+    )
+
+
+def test_promotion_gate_module_and_cli_agree_on_the_predicate():
+    """scripts/promotion_gate.py must call the SAME predicate the future
+    admin route (bead 4.4) will use, not a second copy of the rule."""
+    cli = (REPO_ROOT / "scripts" / "promotion_gate.py").read_text(encoding="utf-8")
+    assert "from admin_backend.services.promotion_gate import staging_verified" in cli, (
+        "scripts/promotion_gate.py does not import the pure predicate from "
+        "admin_backend.services.promotion_gate -- it may be reimplementing "
+        "the rule instead of sharing it with the future admin route"
+    )
+
+
+def test_promotion_gate_cli_actually_imports_under_its_real_invocation():
+    """A substring match on the import line (the test above) cannot catch a
+    broken sys.path: cloudbuild.yaml's staging-verified-gate and
+    admin-service-staging-gate steps both invoke this as
+    `python scripts/promotion_gate.py` from /workspace (the build's
+    repo-root checkout) -- NOT as `python -m scripts.promotion_gate` and NOT
+    from inside scripts/. That invocation form puts scripts/ (this file's
+    own directory), not the repo root, on sys.path[0], so a plain
+    `from admin_backend... import ...` at module scope raises
+    ModuleNotFoundError before argparse even runs (review round: bd
+    polyglot-pdf-ywxoh -- every prior test here stubbed out the `python`
+    binary entirely and so never caught this). Actually spawn the real
+    interpreter, cwd'd at the repo root exactly as Cloud Build does, and
+    assert it reaches argument parsing (a `--target-family`/`--sha` usage or
+    argparse error is fine; a traceback naming ModuleNotFoundError is not).
+
+    PYTHONPATH is explicitly stripped from the child's environment: this
+    repo's own test-running convention (PYTHONPATH=<worktree> for pytest)
+    would otherwise put the repo root on sys.path FOR us and hide exactly
+    the bug this test exists to catch (mutation-verified: with the
+    subprocess inheriting the parent's PYTHONPATH, this test stayed green
+    against the pre-fix module -- Cloud Build's own container carries no
+    such variable, so inheriting it here would test a scenario that cannot
+    happen in production).
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, "scripts/promotion_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    assert "ModuleNotFoundError" not in result.stderr, (
+        "scripts/promotion_gate.py could not import admin_backend when run "
+        "the way cloudbuild.yaml actually invokes it (python "
+        "scripts/promotion_gate.py from the repo root) -- sys.path[0] is "
+        "the script's own scripts/ directory in this invocation form, not "
+        f"the repo root:\n{result.stderr}"
+    )
+    assert result.returncode == 0, (
+        f"scripts/promotion_gate.py --help exited {result.returncode} "
+        f"instead of printing help:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+
+
+def test_record_deployment_module_exists_and_derives_target_family():
+    """scripts/record_deployment.py's target_family() is what lets
+    staging_verified() match a staging target's family against a demo
+    target's family."""
+    import sys as _sys
+    _sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import record_deployment  # noqa: E402
+
+    assert record_deployment.target_family("backend-staging") == "backend"
+    assert record_deployment.target_family("backend-demo") == "backend"
+    assert record_deployment.target_family("frontend-staging") == "frontend"
+    assert record_deployment.target_family("admin-service") == "admin-service"
+
+
+def test_frontend_build_exports_vite_app_channel(by_id):
+    """(Not in the original handoff, caught by cross-surface review of bd
+    polyglot-pdf-ywxoh.) frontend/src/shared/config.ts::getAppChannel()
+    reads VITE_APP_CHANNEL and falls back to 'demo' when it is unset --
+    deploy-staging.sh and deploy-demo.sh both export it explicitly for
+    exactly that reason (bd polyglot-pdf-z4ljj), because both channels build
+    the identical Vite mode (build:schema:demo) and import.meta.env.MODE
+    cannot tell them apart. Without this, a Cloud Build frontend-staging
+    build would silently claim to be the demo channel on every firm-scoped
+    admin-service call, reading and writing the DEMO's Firestore data from
+    the staging site.
+    """
+    body = script_of(by_id["frontend-build-deploy"])
+    assert 'export VITE_APP_CHANNEL="${_CHANNEL}"' in body, (
+        "frontend-build-deploy does not export VITE_APP_CHANNEL from "
+        "${_CHANNEL} -- a staging build would default to the 'demo' "
+        "channel and touch the wrong Firestore data"
+    )
+    # Must run before the actual build command, not after.
+    build_idx = body.index("npm run build:schema:demo")
+    channel_idx = body.index('export VITE_APP_CHANNEL="${_CHANNEL}"')
+    assert channel_idx < build_idx, (
+        "VITE_APP_CHANNEL is exported AFTER the build runs, so it would "
+        "never reach the bundle"
+    )
+
+
+def test_frontend_resolve_urls_aborts_on_unresolved_admin_service(by_id):
+    """(Not in the original handoff.) frontend-resolve-urls already aborts
+    when the backend URL cannot be resolved; it must do the SAME for the
+    admin service, matching deploy-all.sh:885-892's "an explicit channel was
+    selected -> abort" rule (Cloud Build's _CHANNEL is always an explicit
+    channel here). Silently falling back would leave
+    /workspace/.vite_admin_api_base_url empty, and frontend-build-deploy
+    would then ship a build whose firm-console calls become relative paths
+    that Hosting's /api/** rewrite routes to the VOICE backend instead of
+    the admin service.
+    """
+    body = script_of(by_id["frontend-resolve-urls"])
+    assert "polyglot-admin" in body, (
+        "frontend-resolve-urls no longer resolves the admin service URL"
+    )
+    admin_abort_idx = body.find('ADMIN_URL"')
+    assert admin_abort_idx != -1 and "ABORT" in body[admin_abort_idx:], (
+        "frontend-resolve-urls does not ABORT on an unresolved ADMIN_URL -- "
+        "it would silently ship an empty VITE_ADMIN_API_BASE_URL instead"
+    )
+
+
+@pytest.mark.parametrize("channel", ["staging", "demo"])
+def test_frontend_build_deploy_actually_exports_channel_at_runtime(by_id, channel, tmp_path):
+    """RUNTIME half of test_frontend_build_exports_vite_app_channel: proves
+    the export line is actually reached and evaluates to the right value,
+    not merely present in the source text. Stubs npm/npx/cd's targets so the
+    script runs to completion without a real Node toolchain or network
+    Firebase deploy, and captures the environment at the point the (stubbed)
+    npm is invoked.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["frontend-build-deploy"])
+    rendered = (
+        script.replace("${_TARGET}", "frontend-" + channel)
+        .replace("${_CHANNEL}", channel)
+        # The real script reads its handoff files from Cloud Build's
+        # fixed /workspace path; redirect that to tmp_path (bash's OWN
+        # posix rendering of it) so this test does not need write access
+        # to an actual /workspace.
+        .replace("/workspace/", tmp_path.as_posix() + "/")
+        .replace("$$", "$")
+    )
+
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / ".vite_ws_url").write_text("wss://example/ws/fill", encoding="utf-8")
+    (tmp_path / ".vite_admin_api_base_url").write_text(
+        "https://polyglot-admin-example.a.run.app", encoding="utf-8"
+    )
+
+    marker = tmp_path / "npm_env.txt"
+    fake_npm = tmp_path / "npm"
+    fake_npm.write_text(
+        "#!/bin/bash\n"
+        f'env > "{marker.as_posix()}"\n'
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_npm.chmod(0o755)
+    fake_npx = tmp_path / "npx"
+    fake_npx.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8", newline="\n")
+    fake_npx.chmod(0o755)
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{tmp_path.as_posix()}"\n'
+        'export PATH="$PWD:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+    assert result.returncode == 0, (
+        f"frontend-build-deploy crashed for channel {channel!r}:\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        f"frontend-build-deploy for channel {channel!r} never reached the "
+        f"(stubbed) npm -- stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    env_text = marker.read_text(encoding="utf-8")
+    assert f"VITE_APP_CHANNEL={channel}" in env_text, (
+        f"npm's environment does not contain VITE_APP_CHANNEL={channel} -- "
+        f"env dump:\n{env_text}"
+    )
+    assert "VITE_ADMIN_API_BASE_URL=https://polyglot-admin-example.a.run.app" in env_text, (
+        "npm's environment does not contain the resolved "
+        "VITE_ADMIN_API_BASE_URL"
+    )

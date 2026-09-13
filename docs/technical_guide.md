@@ -2667,10 +2667,14 @@ the deploy out of bash-only and giving Cloud Build something it can read.
   inline (derived from the shipped file, not a hand-typed list); each wrapper
   must pass `DEPLOY_CHANNEL` inside its `./deploy-all.sh` env prefix; and each
   section must reach its own gcloud flag. `admin.env` is outside the parity
-  pair (one admin service, both channels' data) and is pinned equal to
-  `deploy-admin.sh`'s still-inline copy by
+  pair (one admin service, both channels' data). `cloudbuild.yaml`'s
+  `admin-service` target now reads it directly (bead `polyglot-pdf-ywxoh`,
+  4.2, same `read_channel_section`/`read_channel_value` sourcing as the
+  `backend-<channel>` targets); `deploy-admin.sh` still passes the same
+  values inline, and the two copies stay pinned equal by
   `tests/test_cloudbuild_yaml.py::test_admin_channel_file_matches_the_wrapper`
-  until bead `polyglot-pdf-ywxoh` (4.2) switches the wrapper over.
+  until bead `polyglot-pdf-oqtm7` (4.6) switches the wrapper itself over to a
+  thin call into the build.
 
 **29b. The verify gate: Firestore `build_checks/{sha}`.**
 
@@ -2700,3 +2704,144 @@ the deploy out of bash-only and giving Cloud Build something it can read.
   INDEX is lower than every step that runs `gcloud run deploy`, `docker push`
   or `firebase deploy`. Asserting the gate merely EXISTS passes with it moved
   after the deploy.
+
+
+### 31. The remaining Cloud Build targets, the ONE reachability module, and the staging-before-demo gate (Epic 4 bead E4.2, bd polyglot-pdf-ywxoh)
+
+Three contracts share this entry because they are three parts of one move:
+filling in the deploy targets contract 30 left as named-but-failing steps, and
+making the reachability check and the staging-before-demo rule each live in
+exactly one place instead of drifting per caller.
+
+**31a. `deployments/{id}`: the deploy audit row.**
+
+- **Producer:** `scripts/record_deployment.py`, run as the LAST step of every
+  STAGING target (`backend-staging`, `frontend-staging`) and unconditionally by
+  `admin-service` (its own staging tier, tagged-revision-then-shift). Document
+  shape: `{target, target_family, channel, sha, build_id, status,
+  triggered_by, created_at}` -- `target_family` is derived by
+  `record_deployment.target_family()` stripping a trailing `-staging`/`-demo`
+  suffix (`backend-staging` and `backend-demo` share the family `backend`;
+  `admin-service` has no suffix and is its own family), `triggered_by` is
+  always `"build"` here (bead 4.3's Pub/Sub webhook is what will also carry
+  `"console"`/`"cli"` for an admin-triggered build). This is deliberately NOT
+  the SAME record contract 30's `build_checks/{sha}` writes -- that answers
+  "did this commit's suites pass"; this answers "did THIS TARGET deploy
+  successfully on THIS channel".
+- **Consumer:** `scripts/promotion_gate.py` (see 31c below), which queries
+  `deployments` filtered on `target_family` and `sha`.
+- **Firestore rules:** a full client deny block, same as `build_checks` --
+  neither collection has a legitimate browser caller, and a client-SDK write
+  to either could forge a gate result.
+- **Pinned by:** `tests/test_cloudbuild_yaml.py` (each staging target's record
+  step is its LAST step, by position; the record step calls
+  `python scripts/record_deployment.py` verbatim, not merely a
+  substring-matching filename); `backend/tests/unit/test_firestore_rules_text.py`
+  (the deny block, in `ADMIN_SDK_ONLY_COLLECTIONS`).
+
+**31b. The reachability gate: ONE python module, four bash callers, three
+build steps.**
+
+- **Before this bead:** `deploy-all.sh`, `backend/deploy-new.sh`,
+  `deploy-editor.sh` and `deploy-admin-console.sh` each carried a
+  byte-identical bash FUNCTION implementing the whole IAM-policy check
+  (`get-iam-policy --flatten --filter`, the exact-match `roles/run.invoker`
+  test, warn-vs-fatal severity). `cloudbuild.yaml`'s `backend-reachability-gate`
+  step (bead 4.1) sourced `deploy-all.sh` to reuse the bash copy rather than
+  restating it a fifth time -- a source-time coupling contract 30 flagged as
+  bead 4.2's to remove.
+- **Now:** `scripts/verify_service_reachable.py::verify_service_reachable()`
+  is the ONE implementation (stdlib only, no third-party dependency; its
+  `gcloud_runner` is injectable, which is what lets
+  `tests/test_verify_service_reachable.py` exercise every case -- reachable,
+  the false-fail case (a second binding), the false-pass case (allUsers on a
+  non-invoker role), an inconclusive IAM read, warn-mode -- without shelling
+  out to a stubbed `gcloud`). Fatal severity raises `ServiceUnreachable`
+  rather than returning False, so a caller cannot accidentally ignore it; the
+  CLI (`python scripts/verify_service_reachable.py <svc> <region> <project>
+  [--severity warn|fatal]`) translates that to an exit code for both bash and
+  Cloud Build.
+- **Bash callers:** all four scripts' `verify_service_publicly_reachable()` is
+  now a THIN WRAPPER -- resolve a python interpreter
+  (`MANIFEST_PYTHON_CANDIDATES`-style fallback), resolve the module's path
+  relative to the wrapper's OWN file (two candidate depths, since
+  `backend/deploy-new.sh` sits one directory below the other three), shell
+  out, and `exit 1` on a non-zero return so the calling script still
+  terminates (the bare-command-shape requirement from bead pidtg/6oi9s
+  carries over unchanged -- a `| cat` or `$(...)` around the call would still
+  swallow the exit). All four wrapper functions are byte-identical.
+- **Build callers:** `backend-reachability-gate` (fatal),
+  `editor-reachability-warn` and `admin-console-reachability-warn` (warn) call
+  `python3 scripts/verify_service_reachable.py` directly on the
+  `cloud-sdk:slim` image (which bundles its own `python3` for gcloud's
+  internal use -- NOT `python:3.12`, which has no `gcloud` binary on PATH for
+  the module's default `gcloud_runner` to shell out to).
+- **Pinned by:** `tests/test_verify_service_reachable.py` (the module's
+  behavior); `tests/test_deploy_reachability_gate.py` (the four wrapper
+  functions are byte-identical thin calls with NO inline `get-iam-policy`
+  query left, executed end-to-end with a stubbed interpreter to prove the
+  argument binding and exit-code propagation actually work, plus the
+  unchanged per-script call-site properties -- bare command, correct
+  severity counts, ordering vs. the success banner); `tests/test_cloudbuild_yaml.py`
+  (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
+  their target's mutating step).
+
+**31c. The staging-before-demo gate: build-side enforcement of a
+maintainer-approved rule bead 4.4 will also expose as an admin route.**
+
+- **The rule:** `admin_backend/services/promotion_gate.py::staging_verified(
+  target_family, sha, deployments)` -- a demo build for `(family, sha)` is
+  allowed only if `deployments` contains a record with `channel="staging"`,
+  the SAME `target_family`, the SAME `sha`, `status="success"`. NO recency
+  rule: an OLDER verified sha is not invalidated by a NEWER staging deploy of
+  a different sha -- that is the deliberate rollback case. This module is
+  explicitly a PLACEHOLDER bead 4.4 EXTENDS (adding the admin route that also
+  calls it, plus a richer test suite there) rather than a throwaway bead 4.2
+  will replace -- one function, two eventual callers (the build gate here, and
+  the future route), so neither can drift from the other.
+- **Build-side caller:** `scripts/promotion_gate.py` -- a thin CLI that
+  queries `deployments` filtered on `target_family`/`sha`, hands the rows to
+  `staging_verified()` unchanged, and fails CLOSED (refuses the deploy) on any
+  Firestore read error, same discipline as contract 30's `build_checks`
+  `require` subcommand.
+- **Build wiring:** `cloudbuild.yaml`'s `staging-verified-gate` step runs for
+  `backend-demo`/`frontend-demo` (mapping each to its family by stripping the
+  `-demo` suffix) and precedes BOTH targets' own build/deploy steps;
+  `admin-service-staging-gate` runs the same check for family
+  `admin-service`, positioned between the tagged-candidate verify and the
+  traffic-shift step. admin-service has no separate staging target of its
+  own (one service backs both channels), so its OWN
+  `admin-service-record-deployment` step writes the `channel="staging"` row
+  its gate reads -- and it has to run BEFORE the gate (right after
+  `admin-service-verify-tagged`, not last), because both the write and the
+  read happen in the SAME build. This is the opposite order from
+  backend/frontend, whose recording target and gated target are two
+  separate builds.
+- **Firestore rules:** covered by 31a's deny block (one collection, two
+  producers/consumers).
+- **Pinned by:** `admin_backend/tests/unit/test_promotion_gate.py` (the pure
+  predicate, both directions, including the no-recency rollback case, per
+  the bead's own exit criterion); `tests/test_cloudbuild_yaml.py` (the gate
+  step precedes each demo-side target's mutating step; the CLI module
+  imports the predicate rather than reimplementing it).
+
+**31d. Site targets require a connected-repo source.**
+
+- **The gate:** `cloudbuild.yaml`'s `require-connected-source-for-site-targets`
+  step refuses (`COMMIT_SHA` empty) for every target that builds a frontend
+  bundle -- `frontend-staging`, `frontend-demo`, `editor`,
+  `admin-console-candidate`, `admin-console` -- and precedes every one of
+  their build steps. `.gcloudignore` excludes `frontend/`, `schema-editor/`,
+  `landing/` and (new in this bead) `admin-console/` entirely, so a tarball
+  build cannot see those directories to build them in the first place; this
+  step turns that into an early, loud refusal instead of a confusing
+  mid-build failure.
+- **Pinned by:** `tests/test_cloudbuild_yaml.py` (the gate step precedes
+  every site target's own build step; `.gcloudignore` actually excludes
+  `admin-console/`).
+
+**Not yet wired:** `landing` remains a named-but-failing target (a maintainer
+call the plan leaves open, not an oversight -- see the journal entry for this
+bead). Bead 4.3 (trigger route + Pub/Sub webhook) and bead 4.5 (the dedicated
+Cloud Build service account) are this bead's declared blockers; both read the
+targets and modules this entry describes rather than changing them.
