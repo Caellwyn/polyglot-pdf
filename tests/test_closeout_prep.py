@@ -715,6 +715,75 @@ class TestTests:
         assert "168 passed" in prep._summary_line("blah\n168 passed, 2 skipped in 3s\n")
         assert prep._summary_line("no summary here") == ""
 
+    def test_timeout_is_its_own_status_not_a_launch_failure(self, monkeypatch, tmp_path):
+        """A suite that merely ran LONG must never render as "could not run".
+
+        bd polyglot-pdf-u98r1: the run was widened to every testpaths root
+        (590s -> 706s) while the ceiling stayed at 600s, so check_tests died on
+        its own timeout on EVERY closeout. Because TimeoutExpired subclasses
+        SubprocessError, the generic `except SubprocessError` arm swallowed it
+        and reported "could not run pytest" -- which overall_status renders as
+        "RESULT: PREP-ERROR -- a check could not run (not a closeout verdict)".
+        The orchestrator reads past a tooling error, so the pre-PR suite gate
+        verified NOTHING while still looking like it had run.
+
+        So the timeout arm must be ordered FIRST and say what actually
+        happened. This pins the distinction the bug erased: a timeout is
+        ATTENTION (a missing verdict someone must chase), not the FAIL that
+        means the launch itself broke.
+        """
+        (tmp_path / "backend" / "tests").mkdir(parents=True)
+
+        def _timeout(*a, **k):
+            raise subprocess.TimeoutExpired(cmd=["pytest"], timeout=prep._TESTS_TIMEOUT_S)
+
+        monkeypatch.setattr(prep.subprocess, "run", _timeout)
+        r = prep.check_tests(pathlib.Path("py"), tmp_path)
+
+        assert r["status"] == prep.STATUS_ATTENTION, (
+            "a timed-out suite must not be the FAIL that means 'could not run'"
+        )
+        # Distinguishable from the launch-failure arm by its text, so the
+        # orchestrator can tell 'ran long, no verdict' from 'never started'.
+        assert "could not run pytest" not in r["summary"]
+        assert str(prep._TESTS_TIMEOUT_S) in r["summary"]
+
+    def test_launch_failure_is_still_fail(self, monkeypatch, tmp_path):
+        """The negative half: a REAL launch failure must keep reporting FAIL.
+
+        Without this, the arm above could be "satisfied" by mapping every
+        subprocess error to ATTENTION, which would hide a broken interpreter.
+        """
+        (tmp_path / "backend" / "tests").mkdir(parents=True)
+
+        def _boom(*a, **k):
+            raise OSError("No such file or directory: 'py'")
+
+        monkeypatch.setattr(prep.subprocess, "run", _boom)
+        r = prep.check_tests(pathlib.Path("py"), tmp_path)
+        assert r["status"] == prep.STATUS_FAIL
+        assert "could not run pytest" in r["summary"]
+
+    def test_ceiling_clears_the_measured_full_suite_runtime(self):
+        """The ceiling must carry real headroom over the MEASURED runtime.
+
+        The original bug was not that a timeout existed -- it was that the
+        ceiling sat 106s BELOW the run it had to cover. 600s was itself only
+        10s above the older, narrower scope, i.e. sized with no headroom and
+        therefore one suite-growth away from re-breaking.
+
+        Asserting a MULTIPLE of the measured runtime (not a bare `> measured`)
+        is what keeps this honest: a ceiling that merely squeaks past today's
+        wall time reopens the same hole on a slower box or after a few hundred
+        new tests.
+        """
+        measured_full_suite_s = 706  # bd polyglot-pdf-u98r1, reference machine
+        assert prep._TESTS_TIMEOUT_S >= 2 * measured_full_suite_s, (
+            "_TESTS_TIMEOUT_S={}s leaves too little headroom over the measured "
+            "{}s full-suite run; size it with room for a slower machine and "
+            "future test growth".format(prep._TESTS_TIMEOUT_S, measured_full_suite_s)
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Rendering: the TODO leads with the right RESULT line
