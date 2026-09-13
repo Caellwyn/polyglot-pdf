@@ -207,6 +207,89 @@ class TestManualFieldUpdate:
         assert "test@example.com" in message
     
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "value,expected,forbidden",
+        [
+            (["Asian"], "Asian", "['Asian']"),
+            (["Asian", "White"], "Asian, White", "['Asian', 'White']"),
+            ([], "(nothing selected)", "[]"),
+            ("Female", "Female", ""),
+            (True, "True", ""),
+            # None is deliberately absent: the guard at the top of
+            # send_manual_field_update returns early for it, so it can never
+            # reach the formatter. An empty LIST is not dropped by that guard,
+            # which is what makes the cleared-group notify work end to end.
+        ],
+    )
+    async def test_a_group_value_is_spoken_not_printed(self, value, expected, forbidden):
+        """A checkbox group arrives as a LIST, and str() on one yields Python
+        syntax the model reads aloud -- brackets and quotes included. Every
+        shape goes through the same formatter, so this is parametrized over the
+        whole dimension rather than sampling one case."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_group")
+
+        await handler.send_manual_field_update(
+            field_id="race", field_name="Race", value=value
+        )
+
+        message = mock_live_ai.send_text_message.call_args[0][0]
+        assert expected in message
+        if forbidden:
+            assert forbidden not in message, (
+                f"the model must not be handed Python list syntax: {forbidden!r}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_cleared_group_is_not_dropped_by_the_empty_guard(self):
+        """The empty-value guard drops None and blank strings, and an empty LIST
+        must NOT be among them: clearing every option of a checkbox group is a
+        real answer change the model has to hear about, which is the whole point
+        of the frontend's empty-selection carve-out (bd polyglot-pdf-96um6).
+        Pinned here because the guard and that carve-out have to agree, and
+        nothing else asserts they do."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_cleared")
+
+        await handler.send_manual_field_update(
+            field_id="race", field_name="Race", value=[]
+        )
+
+        mock_live_ai.send_text_message.assert_called_once()
+        assert "(nothing selected)" in mock_live_ai.send_text_message.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_a_cleared_radio_is_dropped_and_that_is_deliberate(self):
+        """The asymmetry with the test above, asserted rather than merely
+        commented (bd polyglot-pdf-9he8l). A cleared checkbox group reports []
+        and reaches the model; a cleared RADIO reports '' and this guard drops
+        it. That is accepted, not overlooked: no native control deselects a
+        radio (they only switch, which reports the new value), and widening the
+        guard to forward '' would make every emptied TEXT field notify too --
+        which is precisely what the guard exists to prevent. Pinned so the
+        asymmetry cannot change silently in either direction."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_radio_clear")
+
+        await handler.send_manual_field_update(
+            field_id="sex", field_name="Sex", value=""
+        )
+
+        mock_live_ai.send_text_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_the_empty_guard_still_drops_a_blank_string(self):
+        """The other half, so the test above is not read as widening the guard."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai, session_id="test_blank")
+
+        await handler.send_manual_field_update(
+            field_id="name", field_name="Name", value="   "
+        )
+
+        mock_live_ai.send_text_message.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_manual_field_update_with_next_hint(self):
         """Test manual field update includes next field hint."""
         mock_live_ai = AsyncMock()

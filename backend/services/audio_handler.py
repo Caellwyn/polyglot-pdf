@@ -114,7 +114,8 @@ class AudioHandler:
         field_id: str,
         field_name: str,
         value: Any,
-        next_field_hint: Optional[str] = None
+        next_field_hint: Optional[str] = None,
+        verified: bool = False
     ) -> None:
         """
         Notify Gemini when user manually updates a field.
@@ -148,9 +149,30 @@ class AudioHandler:
             )
             return
         
-        # Format as natural language notification with next field guidance
-        value_str = str(value)
-        message = f"User manually updated field '{field_name}' with value: {value_str}"
+        # STATE, never provenance (maintainer directive 2026-09-08, bd
+        # polyglot-pdf-gaxnf): the model is told what the field HOLDS and whether
+        # it is VERIFIED -- never how the value got there. A field is filled or
+        # not, and verified or not; it can be filled by voice or typing and
+        # verified by the modal or by the model's own confirm_field, and the state
+        # is the state however it was applied.
+        #
+        # The unverified case says what to DO about it, because that is the one
+        # thing the model cannot read off the state: an unverified value still
+        # needs the user's assent (bd polyglot-pdf-96um6).
+        # A checkbox group arrives as a LIST. str() on one yields Python
+        # syntax -- "['Asian', 'White']" -- which the model then reads aloud,
+        # brackets and quotes included. Join it into something speakable.
+        if isinstance(value, (list, tuple)):
+            value_str = ", ".join(str(v) for v in value) if value else "(nothing selected)"
+        else:
+            value_str = str(value)
+        if verified:
+            message = f"Field '{field_name}' now holds: {value_str}. It is verified."
+        else:
+            message = (
+                f"Field '{field_name}' now holds: {value_str}. It is NOT verified -- "
+                f"read it back and ask the user to confirm it."
+            )
         
         # Add next field guidance if provided
         if next_field_hint:
@@ -162,6 +184,7 @@ class AudioHandler:
             field_id=field_id,
             field_name=field_name,
             has_next_hint=bool(next_field_hint),
+            verified=verified,
             session_id=self._session_id
         )
         await self._live_ai.send_text_message(message)

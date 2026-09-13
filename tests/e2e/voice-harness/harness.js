@@ -320,12 +320,102 @@
    * fall back to the direct DOM + storage clear (still correct for the documented
    * reload-between-attempts path, and for an app build predating the hook).
    */
+  /**
+   * The inputs of a radio/checkbox GROUP, or [] for a single control.
+   *
+   * A group is many inputs sharing a name (`fieldId` for radios, `fieldId[]` for
+   * checkbox groups). Since bd polyglot-pdf-96um6 its first option ALSO carries
+   * id={field.id}, so getElementById no longer returns null for a group -- which
+   * silently re-routed both accessors below through option[0].
+   *
+   * Identified by NAME SHAPE, not by counting inputs: a "[]" suffix is a checkbox
+   * group at ANY option count (a one-option group is a real shape here --
+   * validation.ts's isSingleOptionCheckbox), and a shared plain name on
+   * type=radio is a radio group. A count-based test misclassified the one-option
+   * group and reopened both bugs this helper closes.
+   *
+   * DUPLICATED, deliberately and unavoidably: frontend/src/shared/fieldManager.ts
+   * carries the same rule as groupInputsFor(). This file is injected into a live
+   * page and cannot import that module. If you change the rule there, change it
+   * here -- two sites holding one rule is precisely the shape that cost bd
+   * polyglot-pdf-96um6 two regressions already.
+   */
+  function groupInputs(fieldId) {
+    try {
+      // A checkbox GROUP is identified by its "[]" name suffix, which the app
+      // renders for every group regardless of option count -- NOT by counting
+      // inputs. A one-option group is a real, named shape here (validation.ts's
+      // isSingleOptionCheckbox: "a standalone checkbox that carries a ONE-element
+      // options array describing its single PDF widget", bd polyglot-pdf-5jvn),
+      // and a length>1 test misclassifies it as a single control, silently
+      // reopening both bugs this helper exists to close.
+      // FILTER BY TYPE, as the app's groupInputsFor does: a TEXT field whose own
+      // id is literally 'race[]' matches this query too, and binding it as a
+      // group member misreports its edits under the GROUP's id.
+      var bracketedAll = document.querySelectorAll('input[name="' + fieldId + '[]"]');
+      var bracketed = [];
+      for (var b = 0; b < bracketedAll.length; b++) {
+        if (bracketedAll[b].type === 'checkbox' || bracketedAll[b].type === 'radio') {
+          bracketed.push(bracketedAll[b]);
+        }
+      }
+      // MEMBERSHIP, as the app does. A STANDALONE checkbox/radio whose id
+      // collides with another field's group name is a group TYPE but not a
+      // member -- and reading it returned the unrelated group's picks instead
+      // of its own value ('White' where the answer was 'yes').
+      var own = document.getElementById(fieldId);
+      if (bracketed.length) {
+        // ANY own element that is not a member disqualifies the group -- not
+        // just a group-typed one. Requiring own.type to be checkbox/radio let a
+        // TEXT field whose id collides with a group's name fall through and
+        // receive the unrelated group's inputs, which is the very shape this
+        // guard exists to stop. fieldManager's idResolvesToNonGroup returns
+        // non-group for ANY other type before considering membership; this now
+        // mirrors it rather than only claiming to.
+        if (own && bracketed.indexOf(own) === -1) {
+          return [];
+        }
+        return bracketed;
+      }
+      // Radios: many inputs sharing the plain name. A single control also matches
+      // its own name, so require more than one to avoid capturing it.
+      var plain = document.querySelectorAll('input[name="' + fieldId + '"]');
+      var radios = [];
+      for (var i = 0; i < plain.length; i++) {
+        if (plain[i].type === 'radio') radios.push(plain[i]);
+      }
+      // MEMBERSHIP on the PLAIN branch too. RadioField renders name={field.id}
+      // with no bracket, so this is the branch every real radio group takes --
+      // and a standalone radio whose id collides with another group's name is
+      // not one of them.
+      if (radios.length && own && radios.indexOf(own) === -1) {
+        return [];
+      }
+      return radios.length ? radios : [];
+    } catch (e) { return []; }
+  }
+
   function clearFieldState(fieldId) {
     try {
-      var el = document.getElementById(fieldId);
-      if (el && 'value' in el) {
-        el.value = '';
-        el.removeAttribute('data-vff-confirmed');
+      // A radio/checkbox GROUP is many inputs sharing a name, and since bd
+      // polyglot-pdf-96um6 its FIRST option also carries id={field.id} -- so a
+      // bare getElementById now returns that option where it used to return
+      // null. Clearing it as if it were a single control does `el.value = ''`,
+      // which WIPES that option's value attribute; handleRadioGroup's fuzzy tier
+      // then matches the empty string for ANY value and selects the wrong option.
+      // Uncheck the group instead, and never touch value attributes.
+      var group = groupInputs(fieldId);
+      if (group.length) {
+        for (var i = 0; i < group.length; i++) {
+          group[i].checked = false;
+          group[i].removeAttribute('data-vff-confirmed');
+        }
+      } else {
+        var el = document.getElementById(fieldId);
+        if (el && 'value' in el) {
+          el.value = '';
+          el.removeAttribute('data-vff-confirmed');
+        }
       }
     } catch (e) { /* ignore */ }
     var h = window.__VFF_TEST_INJECT;
@@ -395,9 +485,25 @@
    * robustly against an LLM-produced value (strips spaces, commas, punctuation).
    */
   function readField(fieldId) {
-    var el = document.getElementById(fieldId);
-    var domValue = el ? (el.value !== undefined ? el.value : null) : null;
-    var domConfirmed = el ? el.getAttribute('data-vff-confirmed') === 'true' : false;
+    // Groups first (bd polyglot-pdf-96um6): a radio's .value is its own value
+    // attribute whatever its checked state, so reading option[0] returns the
+    // FIRST option no matter what the user picked -- and waitForFieldValue, the
+    // "did Gemini fill it" gate, would go truthy from first render.
+    var group = groupInputs(fieldId);
+    var el = group.length ? null : document.getElementById(fieldId);
+    var domValue = null;
+    var domConfirmed = false;
+    if (group.length) {
+      var picked = [];
+      for (var gi = 0; gi < group.length; gi++) {
+        if (group[gi].checked) picked.push(group[gi].value);
+        if (group[gi].getAttribute('data-vff-confirmed') === 'true') domConfirmed = true;
+      }
+      domValue = picked.length ? picked.join(',') : null;
+    } else {
+      domValue = el ? (el.value !== undefined ? el.value : null) : null;
+      domConfirmed = el ? el.getAttribute('data-vff-confirmed') === 'true' : false;
+    }
 
     var ssValue = null;
     var ssConfirmed = null;
@@ -456,7 +562,16 @@
     // survives the reload a retry does, so without this a rerun could read the old
     // filled+confirmed value and false-pass before any new audio (Codex, PR #123).
     clearFieldState(fieldId);
-    report.steps.push({ step: 'clear-state', cleared: readField(fieldId).digits === '' });
+    // Check the VALUE, not `digits`. digits strips non-numerics, so for a
+    // radio/checkbox group (values like "m"/"f"/"reason_a") it is ALWAYS '' --
+    // picked or not -- and this line would report cleared:true even when the
+    // clear silently failed. domValue is null when a group has nothing checked
+    // and '' when a single control is empty, so both shapes read as cleared.
+    var clearSnap = readField(fieldId);
+    report.steps.push({
+      step: 'clear-state',
+      cleared: !clearSnap.domValue && !clearSnap.ssValue,
+    });
 
     // Reset the thinking-indicator observer (bd polyglot-pdf-fa4x) so report.thinking
     // reflects ONLY this cycle's agent_processing events. report.thinking is read off

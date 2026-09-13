@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-38p0y: the AI-write gates now honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it, where before it was refused as system-managed while the UI and PDF filler both unlocked it. See [the journal entry](../journal/entries/2026-09-08-bd-38p0y-readonly-unlock-on-the-ai-write-gate.md) for closeout details.)*
+*Last updated: 2026-09-11 (bd polyglot-pdf-96um6: the Enter->verify modal is the keyboard path to an audit claim, and reaches every field type -- radio/checkbox groups now carry id={field.id} on their first option, which is what makes them reachable at all. bd polyglot-pdf-38p0y: the AI-write gates honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it.)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -377,6 +377,27 @@ now comes only from an explicit act -- the verbal confirm, the skip control, or
 (bd polyglot-pdf-96um6) the Enter->verify modal. An unverified field keeps its
 value and stays in the next-field search (`computeNextField`), so it is re-offered
 rather than stranded.
+
+The Enter->verify gesture reaches every field type that renders an input, and
+that took two goes to get right. The handler resolves the field from the focused
+element's `id` **or its `name`**, and the name is the load-bearing half: a
+radio/checkbox GROUP carries `id={field.id}` on its FIRST option only (duplicate
+ids are invalid HTML), but the browser focuses the CHECKED option -- so an
+id-only lookup missed every already-answered group whose answer was not the first
+choice. The handler checks the id first and falls back to the name, and the
+fallback is what does the real work for groups, because every option carries the
+name while only one carries the id.
+
+`SchemaForm.fieldIds.test.tsx` pins the set by keying its cases on the `FieldType`
+union itself, so adding a type without a case is a TYPE error, not a silent gap.
+The three unimplemented types (`signature`, `address_group`, `table`) render a
+placeholder with no input and are marked exempt there -- they start failing the
+moment one is implemented without an id.
+
+Note the id and the name do different jobs: the **id** is for REACHING a field
+(`getElementById`, the verify gesture, scroll-and-highlight), the **name** is for
+BINDING a whole group's inputs (`fieldManager`'s change listeners). Conflating
+them silently unbound every non-first option once the groups gained ids.
 
 `field.copy_to` auto-copies the value to listed target
 fields at the **write chokepoint** -- `SchemaFormStateManager.updateField` --

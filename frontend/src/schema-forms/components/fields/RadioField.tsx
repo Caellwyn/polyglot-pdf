@@ -63,10 +63,16 @@ export function RadioField({
         )}
 
         <div className="form-field__radio-group">
-          {field.options.map((option) => (
+          {/* The FIRST option carries id={field.id}: one id per FIELD, never per
+              option (duplicates are invalid HTML and break label targeting). Without
+              it a radio group has no id at all, so getElementById and the
+              Enter->verify gesture cannot reach it -- 30 of 323 fields across the
+              shipped kits (bd polyglot-pdf-96um6, cross-surface finding). */}
+          {field.options.map((option, idx) => (
             <label key={option.value} className="form-field__radio-label">
               <input
                 type="radio"
+                id={idx === 0 ? field.id : undefined}
                 name={field.id}
                 value={option.value}
                 checked={currentValue === option.value}

@@ -22,7 +22,9 @@ import { PdfViewErrorBoundary } from "./PdfViewErrorBoundary";
 import { PdfPreviewFallback } from "./PdfPreviewFallback";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
-import { unwrapFieldValue } from "../utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias } from "../utils/fieldValue";
+import { isBlankFieldValue } from "../utils/fieldValue";
+import { VerifyFieldModal } from "./VerifyFieldModal";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -131,6 +133,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const isMobileRef = useRef(false);
 
   // Voice overlay state
+  // The field awaiting explicit verification (bd polyglot-pdf-96um6). null = no
+  // modal. Holds only the id; the value and name are read from live state when
+  // rendering, so a background AI fill cannot leave the modal showing a stale
+  // value the user would then "verify".
+  const [verifyingFieldId, setVerifyingFieldId] = useState<string | null>(null);
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
@@ -629,6 +636,99 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     setState(newState);
   };
 
+  /**
+   * Enter on a FILLED field opens the verify modal (bd polyglot-pdf-96um6).
+   *
+   * This is the keyboard path to an audit claim. Typing stopped producing one in
+   * bd polyglot-pdf-uum5g, so without this gesture a typing-only user cannot
+   * finish a form at all.
+   *
+   * Bound at the FORM, not threaded through every field component: Enter bubbles
+   * from whichever input has focus, and every field type renders id={field.id}
+   * (TextField, TextAreaField, DateField, SelectField, CheckboxField), so one
+   * handler covers them all with no prop drilling.
+   *
+   * SCOPE, deliberately narrow: only a field holding a real value opens the
+   * modal. On an empty or whitespace-only field Enter keeps its existing
+   * behaviour, because there is nothing to verify -- and because Enter today
+   * reaches <form onSubmit> and advances the section, which is a shortcut people
+   * may rely on. Where the modal DOES open we preventDefault, so that submit
+   * never fires and the section cannot move out from under the dialog.
+   */
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Enter') return;
+    const target = e.target as HTMLElement | null;
+    // Resolve the field from the id OR the name (bd polyglot-pdf-96um6).
+    //
+    // Keying on id alone was wrong for GROUPS: only option[0] carries
+    // id={field.id}, and the browser focuses the CHECKED option on tab-in -- so
+    // on any already-answered radio whose answer is not the first choice
+    // ("Female" on w7 sex), Enter landed on an element with no id and returned
+    // early. That is the same "no keyboard verify path" defect this bead exists
+    // to close, surviving the fix meant to close it.
+    //
+    // NAME is the reliable handle: every option of a group carries it, and the
+    // single controls carry it too (name={field.id}). The `[]` suffix is the
+    // checkbox-group convention.
+    const rawName = (target as HTMLInputElement | null)?.name;
+    const fieldId =
+      target?.id || (rawName ? rawName.replace(/\[\]$/, '') : '');
+    if (!fieldId) return;
+    // A textarea's Enter is a newline, not a submit -- leave it alone.
+    if (target?.tagName === 'TEXTAREA') return;
+    const field = state.schema.fields.find(f => f.id === fieldId);
+    if (!field) return;
+
+    // readFieldEntryWithAlias, NOT a bare fieldValues[fieldId] (bd
+    // polyglot-pdf-5k52 and its scar tissue): a GROUP's entry may sit under the
+    // bracketed OR unbracketed key, because Gemini drops and adds the bracket. A
+    // bare read misses the real entry, isBlankFieldValue(undefined) is true, and
+    // Enter does nothing -- reproducing this bead's own defect for exactly the
+    // field class the group fixes were written to rescue. fieldValue.ts says it
+    // outright: use this wherever a miss would change behavior.
+    const value = unwrapFieldValue(readFieldEntryWithAlias(state.fieldValues, fieldId));
+    if (isBlankFieldValue(value)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setVerifyingFieldId(fieldId);
+  };
+
+  /**
+   * The user asserted the answer is correct. Writes through the SAME path the
+   * verbal confirm uses (confirmField), so the audit record has one shape
+   * whatever gesture produced it, then tells the model the new STATE through the
+   * established manual_field_update protocol -- a verify does not reach the model
+   * on its own (measured: the notify fires on a DOM value change, and verifying
+   * changes no value).
+   */
+  const handleVerifyConfirmed = () => {
+    const fieldId = verifyingFieldId;
+    if (!fieldId) return;
+    setState(prevState => {
+      // confirmField SAVES internally, so no explicit save here -- a second one
+      // double-fires the schemaFormStateChange event (fresh-eyes finding).
+      const next = SchemaFormStateManager.confirmField(prevState, fieldId, 'manual_edit');
+      const field = next.schema.fields.find(f => f.id === fieldId);
+      const conn = connectionManagerRef.current;
+      if (conn?.sendManualFieldUpdate) {
+        conn.sendManualFieldUpdate(
+          fieldId,
+          field?.name || fieldId,
+          // Alias-aware here TOO (bd polyglot-pdf-5k52). A bare read after
+          // verifying a group stored under the bracketed key sends value=undefined
+          // WITH verified=true -- telling the model the field is confirmed and
+          // empty, which is worse than the gate bug: that one did nothing, this
+          // one asserts something false.
+          unwrapFieldValue(readFieldEntryWithAlias(next.fieldValues, fieldId)),
+          true
+        );
+      }
+      return next;
+    });
+    setVerifyingFieldId(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     console.log('[handleSubmit] Form submit triggered! isNavigating:', isNavigating);
     e.preventDefault();
@@ -819,6 +919,41 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         </button>
       </div>
 
+      {verifyingFieldId && (() => {
+        const vField = state.schema.fields.find(f => f.id === verifyingFieldId);
+        const vValue = unwrapFieldValue(readFieldEntryWithAlias(state.fieldValues, verifyingFieldId));
+        return (
+          <VerifyFieldModal
+            isOpen
+            fieldName={vField?.name || verifyingFieldId}
+            value={
+              typeof vValue === 'boolean' ? vValue : vValue == null ? '' : String(vValue)
+            }
+            selectedLanguage={initialLanguage || 'English'}
+            onVerify={handleVerifyConfirmed}
+            onCancel={() => setVerifyingFieldId(null)}
+          />
+        );
+      })()}
+
+      {/* Enter->verify is bound HERE (bd polyglot-pdf-96um6). It was originally on
+          the <form>, which is the Simplified view ONLY -- so the PDF view had no
+          keyboard verify path at all, reproducing the exact hole this bead exists
+          to close. Fresh-eyes caught it.
+
+          SCOPE, stated accurately: this div wraps more than the two views -- the
+          voice overlay, the download section and FilledPreviewModal are inside it
+          too, so their Enter events bubble through this handler. That is safe
+          because handleFormKeyDown resolves a SCHEMA FIELD from the event target
+          and returns early when it finds none, which is what every control in
+          those subtrees yields.
+
+          Pinned by "ENTER on a control that shares a field id but is NOT a
+          schema field" in SchemaForm.verify.test.tsx. An earlier attempt fired
+          Enter at the mocked overlay instead -- that test COULD NOT FAIL, because
+          the mock is a bare <div> with no id or name, so no guard it claimed to
+          test was ever reached. */}
+      <div onKeyDown={handleFormKeyDown} className="schema-form__view-container">
       {viewMode === 'preview' ? (
         <PdfViewErrorBoundary
           fallback={
@@ -860,6 +995,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         </PdfViewErrorBoundary>
       ) : (
       <form className="schema-form" onSubmit={handleSubmit}>
+
         {/* Form Header */}
         <div className="schema-form__header">
           <h1 className="schema-form__title">{state.schema.form_metadata.title}</h1>
@@ -1027,6 +1163,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           />
         )
       )}
+      </div>
     </>
   );
 }

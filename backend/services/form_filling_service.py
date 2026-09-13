@@ -675,7 +675,8 @@ class FormFillingService:
 
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any,
                                        next_field_hint: Optional[str] = None,
-                                       next_field_schema: Optional[Dict[str, Any]] = None):
+                                       next_field_schema: Optional[Dict[str, Any]] = None,
+                                       verified: bool = False):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
         # A manual edit moves the user OFF the field the DTI current-field pointer
         # names, so that pointer is stale. (This used to say the edit is
@@ -701,7 +702,8 @@ class FormFillingService:
             # AudioHandler appends next_field_hint to the spoken message, so strip
             # the "(field_id: ...)" parenthetical here too (bd polyglot-pdf-dx7).
             await self._audio_handler.send_manual_field_update(
-                field_id, field_name, value, strip_field_id_from_hint(next_field_hint)
+                field_id, field_name, value, strip_field_id_from_hint(next_field_hint),
+                verified=verified
             )
 
     async def send_activity_start(self):

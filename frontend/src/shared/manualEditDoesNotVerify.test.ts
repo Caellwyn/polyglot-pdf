@@ -76,6 +76,29 @@ describe('a manual edit reports a value but never a verification (bd polyglot-pd
     expect(onManualEdit).toHaveBeenCalledWith('f1', 'Maria')
   })
 
+  it('TAB-THROUGH is covered because it IS a blur (bd polyglot-pdf-96um6 criterion 1)', () => {
+    // The criterion names three gestures -- blur, TAB-THROUGH, and clicking away.
+    // Only two were named by a test; tab-through was covered by mechanism (the
+    // notify rides on 'blur' and 'change', and moving focus off a field fires
+    // blur) but nothing SAID so, which is how a criterion goes fifteen rounds
+    // without anyone noticing it was never scored.
+    document.body.innerHTML = `
+      <input id="f1" name="f1" type="text" value="" />
+      <input id="f2" name="f2" type="text" value="" />`;
+    const onManualEdit = vi.fn();
+    createFieldManager({ schema: TWO_FIELD_SCHEMA, onManualEdit });
+
+    const first = document.getElementById('f1') as HTMLInputElement;
+    const second = document.getElementById('f2') as HTMLInputElement;
+    first.focus();
+    first.value = 'Vasquez';
+    second.focus();                                        // the Tab keypress
+    first.dispatchEvent(new FocusEvent('blur', { bubbles: false }));
+
+    expect(onManualEdit, 'tabbing out must notify like any other blur').toHaveBeenCalledTimes(1);
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Vasquez');
+  });
+
   it('the state written for a blurred field is NOT verified', () => {
     // Drives PRODUCTION's own write, not a re-implementation of it: the options
     // object comes from connection.ts's onManualEdit, so this test would pass
@@ -223,5 +246,512 @@ describe('the EXPLICIT verification paths still verify (bd polyglot-pdf-uum5g)',
 
     st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
     expect(computeNextField(st, { skipConfirmed: true })?.id).not.toBe('f1')
+  })
+})
+
+describe('CHANGING a verified field drops its verification (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+
+  it('a verified field that is edited becomes unverified again', () => {
+    // Maintainer rule (2026-09-08): "if a verified field is changed, it should
+    // lose the verified status. Then the modal pops up to re-verify it after
+    // enter."
+    //
+    // This ALREADY holds as a consequence of bd polyglot-pdf-uum5g -- typing
+    // writes confirmed:false unconditionally, so an edit cannot leave a stale
+    // verification behind. Pinned here because it is now load-bearing for the
+    // verify-modal gesture and nothing asserted it: the old verification
+    // describes the OLD value, and letting it survive would put a verified
+    // stamp on an answer nobody checked.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = applyManualEditLikeProduction(st, 'f1', 'Maria')
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+    expect((st.fieldValues['f1'] as any).confirmed).toBe(true)
+
+    st = applyManualEditLikeProduction(st, 'f1', 'Mariana')
+
+    const entry = st.fieldValues['f1'] as any
+    expect(entry.value).toBe('Mariana')
+    expect(entry.confirmed, 'a changed answer is not the one that was verified').not.toBe(true)
+    expect(entry.confirmationMethod, 'and carries no stale audit record').toBeUndefined()
+    expect(entry.confirmedAt, 'nor a stale timestamp').toBeUndefined()
+  })
+
+  it('the re-edited field is offered again, so it can be re-verified', () => {
+    // The other half of the rule: losing verification must put the field back in
+    // the next-field search, or "re-verify it after enter" has nothing to act on.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = SchemaFormStateManager.updateField(st, 'f1', 'Maria', { confirmed: false })
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+    expect(computeNextField(st, { skipConfirmed: true })?.id).not.toBe('f1')
+
+    st = SchemaFormStateManager.updateField(st, 'f1', 'Mariana', { confirmed: false })
+
+    expect(computeNextField(st, { skipConfirmed: true })?.id).toBe('f1')
+  })
+})
+
+describe('a radio/checkbox GROUP notifies from EVERY option (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GROUP_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio' }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('selecting a NON-FIRST option still notifies', () => {
+    // Giving groups id={field.id} on their first option (so the Enter->verify
+    // gesture can reach them) made getElementById SUCCEED where it used to fail,
+    // which silently narrowed fieldManager to that one element. Measured: with
+    // the id, selecting the second option notified NOT AT ALL. A user picking
+    // "Female" would have left the model believing the field was never answered.
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="m" />
+      <input name="sex" type="radio" value="f" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    const second = document.querySelectorAll('input')[1] as HTMLInputElement
+    second.checked = true
+    second.value = 'f'
+    second.dispatchEvent(new Event('change'))
+
+    expect(onManualEdit, 'every option in a group must notify, not just the first').toHaveBeenCalled()
+  })
+
+  it('the FIRST option still notifies too', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="m" />
+      <input name="sex" type="radio" value="f" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    const first = document.querySelectorAll('input')[0] as HTMLInputElement
+    first.checked = true
+    first.dispatchEvent(new Event('change'))
+
+    expect(onManualEdit).toHaveBeenCalled()
+  })
+})
+
+describe('AI FILL still reaches a group after it gained an id (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const RADIO_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio',
+               options: [{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  // NOTE the fixture renders id={field.id} on option[0], exactly as RadioField
+  // does. The pre-existing fieldManager suites build groups WITHOUT an id, so
+  // they still encode the pre-bead DOM and could not have caught this.
+  function renderRadioGroup() {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    return Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+  }
+
+  it('a voice fill selects a NON-FIRST option', () => {
+    // Giving the group an id made getElementById succeed, so applyUpdates took
+    // the SINGLE-control path: handleSingleRadio returned false and the fill
+    // selected nothing, while the model believed it had filled the field.
+    // Measured before the fix: Female.checked was TRUE without the id, FALSE with.
+    const [, female] = renderRadioGroup()
+    const fm = createFieldManager({ schema: RADIO_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'Female' } as any])
+
+    expect(female.checked, 'a voice fill must still reach the group').toBe(true)
+  })
+
+  it('the case-insensitive fuzzy tier still reaches the FIRST option', () => {
+    const [male] = renderRadioGroup()
+    const fm = createFieldManager({ schema: RADIO_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'male' } as any])
+
+    expect(male.checked).toBe(true)
+  })
+})
+
+describe('CHECKBOX GROUPS survive the option[0] id (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GROUP_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+               options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  // Renders name="race[]" with the id on option[0], exactly as CheckboxField does.
+  function renderGroup() {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    return Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+  }
+
+  it('a manual edit still notifies AFTER a failed AI fill', async () => {
+    // applyUpdates sets aiUpdatingFields to suppress its own change events, and
+    // cleared it only on the paths reaching the end of the loop. A checkbox group
+    // bails at notFound, so the flag stranded SET and setupEditListener swallowed
+    // every later manual edit -- permanently. Measured 0 notifications.
+    renderGroup()
+    const onManualEdit = vi.fn()
+    const fm = createFieldManager({ schema: GROUP_SCHEMA, onManualEdit })
+
+    fm.applyUpdates([{ fieldId: 'race', value: ['White'] } as any])
+    await new Promise(r => setTimeout(r, 80))
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(
+      onManualEdit.mock.calls.length,
+      'a field the AI could not fill must not become uneditable by hand'
+    ).toBe(1)
+  })
+})
+
+const TWO_FIELD_SCHEMA = {
+  source: 'web',
+  form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+  fields: [
+    { id: 'f1', name: 'F1', spoken_name: 'f one', type: 'text' },
+    { id: 'f2', name: 'F2', spoken_name: 'f two', type: 'text' },
+  ],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f1', 'f2'] }],
+} as unknown as FormSchema;
+
+describe('a GROUP edit reports the checked selection (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  const GRP = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+               options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  const RAD = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio',
+               options: [{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }] }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('UNCHECKING an option reports the remainder, not the toggled option', () => {
+    // handleEdit read element.value -- a group member's CONSTANT attribute -- so
+    // unchecking White reported race = "White": an un-selection recorded as a
+    // selection, persisted over the real array AND sent to the model.
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" checked />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = false
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian'])
+  })
+
+  it('CHECKING a second option reports both', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
+  })
+
+  it('clearing the LAST option still notifies -- an empty selection is a real change', () => {
+    // The non-empty gate is deliberate for a blank text field, but a cleared
+    // group is an answer the model must hear about.
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: GRP, onManualEdit })
+
+    const asian = document.querySelectorAll('input')[0] as HTMLInputElement
+    asian.checked = false
+    asian.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit, 'a cleared group must not go unreported').toHaveBeenCalled()
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual([])
+  })
+
+  it('a RADIO reports a single string, not an array', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" checked />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: RAD, onManualEdit })
+
+    const female = document.querySelectorAll('input')[1] as HTMLInputElement
+    female.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Female')
+  })
+
+  it('a plain TEXT field is unchanged', () => {
+    const T = {
+      source: 'web',
+      form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+      fields: [{ id: 'name', name: 'Name', spoken_name: 'name', type: 'text' }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['name'] }],
+    } as unknown as FormSchema
+    document.body.innerHTML = `<input id="name" name="name" type="text" value="Maria" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: T, onManualEdit })
+
+    const el = document.getElementById('name') as HTMLInputElement
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('Maria')
+  })
+})
+
+describe('a CLEARED group cannot masquerade as answered (bd polyglot-pdf-96um6)', () => {
+  // The empty-selection carve-out is the risky half of the group-edit fix: a
+  // cleared group now notifies with [] where the old code notified nothing. That
+  // is only safe because the notify writes confirmed:false -- a CONFIRMED blank
+  // is the deliberate "the user said this does not apply" value and DOES settle
+  // (isConfirmedButBlank, bd polyglot-pdf-6oe6). These pin the distinction.
+  const S = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [
+      { id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group', required: true,
+        options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race'] }],
+  } as unknown as FormSchema
+
+  const stateWith = (value: unknown, confirmed: boolean) => ({
+    schema: S,
+    fieldValues: { race: { value, confirmed } },
+    sectionState: { currentSectionId: 's1' },
+  } as any)
+
+  it('the UNCONFIRMED empty a manual clear writes does not complete the form', () => {
+    expect(isFormComplete(stateWith([], false))).toBe(false)
+  })
+
+  it('and the cleared group is still the next field to ask about', () => {
+    expect(computeNextField(stateWith([], false))?.id).toBe('race')
+  })
+
+  it('a filled group DOES complete it -- so the test above is not vacuous', () => {
+    expect(isFormComplete(stateWith(['Asian'], true))).toBe(true)
+  })
+})
+
+describe('an id/name COLLISION must not redirect the notify (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // Resolving the group by NAME alone meant a text field whose id equals another
+  // field's group name took the group branch and reported the OTHER field's
+  // radios -- or nothing. Ids and names share no namespace in HTML, so this
+  // collision is legal and a kit author would have no reason to expect it.
+  const TEXT_SCHEMA = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [{ id: 'sex', name: 'Sex detail', spoken_name: 'sex detail', type: 'text' }],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['sex'] }],
+  } as unknown as FormSchema
+
+  it('typing in a text field reports the TYPED value, not a colliding groups selection', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="sex_text" type="text" value="typed" />
+      <input name="sex" type="radio" value="Male" checked />
+      <input name="sex" type="radio" value="Female" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: TEXT_SCHEMA, onManualEdit })
+
+    const text = document.getElementById('sex') as HTMLInputElement
+    text.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
+  })
+
+  it('an AI FILL also reaches the text field, not the colliding radios', () => {
+    // The THIRD consumer of the name-based resolution. I gated the listener and
+    // the edit path, then enumerated the consumers rather than assuming two was
+    // all of them -- applyUpdates was still hijacked, and an AI fill of this
+    // field landed NOWHERE. Measured: the field stayed empty.
+    document.body.innerHTML = `
+      <input id="sex" name="sex_text" type="text" value="" />
+      <input name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    const fm = createFieldManager({ schema: TEXT_SCHEMA, onManualEdit: vi.fn() })
+
+    fm.applyUpdates([{ fieldId: 'sex', value: 'Maria' } as any])
+
+    expect((document.getElementById('sex') as HTMLInputElement).value).toBe('Maria')
+  })
+
+  it('and the same field notifies identically with NO colliding group present', () => {
+    // The control: proves the assertion above is about the collision, not about
+    // text fields being broken generally.
+    document.body.innerHTML = `<input id="sex" name="sex_text" type="text" value="typed" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: TEXT_SCHEMA, onManualEdit })
+
+    const text = document.getElementById('sex') as HTMLInputElement
+    text.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('typed')
+  })
+})
+
+describe('a BRACKETED-ID text field is not swallowed by its groups query', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // A schema declaring BOTH `race` (checkbox_group) and `race[]` (text) is a
+  // documented shape here (bd polyglot-pdf-ii6g), not a hypothetical. The
+  // bracketed lookup matched the TEXT field too, so its edits were reported
+  // under the GROUP's id -- overwriting the group's answer with a typed note.
+  // Regression against origin/dev, introduced by this bead.
+  const BOTH = {
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields: [
+      { id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+        options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] },
+      { id: 'race[]', name: 'Race note', spoken_name: 'race note', type: 'text' },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race', 'race[]'] }],
+  } as unknown as FormSchema
+
+  function render() {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />
+      <input id="race[]" name="race[]" type="text" value="note" />`
+  }
+
+  it('the text fields edit reports under ITS OWN id', () => {
+    render()
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: BOTH, onManualEdit })
+
+    ;(document.getElementById('race[]') as HTMLInputElement)
+      .dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race[]')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('note')
+  })
+
+  it('and the GROUP still reports its checked options -- the gate did not break it', () => {
+    render()
+    const onManualEdit = vi.fn()
+    createFieldManager({ schema: BOTH, onManualEdit })
+
+    const white = document.querySelectorAll('input[type=checkbox]')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
+  })
+})
+
+describe('a STANDALONE group-type field is not swallowed by a colliding group', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { document.body.innerHTML = '' })
+
+  // The THIRD collision shape, and the one both earlier layers waved through: a
+  // standalone checkbox/radio whose id collides with ANOTHER field's group name.
+  // The element IS a group type (so the call-site gate allowed it) and the query
+  // DOES return group members (so the type filter allowed it) -- but this element
+  // is not among them. It got no listener at all, so ticking it never reached the
+  // model. Regression vs origin/dev, where getElementById resolved first.
+  // The fix is a MEMBERSHIP test, which subsumes the type check.
+  const mk = (fields: any[]) => ({
+    source: 'web',
+    form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'T-1' },
+    fields,
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: fields.map(f => f.id) }],
+  } as unknown as FormSchema)
+
+  it('a standalone CHECKBOX whose id collides with a bracketed group name', () => {
+    document.body.innerHTML = `
+      <input id="race" name="agree" type="checkbox" value="yes" />
+      <input name="race[]" type="checkbox" value="Asian" />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'race', name: 'Agree', spoken_name: 'agree', type: 'checkbox' }]),
+      onManualEdit,
+    })
+
+    const el = document.getElementById('race') as HTMLInputElement
+    el.checked = true
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('race')
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toBe('yes')
+  })
+
+  it('a standalone RADIO whose id collides with another radio groups name', () => {
+    document.body.innerHTML = `
+      <input id="sex" name="marital" type="radio" value="single" />
+      <input name="sex" type="radio" value="Male" />
+      <input name="sex" type="radio" value="Female" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'sex', name: 'Marital', spoken_name: 'marital', type: 'radio',
+                   options: [{ value: 'single', label: 'Single' }] }]),
+      onManualEdit,
+    })
+
+    const el = document.getElementById('sex') as HTMLInputElement
+    el.checked = true
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[0]).toBe('sex')
+  })
+
+  it('a REAL group member still reports under the group -- membership cuts both ways', () => {
+    document.body.innerHTML = `
+      <input id="race" name="race[]" type="checkbox" value="Asian" checked />
+      <input name="race[]" type="checkbox" value="White" />`
+    const onManualEdit = vi.fn()
+    createFieldManager({
+      schema: mk([{ id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+                   options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }] }]),
+      onManualEdit,
+    })
+
+    const white = document.querySelectorAll('input')[1] as HTMLInputElement
+    white.checked = true
+    white.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(onManualEdit.mock.calls.at(-1)?.[1]).toEqual(['Asian', 'White'])
   })
 })

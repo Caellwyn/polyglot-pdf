@@ -724,11 +724,17 @@ async def _handle_fill_session(
 					# validation entry (a manual edit skips the confirm_field round-trip
 					# that normally carries it). Optional; absent from legacy clients.
 					next_field_schema = obj.get("next_field_schema")
+					# Whether the user has VERIFIED this value (bd polyglot-pdf-96um6).
+					# Optional and additive, exactly like next_field_schema above: an older
+					# client omits it and reads as False, which is the safe default -- an
+					# unverified field is re-offered, not treated as settled.
+					verified = bool(obj.get("verified", False))
 					if not field_id or field_name is None:
 						await websocket.send_json({"type": "error", "code": "invalid_update", "reason": "field_id_and_name_required"})
 					else:
 						await service.send_manual_field_update(field_id, field_name, value, next_field_hint,
-						                                       next_field_schema=next_field_schema)
+						                                       next_field_schema=next_field_schema,
+						                                       verified=verified)
 						# No acknowledgment needed - fire-and-forget notification
 					continue
 				elif mtype == "read_disclaimer":

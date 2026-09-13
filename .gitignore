@@ -197,3 +197,7 @@ form-kits/*/
 !form-kits/w9-heldout/
 !form-kits/w7/
 !form-kits/f1040/
+
+# Stray zero-byte artifact from tooling, not produced by any repo script.
+# Swept into a commit twice during bd polyglot-pdf-96um6 by `git add -A`.
+tmpfile

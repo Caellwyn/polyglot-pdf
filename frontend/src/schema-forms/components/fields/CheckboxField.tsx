@@ -109,10 +109,14 @@ export function CheckboxField({
         )}
 
         <div className="form-field__checkbox-group">
-          {field.options.map((option) => (
+          {/* Same as RadioField: the FIRST option carries id={field.id}, so the
+              group is reachable by getElementById and by the Enter->verify
+              gesture (bd polyglot-pdf-96um6). One id per FIELD, not per option. */}
+          {field.options.map((option, idx) => (
             <label key={option.value} className="form-field__checkbox-label">
               <input
                 type="checkbox"
+                id={idx === 0 ? field.id : undefined}
                 name={`${field.id}[]`}
                 value={option.value}
                 checked={selectedValues.includes(option.value)}

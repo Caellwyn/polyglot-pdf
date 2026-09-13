@@ -57,6 +57,7 @@ import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
+import { groupInputsFor } from './groupMembership'
 
 /**
  * Pure gate function: should the mic audio chunk be forwarded to the backend?
@@ -102,6 +103,15 @@ export interface ConnectionManager {
 	setPushToTalkMode: (enabled: boolean) => void  // Enable/disable PTT mode
 	getPushToTalkMode: () => boolean  // Current PTT mode (so a remounted overlay restores the user's choice; bd polyglot-pdf-6vo)
 	setPushToTalkHeld: (held: boolean) => void  // Track whether PTT is CURRENTLY held down (bd polyglot-pdf-qt7w), so a reconnect's audio rehydration does not re-mute an active hold
+	/**
+	 * Notify the model of a field's current STATE through the established
+	 * manual_field_update protocol (bd polyglot-pdf-96um6). Exposed because a
+	 * VERIFY does not reach the model on its own: the internal notify fires from
+	 * a DOM change listener, and verifying changes only a flag, not the input's
+	 * value -- measured, 0 notify calls after a pure verify. The React verify
+	 * modal therefore has to call this itself.
+	 */
+	sendManualFieldUpdate: (fieldId: string, fieldName: string, value: any, verified?: boolean) => void
 	getFieldManager: () => FieldManager | null
 	getAudioManager: () => AudioManager | null
 	startRecording: () => Promise<void>
@@ -146,7 +156,7 @@ export interface ConnectionManager {
  * Restore DOM fields from sessionStorage on page load
  * Ensures DOM and sessionStorage stay in sync across page refreshes
  */
-function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
+export function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
 	let restoredCount = 0
 
 	for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
@@ -171,7 +181,53 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 			(element as HTMLSelectElement).value = String(value)
 		} else if (element.tagName === 'INPUT') {
 			const inputEl = element as HTMLInputElement
-			if (inputEl.type === 'checkbox') {
+			// A GROUP is not a single control. Since bd polyglot-pdf-96um6 gave a
+			// group's option[0] an id, getElementById resolves here where it used to
+			// return null -- so without this branch a checkbox group restored as
+			// Boolean(['White']) === true, checking OPTION[0] regardless of what the
+			// user actually picked. A silently wrong race or reason answer.
+			// Gated on the RESOLVED element, not the name alone. Ids and names share
+			// no namespace, so a text field id="race" can coexist with a checkbox
+			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
+			// is keyed on the field's OWN id. Ungated, that text field restored/captured
+			// nothing at all (measured).
+			// MEMBERSHIP, not type. A standalone checkbox/radio whose id collides with
+			// another field's group name IS a group type, so a type-only gate sent it
+			// down the group branch and wrote the UNRELATED group instead of itself.
+			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
+			// share, which diverged the moment I added the membership dimension there
+			// and did not carry it here.
+			// ONE shared rule (groupMembership.ts). These two inline copies had the
+			// membership test but NOT the type filter, so a text field whose own name
+			// is bracketed took the group branch and its value vanished -- a
+			// regression against origin/dev that the green suite did not see.
+			const memberEls = groupInputsFor(fieldId)
+			const isGroupMember = memberEls.includes(inputEl)
+			const groupEls = isGroupMember ? memberEls : []
+			if (groupEls.length) {
+				const picked = Array.isArray(value) ? value.map(String) : [String(value)]
+				groupEls.forEach(el => { el.checked = picked.includes(el.value) })
+			} else if (inputEl.type === 'radio') {
+				// Likewise a radio group: select the MATCHING option rather than
+				// overwriting option[0]'s value attribute (bd polyglot-pdf-sjbdm).
+				//
+				// MEMBERSHIP HERE TOO. RadioField renders name={field.id} with NO
+				// bracket, so this plain branch -- not the bracketed one above -- is
+				// what every real radio group takes. Ungated, a standalone radio whose
+				// id collides with ANOTHER group's name wrote that group and dropped
+				// its own answer entirely (measured: nothing selected anywhere).
+				// The SHARED rule, not another inline lookup. The extraction left this
+				// one behind and it was missing the TYPE FILTER -- the same rule and the
+				// same dimension that produced the round-7 regression, surviving because
+				// my closure guard only forbade the BRACKETED query shape.
+				const radios = groupInputsFor(fieldId)
+				if (radios.includes(inputEl)) {
+					radios.forEach(el => { el.checked = el.value === String(value) })
+				} else {
+					// Not a member: it is a standalone control that merely shares the id.
+					inputEl.checked = inputEl.value === String(value) || Boolean(value)
+				}
+			} else if (inputEl.type === 'checkbox') {
 				inputEl.checked = Boolean(value)
 			} else {
 				inputEl.value = String(value)
@@ -192,7 +248,7 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
  * Scan DOM for pre-filled values and populate sessionStorage
  * Called before connecting to capture values user entered before activating voice
  */
-function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
+export function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
 	let capturedCount = 0
 
 	for (const field of schema.fields) {
@@ -212,14 +268,42 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 		if (!element) continue
 
 		// Get current value from DOM
-		let value: string | boolean | null = null
+		// string[] for a checkbox group -- the shape the rest of the app already
+		// stores for one (see FieldValue), and what this path failed to capture.
+		let value: string | string[] | boolean | null = null
 
 		if (element.tagName === 'SELECT') {
 			const selectEl = element as HTMLSelectElement
 			value = selectEl.value || null
 		} else if (element.tagName === 'INPUT') {
 			const inputEl = element as HTMLInputElement
-			if (inputEl.type === 'checkbox') {
+			// Same group-vs-single distinction as the restore above. Capturing a
+			// checkbox group as inputEl.checked stored the BOOLEAN true in place of
+			// the string[] selection -- and this path marks what it captures
+			// {confirmed: true}, which would have contradicted this bead's whole
+			// thesis that only an explicit act verifies a field.
+			// Gated on the RESOLVED element, not the name alone. Ids and names share
+			// no namespace, so a text field id="race" can coexist with a checkbox
+			// group name="race[]", and the bracket does NOT disambiguate -- the lookup
+			// is keyed on the field's OWN id. Ungated, that text field restored/captured
+			// nothing at all (measured).
+			// MEMBERSHIP, not type. A standalone checkbox/radio whose id collides with
+			// another field's group name IS a group type, so a type-only gate sent it
+			// down the group branch and wrote the UNRELATED group instead of itself.
+			// Mirrors fieldManager's idResolvesToNonGroup -- the rule these two modules
+			// share, which diverged the moment I added the membership dimension there
+			// and did not carry it here.
+			// ONE shared rule (groupMembership.ts). These two inline copies had the
+			// membership test but NOT the type filter, so a text field whose own name
+			// is bracketed took the group branch and its value vanished -- a
+			// regression against origin/dev that the green suite did not see.
+			const memberEls = groupInputsFor(fieldId)
+			const isGroupMember = memberEls.includes(inputEl)
+			const groupEls = isGroupMember ? memberEls : []
+			if (groupEls.length) {
+				const picked = Array.from(groupEls).filter(el => el.checked).map(el => el.value)
+				value = picked.length ? picked : null
+			} else if (inputEl.type === 'checkbox') {
 				value = inputEl.checked
 			} else if (inputEl.type === 'radio') {
 				// For radio groups, only capture if checked
@@ -1123,6 +1207,14 @@ export function createConnectionManager(
 
 		// Lets the UI (VoiceOverlay PTT effect) read the mode the audio layer is
 		// configured with. Always true since bd polyglot-pdf-v1m8g.
+
+		sendManualFieldUpdate(fieldId: string, fieldName: string, value: any, verified?: boolean) {
+			// Guarded: a verify can land while the socket is down (the form is
+			// usable offline -- the client owns all field state). The verification is
+			// still recorded locally; only the model's copy is missed, and the
+			// handshake re-syncs it on reconnect.
+			connection?.sendManualFieldUpdate(fieldId, fieldName, value, verified)
+		},
 
 		getFieldManager() {
 			return fieldManager

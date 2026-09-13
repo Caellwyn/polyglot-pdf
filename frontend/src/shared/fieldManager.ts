@@ -7,13 +7,20 @@
 
 import { escapeHtml } from './security'
 
+// The group-membership rule lives in ONE module now (bd polyglot-pdf-96um6):
+// hand-syncing it across fieldManager and connection.ts diverged TWICE, the
+// second time silently dropping a text field's value on restore.
+import { groupInputsFor, idResolvesToNonGroup } from './groupMembership'
+
 export interface FieldUpdate {
 	fieldId: string
 	value: any
 }
 
 export interface FieldManagerOptions {
-	onManualEdit?: (fieldId: string, value: string) => void
+	// string[] for a checkbox group -- its answer is which options are checked,
+	// not one member's constant `value` attribute. Matches FieldValue.value.
+	onManualEdit?: (fieldId: string, value: string | string[]) => void
 	schema?: any // Optional schema to set up listeners on all fields
 }
 
@@ -59,9 +66,47 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			
 			// Always notify about manual edits (even if not AI-confirmed yet)
 			if (options.onManualEdit) {
-				const value = (element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
-				if (value && value.trim()) {  // Only notify if non-empty
-					options.onManualEdit(fieldId, value)
+				// A GROUP's answer is which options are CHECKED -- never one member's
+				// `value`, which is a constant attribute. Reading .value here reported
+				// the toggled option as the whole answer, so UNCHECKING 'White' wrote
+				// race = 'White': an un-selection recorded as a selection, persisted
+				// over the real array AND sent to the model. Groups only reach this
+				// listener at all since bd polyglot-pdf-96um6 attached them.
+				// Gate on the EDITED ELEMENT, not just the name lookup. A text field
+				// whose id equals another field's group NAME (id="sex" vs a radio
+				// group name="sex") made groupInputsFor return the OTHER field's
+				// radios, so typing in the text box reported their selection -- or
+				// nothing. Only an element that is itself a group member takes this
+				// branch.
+				const editedIsGroupMember =
+					element instanceof HTMLInputElement &&
+					(element.type === 'radio' || element.type === 'checkbox')
+				const groupEls = editedIsGroupMember ? groupInputsFor(fieldId) : []
+				if (groupEls.length && groupEls.includes(element as HTMLInputElement)) {
+					const picked = groupEls.filter(el => el.checked).map(el => el.value)
+					// Radio: a single string, matching what the rest of the app stores.
+					// Checkbox group: the array.
+					//
+					// An emptied CHECKBOX group notifies with [], because clearing every
+					// box is a real answer change -- unlike a blank text field, where the
+					// non-empty gate below is deliberate. The backend's own empty-value
+					// guard drops None and blank strings but NOT an empty list, so [] does
+					// reach the model (pinned in test_audio_handler.py from both sides).
+					//
+					// A cleared RADIO reports '' and that guard DOES drop it, so the model
+					// is not told. Deliberate rather than fixed: no native control
+					// deselects a radio -- they only switch, which reports the new value
+					// correctly -- and the app's own clear path goes through state, not
+					// this listener. Widening the guard to forward '' would make every
+					// emptied TEXT field notify too, which the guard exists to prevent.
+					// bd polyglot-pdf-9he8l holds the asymmetry if a real deselect appears.
+					const isRadio = groupEls[0]?.type === 'radio'
+					options.onManualEdit(fieldId, isRadio ? (picked[0] || '') : picked)
+				} else {
+					const value = (element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
+					if (value && value.trim()) {  // Only notify if non-empty
+						options.onManualEdit(fieldId, value)
+					}
 				}
 			}
 		}
@@ -88,6 +133,21 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			// Try to find element by ID
 			let element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 			
+			// Groups resolve by NAME even when the id now resolves (bd
+			// polyglot-pdf-96um6) -- see groupInputsFor. Binding only the id'd
+			// option would leave every OTHER option unlistened, so selecting any
+			// but the first would stop notifying the model.
+			// ...but only when the id does NOT already resolve to a non-group
+			// element. A text field whose id equals another field's group NAME
+			// (id="sex" vs a radio group name="sex") otherwise bound the OTHER
+			// field's radios and `continue`d, leaving the text field with NO
+			// listener at all -- so typing in it never reached the model.
+			const groupEls = idResolvesToNonGroup(element, fieldId) ? [] : groupInputsFor(fieldId)
+			if (groupEls.length) {
+				groupEls.forEach(input => setupEditListener(input as HTMLElement, fieldId))
+				continue
+			}
+
 			// Try by name attribute (for table fields, radio groups, checkbox groups)
 			if (!element) {
 				const inputs = document.querySelectorAll(`input[name="${fieldId}"], textarea[name="${fieldId}"], select[name="${fieldId}"]`)
@@ -151,6 +211,22 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			const newValue = update.value || ''
 			let element = document.getElementById(update.fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 
+			// Same rule as the listener site above: a group is resolved by NAME, not
+			// by the id its first option now carries. Without this, getElementById
+			// returns option[0] and the group falls into the SINGLE-control path --
+			// handleSingleRadio returns false and a voice fill selects NOTHING.
+			// Measured: filling 'Female' checked it TRUE before the id existed and
+			// FALSE after, on 14 radio fields in i-90_v2 alone.
+			// Gated the SAME way (see idResolvesToNonGroup): without it, an AI fill
+			// of a text field whose id collides with a group's name nulled `element`
+			// and the fill landed NOWHERE. Measured: the field stayed empty.
+			if (
+				!idResolvesToNonGroup(element, update.fieldId) &&
+				groupInputsFor(update.fieldId).length
+			) {
+				element = null
+			}
+
 		// Special handling for radio buttons, checkbox groups, and comboboxes which may not have IDs
 		if (!element) {
 			// Try to find by name attribute (for radio groups, checkbox groups, or table fields)
@@ -206,6 +282,17 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			if (!element) {
 				console.warn('[VFF FieldManager] [X] Field not found:', update.fieldId)
 				results.notFound.push(update.fieldId)
+				// RELEASE THE FLAG BEFORE BAILING. It is set unconditionally above, and
+				// cleared only on the two paths that reach the end of the loop -- so this
+				// `continue` used to strand it set FOREVER, and setupEditListener's
+				// `if (aiUpdatingFields.has(fieldId)) return` then swallowed EVERY later
+				// manual edit to that field: no state write, no notify to the model. That
+				// is the precise failure this bead exists to prevent, so a field the AI
+				// could not fill must not also become uneditable by hand.
+				// Same 50ms settle as the success paths, for the same reason.
+				setTimeout(() => {
+					aiUpdatingFields.delete(update.fieldId)
+				}, 50)
 				continue
 			}
 		}		// Apply value to field based on element type
