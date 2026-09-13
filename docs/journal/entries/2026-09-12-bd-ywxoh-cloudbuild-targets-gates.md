@@ -142,6 +142,66 @@ adopted (fixed in place), one nit filed as a follow-up bead:
 Full backend + root suites re-run green after the fixes (1645 root tests
 passed / 46 skipped; backend suite re-run in full).
 
+## What shipped -- fresh-eyes round 2 fixes
+
+Round 2 found one blocker and confirmed the other two rubric criteria pass.
+Blocker adopted; two nits deferred as one follow-up bead.
+
+- **ADOPTED (blocker, P1): `admin-service-staging-gate` could never be
+  satisfied -- every admin-service Cloud Build deploy would fail forever.**
+  The gate requires a `deployments` record with `channel=="staging"` for
+  this sha/family, but `admin-service-record-deployment` (the only writer)
+  used `--channel "${_CHANNEL}"`, and `scripts/setup-cloud-build.sh` fixes
+  admin-service's trigger to `_CHANNEL=admin` always ("the admin service has
+  no channel of its own"). Worse, the record step ran AFTER the gate check
+  and the traffic shift in the SAME single-`_TARGET` build, so no prior
+  build could ever have written the row either -- a structural bootstrap
+  deadlock, not just a wrong literal. Fixed both halves together: (1)
+  `admin-service-record-deployment` now hardcodes `--channel staging`
+  (matching its `backend-record-deployment` / `frontend-record-deployment`
+  siblings, and matching `record_deployment.py`'s own docstring, which
+  already documented admin-service as a staging-channel writer); (2) the
+  step now runs immediately after `admin-service-verify-tagged` (the tagged
+  candidate's own health check is admin-service's equivalent of a separate
+  staging deploy, since there is no separate staging tier for a
+  single-instance service) and BEFORE `admin-service-staging-gate`, not
+  after `admin-service-shift-traffic`. `docs/technical_guide.md`'s Surface
+  contract 31c, which asserted the old (broken) composition as correct, is
+  corrected to describe the actual required order and why it is reversed
+  from backend/frontend's two-separate-builds shape.
+  `tests/test_cloudbuild_yaml.py` gained: a literal-value assertion
+  (`--channel staging`, not just "a --channel flag exists" -- the exact gap
+  that let the wrong literal ship unpinned) on all three
+  STAGING_RECORDING_TARGETS, and an explicit
+  `admin-service-record-deployment < admin-service-staging-gate <
+  admin-service-shift-traffic` ordering assertion in
+  `test_admin_service_traffic_shift_carries_the_staging_gate`. Both
+  mutation-verified: reverting the channel literal turns only the
+  admin-service parametrization red (the other two stay green); reverting
+  the step order turns both new/changed assertions red without touching
+  backend-staging/frontend-staging.
+- **DEFERRED (nits, filed as bead `polyglot-pdf-8ft81`):** the ported
+  `verify_service_publicly_reachable()` wrapper loses the colored
+  `[WARN]`/`[ERROR]` terminal output the prior extraction was specifically
+  reviewed to preserve (cosmetic only -- message content and exit codes are
+  unaffected); `scripts/write_kits_manifest.py`'s multi-PDF fallback
+  selection changed from filesystem (`ls`) order to `sorted()` alphabetical
+  order (deterministic is arguably better, and no kit in the current
+  form-kits tree has more than one non-`form.pdf` PDF to exercise the
+  difference).
+- **NOTED, not scored as a gap:** whether `admin-console` (the live console
+  site) should carry a staging-success gate the way
+  `backend-demo`/`frontend-demo`/admin-service's traffic-shift do is a
+  genuine pre-existing plan ambiguity (the "Admin-tier targets" bullet
+  describes only a candidate-then-live sequence with no Firestore check),
+  not something this diff introduced -- left as-is per the reviewer's own
+  read, flagged here in case the maintainer wants `admin-console` gated too
+  in a future bead.
+
+Full backend suite (3825 passed / 67 skipped / 3 deselected / 1 xfailed) and
+root suite (1645 passed / 46 skipped) re-run green after the round-2 fix,
+from the worktree with `PYTHONPATH` set to it.
+
 ## Lessons
 
 Building the new `cloudbuild.yaml` steps surfaced the SAME ordering bug

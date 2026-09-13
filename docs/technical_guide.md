@@ -2809,10 +2809,14 @@ maintainer-approved rule bead 4.4 will also expose as an admin route.**
   `-demo` suffix) and precedes BOTH targets' own build/deploy steps;
   `admin-service-staging-gate` runs the same check for family
   `admin-service`, positioned between the tagged-candidate verify and the
-  traffic-shift step -- so admin-service's OWN staging tier (verify the
-  tagged revision, then check the gate, then shift) composes with this
-  bead's demo-side gate rather than needing a separate admin-service staging
-  target to write a row for.
+  traffic-shift step. admin-service has no separate staging target of its
+  own (one service backs both channels), so its OWN
+  `admin-service-record-deployment` step writes the `channel="staging"` row
+  its gate reads -- and it has to run BEFORE the gate (right after
+  `admin-service-verify-tagged`, not last), because both the write and the
+  read happen in the SAME build. This is the opposite order from
+  backend/frontend, whose recording target and gated target are two
+  separate builds.
 - **Firestore rules:** covered by 31a's deny block (one collection, two
   producers/consumers).
 - **Pinned by:** `admin_backend/tests/unit/test_promotion_gate.py` (the pure

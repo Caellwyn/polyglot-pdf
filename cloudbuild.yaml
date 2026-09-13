@@ -700,12 +700,49 @@ steps:
         fi
         echo "Tagged candidate is healthy at $$TAG_URL"
 
+  - id: admin-service-record-deployment
+    # admin-service has NO separate staging target of its own (deploy-admin.sh:
+    # "the admin service has no channel of its own" -- ONE service backs both
+    # channels' data, see deploy-admin.sh's own "WHY A TAGGED NO-TRAFFIC
+    # DEPLOY" comment). Its tagged-candidate-then-shift sequence above IS its
+    # staging tier: a healthy /health response from the untrafficked
+    # "candidate" tag (admin-service-verify-tagged, just above) is the same
+    # proof-of-work a separate staging deploy provides for backend/frontend.
+    # So this step records that proof as a channel="staging" row --
+    # hardcoded, like its backend-record-deployment / frontend-record-deployment
+    # siblings, NOT "${_CHANNEL}" (which resolves to "admin" per
+    # setup-cloud-build.sh's trigger wiring and would make
+    # admin-service-staging-gate below permanently unsatisfiable: the gate
+    # requires channel=="staging" and no other step ever writes that value
+    # for this family).
+    #
+    # ORDER MATTERS: this step MUST run BEFORE admin-service-staging-gate,
+    # unlike backend/frontend where the recording target and the gated
+    # target are two SEPARATE builds. Here both halves are the SAME build,
+    # so the row has to exist before the gate reads it -- recording after
+    # the gate (as originally written) is a bootstrap deadlock: no build
+    # could ever satisfy its own gate.
+    name: python:3.12
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
+        pip install --quiet google-cloud-firestore
+        python scripts/record_deployment.py \
+          --target admin-service --channel staging --sha "${_SHA}" \
+          --build-id "$BUILD_ID" --status success --project "$PROJECT_ID"
+
   - id: admin-service-staging-gate
     # The staging-before-demo gate for the admin service's TRAFFIC SHIFT
     # (plan: "backend-demo, frontend-demo and admin-service traffic shift
     # additionally require a deployments record ..."). Uses the SAME
     # promotion gate module as staging-verified-gate above, family
-    # "admin-service".
+    # "admin-service". Satisfied by admin-service-record-deployment just
+    # above, in THIS SAME build -- see that step's comment for why its
+    # position is reversed relative to backend/frontend's separate-build
+    # staging tiers.
     name: python:3.12
     entrypoint: bash
     args:
@@ -727,19 +764,6 @@ steps:
         if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
         gcloud run services update-traffic polyglot-admin \
           --region us-central1 --project "$PROJECT_ID" --to-latest
-
-  - id: admin-service-record-deployment
-    name: python:3.12
-    entrypoint: bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        if [ "${_TARGET}" != "admin-service" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
-        pip install --quiet google-cloud-firestore
-        python scripts/record_deployment.py \
-          --target admin-service --channel "${_CHANNEL}" --sha "${_SHA}" \
-          --build-id "$BUILD_ID" --status success --project "$PROJECT_ID"
 
   # --------------------------------------------------------------------
   # admin-console-candidate / admin-console -- the two Hosting sites, mirrors

@@ -921,7 +921,11 @@ STAGING_GATED_DEMO_TARGETS = ("backend-demo", "frontend-demo")
 # staging target's LAST step writes its own success row to deployments").
 # admin-service is its OWN staging tier (tagged-candidate-then-shift), so its
 # record step fires unconditionally for that target rather than being
-# staging-channel-gated the way backend/frontend are.
+# staging-channel-gated the way backend/frontend are. UNLIKE backend/frontend,
+# admin-service's record step does NOT run last -- it runs before its own
+# admin-service-staging-gate (which reads the very row it writes, in the same
+# build) and before admin-service-shift-traffic. See
+# test_each_staging_target_records_its_own_success_row's docstring.
 STAGING_RECORDING_TARGETS = ("backend-staging", "frontend-staging", "admin-service")
 
 # Every SITE target: builds a frontend bundle from a directory .gcloudignore
@@ -1062,18 +1066,49 @@ def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
         "admin-service-shift-traffic runs before admin-service-staging-gate -- "
         "traffic could shift before the staging check runs"
     )
+    # admin-service has no separate staging build -- its OWN
+    # record-deployment step must satisfy its OWN gate, in the same build,
+    # so the record step has to run FIRST. (Bootstrap-deadlock regression
+    # guard: this was reversed until the ywxoh fresh-eyes review caught that
+    # no build could ever satisfy a gate checked before anything wrote the
+    # row it looks for.)
+    assert order["admin-service-record-deployment"] < order["admin-service-staging-gate"], (
+        "admin-service-record-deployment runs AFTER admin-service-staging-gate -- "
+        "the gate can never find a row, since nothing wrote one yet in this build "
+        "(a bootstrap deadlock: admin-service deploys would fail every time)"
+    )
 
 
 @pytest.mark.parametrize("target", STAGING_RECORDING_TARGETS)
 def test_each_staging_target_records_its_own_success_row(by_id, steps, target):
-    """Exit criterion 1, clause 3: each staging target's LAST step writes its
-    own deployments row (plan: avoids racing bead 4.3's Pub/Sub webhook, and
+    """Exit criterion 1, clause 3: each staging target writes its own
+    deployments row (plan: avoids racing bead 4.3's Pub/Sub webhook, and
     covers bash-triggered builds the webhook alone would still need this for).
+
+    "LAST step" (the plan's literal phrasing) holds for backend-staging and
+    frontend-staging, which record AFTER their own deploy in a build no
+    later step depends on reading. admin-service is the deliberate
+    exception: it has no separate staging build, so its OWN
+    admin-service-staging-gate has to read a row THIS SAME build wrote --
+    which means admin-service-record-deployment must run BEFORE the gate
+    (and therefore before the traffic shift too), not last. See that step's
+    comment in cloudbuild.yaml for the bootstrap-deadlock this avoids.
+
+    Every target's record step is also pinned to the LITERAL channel value
+    "staging" (not just "some --channel flag exists") -- the exact gap a
+    prior review round found: admin-service's trigger fixes _CHANNEL to
+    "admin" (scripts/setup-cloud-build.sh), so a step written as
+    `--channel "${_CHANNEL}"` would silently record "admin" and the staging
+    gate could never be satisfied. Asserting the flag's PRESENCE alone does
+    not catch that -- only the literal value does.
 
     Mutation-verified: deleting the record_deployment.py call from any one of
     the three record steps (confirmed on frontend-record-deployment during
     development) makes this red for that target without affecting the other
     two -- proving the check is per-target, not a single global grep.
+    Separately mutation-verified: reverting `--channel staging` back to
+    `--channel "${_CHANNEL}"` on admin-service-record-deployment makes the
+    literal-value assertion below red without touching the two siblings.
     """
     record_step_by_target = {
         "backend-staging": "backend-record-deployment",
@@ -1087,8 +1122,32 @@ def test_each_staging_target_records_its_own_success_row(by_id, steps, target):
     assert "--channel" in body
     assert "--status success" in body
     assert "--build-id" in body and "$BUILD_ID" in body
+    # The literal value, not just the flag's presence -- see docstring.
+    assert re.search(r'--channel\s+staging(\s|$)', body), (
+        f"{step_id} does not record the LITERAL channel value \"staging\" "
+        f"(found: {body!r}) -- a demo/traffic-shift gate reading for "
+        f"channel==\"staging\" would never find this row"
+    )
 
     order = {step["id"]: i for i, step in enumerate(steps)}
+    if target == "admin-service":
+        # The deliberate exception: record BEFORE the gate it satisfies (and
+        # therefore before the traffic shift), not last. Pinned in detail by
+        # test_admin_service_traffic_shift_carries_the_staging_gate above;
+        # here just confirm it precedes its own deploy-tagged/verify-tagged
+        # predecessors' natural successor, i.e. it isn't sitting somewhere
+        # nonsensical like before the tagged deploy even happens.
+        assert order[step_id] > order["admin-service-verify-tagged"], (
+            f"{step_id} runs before admin-service-verify-tagged -- it would "
+            "record success for a candidate that was never health-checked"
+        )
+        assert order[step_id] < order["admin-service-shift-traffic"], (
+            f"{step_id} runs after admin-service-shift-traffic -- traffic "
+            "would have already moved before this build's own success row "
+            "was durable"
+        )
+        return
+
     # "LAST step" -- no other step for this target's family runs after it,
     # among the steps THIS bead added for that family.
     family_steps = {
@@ -1097,11 +1156,6 @@ def test_each_staging_target_records_its_own_success_row(by_id, steps, target):
                              "backend-record-deployment"],
         "frontend-staging": ["frontend-resolve-urls", "frontend-build-deploy",
                               "frontend-record-deployment"],
-        "admin-service": ["admin-service-deploy-tagged",
-                           "admin-service-verify-tagged",
-                           "admin-service-staging-gate",
-                           "admin-service-shift-traffic",
-                           "admin-service-record-deployment"],
     }[target]
     indices = [order[s] for s in family_steps]
     assert order[step_id] == max(indices), (
