@@ -2,10 +2,13 @@ import React from 'react';
 import {
   getFirm, setFirmAllowedKits, setFirmKind, setFirmPlan,
   grantCredits, adjustCredits, listFirmLinks, revokeLink,
+  listAlerts, acknowledgeAlert,
   FIRM_KINDS, GRANT_TYPES, USD_REQUIRED_GRANT_TYPES, LINK_CHANNELS, PLAN_TIERS,
   type FirmDetail, type FirmKind, type FirmPlan, type GrantType,
   type LinkChannel, type LinkRow, type PlanTier,
+  type AlertRow as AlertRowData,
 } from '../utils/adminApi';
+import { AlertRow } from '../components/AlertRow';
 
 interface FirmDetailPageProps {
   firmId: string;
@@ -66,6 +69,27 @@ function usdAmountApplies(type: GrantType): boolean {
  * (monthly_credits a positive integer) ahead of the network call, but the
  * route's own 422 detail is still what this page trusts for anything that
  * check does not catch.
+ *
+ * ALERTS SECTION (bd polyglot-pdf-362nk): `GET /admin/alerts?firm_id=<id>`
+ * (the OPERATOR-WIDE route, `require_app_admin` -- this console's own
+ * sign-in gate already requires that role, unlike the firm's own console's
+ * SEPARATE `GET /admin/firms/{firm_id}/alerts` route from bd
+ * polyglot-pdf-62o4d), rendered through the SAME `components/AlertRow.tsx`
+ * row component AlertsPage.tsx uses (exit criterion 2) rather than a
+ * second copy of the kind/level/plain-text rendering. UNACKNOWLEDGED
+ * ALERTS SORT FIRST (exit criterion 1's own wording -- NOT an
+ * unacknowledged-ONLY filter the way AlertsPage.tsx defaults to: this
+ * section lists every alert for the firm, with the ones still needing
+ * attention at the top) via a stable client-side sort on
+ * `Boolean(acknowledged_by)`, since the route's own ordering is newest-ts-
+ * first with no acknowledged-aware ordering of its own. Acknowledge calls
+ * the PATCH exactly once per row click (the shared component's own
+ * busy-while-in-flight gate) and RE-READS the alerts list on success only
+ * -- mirrors every other mutation on this page's mutate-then-re-read
+ * round trip, and AlertsPage.tsx's own not-re-read-on-failure rule. A
+ * FAILED alerts fetch sets ONLY `alertsError` (its own, separate error
+ * state) and never touches `error`/`firm` -- the bead's own requirement
+ * that a fetch error here "never blanks the rest of the detail page".
  */
 export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
   firmId, onAuthExpired, onBack,
@@ -120,6 +144,15 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
   const [linksError, setLinksError] = React.useState<string | null>(null);
   const [revokingJti, setRevokingJti] = React.useState<string | null>(null);
 
+  // Alerts (bd polyglot-pdf-362nk) -- its own isolated {loading, error}
+  // pair, deliberately separate from `error`/`loading` above, so a failed
+  // alerts fetch never blanks the rest of the already-loaded firm detail.
+  const [alerts, setAlerts] = React.useState<AlertRowData[]>([]);
+  const [alertsLoading, setAlertsLoading] = React.useState(false);
+  const [alertsError, setAlertsError] = React.useState<string | null>(null);
+  const [alertBusyId, setAlertBusyId] = React.useState<string | null>(null);
+  const [alertRowError, setAlertRowError] = React.useState<{ id: string; message: string } | null>(null);
+
   const loadFirm = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -170,6 +203,56 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
     void loadLinks(channel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firmId, channel]);
+
+  // Unacknowledged-first: a stable sort (Array.prototype.sort is stable in
+  // every JS engine this app targets) that keeps the route's own
+  // newest-ts-first ordering WITHIN each acknowledged/unacknowledged group,
+  // only reordering ACROSS the two groups.
+  const sortAlertsUnacknowledgedFirst = (rows: AlertRowData[]): AlertRowData[] => {
+    return [...rows].sort((a, b) => {
+      const aAck = a.acknowledged_by ? 1 : 0;
+      const bAck = b.acknowledged_by ? 1 : 0;
+      return aAck - bAck;
+    });
+  };
+
+  const loadAlerts = React.useCallback(async () => {
+    setAlertsLoading(true);
+    setAlertsError(null);
+    try {
+      const page = await listAlerts({ firmId });
+      setAlerts(sortAlertsUnacknowledgedFirst(page.alerts));
+    } catch (err) {
+      if (onAuthExpired(err)) return;
+      // Deliberately its OWN error state (never `setError`) -- a failed
+      // alerts fetch must never blank the rest of this already-loaded page
+      // (bead requirement).
+      setAlertsError(err instanceof Error ? err.message : 'Could not load the firm alerts');
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, [firmId, onAuthExpired]);
+
+  React.useEffect(() => {
+    void loadAlerts();
+  }, [loadAlerts]);
+
+  const handleAcknowledgeAlert = React.useCallback(async (alert: AlertRowData) => {
+    setAlertBusyId(alert.id);
+    setAlertRowError(null);
+    try {
+      await acknowledgeAlert(alert.id);
+      await loadAlerts();
+    } catch (err) {
+      if (onAuthExpired(err)) return;
+      setAlertRowError({
+        id: alert.id,
+        message: err instanceof Error ? err.message : 'Could not acknowledge the alert',
+      });
+    } finally {
+      setAlertBusyId(null);
+    }
+  }, [loadAlerts, onAuthExpired]);
 
   const handleSaveAllowedKits = React.useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -693,6 +776,47 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
                   {links.length === 0 && !linksLoading && (
                     <tr>
                       <td colSpan={5} className="py-4 text-gray-500">No links for this channel.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Alerts (bd polyglot-pdf-362nk) -- see module docstring's
+              "ALERTS SECTION" paragraph. A fetch error here (alertsError)
+              renders inline, below, and never replaces anything else on
+              this page -- everything above (profile, plan, ledger, links)
+              stays exactly as it was. */}
+          <div className="mt-6">
+            <h3 className="font-medium text-gray-700 text-sm">Alerts</h3>
+
+            {alertsError && <div className="mt-2 text-sm text-red-600">{alertsError}</div>}
+
+            <div className="mt-2 overflow-x-auto">
+              <table className="min-w-full text-sm text-left" data-testid="firm-alerts-table">
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-500">
+                    <th className="py-1 pr-4">Kind</th>
+                    <th className="py-1 pr-4">Level</th>
+                    <th className="py-1 pr-4">Time</th>
+                    <th className="py-1 pr-4">Status</th>
+                    <th className="py-1 pr-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alerts.map((alert) => (
+                    <AlertRow
+                      key={alert.id}
+                      alert={alert}
+                      busy={alertBusyId === alert.id}
+                      rowError={alertRowError && alertRowError.id === alert.id ? alertRowError.message : null}
+                      onAcknowledge={(a) => void handleAcknowledgeAlert(a)}
+                    />
+                  ))}
+                  {alerts.length === 0 && !alertsLoading && !alertsError && (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-gray-500">No alerts for this firm.</td>
                     </tr>
                   )}
                 </tbody>
