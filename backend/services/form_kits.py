@@ -773,11 +773,12 @@ class LocalFormKitStore(FormKitStore):
 	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
 		"""Delete an abandoned claim, without ever removing real work.
 
-		THREE guards here, each load-bearing for a DIFFERENT file, plus a
-		FOURTH at the only call site (the `>= next_id` id bound -- see the
-		comment there). Every guard below keys on directory CONTENTS, so none
-		of them protects another saver's freshly-claimed EMPTY directory; do
-		not read this list as complete without that one. None is redundant:
+		THREE guards here, each load-bearing for a DIFFERENT file, plus TWO
+		more at the only call site (the `>= next_id` id bound and the
+		in-flight claim registry -- see the comment there). Every guard below
+		keys on directory CONTENTS, so none of them protects another saver's
+		freshly-claimed EMPTY directory; do not read this list as complete
+		without those two. None is redundant:
 
 		1. The schema.json early return protects a COMPLETED snapshot's
 		   meta.json. The unlink below runs BEFORE rmdir is ever reached, so

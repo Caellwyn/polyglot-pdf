@@ -250,9 +250,9 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 - **Validation happens ONLY at the publish gate.** Draft saves
   (`save_editor_kit_schema` in `editor_kit_routes.py`) check just that
   `fields` is a list and write the raw dict via the store
-  (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
-  `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
-  :1172 GCS). The one chokepoint is "mark complete"
+  (`FormKitStore.put_schema` in `backend/services/form_kits.py` -- abstract /
+  `LocalFormKitStore.put_schema` local / `GCSFormKitStore.put_schema`
+  GCS). The one chokepoint is "mark complete"
   (`set_editor_kit_status` in `editor_kit_routes.py`):
   `FormSchema.model_validate` plus the zero-ERROR schema-lint gate
   (`lint_schema`, `backend/services/schema_lint.py:833`, checked via its own
