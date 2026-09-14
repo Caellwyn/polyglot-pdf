@@ -48,15 +48,24 @@ ADMIN_SA_NAME = "admin-backend-sa"
 # --format='value(bindings.role)'`.
 #
 # Roles the plan DEFERS to the epic that first needs them are deliberately
-# ABSENT: cloudbuild.builds.editor + iam.serviceAccountUser, run.admin,
-# firebasehosting.admin (Epic 4). errorreporting.viewer and monitoring.viewer
+# ABSENT: cloudbuild.builds.editor is the one still deferred (Epic 4 bead
+# 4.3, admin_backend/services/cloud_build.py, not yet built -- the route
+# that actually submits a build). errorreporting.viewer and monitoring.viewer
 # were deferred here too until Epic 3 bead 8 (bd polyglot-pdf-e4dt8) shipped
 # and moved them OUT of DEFERRED_ROLES into EXPECTED_ADMIN_SA_ROLES below
 # (granted by scripts/setup-monitoring.sh, MONITORING_GRANTED_ROLES) -- their
 # first real consumer is bd polyglot-pdf-mpebj's GET /admin/errors
 # (admin_backend/services/error_stats.py); no route reads monitoring.viewer
-# yet. An unused grant is its own risk, so each lands with its first
-# consumer -- pinned by test_admin_sa_holds_no_deferred_role_early below.
+# yet. iam.serviceAccountUser moved OUT of DEFERRED_ROLES the same way, into
+# CLOUD_BUILD_SA_GRANTED_ROLES below (bead polyglot-pdf-p4ale, E4.5) -- its
+# first consumer is the SAME bead-4.3 route, which needs actAs on
+# polyglot-cloudbuild-sa to submit a build that runs as that identity even
+# before the route itself exists to call it. run.admin and
+# firebasehosting.admin are DELETED, not deferred: the admin service never
+# deploys anything itself (Cloud Build does), so there is no future epic
+# that grants either here. An unused grant is its own risk, so each
+# genuinely-deferred role lands with its first consumer -- pinned by
+# test_admin_sa_holds_no_deferred_role_early below.
 #
 # bigquery.jobUser + bigquery.dataViewer landed HERE (Epic 3 bead 6, E3.6):
 # they are granted by scripts/setup-telemetry.sh, NOT
@@ -102,6 +111,18 @@ EXPECTED_ADMIN_SA_ROLES = {
     # re-running scripts/setup-monitoring.sh under their OWN credentials,
     # never through the console with the service's identity.
     "roles/monitoring.viewer",
+    # actAs on polyglot-cloudbuild-sa: submit a build that runs AS that
+    # identity (bead polyglot-pdf-p4ale, E4.5 -- the admin service's future
+    # trigger route, bead 4.3, calls `builds.create`). Granted by
+    # scripts/setup-admin-service.sh's CLOUD_BUILD_SA_ROLES array, scoped to
+    # that ONE service account -- see
+    # test_admin_sa_actas_role_is_scoped_to_the_cloud_build_sa below for why
+    # the scope, not just the name, is pinned. This is the role CLAUDE.md's
+    # scar #7 example is about: a project-wide grant here would let a
+    # compromised admin-backend-sa credential impersonate every service
+    # account in the project, not just the one build identity it is allowed
+    # to submit builds as.
+    "roles/iam.serviceAccountUser",
 }
 
 # Roles granted on ONE RESOURCE rather than project-wide. Kept apart from the
@@ -142,14 +163,37 @@ TELEMETRY_GRANTED_ROLES = {
     "roles/monitoring.viewer",
 }
 
+# The subset of EXPECTED_ADMIN_SA_ROLES granted by setup-admin-service.sh's
+# CLOUD_BUILD_SA_ROLES array (resource-scoped to polyglot-cloudbuild-sa),
+# not its project-level PROJECT_ROLES array. Subtracted out for the same
+# reason as TELEMETRY_GRANTED_ROLES and MONITORING_GRANTED_ROLES above:
+# test_admin_sa_project_role_pin_matches_the_setup_script reads ONLY
+# PROJECT_ROLES, so a role granted by a different array in the same script
+# must be excluded from that comparison rather than wrongly demanded there.
+CLOUD_BUILD_SA_GRANTED_ROLES = {
+    "roles/iam.serviceAccountUser",
+}
+
 # Roles the plan defers to the epic that first needs them. Granting one early
 # widens the blast radius of a compromise for a capability nothing calls.
+#
+# roles/iam.serviceAccountUser, roles/run.admin and roles/firebasehosting.
+# admin -- all three DEFERRED here before bead polyglot-pdf-p4ale (E4.5) --
+# are gone from this set now, but for two DIFFERENT reasons:
+#   - roles/iam.serviceAccountUser is GRANTED (see
+#     CLOUD_BUILD_SA_GRANTED_ROLES above): its first consumer, the admin
+#     service's future build-trigger route (bead 4.3), needs actAs on
+#     polyglot-cloudbuild-sa to submit a build that runs as that identity.
+#   - roles/run.admin and roles/firebasehosting.admin are DELETED, not
+#     granted: the admin service never deploys anything itself -- Cloud
+#     Build does the deploying, as polyglot-cloudbuild-sa (see
+#     scripts/setup-cloud-build.sh, which holds both). There is no future
+#     epic that grants either to admin-backend-sa, so leaving them deferred
+#     would keep a dead expectation this test could never satisfy.
 DEFERRED_ROLES = {
-    # Epic 4 (deploy control plane).
+    # Bead 4.3 (admin_backend/services/cloud_build.py, not yet built): the
+    # route that actually calls builds.create/triggers.run.
     "roles/cloudbuild.builds.editor",
-    "roles/iam.serviceAccountUser",
-    "roles/run.admin",
-    "roles/firebasehosting.admin",
 }
 
 
@@ -192,10 +236,19 @@ def test_admin_sa_project_role_pin_matches_the_setup_script():
     test_telemetry_script_grants_admin_sa_bigquery_roles below), not by this
     script's PROJECT_ROLES array, so comparing the full envelope against
     setup-admin-service.sh alone would wrongly demand it grant BigQuery
-    roles it never touches.
+    roles it never touches. CLOUD_BUILD_SA_GRANTED_ROLES is subtracted for
+    the identical reason: roles/iam.serviceAccountUser is granted by this
+    same script's CLOUD_BUILD_SA_ROLES array (resource-scoped to
+    polyglot-cloudbuild-sa), not PROJECT_ROLES -- see
+    test_admin_sa_actas_role_pin_matches_the_setup_script below for that
+    array's own pin.
     """
     granted = _named_array(_setup_script_text(), "PROJECT_ROLES")
-    expected = EXPECTED_ADMIN_SA_ROLES - TELEMETRY_GRANTED_ROLES
+    expected = (
+        EXPECTED_ADMIN_SA_ROLES
+        - TELEMETRY_GRANTED_ROLES
+        - CLOUD_BUILD_SA_GRANTED_ROLES
+    )
     assert granted == expected, (
         "scripts/setup-admin-service.sh grants a different PROJECT-level role "
         "set than EXPECTED_ADMIN_SA_ROLES (minus the telemetry-script roles) "
@@ -253,6 +306,52 @@ def test_the_bucket_roles_are_granted_on_the_bucket_not_the_project():
         assert role not in _named_array(text, "PROJECT_ROLES"), (
             "{} is granted PROJECT-WIDE. It is meant to be scoped to the "
             "form-kits bucket only.".format(role))
+
+
+def test_admin_sa_actas_role_pin_matches_the_setup_script():
+    """The CLOUD_BUILD_SA_ROLES array grants exactly CLOUD_BUILD_SA_GRANTED_ROLES.
+
+    Mirrors test_admin_sa_bucket_role_pin_matches_the_setup_script, but for
+    the resource-scoped grant on polyglot-cloudbuild-sa rather than the
+    form-kits bucket.
+    """
+    granted = _named_array(_setup_script_text(), "CLOUD_BUILD_SA_ROLES")
+    assert granted == CLOUD_BUILD_SA_GRANTED_ROLES, (
+        "scripts/setup-admin-service.sh grants a different actAs role set on "
+        "polyglot-cloudbuild-sa than CLOUD_BUILD_SA_GRANTED_ROLES pins."
+        + chr(10) + "  only in the script: {}".format(
+            sorted(granted - CLOUD_BUILD_SA_GRANTED_ROLES))
+        + chr(10) + "  only in the pin:    {}".format(
+            sorted(CLOUD_BUILD_SA_GRANTED_ROLES - granted)))
+
+
+def test_the_actas_role_is_scoped_to_the_cloud_build_sa_not_the_project():
+    """The SCOPE of the actAs grant, not just its name.
+
+    roles/iam.serviceAccountUser moved from `gcloud iam service-accounts
+    add-iam-policy-binding polyglot-cloudbuild-sa@...` to `gcloud projects
+    add-iam-policy-binding` would keep every name-keyed assertion above
+    green while handing admin-backend-sa the ability to impersonate EVERY
+    service account in the project -- exactly the CLAUDE.md scar #7 shape,
+    on the grant side.
+    """
+    text = _setup_script_text()
+    for role in CLOUD_BUILD_SA_GRANTED_ROLES:
+        assert role in _named_array(text, "CLOUD_BUILD_SA_ROLES"), role
+    assert re.search(
+        r"CLOUD_BUILD_SA_ROLES\[@\]", text), (
+        "CLOUD_BUILD_SA_ROLES is never iterated in setup-admin-service.sh -- "
+        "the array is pinned by the test above but grants nothing.")
+    assert re.search(
+        r'gcloud\s+iam\s+service-accounts\s+add-iam-policy-binding\s+'
+        r'"\$CLOUD_BUILD_SA"', text), (
+        "setup-admin-service.sh has no `gcloud iam service-accounts "
+        "add-iam-policy-binding \"$CLOUD_BUILD_SA\"` call, so the actAs "
+        "role is either ungranted or (worse) granted project-wide.")
+    for role in CLOUD_BUILD_SA_GRANTED_ROLES:
+        assert role not in _named_array(text, "PROJECT_ROLES"), (
+            "{} is granted PROJECT-WIDE. It is meant to be scoped to "
+            "polyglot-cloudbuild-sa only.".format(role))
 
 
 def _telemetry_script_text() -> str:
@@ -384,8 +483,11 @@ def test_admin_sa_holds_no_deferred_role_early():
     open rather than a line nobody notices in a setup script.
     """
     text = _setup_script_text()
-    granted = _named_array(text, "PROJECT_ROLES") | _named_array(
-        text, "BUCKET_ROLES")
+    granted = (
+        _named_array(text, "PROJECT_ROLES")
+        | _named_array(text, "BUCKET_ROLES")
+        | _named_array(text, "CLOUD_BUILD_SA_ROLES")
+    )
     granted_early = DEFERRED_ROLES & granted
     assert not granted_early, (
         "scripts/setup-admin-service.sh grants roles the plan defers to the "
