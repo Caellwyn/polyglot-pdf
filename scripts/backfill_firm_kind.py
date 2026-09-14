@@ -38,6 +38,14 @@ WHAT GETS WRITTEN, PER FIRM:
     no `balance_credits` key yet (same reasoning: upsert_firm() already
     0-initializes this on every NEW firm since bead A1, so this only ever
     fires for docs older than that).
+  - `plan` (bd polyglot-pdf-0euzk): set ONLY when the firm doc has no `plan`
+    key yet, to backend/services/plans.py's DEFAULT_PLAN ({tier: "starter",
+    monthly_credits: 35, rollover: False} -- the maintainer's 2026-09-14
+    starting numbers). Independent of the kind/balance backfill above: a
+    firm created AFTER admin_backend/routes/firm_routes.py's create route
+    started writing a default plan already has one and is skipped for this
+    step alone, while an OLDER firm predating that route gets caught up
+    here regardless of whether its kind/balance needed backfilling too.
   - an optional ONE-TIME `promo_grant` ledger entry via
     `--seed-credits N`, written through the SAME transactional helper
     (backend/services/credit_ledger.py:append_entry) the console and
@@ -218,7 +226,7 @@ def main(argv=None) -> int:
 
     from firebase_admin import firestore
 
-    from backend.services import credit_ledger
+    from backend.services import credit_ledger, plans
     from backend.services.auth import get_db
 
     db = get_db()
@@ -233,6 +241,7 @@ def main(argv=None) -> int:
         firm = snap.to_dict() or {}
         had_kind = "kind" in firm
         had_balance = "balance_credits" in firm
+        had_plan = "plan" in firm
 
         target_kind = KIND_MOCK if firm_id in mock_allowlist else KIND_LIVE
 
@@ -247,6 +256,10 @@ def main(argv=None) -> int:
             # normally-created firm's exactly.
             payload["balance_credits"] = 0
             payload["balance_updated_at"] = firestore.SERVER_TIMESTAMP
+        if not had_plan:
+            # dict(...) copies plans.DEFAULT_PLAN rather than writing the
+            # same mutable module-level object into every touched firm doc.
+            payload["plan"] = dict(plans.DEFAULT_PLAN)
 
         # Seed grant is scoped to firms this run is FIRST assigning a kind
         # to -- see the module docstring's idempotency section. A firm that

@@ -252,12 +252,16 @@ def test_firm_with_existing_balance_is_never_overwritten(
 
 
 def test_true_no_op_rerun_writes_nothing(firebase_stub, ledger_spy, monkeypatch):
-    """A firm already fully backfilled (kind + balance_credits present) must
-    not trigger ANY Firestore write on a re-run. Mutation: remove the
-    `if not payload and not will_seed: continue` early-out -- would call
-    .set({}, merge=True) unconditionally, and this test's assertion that
-    .set was never invoked would go red."""
-    firms = {"acme-legal": {"kind": "live", "balance_credits": 0}}
+    """A firm already fully backfilled (kind + balance_credits + plan
+    present -- bd polyglot-pdf-0euzk added the third field this backfill
+    covers) must not trigger ANY Firestore write on a re-run. Mutation:
+    remove the `if not payload and not will_seed: continue` early-out --
+    would call .set({}, merge=True) unconditionally, and this test's
+    assertion that .set was never invoked would go red."""
+    firms = {"acme-legal": {"kind": "live", "balance_credits": 0,
+                            "plan": {"tier": "starter",
+                                     "monthly_credits": 35,
+                                     "rollover": False}}}
     db = _wire_db(monkeypatch, firms)
 
     calls = []
@@ -429,3 +433,95 @@ def test_existing_balance_never_gets_balance_updated_at_added(
 
     assert rc == 0
     assert "balance_updated_at" not in db.firms["acme-legal"]
+
+
+# --------------------------------------------------------------- plan backfill (bd polyglot-pdf-0euzk)
+
+
+def test_firm_with_no_plan_gets_the_default_plan(
+        firebase_stub, ledger_spy, monkeypatch):
+    """A pre-0euzk firm doc (kind + balance already backfilled, but no
+    plan key at all) gets backend/services/plans.py's DEFAULT_PLAN.
+
+    Mutation: drop the `if not had_plan: payload["plan"] = ...` branch in
+    main() -- this goes red (db.firms[...] would have no "plan" key at
+    all)."""
+    firms = {"acme-legal": {"kind": "live", "balance_credits": 100}}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert db.firms["acme-legal"]["plan"] == {
+        "tier": "starter", "monthly_credits": 35, "rollover": False}
+
+
+def test_firm_with_existing_plan_is_never_overwritten(
+        firebase_stub, ledger_spy, monkeypatch):
+    """A firm that already carries a `plan` (an app-admin already changed
+    it via PATCH /admin/firms/{firm_id}/plan) must not have it reset to
+    the default on a re-run.
+
+    Mutation: drop the `"plan" not in firm` guard (always overwrite) --
+    this goes red (a deliberately-changed plan would be reset to
+    DEFAULT_PLAN)."""
+    firms = {"acme-legal": {
+        "kind": "live", "balance_credits": 100,
+        "plan": {"tier": "starter", "monthly_credits": 99,
+                 "rollover": True},
+    }}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert db.firms["acme-legal"]["plan"] == {
+        "tier": "starter", "monthly_credits": 99, "rollover": True}
+
+
+def test_plan_backfill_is_independent_of_kind_and_balance_backfill(
+        firebase_stub, ledger_spy, monkeypatch):
+    """A firm missing ONLY plan (kind and balance_credits already stored)
+    still gets the plan backfilled -- the three fields are checked
+    independently, not gated on "the firm needed ANY backfill".
+
+    Mutation: gate the plan write on `not had_kind` (reusing the kind
+    check instead of its own `had_plan`) -- this goes red (a firm with a
+    real kind but no plan would be skipped for the plan step)."""
+    firms = {"acme-legal": {"kind": "live", "balance_credits": 100}}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert db.firms["acme-legal"]["kind"] == "live"  # untouched
+    assert db.firms["acme-legal"]["balance_credits"] == 100  # untouched
+    assert db.firms["acme-legal"]["plan"] == {
+        "tier": "starter", "monthly_credits": 35, "rollover": False}
+
+
+def test_plan_backfill_copies_the_default_not_a_shared_reference(
+        firebase_stub, ledger_spy, monkeypatch):
+    """Each touched firm must get its OWN dict, not a shared reference to
+    plans.DEFAULT_PLAN -- mutating one firm's stored plan later must never
+    silently mutate every other firm's (or the module-level default
+    itself).
+
+    Mutation: drop the `dict(...)` copy (`payload["plan"] = plans.
+    DEFAULT_PLAN` instead of `dict(plans.DEFAULT_PLAN)`) -- the `is not`
+    identity assertions below catch this directly: with the copy dropped,
+    firm-a's and firm-b's stored `plan` become the SAME object (and the
+    SAME object as plans_module.DEFAULT_PLAN itself), so both identity
+    checks flip from `is not` to `is` and this test goes red. Verified
+    2026-09-14."""
+    import backend.services.plans as plans_module
+
+    firms = {"firm-a": {"kind": "live", "balance_credits": 0},
+             "firm-b": {"kind": "live", "balance_credits": 0}}
+    db = _wire_db(monkeypatch, firms)
+
+    rc = backfill_firm_kind.main(_argv())
+
+    assert rc == 0
+    assert db.firms["firm-a"]["plan"] is not db.firms["firm-b"]["plan"]
+    assert db.firms["firm-a"]["plan"] is not plans_module.DEFAULT_PLAN

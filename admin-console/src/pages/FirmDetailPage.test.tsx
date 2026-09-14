@@ -14,7 +14,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { FirmDetailPage } from './FirmDetailPage';
 import {
   AuthError, ForbiddenError,
-  getFirm, setFirmAllowedKits, setFirmKind,
+  getFirm, setFirmAllowedKits, setFirmKind, setFirmPlan,
   grantCredits, adjustCredits, listFirmLinks, revokeLink,
 } from '../utils/adminApi';
 
@@ -25,6 +25,7 @@ vi.mock('../utils/adminApi', async (importOriginal) => {
     getFirm: vi.fn(),
     setFirmAllowedKits: vi.fn(),
     setFirmKind: vi.fn(),
+    setFirmPlan: vi.fn(),
     grantCredits: vi.fn(),
     adjustCredits: vi.fn(),
     listFirmLinks: vi.fn(),
@@ -39,6 +40,7 @@ const FIRM_DETAIL = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 120,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
   // No doc_id: GET /admin/firms/{firm_id}'s ledger rows are the persisted
   // credit_ledger document verbatim (backend/services/credit_ledger.py's
   // read_entries()), which does NOT include doc_id -- unlike the grant/
@@ -357,6 +359,79 @@ describe('FirmDetailPage', () => {
       await waitFor(() => expect(setFirmAllowedKits).toHaveBeenCalledTimes(1));
       expect(setFirmAllowedKits).toHaveBeenCalledWith('firm-a', ['w7', 'i-90']);
       await waitFor(() => expect(getFirm).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('plan (bd polyglot-pdf-0euzk): one write per save, no confirm-twice', () => {
+    it('saves the plan form fields in one call, then re-reads', async () => {
+      vi.mocked(setFirmPlan).mockResolvedValue({
+        firm_id: 'firm-a',
+        plan: { tier: 'starter', monthly_credits: 50, rollover: true },
+        before_plan: { tier: 'starter', monthly_credits: 35, rollover: false },
+        request_id: 'req-plan-1',
+      });
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '50' },
+      });
+      fireEvent.click(screen.getByLabelText(/Rollover/));
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      await waitFor(() => expect(setFirmPlan).toHaveBeenCalledTimes(1));
+      expect(setFirmPlan).toHaveBeenCalledWith('firm-a', {
+        tier: 'starter', monthly_credits: 50, rollover: true,
+      });
+      await waitFor(() => expect(getFirm).toHaveBeenCalledTimes(2));
+    });
+
+    it('the form pre-fills from the loaded firm plan', async () => {
+      await renderLoaded();
+      expect(screen.getByLabelText('Monthly credits')).toHaveValue(35);
+      expect(screen.getByLabelText(/Rollover/)).not.toBeChecked();
+    });
+
+    it('a fractional monthly_credits refuses submit client-side via handleSavePlan\'s own check, and shows the error', async () => {
+      // No native min/step constraint on this input (unlike grant-amount) --
+      // the input's own Number.isInteger check inside handleSavePlan is
+      // what refuses this, so this test actually exercises that guard
+      // end-to-end, unlike the zero-value case above (which the native
+      // `required`+"0" combination cannot cleanly isolate from -- see that
+      // test's own comment).
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '35.7' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      expect(setFirmPlan).not.toHaveBeenCalled();
+      expect(await screen.findByText(/Monthly credits must be a positive whole number/)).toBeInTheDocument();
+    });
+
+    it('a zero monthly_credits also refuses via handleSavePlan\'s own check, and shows the error', async () => {
+      // With min= dropped, "0" now also reaches the JS handler directly
+      // (jsdom's `required` attribute only blocks a BLANK value, not "0"),
+      // so this proves the <= 0 half of the same guard end-to-end too.
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '0' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      expect(setFirmPlan).not.toHaveBeenCalled();
+      expect(await screen.findByText(/Monthly credits must be a positive whole number/)).toBeInTheDocument();
+    });
+
+    it('a route-side 422 surfaces as an inline error, not a thrown exception', async () => {
+      vi.mocked(setFirmPlan).mockRejectedValueOnce(new Error('tier must be one of (starter,)'));
+      await renderLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      await waitFor(() => expect(setFirmPlan).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText('tier must be one of (starter,)')).toBeInTheDocument();
     });
   });
 

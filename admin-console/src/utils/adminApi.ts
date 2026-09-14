@@ -454,6 +454,29 @@ export async function setKitCommercial(
 export const FIRM_KINDS = ['mock', 'live'] as const;
 export type FirmKind = (typeof FIRM_KINDS)[number];
 
+/** The closed list of plan tiers (backend/services/plans.py::PLAN_TIERS,
+ * bd polyglot-pdf-0euzk). Today: exactly one -- a second tier is a
+ * maintainer-approved addition to that Python tuple, mirrored here. */
+export const PLAN_TIERS = ["starter"] as const;
+export type PlanTier = (typeof PLAN_TIERS)[number];
+
+/** A firm's plan: tier, monthly credit allotment, and whether the
+ * monthly top-up ADDS to the balance (rollover) or brings it UP TO the cap
+ * (no rollover) -- backend/services/plans.py's doc shape, verbatim. */
+export interface FirmPlan {
+  tier: PlanTier;
+  monthly_credits: number;
+  rollover: boolean;
+}
+
+/** The maintainer's 2026-09-14 starting numbers
+ * (backend/services/plans.py::DEFAULT_PLAN) -- what GET /admin/firms/
+ * {firm_id} and GET /admin/firms both return for a firm with no plan of
+ * its own yet (firm_routes.py's _public_firm_view fallback). */
+export const DEFAULT_PLAN: FirmPlan = {
+  tier: "starter", monthly_credits: 35, rollover: false,
+};
+
 /** The two firm statuses (backend/services/firms.py's FIRM_STATUS_ACTIVE /
  * FIRM_STATUS_SUSPENDED). */
 export const FIRM_STATUSES = ['active', 'suspended'] as const;
@@ -469,6 +492,7 @@ export interface FirmRow {
   status: FirmStatus | null;
   allowed_kits: string[];
   balance_credits: number;
+  plan: FirmPlan;
 }
 
 /** GET /admin/firms' response shape. A read, so no audit row. */
@@ -546,6 +570,7 @@ export interface FirmDetail {
   status: FirmStatus | null;
   allowed_kits: string[];
   balance_credits: number;
+  plan: FirmPlan;
   ledger: LedgerEntry[];
   ledger_truncated: boolean;
 }
@@ -623,6 +648,33 @@ export async function setFirmKind(
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not change the firm kind'));
   return (await res.json()) as SetFirmKindResult;
+}
+
+/** PATCH /admin/firms/{firm_id}/plan's response shape. */
+export interface SetFirmPlanResult {
+  firm_id: string;
+  plan: FirmPlan;
+  before_plan: FirmPlan | null;
+  request_id: string;
+}
+
+/** Set a firm's plan (tier, monthly_credits, rollover). No confirm-twice
+ * here, unlike setFirmKind -- a plan change only affects a monthly top-up
+ * amount, not minting eligibility, so one Save is enough (bd
+ * polyglot-pdf-0euzk exit criterion 3: "one write per save"). The route's
+ * own 422s (unknown tier, non-positive monthly_credits) are the source of
+ * truth this function trusts for anything the caller's own form did not
+ * already catch. */
+export async function setFirmPlan(
+  firmId: string, plan: FirmPlan,
+): Promise<SetFirmPlanResult> {
+  const res = await adminFetch(`/admin/firms/${encodeURIComponent(firmId)}/plan`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(plan),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the firm plan'));
+  return (await res.json()) as SetFirmPlanResult;
 }
 
 /** The three grant-shaped ledger entry types (credit_routes.py's
