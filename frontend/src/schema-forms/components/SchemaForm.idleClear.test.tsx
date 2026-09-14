@@ -390,7 +390,7 @@ describe('SchemaForm idle-wipe grace (bd polyglot-pdf-8v8i7)', () => {
     }
   });
 
-  it('tells a CLIENT-LINK session to reopen their link afterward to resume an unfinished form', async () => {
+  it('tells a CLIENT-LINK session that reopening the link starts again and only a saved PDF restores answers', async () => {
     vi.useFakeTimers();
     try {
       mockHasClientLinkToken = true;
@@ -404,6 +404,10 @@ describe('SchemaForm idle-wipe grace (bd polyglot-pdf-8v8i7)', () => {
       });
 
       expect(screen.getByRole('alert').textContent).toMatch(/reopen your original link/i);
+      // The copy must not promise a resume the app cannot deliver: only a
+      // saved PDF restores answers after the wipe (bd polyglot-pdf-xv4eb).
+      expect(screen.getByRole('alert').textContent).toMatch(/only a PDF you saved/i);
+      expect(screen.getByRole('alert').textContent).not.toMatch(/resume an unfinished form/i);
     } finally {
       vi.useRealTimers();
     }

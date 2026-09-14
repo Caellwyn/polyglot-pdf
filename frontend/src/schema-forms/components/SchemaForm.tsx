@@ -1123,7 +1123,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           be cleared from this device in {formatMmSs(idleClearMsLeft)} unless
           you continue.{' '}
           {hasClientLinkToken() && (
-            <>Reopen your original link afterward to resume an unfinished form.</>
+            <>Afterward you can reopen your original link to start this form again; only a PDF you saved can bring your answers back.</>
           )}
           <button
             type="button"
