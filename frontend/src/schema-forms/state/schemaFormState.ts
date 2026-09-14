@@ -17,7 +17,8 @@ import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from 
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 import { isBlankFieldValue, isConfirmedButBlank } from "../utils/fieldValue";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
-import { loadOnboardingState } from "../onboardingStorage";
+import { loadOnboardingState, clearOnboardingState } from "../onboardingStorage";
+import { clearClientLinkToken } from "../../shared/sessionCredential";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
 // does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
@@ -469,9 +470,6 @@ export class SchemaFormStateManager {
       skipCopyTo?: boolean;
     }
   ): SchemaFormState {
-    console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
-    console.log(`[SchemaFormStateManager] Current state.fieldValues:`, state.fieldValues);
-
     // Normalize the raw value to its canonical stored form (e.g. strip an
     // A-Number's "A" prefix/separators) so manual edits store the same canonical
     // value the backend stores for AI fills (bd polyglot-pdf-0zr). Idempotent for
@@ -580,8 +578,6 @@ export class SchemaFormStateManager {
       lastUpdated: Date.now(),
     };
 
-    console.log(`[SchemaFormStateManager] New state.fieldValues after spread:`, newState.fieldValues);
-
     // Clear validation error for this field
     if (newState.validationErrors[fieldId]) {
       const { [fieldId]: removed, ...rest } = newState.validationErrors;
@@ -641,8 +637,6 @@ export class SchemaFormStateManager {
     }
 
     this.save(newState);
-    console.log(`[SchemaFormStateManager] Returning newState with fieldValues:`, newState.fieldValues);
-    console.log(`[SchemaFormStateManager] Are they the same object?`, state.fieldValues === newState.fieldValues);
     return newState;
   }
 
@@ -886,6 +880,21 @@ export class SchemaFormStateManager {
    */
   static clear(): void {
     sessionStorage.removeItem(this.STORAGE_KEY);
+  }
+
+  /**
+   * The single Clear-form path (bd polyglot-pdf-8v8i7): wipes the form state,
+   * the onboarding form/language selection, and a redeemed client-link token
+   * in one call, so every browser-PII clearing trigger (form complete, idle
+   * timeout, logout) leaves no client answer or credential behind on a
+   * shared device. `clear()` above is a silent `sessionStorage.removeItem` --
+   * it does not dispatch `schemaFormStateChange` -- so a caller that needs the
+   * UI to react to the wipe must refresh it itself.
+   */
+  static clearAllClientState(): void {
+    this.clear();
+    clearOnboardingState();
+    clearClientLinkToken();
   }
 
   /**

@@ -38,7 +38,6 @@ export function CheckboxField({
     const isChecked = unwrapToBoolean(value);
 
     const handleChange = (checked: boolean) => {
-      console.log(`[CheckboxField] ${field.id} changed to:`, checked);
       onChange(checked);
       if (onBlur) onBlur();
     };
@@ -86,7 +85,6 @@ export function CheckboxField({
       ? selectedValues.filter((v) => v !== optionValue)
       : [...selectedValues, optionValue];
 
-    console.log(`[CheckboxField] ${field.id} changed to:`, newValues);
     onChange(newValues);
     if (onBlur) onBlur();
   };

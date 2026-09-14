@@ -362,7 +362,11 @@ export function createConnectionManager(
 	// Thinking-indicator signal (bd polyglot-pdf-wpw.5): true while the agent is
 	// processing a turn (user-turn-end -> first response audio). Optional so existing
 	// callers are unaffected; the overlays pass it to drive a calm "thinking" UI.
-	onThinkingChange?: (thinking: boolean) => void
+	onThinkingChange?: (thinking: boolean) => void,
+	// Fires once when the AI-facing connection reports every section done (bd
+	// polyglot-pdf-8v8i7). Optional so existing callers are unaffected; a caller
+	// that wants to auto-clear browser storage on completion passes this.
+	onFormComplete?: () => void
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
@@ -757,13 +761,9 @@ export function createConnectionManager(
 				console.log('[VFF Audio] backlog at form_updated ' + JSON.stringify(backlog))
 			}
 
-			// Log each update attempt for debugging
-			updates.forEach(update => {
-				const valuePreview = typeof update.value === 'string' && update.value.length > 50
-					? update.value.substring(0, 50) + '...'
-					: update.value
-				console.log(`[VFF Connection]   -> ${update.fieldId} = ${JSON.stringify(valuePreview)}`)
-			})
+			// Field VALUES are never logged here (bd polyglot-pdf-8v8i7): a shared
+			// law-office device's console must not carry client PII. Only the
+			// field id + update count above are diagnostic.
 
 			// Track tool calls in metrics and filter out hallucinations
 			const acceptedUpdates: typeof updates = []
@@ -817,6 +817,9 @@ export function createConnectionManager(
 		},
 		onFormComplete: () => {
 			console.log('[VFF Connection] form complete')
+			if (onFormComplete) {
+				onFormComplete()
+			}
 		},
 	}
 

@@ -25,6 +25,7 @@ import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue, readFieldEntryWithAlias } from "../utils/fieldValue";
 import { isBlankFieldValue } from "../utils/fieldValue";
 import { VerifyFieldModal } from "./VerifyFieldModal";
+import { StaffHeader } from "./StaffHeader";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -141,6 +142,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
+  // On-screen warning shown just before an idle-timeout clear (bd
+  // polyglot-pdf-8v8i7): `status === 'idle_timeout'` already fires BEFORE the
+  // storage wipe below runs, so this banner and the wipe key off the same
+  // signal rather than a second client-side idle detector.
+  const [showIdleClearWarning, setShowIdleClearWarning] = useState(false);
   // Thinking indicator (bd polyglot-pdf-wpw.5): SchemaForm owns the ConnectionManager
   // (it is the shared manager the overlays use), so it must wire onThinkingChange and
   // pass `thinking` down -- the overlays skip their own manager when a shared one
@@ -340,6 +346,32 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     focusField();
   };
 
+  // Browser PII hygiene (bd polyglot-pdf-8v8i7): the form completing is one of
+  // three automatic triggers for wiping this device's stored answers (the
+  // other two are the idle-timeout effect below and the logout control in
+  // StaffHeader). Clearing on completion means a client who finishes on a
+  // shared law-office tablet does not leave their answers sitting in
+  // sessionStorage for the next person who touches it.
+  const handleFormComplete = useCallback(() => {
+    SchemaFormStateManager.clearAllClientState();
+  }, []);
+
+  // Idle-timeout auto-clear (bd polyglot-pdf-8v8i7). `status` becomes
+  // 'idle_timeout' when the backend sends its idle_timeout message -- BEFORE
+  // the socket actually closes (see webFormConnection.ts's handleMessage) --
+  // so this warning has a moment on screen before the wipe below runs. A
+  // short delay lets the warning actually be read rather than flashing and
+  // clearing in the same frame.
+  useEffect(() => {
+    if (status !== 'idle_timeout') return;
+    setShowIdleClearWarning(true);
+    const clearTimer = window.setTimeout(() => {
+      SchemaFormStateManager.clearAllClientState();
+      setShowIdleClearWarning(false);
+    }, 5000);
+    return () => window.clearTimeout(clearTimer);
+  }, [status]);
+
   // Create connection manager once (only when stream becomes ready)
   useEffect(() => {
     if (connectionManagerRef.current) return;
@@ -358,7 +390,8 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         sharedStream || undefined,
         handleNextField,
         getToken,
-        (isThinking: boolean) => setThinking(isThinking) // bd polyglot-pdf-wpw.5
+        (isThinking: boolean) => setThinking(isThinking), // bd polyglot-pdf-wpw.5
+        handleFormComplete // bd polyglot-pdf-8v8i7: auto-clear browser PII on completion
       );
       connectionManagerRef.current = manager;
       setConnectionManager(manager);
@@ -816,17 +849,13 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     setIsDownloadingPDF(true);
 
     try {
-      // Unwrap FieldValue objects to get raw values for PDF filling
+      // Unwrap FieldValue objects to get raw values for PDF filling. Field
+      // values are never logged here (bd polyglot-pdf-8v8i7): a shared
+      // law-office device's console must not carry client PII.
       const unwrappedFieldValues: Record<string, any> = {};
       for (const [fieldId, value] of Object.entries(state.fieldValues)) {
         unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
       }
-
-      console.log('[SchemaForm] Unwrapped field values for PDF filling:', {
-        original_count: Object.keys(state.fieldValues).length,
-        unwrapped_count: Object.keys(unwrappedFieldValues).length,
-        sample: Object.entries(unwrappedFieldValues).slice(0, 3),
-      });
 
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
@@ -895,6 +924,17 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
   return (
     <>
+      {/* Staff-only logout control (bd polyglot-pdf-8v8i7). Renders nothing
+          for a client-link session -- see StaffHeader's own doc. */}
+      <StaffHeader />
+
+      {showIdleClearWarning && (
+        <div className="schema-form__idle-clear-warning" role="alert">
+          This session timed out from inactivity. This device's saved answers
+          will be cleared in a moment.
+        </div>
+      )}
+
       {/* View-mode toggle (bd vxwj). The voice overlay + the ConnectionManager
           live OUTSIDE the switched container below, so toggling views never
           remounts them or disturbs the session. */}
