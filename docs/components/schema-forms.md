@@ -173,9 +173,12 @@ the reload the next keystroke would `save()` them straight back into the storage
 just cleared. `wipeSitesReload.test.ts` derives the complete set by scanning
 `frontend/src` for every `clearAllClientState()` call and asserts each one is followed
 nearby by a reload, so a fifth site added later without one fails there instead of
-waiting for another review round. The manual Clear-form buttons still call the two-step
-path directly (no reload -- they already trigger one via `window.location.reload()` at
-their own call sites in `SchemaFormDemo.tsx` / the voice overlays, outside this bead).
+waiting for another review round. The three manual Clear-form / Start Fresh buttons
+(`SchemaFormDemo.tsx`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) are NOT on this
+path: they call `clear()` + `clearOnboardingState()` directly and reload at their own
+call sites, so they never clear `vff_client_link_token` -- an open gap, bd
+`polyglot-pdf-ylokf`, which `wipeSitesReload.test.ts` cannot see because it scans only
+`clearAllClientState()` calls.
 `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
 `StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts` and
