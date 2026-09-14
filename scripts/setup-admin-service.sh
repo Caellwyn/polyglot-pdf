@@ -89,13 +89,25 @@ fi
 
 # 3. PROJECT-level roles. Each carries the one call that needs it.
 #
-# DEFERRED, deliberately absent until the epic that first calls them:
-#   Epic 4 (deploy control plane): roles/cloudbuild.builds.editor +
-#     roles/iam.serviceAccountUser on the Cloud Build SA, roles/run.admin +
-#     roles/iam.serviceAccountUser on polyglot-backend-sa (resource-scoped),
-#     roles/firebasehosting.admin.
-#   Epic 3 bead 8 (setup-monitoring.sh, not yet built):
-#     roles/errorreporting.viewer, roles/monitoring.viewer.
+# roles/iam.serviceAccountUser on polyglot-cloudbuild-sa (bead
+# polyglot-pdf-p4ale, E4.5) moved OUT of the deferred set below and into a
+# resource-scoped grant of its own (step 3b) -- it is the actAs binding the
+# admin service's trigger route needs to submit a build that runs AS the
+# Cloud Build SA (`builds.create`, admin_backend/services/cloud_build.py,
+# bead 4.3). roles/cloudbuild.builds.editor for that same route is still
+# DEFERRED: it lands with bead 4.3 itself, the first (and only) caller.
+#
+# run.admin and firebasehosting.admin are DELETED from the deferred list
+# entirely, not merely left deferred: the admin service never deploys
+# anything directly -- Cloud Build does the deploying (polyglot-cloudbuild-sa
+# holds both roles, see scripts/setup-cloud-build.sh) -- so there is no
+# future epic that grants either to admin-backend-sa. A role with no future
+# consumer is a dead expectation, and the pin test below only checks for
+# roles the plan still intends to grant.
+#
+# STILL DEFERRED, absent until the epic that first calls them:
+#   Bead 4.3 (admin_backend/services/cloud_build.py, not yet built):
+#     roles/cloudbuild.builds.editor (triggers/submits the build itself).
 # An unused grant is its own risk; the pin test fails if one appears early.
 #
 # roles/bigquery.jobUser + dataset-scoped roles/bigquery.dataViewer are NOT
@@ -148,6 +160,30 @@ echo -e "${GREEN}[INFO]${NC} Assigning bucket-scoped IAM roles on gs://$FORM_KIT
 for role in "${BUCKET_ROLES[@]}"; do
     echo -e "${GREEN}[INFO]${NC}    Adding $role on gs://$FORM_KITS_BUCKET..."
     gcloud storage buckets add-iam-policy-binding "gs://$FORM_KITS_BUCKET" \
+        --member="serviceAccount:$SA_EMAIL" \
+        --role="$role" \
+        --project "$PROJECT_ID" > /dev/null
+done
+
+# 5. actAs on polyglot-cloudbuild-sa: admin-backend-sa may submit a build
+# that RUNS AS the Cloud Build SA (bead 4.3's `builds.create` trigger route,
+# admin_backend/services/cloud_build.py). Granted with `gcloud iam
+# service-accounts add-iam-policy-binding` on the TARGET SA (the resource),
+# never `gcloud projects add-iam-policy-binding` -- a project-level grant of
+# this role would let admin-backend-sa impersonate every service account in
+# the project, not just the one build identity it is allowed to submit
+# builds as. Kept in its own array (not folded into PROJECT_ROLES) for the
+# same reason BUCKET_ROLES is separate: the SCOPE, not just the role name,
+# is what the pin test asserts.
+CLOUD_BUILD_SA="polyglot-cloudbuild-sa@$PROJECT_ID.iam.gserviceaccount.com"
+CLOUD_BUILD_SA_ROLES=(
+    "roles/iam.serviceAccountUser"
+)
+
+echo -e "${GREEN}[INFO]${NC} Assigning actAs on $CLOUD_BUILD_SA..."
+for role in "${CLOUD_BUILD_SA_ROLES[@]}"; do
+    echo -e "${GREEN}[INFO]${NC}    Adding $role on $CLOUD_BUILD_SA..."
+    gcloud iam service-accounts add-iam-policy-binding "$CLOUD_BUILD_SA" \
         --member="serviceAccount:$SA_EMAIL" \
         --role="$role" \
         --project "$PROJECT_ID" > /dev/null

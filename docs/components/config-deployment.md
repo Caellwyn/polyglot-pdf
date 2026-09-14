@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
-*Last updated: 2026-09-12 (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declared the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, naming the remaining targets as failing steps.) (bd polyglot-pdf-ywxoh: the remaining `cloudbuild.yaml` targets land -- `frontend-<channel>`, `editor`, `form-kits`, `firestore-rules`, `admin-service` (tagged-revision-then-shift), `admin-console-candidate`, `admin-console`; the reachability gate becomes ONE python module (`scripts/verify_service_reachable.py`) the build and all four bash wrappers call instead of four hand copies; `scripts/write_kits_manifest.py` and `scripts/record_deployment.py` are new; the staging-before-demo gate lands IN THE BUILD via `scripts/promotion_gate.py` over the placeholder pure predicate `admin_backend/services/promotion_gate.py::staging_verified` (bead 4.4 extends it), invoked as `python scripts/promotion_gate.py` from the repo root so its own `sys.path` fix-up is required (a bare `python scripts/promotion_gate.py` invocation puts `scripts/` on `sys.path[0]`, not the repo root); `admin-service-deploy-tagged` resolves `ADMIN_SERVICE_URL`/`BACKEND_URLS_JSON` live (same `gcloud run services describe` calls `deploy-admin.sh` makes) since `admin.env` deliberately excludes both; `firestore-rules-deploy` runs on `node:22` (its only tool is `npx firebase-tools`, and `cloud-sdk:slim` ships no Node); `deployments` and `build_checks` gain firestore.rules deny blocks. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-service
+*Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `scripts/setup-cloud-build.sh` now provisions `polyglot-cloudbuild-sa` itself -- creates the SA, grants it `run.admin`/`firebasehosting.admin`/`firebaserules.admin`/`artifactregistry.writer`/`logging.logWriter`/`datastore.user` project-wide and `storage.objectAdmin` on the form-kits bucket only, then grants it resource-scoped actAs (`roles/iam.serviceAccountUser`) on BOTH `polyglot-backend-sa` and `admin-backend-sa`, and grants the Pub/Sub service agent `roles/iam.serviceAccountTokenCreator` for bead 4.3's future build-status webhook -- so every trigger's `--service-account` now names an identity this same script actually provisions and roles, pinned by the new `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` and `tests/test_setup_cloud_build_script.py`. `scripts/setup-admin-service.sh` gains the mirror-image grant -- `admin-backend-sa` actAs on `polyglot-cloudbuild-sa` ONLY, resource-scoped -- so the admin service's future trigger route can submit a build that runs as the build identity; `roles/run.admin` and `roles/firebasehosting.admin` are deleted (not deferred) from that script's DEFERRED_ROLES because the admin service never deploys anything itself.) (bd polyglot-pdf-1s3ko: per-channel Cloud Run config left bash for `deploy/channels/<channel>.env` -- three sections (`SET_ENV_VARS`, `SET_SECRETS`, `SERVICE_ACCOUNT`) read by BOTH `deploy-all.sh` and the new root `cloudbuild.yaml`, so the human and console deploy paths share one source; `SERVICE_ACCOUNT` is explicit and versioned for the first time; the two wrappers gained a dirty/unpushed refusal (`scripts/deploy_preflight.sh`); `cloudbuild.yaml` declared the `verify` and `backend-<channel>` targets with a `build_checks/{sha}` gate as every deploy target's first step, naming the remaining targets as failing steps.) (bd polyglot-pdf-ywxoh: the remaining `cloudbuild.yaml` targets land -- `frontend-<channel>`, `editor`, `form-kits`, `firestore-rules`, `admin-service` (tagged-revision-then-shift), `admin-console-candidate`, `admin-console`; the reachability gate becomes ONE python module (`scripts/verify_service_reachable.py`) the build and all four bash wrappers call instead of four hand copies; `scripts/write_kits_manifest.py` and `scripts/record_deployment.py` are new; the staging-before-demo gate lands IN THE BUILD via `scripts/promotion_gate.py` over the placeholder pure predicate `admin_backend/services/promotion_gate.py::staging_verified` (bead 4.4 extends it), invoked as `python scripts/promotion_gate.py` from the repo root so its own `sys.path` fix-up is required (a bare `python scripts/promotion_gate.py` invocation puts `scripts/` on `sys.path[0]`, not the repo root); `admin-service-deploy-tagged` resolves `ADMIN_SERVICE_URL`/`BACKEND_URLS_JSON` live (same `gcloud run services describe` calls `deploy-admin.sh` makes) since `admin.env` deliberately excludes both; `firestore-rules-deploy` runs on `node:22` (its only tool is `npx firebase-tools`, and `cloud-sdk:slim` ships no Node); `deployments` and `build_checks` gain firestore.rules deny blocks. No build has RUN yet -- the 2nd-gen Cloud Build GitHub connection is a maintainer step.) (bd polyglot-pdf-scaig: a fifth admin-service
 gate, `require_app_admin_or_owning_manager_or_employee`, scoped to one
 route only -- no deploy-time env var or config key changed; see the gate
 inventory section below and [admin-service.md](admin-service.md).) (bd
@@ -432,6 +432,50 @@ the gate crying wolf. The counts are pinned per script.
   omitting either would silently disable the refund sweep's OIDC audience or
   blank `GET /admin/health`'s channel fan-out on the very next Cloud Build
   admin-service deploy.
+
+  **The build's own identity, `polyglot-cloudbuild-sa`** (bd
+  `polyglot-pdf-p4ale`, E4.5), is separate from every SA above -- it is who
+  the BUILD runs as, not who a deployed service runs as. Provisioned by
+  `scripts/setup-cloud-build.sh` (sibling of `scripts/setup-admin-service.sh`),
+  which now does three things instead of just creating triggers: creates the
+  SA, grants it a role per class of build step (`roles/run.admin` to deploy
+  Cloud Run revisions, `roles/firebasehosting.admin` for the Hosting targets,
+  `roles/firebaserules.admin` for `firestore-rules`, `roles/artifactregistry.
+  writer` to push the image, `roles/logging.logWriter`, `roles/datastore.user`
+  to write `build_checks`/`deployments`), and grants `roles/storage.
+  objectAdmin` on the form-kits bucket ONLY (same scope, same role, as
+  `admin-backend-sa`'s own grant). Every trigger the same script creates
+  passes `--service-account` naming this identity, never the legacy default
+  Cloud Build SA (which historically holds project Editor).
+
+  **actAs, not just run.admin.** `gcloud run deploy --service-account
+  $RUNTIME_SA` additionally requires the CALLER to hold
+  `roles/iam.serviceAccountUser` ON that runtime SA -- "deploy a revision
+  running as X" is itself privileged on X. The build deploys revisions as
+  BOTH `polyglot-backend-sa` and `admin-backend-sa`, so
+  `scripts/setup-cloud-build.sh` grants this role on each, resource-scoped
+  (`gcloud iam service-accounts add-iam-policy-binding`, never
+  `gcloud projects add-iam-policy-binding` -- a project-wide grant would let
+  the build identity impersonate every SA in the project). The SAME script
+  also grants the Pub/Sub service agent (`service-<PROJECT_NUMBER>@gcp-sa-
+  pubsub.iam.gserviceaccount.com`) `roles/iam.serviceAccountTokenCreator`, so
+  it can mint the OIDC token the `cloud-builds` topic's push subscription
+  presents to the admin service's future build-status webhook (bead 4.3) --
+  keeping the whole deploy-plane IAM surface in one script and one pin
+  (`admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py`).
+
+  **The reverse direction: `admin-backend-sa` gains actAs on
+  `polyglot-cloudbuild-sa`** (also resource-scoped, granted by
+  `scripts/setup-admin-service.sh`'s own `CLOUD_BUILD_SA_ROLES` array), so
+  the admin service's future trigger route (bead 4.3,
+  `admin_backend/services/cloud_build.py`) can submit a build that runs AS
+  the build identity. `roles/run.admin` and `roles/firebasehosting.admin`
+  are NOT granted to `admin-backend-sa` -- the build does the deploying, the
+  admin service only submits it -- so both are deleted (not merely
+  deferred) from that script's `DEFERRED_ROLES` pin; only
+  `roles/cloudbuild.builds.editor` (the `builds.create` call itself) still
+  awaits bead 4.3. See [admin-service.md](admin-service.md)'s IAM table for
+  the admin-SA side of this same pin.
 
   **`--set-secrets`** comes from the channel file's `[SET_SECRETS]` section (an
   explicit `BACKEND_SECRETS` from the caller still wins); a channel that sets

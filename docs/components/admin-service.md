@@ -2,7 +2,7 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
+*Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
 monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
 `pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
 fetched independently so one channel's failure never blanks the other's
@@ -655,12 +655,16 @@ constant fails CI):
 | `roles/bigquery.dataViewer` | the telemetry dataset ONLY | Read the cost/income views. Dataset-scoped, not project-wide, so a compromised admin-backend-sa credential cannot read an unrelated BigQuery dataset in the same project. Also granted by `scripts/setup-telemetry.sh`. |
 | `roles/errorreporting.viewer` | project | Read Cloud Error Reporting's `groupStats` (bd `polyglot-pdf-mpebj`'s `GET /admin/errors`, `admin_backend/services/error_stats.py`). Granted by `scripts/setup-monitoring.sh` (bd `polyglot-pdf-e4dt8`), not this script. |
 | `roles/monitoring.viewer` | project | Read Cloud Monitoring data for a future console metrics view. Also granted by `scripts/setup-monitoring.sh`; no route reads it yet. |
+| `roles/iam.serviceAccountUser` | `polyglot-cloudbuild-sa` ONLY | actAs: submit a build that runs AS the Cloud Build identity (bd `polyglot-pdf-p4ale`, E4.5 -- the future trigger route, bead 4.3's `admin_backend/services/cloud_build.py`, calls `builds.create`). Granted by this script's own `CLOUD_BUILD_SA_ROLES` array with `gcloud iam service-accounts add-iam-policy-binding`, never a project-wide grant -- see [config-deployment.md](config-deployment.md)'s Cloud Build SA subsection for the mirror-image grant (`polyglot-cloudbuild-sa` holding actAs on `polyglot-backend-sa` AND on this SA). |
 
-Deferred, deliberately absent until the epic that first needs them (an
-unused grant is its own risk): `roles/cloudbuild.builds.editor` +
-`roles/iam.serviceAccountUser` on the Cloud Build SA, `roles/run.admin` +
-`roles/iam.serviceAccountUser` on `polyglot-backend-sa` (resource-scoped),
-`roles/firebasehosting.admin` (Epic 4, deploy control plane).
+Deferred, deliberately absent until the epic that first needs it (an unused
+grant is its own risk): `roles/cloudbuild.builds.editor` (Epic 4 bead 4.3,
+the route that actually calls `builds.create`/`triggers.run` -- its first
+and only consumer). `roles/run.admin` and `roles/firebasehosting.admin` are
+NOT deferred but permanently ABSENT: the admin service never deploys
+anything itself (`polyglot-cloudbuild-sa` does the deploying, see
+[config-deployment.md](config-deployment.md)), so there is no future epic
+that grants either here.
 
 ## CORS
 

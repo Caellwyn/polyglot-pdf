@@ -50,6 +50,28 @@
 # all -- and COMMIT_SHA would be empty while uncommitted code shipped under a
 # SHA the verify gate vouches for. cloudbuild.yaml's header states the same.
 #
+# ============================================================================
+# THE BUILD IDENTITY: polyglot-cloudbuild-sa (bead polyglot-pdf-p4ale, E4.5)
+# ============================================================================
+# Every trigger above runs AS a dedicated service account, never the legacy
+# default Cloud Build SA (which historically holds project Editor -- far
+# wider than anything a deploy build needs). Sibling of
+# scripts/setup-admin-service.sh's admin-backend-sa: one justified role per
+# line, pinned by admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py
+# (which parses THIS file's role arrays -- a role added here without adding
+# it to that test's constant fails CI, same collusion-proof pattern as the
+# admin SA pin).
+#
+# WHY actAs, NOT JUST run.admin. `gcloud run deploy --service-account
+# $RUNTIME_SA` fails unless the CALLER (this build's identity) holds
+# `roles/iam.serviceAccountUser` ON that runtime SA specifically --
+# "deploy a revision that runs as X" is itself a privileged act on X, not
+# just on the Cloud Run service. The build deploys revisions running as BOTH
+# polyglot-backend-sa (public backend targets) and admin-backend-sa (the
+# admin-service target), so it needs actAs on both -- resource-scoped to
+# each SA individually, never project-wide serviceAccountUser, which would
+# let this identity impersonate every service account in the project.
+#
 # Usage:
 #   CLOUD_BUILD_CONNECTION=... CLOUD_BUILD_REPOSITORY=... \
 #     bash scripts/setup-cloud-build.sh [--dry-run]
@@ -58,8 +80,20 @@ set -euo pipefail
 
 PROJECT="${POLYGLOT_PROJECT_NAME:-polyglot-demo-aa709}"
 CLOUD_BUILD_REGION="${CLOUD_BUILD_REGION:-us-central1}"
-BUILD_SA="${CLOUD_BUILD_SA:-polyglot-cloudbuild-sa@$PROJECT.iam.gserviceaccount.com}"
+BUILD_SA_NAME="polyglot-cloudbuild-sa"
+BUILD_SA="${CLOUD_BUILD_SA:-$BUILD_SA_NAME@$PROJECT.iam.gserviceaccount.com}"
 CONFIG_PATH="cloudbuild.yaml"
+
+# The two RUNTIME identities the build must be able to deploy revisions as.
+# Resource-scoped actAs bindings below name these explicitly rather than
+# reaching for a project-wide grant.
+PUBLIC_BACKEND_SA="polyglot-backend-sa@$PROJECT.iam.gserviceaccount.com"
+ADMIN_BACKEND_SA="admin-backend-sa@$PROJECT.iam.gserviceaccount.com"
+
+# The shared form-kit store -- same bucket setup-admin-service.sh scopes
+# storage.objectAdmin to. storage.objectAdmin is granted here on THIS BUCKET
+# ONLY, never project-wide -- see BUCKET_ROLES below.
+FORM_KITS_BUCKET="${FORM_KITS_BUCKET:-$PROJECT-form-kits}"
 
 DRY_RUN=false
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=true
@@ -73,6 +107,140 @@ if [ "$DRY_RUN" = false ]; then
         echo "[ERROR]     --region=$CLOUD_BUILD_REGION" >&2
         exit 1
     fi
+fi
+
+echo "[INFO] Enabling the Cloud Build API (idempotent)..."
+if [ "$DRY_RUN" = false ]; then
+    gcloud services enable cloudbuild.googleapis.com --project "$PROJECT"
+else
+    echo "[DRY-RUN] gcloud services enable cloudbuild.googleapis.com --project $PROJECT"
+fi
+
+# ----------------------------------------------------------------------------
+# 1. The build service account itself.
+# ----------------------------------------------------------------------------
+echo "[INFO] Provisioning build service account: $BUILD_SA_NAME..."
+if [ "$DRY_RUN" = false ]; then
+    if ! gcloud iam service-accounts describe "$BUILD_SA" --project "$PROJECT" &>/dev/null; then
+        gcloud iam service-accounts create "$BUILD_SA_NAME" \
+            --display-name="Polyglot Cloud Build Service Account" \
+            --project "$PROJECT"
+    else
+        echo "[INFO] Service account $BUILD_SA_NAME already exists"
+    fi
+else
+    echo "[DRY-RUN] gcloud iam service-accounts create $BUILD_SA_NAME --project $PROJECT"
+fi
+
+# 2. PROJECT-level roles. Each carries the one class of build step that
+# needs it -- see the per-target step list in cloudbuild.yaml.
+PROJECT_ROLES=(
+    # Deploy Cloud Run revisions (backend-staging, backend-demo,
+    # admin-service targets) and shift traffic on the admin tagged-revision
+    # gate.
+    "roles/run.admin"
+    # Publish the Hosting site targets (frontend-*, admin-console,
+    # admin-console-candidate, editor).
+    "roles/firebasehosting.admin"
+    # Deploy the firestore-rules target (`firebase deploy --only
+    # firestore:rules`).
+    "roles/firebaserules.admin"
+    # Push the built backend image. NOTE: images live on gcr.io today, not
+    # Artifact Registry -- this role still applies because gcr.io pushes are
+    # served through the Artifact Registry API on projects created after its
+    # GA. Moving the images themselves to an Artifact Registry repository is
+    # a separable follow-up (bead 4.5 description), not required for this
+    # role to work.
+    "roles/artifactregistry.writer"
+    # Structured build-step logs to Cloud Logging, same as both runtime SAs.
+    "roles/logging.logWriter"
+    # Write build_checks/{sha} (the verify gate's record) and deployments/{id}
+    # success rows (the staging-before-demo gate's evidence), and read
+    # deployments/{id} to evaluate that gate for a demo build.
+    "roles/datastore.user"
+)
+
+echo "[INFO] Assigning project-level IAM roles to $BUILD_SA_NAME..."
+for role in "${PROJECT_ROLES[@]}"; do
+    echo "[INFO]    Adding $role..."
+    if [ "$DRY_RUN" = false ]; then
+        gcloud projects add-iam-policy-binding "$PROJECT" \
+            --member="serviceAccount:$BUILD_SA" \
+            --role="$role" \
+            --condition=None > /dev/null
+    else
+        echo "[DRY-RUN] gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$BUILD_SA --role=$role"
+    fi
+done
+
+# 3. RESOURCE-scoped roles. Granted on one bucket, never project-wide -- see
+# the FORM_KITS_BUCKET comment above for why the scope matters.
+BUCKET_ROLES=(
+    # Publish and retire form kits in the shared bucket (the form-kits
+    # target). Same role, same bucket, same scoping shape as
+    # setup-admin-service.sh's grant to admin-backend-sa.
+    "roles/storage.objectAdmin"
+)
+
+echo "[INFO] Assigning bucket-scoped IAM roles on gs://$FORM_KITS_BUCKET..."
+for role in "${BUCKET_ROLES[@]}"; do
+    echo "[INFO]    Adding $role on gs://$FORM_KITS_BUCKET..."
+    if [ "$DRY_RUN" = false ]; then
+        gcloud storage buckets add-iam-policy-binding "gs://$FORM_KITS_BUCKET" \
+            --member="serviceAccount:$BUILD_SA" \
+            --role="$role" \
+            --project "$PROJECT" > /dev/null
+    else
+        echo "[DRY-RUN] gcloud storage buckets add-iam-policy-binding gs://$FORM_KITS_BUCKET --member=serviceAccount:$BUILD_SA --role=$role"
+    fi
+done
+
+# 4. actAs bindings: iam.serviceAccountUser, resource-scoped to EACH runtime
+# SA the build deploys revisions as. Granted with
+# `gcloud iam service-accounts add-iam-policy-binding` on the TARGET SA
+# (the resource), not `gcloud projects add-iam-policy-binding` -- a
+# project-level grant of this role would let the build identity impersonate
+# every service account in the project, not just the two it deploys as.
+ACTAS_TARGETS=(
+    "$PUBLIC_BACKEND_SA"
+    "$ADMIN_BACKEND_SA"
+)
+
+echo "[INFO] Granting $BUILD_SA_NAME actAs (roles/iam.serviceAccountUser) on the runtime SAs..."
+for target_sa in "${ACTAS_TARGETS[@]}"; do
+    echo "[INFO]    Adding roles/iam.serviceAccountUser on $target_sa..."
+    if [ "$DRY_RUN" = false ]; then
+        gcloud iam service-accounts add-iam-policy-binding "$target_sa" \
+            --member="serviceAccount:$BUILD_SA" \
+            --role="roles/iam.serviceAccountUser" \
+            --project "$PROJECT" > /dev/null
+    else
+        echo "[DRY-RUN] gcloud iam service-accounts add-iam-policy-binding $target_sa --member=serviceAccount:$BUILD_SA --role=roles/iam.serviceAccountUser"
+    fi
+done
+
+# 5. The Pub/Sub service agent needs iam.serviceAccountTokenCreator to mint
+# the OIDC token it pushes to the admin service's build-status webhook (bead
+# 4.3, POST /api/deploys/webhook, gated by require_google_oidc). Pinned here
+# too so the whole deploy-plane IAM -- the build SA above AND this one
+# Google-managed agent -- is asserted from one script and one test, per the
+# bead's own framing ("the whole deploy-plane IAM is in one pin"). This is
+# NOT a role on BUILD_SA: the Pub/Sub service agent is a separate,
+# Google-managed identity (service-<PROJECT_NUMBER>@gcp-sa-pubsub.iam.
+# gserviceaccount.com), and the role is granted on itself so it may mint a
+# token asserting its own identity to a push subscription -- the standard
+# shape for an OIDC-authenticated Pub/Sub push endpoint.
+echo "[INFO] Granting the Pub/Sub service agent roles/iam.serviceAccountTokenCreator..."
+if [ "$DRY_RUN" = false ]; then
+    PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+    PUBSUB_SERVICE_AGENT="service-$PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com"
+    gcloud projects add-iam-policy-binding "$PROJECT" \
+        --member="serviceAccount:$PUBSUB_SERVICE_AGENT" \
+        --role="roles/iam.serviceAccountTokenCreator" \
+        --condition=None > /dev/null
+else
+    echo "[DRY-RUN] PROJECT_NUMBER=\$(gcloud projects describe $PROJECT --format='value(projectNumber)')"
+    echo "[DRY-RUN] gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:service-\$PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com --role=roles/iam.serviceAccountTokenCreator"
 fi
 
 # EVERY target in cloudbuild.yaml gets a trigger, including the ones bead
@@ -96,13 +264,6 @@ TARGETS=(
     "admin-console:admin"
     "landing:demo"
 )
-
-echo "[INFO] Enabling the Cloud Build API (idempotent)..."
-if [ "$DRY_RUN" = false ]; then
-    gcloud services enable cloudbuild.googleapis.com --project "$PROJECT"
-else
-    echo "[DRY-RUN] gcloud services enable cloudbuild.googleapis.com --project $PROJECT"
-fi
 
 for entry in "${TARGETS[@]}"; do
     target="${entry%%:*}"
