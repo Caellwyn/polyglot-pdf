@@ -65,6 +65,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # render_todo embeds bd orphans/stale output, which carries non-cp1252 glyphs
@@ -412,11 +413,53 @@ def check_docs(py: Path, WT: Path) -> dict:
     return _result("docs", STATUS_OK, "all tracked docs fresh", out)
 
 
-# Wall-clock ceiling for the full-suite run. Measured 706s for all three
-# testpaths roots (4494 tests) on the reference machine; this is that with room
-# for a slower box and future growth, so the gate returns a VERDICT rather than
-# dying on its own timeout.
+# Wall-clock ceiling for the full-suite run, and the margin the gate expects to
+# keep over it.
+#
+# DO NOT defend this ceiling with a hardcoded "measured runtime" literal. That
+# was the original shape and it rotted within days: the comment here cited 706s
+# for 4494 tests (2026-09-03), and nine days later the suite collected 6017 --
+# 6127 by 2026-09-14. Two guards asserted the ceiling against that frozen
+# number, so both kept passing while the real run crept toward the timeout they
+# existed to prevent (bd polyglot-pdf-f3svv). A literal cannot observe growth;
+# only the run itself can.
+#
+# So the ceiling is defended by MEASUREMENT: check_tests times its own suite run
+# and reports the margin, warning once the run consumes more than
+# _TESTS_MARGIN_WARN_FRACTION of the ceiling. That signal tracks the suite
+# automatically -- a slower machine or a few hundred new tests move it, where a
+# literal stays put. The ceiling stays generous because an exceeded ceiling
+# yields NO verdict at all (bd polyglot-pdf-u98r1), which is strictly worse than
+# a slow run.
 _TESTS_TIMEOUT_S = 1800
+
+# Warn when an observed run eats more than this fraction of the ceiling. At 0.5
+# the gate speaks up while there is still 2x headroom -- early enough to raise
+# the ceiling deliberately rather than discover it mid-closeout with no verdict.
+_TESTS_MARGIN_WARN_FRACTION = 0.5
+
+
+def _timeout_margin_note(elapsed_s: float) -> str:
+    """Report how much of the ceiling this run consumed -- "" when comfortable.
+
+    This is the part that RESPONDS to suite growth. The ceiling was previously
+    defended by asserting it against a hardcoded "measured runtime" literal,
+    which went stale in nine days (706s/4494 tests -> 6127 tests) while every
+    guard built on it kept passing, because neither side of that comparison
+    observes anything (bd polyglot-pdf-f3svv). An observed duration does.
+
+    Returns a suffix appended to the check's summary, so the signal rides the
+    line the orchestrator already reads rather than a new field every consumer
+    would have to learn.
+    """
+    budget_s = _TESTS_TIMEOUT_S * _TESTS_MARGIN_WARN_FRACTION
+    if elapsed_s <= budget_s:
+        return ""
+    return (
+        " -- NOTE: the run took {:.0f}s, over {:.0%} of the {}s ceiling; raise"
+        " _TESTS_TIMEOUT_S deliberately now, because a run that EXCEEDS the"
+        " ceiling is killed and yields no verdict at all".format(
+            elapsed_s, _TESTS_MARGIN_WARN_FRACTION, _TESTS_TIMEOUT_S))
 
 
 def check_tests(py: Path, WT: Path) -> dict:
@@ -435,19 +478,23 @@ def check_tests(py: Path, WT: Path) -> dict:
     exclusion). A non-zero pytest exit is ATTENTION (the orchestrator must fix a
     red suite before a PR); a launch failure is FAIL.
 
-    THE TIMEOUT IS SIZED TO THE WIDENED RUN, AND IS REPORTED SEPARATELY.
-    Widening this from `backend/tests` to every testpaths root grew the
-    measured wall time from 590s (3139 tests) to 706s (4494 tests) on the
-    reference machine, which the previous 600s ceiling cut off 106s short. A
-    timeout here is NOT a red suite and must never read as one:
+    THE TIMEOUT IS REPORTED SEPARATELY, AND ITS MARGIN IS MEASURED.
+    A timeout here is NOT a red suite and must never read as one:
     subprocess.TimeoutExpired subclasses SubprocessError, so an `except
     SubprocessError` that lumps it in with a launch failure renders every
     closeout as "a check could not run" -- a tooling error the orchestrator
     reads past -- and the suite gate then verifies nothing while looking like
-    it ran. So it is caught FIRST and named, and the ceiling carries real
-    headroom (_TESTS_TIMEOUT_S) over the measurement rather than sitting just
-    above it, because a slower machine or a few hundred new tests would
-    otherwise re-open exactly that hole.
+    it ran (bd polyglot-pdf-u98r1). So it is caught FIRST and named.
+
+    The ceiling itself is defended by MEASUREMENT rather than by a frozen
+    "measured runtime" literal: this function times its own run and appends the
+    observed margin to the summary, warning once a run consumes more than
+    _TESTS_MARGIN_WARN_FRACTION of the ceiling. The literal it replaced went
+    stale in nine days while the guards built on it kept passing, which is the
+    one failure mode a static number cannot report (bd polyglot-pdf-f3svv).
+    Note the margin is observable ONLY on a run that finished -- a run killed at
+    the ceiling reports no duration at all, which is why the warning has to fire
+    well before the ceiling to be worth anything.
     """
     # Sanity-check that WT really is a checkout before shelling out -- a bare
     # pytest in an empty dir "passes" with zero tests, which would render this
@@ -455,6 +502,7 @@ def check_tests(py: Path, WT: Path) -> dict:
     tests_dir = WT / "backend" / "tests"
     if not tests_dir.exists():
         return _result("tests", STATUS_FAIL, "backend/tests/ not found")
+    started = time.monotonic()
     try:
         proc = subprocess.run(
             [str(py), "-m", "pytest", "-q", "-m", "not external"],
@@ -475,13 +523,17 @@ def check_tests(py: Path, WT: Path) -> dict:
                        "re-run it by hand".format(_TESTS_TIMEOUT_S))
     except (OSError, subprocess.SubprocessError) as exc:
         return _result("tests", STATUS_FAIL, "could not run pytest: {}".format(exc))
+    elapsed_s = time.monotonic() - started
     out = (proc.stdout or "").strip()
     # Keep the last few lines (the summary line: "N passed, M skipped ...").
     tail = "\n".join(out.splitlines()[-8:])
+    margin = _timeout_margin_note(elapsed_s)
     if proc.returncode == 0:
-        return _result("tests", STATUS_OK, _summary_line(out) or "suite passed", tail)
+        summary = _summary_line(out) or "suite passed"
+        return _result("tests", STATUS_OK, summary + margin, tail)
     return _result("tests", STATUS_ATTENTION,
-                   "test suite FAILED (exit {}) -- fix before PR".format(proc.returncode),
+                   "test suite FAILED (exit {}) -- fix before PR{}".format(
+                       proc.returncode, margin),
                    tail + ("\n" + proc.stderr.strip() if proc.stderr.strip() else ""))
 
 

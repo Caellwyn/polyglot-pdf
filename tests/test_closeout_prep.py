@@ -764,25 +764,87 @@ class TestTests:
         assert r["status"] == prep.STATUS_FAIL
         assert "could not run pytest" in r["summary"]
 
-    def test_ceiling_clears_the_measured_full_suite_runtime(self):
-        """The ceiling must carry real headroom over the MEASURED runtime.
+    # The ceiling is defended by MEASUREMENT, not by a frozen literal.
+    #
+    # These replace an assertion of the form `_TESTS_TIMEOUT_S >= 2 * 706`,
+    # where 706 was a hardcoded "measured runtime". Both sides of that
+    # comparison were constants, so it could not observe the one thing it
+    # existed to catch -- the suite growing until the real gate times out
+    # again. It rotted in nine days: the 706s baseline was measured at 4494
+    # collected tests, and the suite reached 6127 by 2026-09-14, while the
+    # guard stayed green throughout (bd polyglot-pdf-f3svv).
+    #
+    # What responds to growth is the run's own duration.
 
-        The original bug was not that a timeout existed -- it was that the
-        ceiling sat 106s BELOW the run it had to cover. 600s was itself only
-        10s above the older, narrower scope, i.e. sized with no headroom and
-        therefore one suite-growth away from re-breaking.
+    @staticmethod
+    def _run_at(monkeypatch, tmp_path, elapsed_s, returncode=0,
+                stdout="...\n168 passed, 2 skipped in 35s"):
+        """Stub subprocess.run so the call APPEARS to take elapsed_s seconds.
 
-        Asserting a MULTIPLE of the measured runtime (not a bare `> measured`)
-        is what keeps this honest: a ceiling that merely squeaks past today's
-        wall time reopens the same hole on a slower box or after a few hundred
-        new tests.
+        Advances a fake monotonic clock by elapsed_s across the call rather
+        than actually sleeping, so a "12-minute" run costs no wall time.
         """
-        measured_full_suite_s = 706  # bd polyglot-pdf-u98r1, reference machine
-        assert prep._TESTS_TIMEOUT_S >= 2 * measured_full_suite_s, (
-            "_TESTS_TIMEOUT_S={}s leaves too little headroom over the measured "
-            "{}s full-suite run; size it with room for a slower machine and "
-            "future test growth".format(prep._TESTS_TIMEOUT_S, measured_full_suite_s)
-        )
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(prep.time, "monotonic", lambda: clock["t"])
+
+        def _run(*a, **k):
+            clock["t"] += elapsed_s
+            return _cp(returncode, stdout=stdout)
+
+        monkeypatch.setattr(prep.subprocess, "run", _run)
+
+    def test_margin_note_is_silent_when_the_run_is_comfortable(self, monkeypatch, tmp_path):
+        """A fast run must add NO noise -- otherwise the warning is ignored."""
+        (tmp_path / "backend" / "tests").mkdir(parents=True)
+        self._run_at(monkeypatch, tmp_path, elapsed_s=1.0)
+        r = prep.check_tests(pathlib.Path("py"), tmp_path)
+        assert r["status"] == prep.STATUS_OK
+        assert "NOTE" not in r["summary"], (
+            "a comfortable run must not carry a margin warning")
+
+    def test_margin_note_fires_when_the_run_eats_the_budget(self, monkeypatch, tmp_path):
+        """A slow-but-passing run must warn, naming the ceiling to raise.
+
+        This is the signal a hardcoded literal could not produce. The run still
+        PASSES -- the point is to surface the shrinking margin before a future
+        run is killed and yields no verdict at all.
+        """
+        (tmp_path / "backend" / "tests").mkdir(parents=True)
+        over = prep._TESTS_TIMEOUT_S * prep._TESTS_MARGIN_WARN_FRACTION + 1
+        self._run_at(monkeypatch, tmp_path, elapsed_s=over)
+        r = prep.check_tests(pathlib.Path("py"), tmp_path)
+
+        # Still a PASS: the margin note is a warning, not a verdict change.
+        assert r["status"] == prep.STATUS_OK
+        assert "NOTE" in r["summary"]
+        assert str(prep._TESTS_TIMEOUT_S) in r["summary"], (
+            "the warning must name the ceiling so the reader knows what to raise")
+
+    def test_margin_note_rides_a_failing_run_too(self, monkeypatch, tmp_path):
+        """A red suite that is ALSO near the ceiling must report both.
+
+        The failure is the headline; losing the margin warning behind it would
+        hide the slow creep exactly when someone is already editing this area.
+        """
+        (tmp_path / "backend" / "tests").mkdir(parents=True)
+        over = prep._TESTS_TIMEOUT_S * prep._TESTS_MARGIN_WARN_FRACTION + 1
+        self._run_at(monkeypatch, tmp_path, elapsed_s=over, returncode=1,
+                     stdout="...\n1 failed, 99 passed")
+        r = prep.check_tests(pathlib.Path("py"), tmp_path)
+        assert r["status"] == prep.STATUS_ATTENTION
+        assert "FAILED" in r["summary"]
+        assert "NOTE" in r["summary"]
+
+    def test_the_warn_fraction_leaves_real_headroom(self):
+        """The warning must fire with room to act, not at the cliff edge.
+
+        A fraction of 1.0 would "warn" only once a run already consumed the
+        whole ceiling -- i.e. never, since such a run is killed and reports no
+        duration at all. The signal is only useful strictly below that.
+        """
+        assert 0 < prep._TESTS_MARGIN_WARN_FRACTION < 1, (
+            "_TESTS_MARGIN_WARN_FRACTION={} cannot warn before the ceiling "
+            "kills the run".format(prep._TESTS_MARGIN_WARN_FRACTION))
 
 
 # --------------------------------------------------------------------------- #
