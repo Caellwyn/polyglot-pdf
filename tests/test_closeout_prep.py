@@ -844,10 +844,37 @@ class TestTests:
         barely = prep._timeout_margin_note(ceiling * 0.51)
         nearly = prep._timeout_margin_note(ceiling * 0.99)
 
-        assert "51%" in barely, barely
-        assert "99%" in nearly, nearly
+        assert "51.0%" in barely, barely
+        assert "99.0%" in nearly, nearly
         assert barely != nearly, (
             "a run at 51% and one at 99% of the ceiling must not read the same")
+
+    def test_margin_note_never_contradicts_itself_at_the_boundary(self):
+        """A warning that has FIRED must never render a figure reading as "not over".
+
+        `{:.0%}` rounds to NEAREST, so the first version printed "50% of the
+        1800s ceiling" for every run from 900s to 909s -- i.e. the note
+        contradicted its own existence at exactly the moment it first fires,
+        which is when a skimming reader is most likely to dismiss it. The
+        percentage is now rounded UP, so text and trigger can never disagree.
+
+        Checks just past the budget rather than a comfortable value: this bug
+        was invisible at 51% and only ever appeared in the first few seconds
+        over the line.
+        """
+        budget_s = prep._TESTS_TIMEOUT_S * prep._TESTS_MARGIN_WARN_FRACTION
+
+        # Exactly at the budget the note must not fire at all.
+        assert prep._timeout_margin_note(budget_s) == ""
+
+        # A hair past it, the note fires AND must not read as "50.0%".
+        for over_by in (0.001, 0.5, 1.0, 9.0):
+            note = prep._timeout_margin_note(budget_s + over_by)
+            assert note, "the note must fire {}s past the budget".format(over_by)
+            assert "50.0%" not in note, (
+                "a fired warning rendered {:.1%} -- reads as NOT over the "
+                "threshold that triggered it: {}".format(
+                    prep._TESTS_MARGIN_WARN_FRACTION, note))
 
     def test_margin_note_rides_a_failing_run_too(self, monkeypatch, tmp_path):
         """A red suite that is ALSO near the ceiling must report both.

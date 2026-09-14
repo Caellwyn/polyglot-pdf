@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
@@ -460,9 +461,16 @@ def _timeout_margin_note(elapsed_s: float) -> str:
     # from being killed with no verdict -- read identically, so the text never
     # intensifies as the situation worsens. Since advance warning of that cliff
     # is the entire purpose here, the number has to move with the run.
-    used_fraction = elapsed_s / float(_TESTS_TIMEOUT_S)
+    # Round the percentage UP, and carry a decimal. Plain {:.0%} rounds to
+    # NEAREST, so a run just over the budget (900.5s of a 1800s ceiling) printed
+    # "50%" -- the warning contradicting itself at the very moment it first
+    # fires, reading as "not actually over" to anyone skimming; the whole band
+    # 900-909s rendered "50%". Rounding up guarantees the displayed figure is
+    # never <= the warn threshold once the warning has fired, so the text and
+    # the decision to warn can never disagree.
+    used_fraction = math.ceil(elapsed_s / float(_TESTS_TIMEOUT_S) * 1000.0) / 1000.0
     return (
-        " -- NOTE: the run took {:.0f}s, {:.0%} of the {}s ceiling; raise"
+        " -- NOTE: the run took {:.0f}s, {:.1%} of the {}s ceiling; raise"
         " _TESTS_TIMEOUT_S deliberately now, because a run that EXCEEDS the"
         " ceiling is killed and yields no verdict at all".format(
             elapsed_s, used_fraction, _TESTS_TIMEOUT_S))
