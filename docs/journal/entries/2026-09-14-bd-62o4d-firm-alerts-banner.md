@@ -108,7 +108,46 @@ by call order/count.
   `scripts/check_doc_freshness.py` and left as-is -- none of them track
   any file this bead changed.
 
-Review outcomes recorded in the closeout ping.
+## Cross-surface review round (2026-09-14)
+
+The Opus outer cross-surface review found the contract trace clean except
+for one blocker-tier doc gap: this bead's own diff to
+`docs/components/admin-service.md` bumped the doc's stamp and rewrote the
+E3.11 prose paragraph but left the per-route gate table and the fifth-gate
+subsection untouched, so three sentences in that doc went stale the moment
+this bead shipped -- no `GET /admin/firms/{firm_id}/alerts` table row; the
+acknowledge row still named `require_app_admin` and called it "The ONE
+mutating route"; and the fifth-gate subsection still called itself the
+ONLY gate on `GET /admin/firms/{firm_id}/links` and "pinned directly on
+its one route", both now false with two more routes on the same gate.
+`docs/technical_guide.md`'s equivalent table was already correct, so this
+was an omission in one doc, not a doc-vs-plan disagreement.
+
+Adopted (fixed in this round): the blocker above -- added the missing
+route-table row, corrected the acknowledge row's gate name and rewrote its
+"ONE mutating route" line to explain the employee refusal instead of
+implying app-admin-only, and rewrote the fifth-gate subsection (both its
+"COMPLETE route set" lead-in and its own heading paragraph) to describe
+three routes on the shared gate instead of one. While enumerating that
+same false "one route" framing (CLAUDE.md scar #8), found and fixed one
+more instance of it in `docs/technical_guide.md`'s `/health` row parenthetical
+(same claim, different file; not raised by the reviewer but the same class
+of falsehood).
+
+Deferred (already filed as beads by the reviewer, not touched here): the
+402-refresh comment's incorrect justification (`polyglot-pdf-vhwyr`);
+`MintLinkPage.test.tsx`'s untested 402->banner-refresh wiring
+(`polyglot-pdf-f9hu7`); three `admin_auth.py` docstrings still calling the
+fifth gate a one-route gate (`polyglot-pdf-fz1lk`) -- code comments, not a
+tier-1/2 doc, so filed rather than fixed inline.
+
+Rejected: none -- every reviewer finding was either the blocker (fixed) or
+an already-filed nit (left for its own bead).
+
+Full backend, admin_backend, and root suites re-run after the doc fix:
+538 (admin_backend) + 3837 (backend, 67 skipped, 1 xfailed) + 1691 (root,
+46 skipped) all green. No test code changed in this round (docs-only fix),
+so no new mutation-verification was needed.
 
 ## Files touched
 
