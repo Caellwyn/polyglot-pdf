@@ -189,3 +189,70 @@ def test_setup_admin_service_no_longer_instructs_a_bare_self_assignment_note():
         "step's effect is silently wiped by the next deploy-admin.sh run's "
         "--set-env-vars call (which REPLACES the whole env block); fold "
         "the value into deploy-admin.sh's own BACKEND_EXTRA_ENV instead")
+
+
+def test_monthly_topup_scheduler_sa_email_is_computed_without_a_gcloud_lookup():
+    """MONTHLY_TOPUP_SCHEDULER_SA_EMAIL (bd polyglot-pdf-0euzk) must be
+    constructible from the fixed MONTHLY_TOPUP_SCHEDULER_SA_NAME literal
+    declared in scripts/setup-admin-service.sh, mirroring
+    test_sweep_scheduler_sa_email_is_computed_without_a_gcloud_lookup's own
+    check one env var over. Mutation: delete the
+    MONTHLY_TOPUP_SCHEDULER_SA_EMAIL assignment in deploy-admin.sh -- this
+    goes red."""
+    deploy_admin_text = _live_text(DEPLOY_ADMIN)
+    match = re.search(
+        r'MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="([^"]+)"', deploy_admin_text)
+    assert match, (
+        "deploy-admin.sh does not declare MONTHLY_TOPUP_SCHEDULER_SA_EMAIL")
+    assert match.group(1) == (
+        "admin-monthly-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
+    ), (
+        "MONTHLY_TOPUP_SCHEDULER_SA_EMAIL in deploy-admin.sh does not match "
+        "the scheduler SA name literal declared in scripts/setup-admin-"
+        "service.sh -- got {!r}".format(match.group(1)))
+
+    setup_text = _live_text(SETUP_ADMIN_SERVICE)
+    sa_name_match = re.search(
+        r'MONTHLY_TOPUP_SCHEDULER_SA_NAME="([^"]+)"', setup_text)
+    assert sa_name_match, (
+        "scripts/setup-admin-service.sh no longer declares "
+        "MONTHLY_TOPUP_SCHEDULER_SA_NAME -- deploy-admin.sh's hard-coded "
+        "literal needs re-deriving against whatever replaced it")
+    assert sa_name_match.group(1) in match.group(1), (
+        "deploy-admin.sh's MONTHLY_TOPUP_SCHEDULER_SA_EMAIL ({!r}) does "
+        "not embed scripts/setup-admin-service.sh's actual "
+        "MONTHLY_TOPUP_SCHEDULER_SA_NAME ({!r}) -- the two would silently "
+        "name different service accounts".format(
+            match.group(1), sa_name_match.group(1)))
+
+
+def test_monthly_topup_scheduler_sa_email_reaches_backend_extra_env():
+    """THE SET GUARD, one env var over from test_both_sweep_env_vars_
+    reach_backend_extra_env: MONTHLY_TOPUP_SCHEDULER_SA_EMAIL must actually
+    reach the BACKEND_EXTRA_ENV passed to ./deploy-all.sh -- computing it
+    and never using it is exactly as broken as not computing it at all.
+    Mutation: compute the value but drop it from the SWEEP_ENV
+    concatenation -- this goes red."""
+    text = _live_text(DEPLOY_ADMIN)
+    deploy_all_call = text.index("./deploy-all.sh --backend")
+    before_deploy = text[:deploy_all_call]
+
+    extra_env_match = re.search(
+        r'BACKEND_EXTRA_ENV="([^"]*)"', before_deploy)
+    assert extra_env_match, (
+        "no BACKEND_EXTRA_ENV assignment found before the ./deploy-all.sh "
+        "call in deploy-admin.sh")
+    extra_env_value = extra_env_match.group(1)
+
+    referenced_vars = re.findall(r'\$([A-Za-z_][A-Za-z0-9_]*)', extra_env_value)
+    resolved = extra_env_value
+    for var_name in referenced_vars:
+        for var_match in re.finditer(
+                r'{}="([^"]*)"'.format(re.escape(var_name)), before_deploy):
+            resolved += " " + var_match.group(1)
+
+    assert "MONTHLY_TOPUP_SCHEDULER_SA_EMAIL" in resolved, (
+        "deploy-admin.sh computes MONTHLY_TOPUP_SCHEDULER_SA_EMAIL but "
+        "never folds it into BACKEND_EXTRA_ENV (directly, or via a "
+        "referenced intermediate variable) -- the monthly top-up route's "
+        "allowlist gate would fail-closed (503) on every deploy")

@@ -23,9 +23,22 @@
  * "Progress: N/M" into the voice model's prompt (ai_context.py) -- a distinct
  * surface this bead did not touch. This file pins the shared state-manager
  * path only.
+ *
+ * THE SPECIMEN IS FROZEN, and is the last GIT-TRACKED W-7 rather than the
+ * published one. Two reasons, both load-bearing:
+ *   - no kit is tracked any more (bd polyglot-pdf-q3u5r), so a live import of
+ *     form-kits/w7/schema.json fails the build in CI while resolving fine on a
+ *     machine that pulled the kit;
+ *   - the PUBLISHED W-7 has zero hidden fields. The maintainer removed the
+ *     acceptance-agent block in the schema editor, and those 7 fields were the
+ *     only statically hidden ones. This test asserts hidden.length > 0, so its
+ *     premise died when the FORM was fixed -- it would have broken on the next
+ *     kit refresh regardless of git.
+ * Freezing keeps the RULE under test while the form moves on. Structure only:
+ * labels and geometry are stripped, because counting never reads them.
  */
 import { describe, expect, it } from "vitest";
-import w7 from "../../../../form-kits/w7/schema.json";
+import w7 from "./__fixtures__/w7_structure_frozen.json";
 import { SchemaFormStateManager } from "./schemaFormState";
 import { shouldShowField } from "../utils/validation";
 import type { FormField, FormSchema } from "../types/schema";

@@ -593,12 +593,21 @@ def test_plain_meaning_examples_are_not_terms_the_shipped_KITS_use():
         "stand", "for", "of", "on", "this", "form", "it",
     }
 
-    kit_root = Path(__file__).resolve().parents[3] / "form-kits"
-    kit_texts = {
-        p.parent.name: p.read_text(encoding="utf-8").lower()
-        for p in kit_root.glob("*/schema.json")
-    }
-    assert kit_texts, f"no shipped kits found under {kit_root}"
+    # FROZEN kit vocabulary, not a live read. No kit is tracked any more (bd
+    # polyglot-pdf-q3u5r), so globbing form-kits/ finds nothing in CI and this
+    # guard would retire itself silently -- the one outcome a legal-boundary
+    # check must not have. The counts are the real shipped vocabulary of the
+    # W-7 and f1040, captured as they left git.
+    frozen = (Path(__file__).resolve().parent / "fixtures"
+              / "kit_vocabulary_frozen.json")
+    kit_words = json.loads(frozen.read_text(encoding="utf-8"))["word_counts"]
+    assert kit_words, "frozen kit vocabulary is empty -- guard would be vacuous"
+    # Premise check: the fixture must still carry the collision this guard
+    # exists to catch, or a future re-capture could quietly defang it.
+    assert kit_words["w7"].get("spouse", 0) > 0, (
+        "frozen vocabulary lost 'spouse' -- that term is the motivating "
+        "collision (bd polyglot-pdf-gs5f0); re-capture from the published kits"
+    )
 
     offenders = []
     for example in quoted:
@@ -610,10 +619,11 @@ def test_plain_meaning_examples_are_not_terms_the_shipped_KITS_use():
             # ITIN stand for" is the motivating example for this whole bead.
             if word in ACRONYM_EXEMPT:
                 continue
-            for kit, text in kit_texts.items():
-                # Word-boundary match: a term the kit actually uses as its own
-                # vocabulary, not an incidental substring.
-                hits = len(re.findall(rf"\b{re.escape(word)}\b", text))
+            for kit, counts in kit_words.items():
+                # The frozen counts were built with a word-boundary tokenizer,
+                # so a hit means the kit uses the term as its OWN vocabulary,
+                # not as an incidental substring.
+                hits = counts.get(word, 0)
                 if hits:
                     offenders.append((example, word, kit, hits))
 
