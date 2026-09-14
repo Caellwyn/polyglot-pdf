@@ -25,20 +25,32 @@ import { join } from "node:path";
 
 const SRC_ROOT = join(__dirname, "..");
 
-/** Identifiers that name a raw value map or a credential; word-boundary matched. */
-const BANNED_IDENTIFIERS = [
-  "fieldValues",
-  "current_values",
-  // Token/credential identifiers: idToken, linkToken, authToken, token, etc.
-  // Matched case-insensitively as a whole word so `token`, `idToken`,
-  // `linkToken`, `sessionToken` are all caught as their OWN identifier.
-  "token",
-  "idToken",
-  "linkToken",
-  "authToken",
-  "sessionToken",
-  "credential",
-];
+// Exact identifiers (lowercased) that name a raw field-value map.
+const BANNED_EXACT_IDENTIFIERS = ["fieldvalues", "current_values"];
+// Substrings (lowercased) that flag a credential-shaped identifier: this
+// catches `token`, `idToken`, `linkToken`, `link_token`, `authToken`,
+// `client_token`, `credential`, etc. -- ANY identifier naming a
+// token/credential, not a fixed list of exact spellings.
+//
+// NOT `\btoken\b` / `\bcredential\b`: JS `\b` is a transition between a
+// `\w` char and a non-`\w` char, and `_` IS `\w` -- so `\btoken\b` matches
+// NEITHER `link_token` (no boundary before `token`; `_` and `t` are both
+// `\w`) NOR `linkToken` (no boundary at all; `k` and `T` are both `\w`).
+// A snake_case OR camelCase identifier that merely CONTAINS the word is
+// exactly the shape a real leak takes, so this substring-matches on
+// extracted IDENTIFIER TOKENS instead of word-boundary regexing raw text.
+const BANNED_IDENTIFIER_SUBSTRINGS = ["token", "credential"];
+
+/** True when a lowercased identifier names a banned value/credential shape. */
+function isBannedIdentifier(identifierLower: string): boolean {
+  if (BANNED_EXACT_IDENTIFIERS.includes(identifierLower)) return true;
+  return BANNED_IDENTIFIER_SUBSTRINGS.some((s) => identifierLower.includes(s));
+}
+
+/** Extract real identifier tokens (not string/number literals) from code text. */
+function extractIdentifiers(code: string): string[] {
+  return code.match(/[A-Za-z_$][\w$]*/g) ?? [];
+}
 
 /**
  * Strip string and template literal CONTENTS (keep delimiters) so prose
@@ -140,10 +152,10 @@ function findViolations(): { file: string; snippet: string; identifier: string }
     const calls = extractConsoleCalls(codeOnly);
     for (const call of calls) {
       const withoutStrings = stripStringContents(call);
-      for (const ident of BANNED_IDENTIFIERS) {
-        const re = new RegExp(`\\b${ident}\\b`, "i");
-        if (re.test(withoutStrings)) {
-          violations.push({ file: relPath, snippet: call.slice(0, 120), identifier: ident });
+      for (const identifier of extractIdentifiers(withoutStrings)) {
+        const lower = identifier.toLowerCase();
+        if (isBannedIdentifier(lower)) {
+          violations.push({ file: relPath, snippet: call.slice(0, 120), identifier });
         }
       }
     }
@@ -171,16 +183,32 @@ describe("console PII guard (bd polyglot-pdf-8v8i7)", () => {
     const code = "console.log('leak', fieldValues);";
     const calls = extractConsoleCalls(code);
     const withoutStrings = stripStringContents(calls[0]);
-    expect(/\bfieldValues\b/i.test(withoutStrings)).toBe(true);
+    const identifiers = extractIdentifiers(withoutStrings).map((i) => i.toLowerCase());
+    expect(identifiers.some(isBannedIdentifier)).toBe(true);
   });
 
   it("does not flag a console call that only mentions 'token' in prose (self-test)", () => {
     const code = "console.warn('falling back to last-known token', error);";
     const calls = extractConsoleCalls(code);
     const withoutStrings = stripStringContents(calls[0]);
-    const hasBannedIdentifier = BANNED_IDENTIFIERS.some((ident) =>
-      new RegExp(`\\b${ident}\\b`, "i").test(withoutStrings)
-    );
-    expect(hasBannedIdentifier).toBe(false);
+    const identifiers = extractIdentifiers(withoutStrings).map((i) => i.toLowerCase());
+    expect(identifiers.some(isBannedIdentifier)).toBe(false);
+  });
+
+  // The exact regression fresh-eyes caught: `\btoken\b` / `\bcredential\b`
+  // word-boundary regexing misses BOTH snake_case and camelCase identifiers,
+  // because JS `\b` treats `_` as a word character (so `link_token` is one
+  // contiguous \w run with no boundary before "token") and camelCase has no
+  // separator at all (so `linkToken` has no boundary either). The fix
+  // extracts real identifier tokens and substring-matches on them instead.
+  it("flags snake_case and camelCase token identifiers, not just the bare word (self-test)", () => {
+    const snakeCase = extractIdentifiers(
+      stripStringContents(extractConsoleCalls("console.warn('x', link_token);")[0])
+    ).map((i) => i.toLowerCase());
+    const camelCase = extractIdentifiers(
+      stripStringContents(extractConsoleCalls("console.warn('x', linkToken);")[0])
+    ).map((i) => i.toLowerCase());
+    expect(snakeCase.some(isBannedIdentifier)).toBe(true);
+    expect(camelCase.some(isBannedIdentifier)).toBe(true);
   });
 });

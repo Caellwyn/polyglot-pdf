@@ -50,6 +50,15 @@ vi.mock('../../pdf-view/FilledPreviewModal', () => ({
   default: () => <div data-testid="filled-preview-modal">modal</div>,
 }));
 
+let mockHasClientLinkToken = false;
+vi.mock('../../shared/sessionCredential', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../shared/sessionCredential')>();
+  return {
+    ...actual,
+    hasClientLinkToken: () => mockHasClientLinkToken,
+  };
+});
+
 import { SchemaForm } from './SchemaForm';
 import { SchemaFormStateManager } from '../state/schemaFormState';
 
@@ -82,6 +91,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
     sessionStorage.clear();
     setWidth(1280);
     capturedOnStatus = null;
+    mockHasClientLinkToken = false;
   });
 
   afterEach(() => {
@@ -118,6 +128,44 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
 
       expect(sessionStorage.getItem('schema_form_state')).toBeNull();
       expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tells a CLIENT-LINK session that reopening their link resumes the form (bd polyglot-pdf-8v8i7)', async () => {
+    vi.useFakeTimers();
+    try {
+      mockHasClientLinkToken = true;
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+
+      expect(screen.getByRole('alert').textContent).toMatch(/reopen your original link/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT mention reopening a link for a STAFF session', async () => {
+    vi.useFakeTimers();
+    try {
+      mockHasClientLinkToken = false;
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+
+      expect(screen.getByRole('alert').textContent).not.toMatch(/reopen/i);
     } finally {
       vi.useRealTimers();
     }

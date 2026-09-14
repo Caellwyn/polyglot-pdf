@@ -26,6 +26,8 @@ import { unwrapFieldValue, readFieldEntryWithAlias } from "../utils/fieldValue";
 import { isBlankFieldValue } from "../utils/fieldValue";
 import { VerifyFieldModal } from "./VerifyFieldModal";
 import { StaffHeader } from "./StaffHeader";
+import { isFormComplete } from "../../navigation";
+import { hasClientLinkToken } from "../../shared/sessionCredential";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -147,6 +149,15 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   // storage wipe below runs, so this banner and the wipe key off the same
   // signal rather than a second client-side idle detector.
   const [showIdleClearWarning, setShowIdleClearWarning] = useState(false);
+  // Completion-clear grace state (bd polyglot-pdf-8v8i7). Set true the first
+  // time a CLIENT-LINK session downloads/prints an already-COMPLETE form
+  // (never on a STAFF session -- staff may need repeat copies and have the
+  // logout control + the Clear-form buttons instead). A second
+  // download/print during the grace does not restart the countdown.
+  const [showCompletionClearWarning, setShowCompletionClearWarning] = useState(false);
+  const [completionClearSecondsLeft, setCompletionClearSecondsLeft] = useState(60);
+  const completionClearTimerRef = useRef<number | null>(null);
+  const completionClearIntervalRef = useRef<number | null>(null);
   // Thinking indicator (bd polyglot-pdf-wpw.5): SchemaForm owns the ConnectionManager
   // (it is the shared manager the overlays use), so it must wire onThinkingChange and
   // pass `thinking` down -- the overlays skip their own manager when a shared one
@@ -346,16 +357,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     focusField();
   };
 
-  // Browser PII hygiene (bd polyglot-pdf-8v8i7): the form completing is one of
-  // three automatic triggers for wiping this device's stored answers (the
-  // other two are the idle-timeout effect below and the logout control in
-  // StaffHeader). Clearing on completion means a client who finishes on a
-  // shared law-office tablet does not leave their answers sitting in
-  // sessionStorage for the next person who touches it.
-  const handleFormComplete = useCallback(() => {
-    SchemaFormStateManager.clearAllClientState();
-  }, []);
-
   // Idle-timeout auto-clear (bd polyglot-pdf-8v8i7). `status` becomes
   // 'idle_timeout' when the backend sends its idle_timeout message -- BEFORE
   // the socket actually closes (see webFormConnection.ts's handleMessage) --
@@ -371,6 +372,70 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     }, 5000);
     return () => window.clearTimeout(clearTimer);
   }, [status]);
+
+  // Unmount safety: a pending completion-clear timer/interval must not fire
+  // (or leak) after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (completionClearTimerRef.current !== null) {
+        window.clearTimeout(completionClearTimerRef.current);
+      }
+      if (completionClearIntervalRef.current !== null) {
+        window.clearInterval(completionClearIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Completion-clear grace (bd polyglot-pdf-8v8i7). Called after a
+  // download/print SUCCEEDS on an already-complete CLIENT-LINK form -- never
+  // from a catch block, and never for staff (a staff session has no
+  // automatic clear on download/print: staff routinely need both a download
+  // AND a print of the same form, and they have the logout control plus the
+  // Clear-form buttons for an explicit wipe instead). Idempotent: a second
+  // download/print while the grace is already running does not restart the
+  // countdown, so repeatedly clicking Print does not repeatedly push back
+  // the clear.
+  const startCompletionClearGrace = useCallback(() => {
+    if (completionClearTimerRef.current !== null) return;
+    setShowCompletionClearWarning(true);
+    setCompletionClearSecondsLeft(60);
+    completionClearIntervalRef.current = window.setInterval(() => {
+      setCompletionClearSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    completionClearTimerRef.current = window.setTimeout(() => {
+      SchemaFormStateManager.clearAllClientState();
+      setShowCompletionClearWarning(false);
+      completionClearTimerRef.current = null;
+      if (completionClearIntervalRef.current !== null) {
+        window.clearInterval(completionClearIntervalRef.current);
+        completionClearIntervalRef.current = null;
+      }
+    }, 60000);
+  }, []);
+
+  const cancelCompletionClearGrace = useCallback(() => {
+    if (completionClearTimerRef.current !== null) {
+      window.clearTimeout(completionClearTimerRef.current);
+      completionClearTimerRef.current = null;
+    }
+    if (completionClearIntervalRef.current !== null) {
+      window.clearInterval(completionClearIntervalRef.current);
+      completionClearIntervalRef.current = null;
+    }
+    SchemaFormStateManager.clearAllClientState();
+    setShowCompletionClearWarning(false);
+  }, []);
+
+  // The one gate for "does this download/print start the completion-clear
+  // grace": a client-link session (never staff) on a form that is fully
+  // confirmed at the moment the PDF fill actually succeeded (state may have
+  // moved on during the async fill, so this reads state fresh rather than
+  // trusting a value captured before the await).
+  const maybeStartCompletionClearGrace = useCallback(() => {
+    if (!hasClientLinkToken()) return;
+    if (!isFormComplete(state)) return;
+    startCompletionClearGrace();
+  }, [state, startCompletionClearGrace]);
 
   // Create connection manager once (only when stream becomes ready)
   useEffect(() => {
@@ -390,8 +455,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         sharedStream || undefined,
         handleNextField,
         getToken,
-        (isThinking: boolean) => setThinking(isThinking), // bd polyglot-pdf-wpw.5
-        handleFormComplete // bd polyglot-pdf-8v8i7: auto-clear browser PII on completion
+        (isThinking: boolean) => setThinking(isThinking) // bd polyglot-pdf-wpw.5
       );
       connectionManagerRef.current = manager;
       setConnectionManager(manager);
@@ -870,6 +934,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
       const filename = `${formNumber}-filled-${timestamp}.pdf`;
 
       downloadPDF(filledPDFBytes, filename);
+      // Only after the download actually succeeded (bd polyglot-pdf-8v8i7) --
+      // never from the catch block below, or a FAILED fill would still wipe
+      // the client's answers.
+      maybeStartCompletionClearGrace();
     } catch (error) {
       console.error('[SchemaForm] PDF download failed:', error);
       alert('Failed to download PDF. Check console for details.');
@@ -893,8 +961,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
       }
 
-      console.log('[SchemaForm] Preparing PDF for printing with unwrapped values');
-
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
@@ -904,6 +970,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       // Open print dialog
       printPDF(filledPDFBytes);
+      // Only after the print dialog actually opened (bd polyglot-pdf-8v8i7) --
+      // never from the catch block below, or a FAILED fill would still wipe
+      // the client's answers.
+      maybeStartCompletionClearGrace();
     } catch (error) {
       console.error('[SchemaForm] PDF print failed:', error);
       alert('Failed to print PDF. Check console for details.');
@@ -930,8 +1000,33 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       {showIdleClearWarning && (
         <div className="schema-form__idle-clear-warning" role="alert">
-          This session timed out from inactivity. This device's saved answers
-          will be cleared in a moment.
+          {hasClientLinkToken() ? (
+            <>
+              This session timed out from inactivity. This device's saved
+              answers will be cleared in a moment -- reopen your original link
+              to resume an unfinished form.
+            </>
+          ) : (
+            <>
+              This session timed out from inactivity. This device's saved
+              answers will be cleared in a moment.
+            </>
+          )}
+        </div>
+      )}
+
+      {showCompletionClearWarning && (
+        <div className="schema-form__completion-clear-warning" role="alert">
+          Your form is finished. Your answers will be cleared from this device
+          in {completionClearSecondsLeft} second{completionClearSecondsLeft === 1 ? '' : 's'} --
+          download or print again now if you need another copy.
+          <button
+            type="button"
+            className="schema-form__completion-clear-now-button"
+            onClick={cancelCompletionClearGrace}
+          >
+            Done -- clear now
+          </button>
         </div>
       )}
 

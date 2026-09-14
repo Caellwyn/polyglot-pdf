@@ -2,11 +2,14 @@
  * Browser PII hygiene on WebFormConnection (bd polyglot-pdf-8v8i7).
  *
  * Two things pinned here:
- *  1. send()'s not-OPEN and "suspicious" console.error branches log only
- *     {type, size} -- never the raw message body, which can carry a field
- *     value or a client-link token. Both are console.error, so the
- *     build-time `pure: ['console.log', 'console.debug']` backstop does NOT
- *     strip them; the redaction has to hold in source.
+ *  1. send()'s not-OPEN and "suspicious" console.error branches never log
+ *     the raw message body, which can carry a field value or a client-link
+ *     token. The not-OPEN branch logs {type, size}; the "suspicious" branch
+ *     logs {size} only -- its own guard is `message.type === undefined`, so
+ *     a `type` field there would always be undefined and add nothing. Both
+ *     are console.error, so the build-time `pure: ['console.log',
+ *     'console.debug']` backstop does NOT strip them; the redaction has to
+ *     hold in source.
  *  2. reset() no longer exists -- it was dead code (no caller anywhere in
  *     the app) that combined disconnect() with a raw
  *     SchemaFormStateManager.clear() outside the documented Clear-form path.
@@ -88,7 +91,7 @@ describe('WebFormConnection browser PII hygiene (bd polyglot-pdf-8v8i7)', () => 
     spy.mockRestore()
   })
 
-  it('redacts the "suspicious" (no type) send() branch to {type, size} -- never keys/preview/stack', async () => {
+  it('redacts the "suspicious" (no type) send() branch to {size} -- never keys/preview/stack/type', async () => {
     const conn = new WebFormConnection(SCHEMA)
     conn.setGetToken(async () => 'fresh-token')
     await conn.connect('wss://example/ws/fill')
@@ -103,7 +106,9 @@ describe('WebFormConnection browser PII hygiene (bd polyglot-pdf-8v8i7)', () => 
     expect(serialized).not.toContain('abc.def')
     expect(serialized).not.toContain('field_id')
     const payload = loggedArgs[loggedArgs.length - 1]
-    expect(Object.keys(payload).sort()).toEqual(['size', 'type']);
+    // No `type` key -- this branch's own guard is `message.type === undefined`,
+    // so a type field would always be undefined here and add nothing.
+    expect(Object.keys(payload).sort()).toEqual(['size']);
 
     spy.mockRestore()
   })

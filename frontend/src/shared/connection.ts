@@ -362,11 +362,7 @@ export function createConnectionManager(
 	// Thinking-indicator signal (bd polyglot-pdf-wpw.5): true while the agent is
 	// processing a turn (user-turn-end -> first response audio). Optional so existing
 	// callers are unaffected; the overlays pass it to drive a calm "thinking" UI.
-	onThinkingChange?: (thinking: boolean) => void,
-	// Fires once when the AI-facing connection reports every section done (bd
-	// polyglot-pdf-8v8i7). Optional so existing callers are unaffected; a caller
-	// that wants to auto-clear browser storage on completion passes this.
-	onFormComplete?: () => void
+	onThinkingChange?: (thinking: boolean) => void
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
@@ -817,9 +813,6 @@ export function createConnectionManager(
 		},
 		onFormComplete: () => {
 			console.log('[VFF Connection] form complete')
-			if (onFormComplete) {
-				onFormComplete()
-			}
 		},
 	}
 

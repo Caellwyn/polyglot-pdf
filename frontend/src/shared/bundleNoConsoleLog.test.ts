@@ -16,13 +16,26 @@
  * covers it if one is added later (a separate config test pins the `pure`
  * list itself).
  *
- * Building 3 apps is slower than a typical vitest case (each is a few
- * seconds), so this file carries a per-test timeout rather than the vitest
- * default.
+ * COST: this runs three real production builds -- roughly 45-50 seconds
+ * total on a normal dev machine. Keep it anyway: the bead's exit criterion
+ * is a property of the SHIPPED BUNDLE, and nothing short of building it
+ * actually verifies that. Do not exclude it from a routine run to save time.
+ *
+ * FAILS CLOSED, deliberately, on every silent-skip shape:
+ *  - A failing build: `execFileSync` throws on a non-zero exit code, which
+ *    fails the `it()` -- there is no try/catch here to swallow that.
+ *  - The frontend app's demo build needs `.env.demo` (git-committed) for
+ *    Vite's `--mode demo` env loading; a MISSING file does not fail the
+ *    build (Vite just falls back to code defaults), so it is checked to
+ *    exist explicitly before the build runs, with its own assertion.
+ *  - A build that "succeeds" but emits no dist/assets directory, or an
+ *    empty one: `bundledJsFiles` throws on a missing directory (propagating
+ *    out of the `it()`), and an explicit assertion rejects an empty file
+ *    list even if the directory does exist but is empty.
  */
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
@@ -33,6 +46,10 @@ interface AppBuild {
   cwd: string;
   buildArgs: string[];
   distDir: string;
+  // Files that must exist before the build runs, or the build would
+  // silently skip real config (e.g. a missing `.env.<mode>` -- Vite does
+  // not error on that, it just falls back to code defaults).
+  requiredFiles?: string[];
 }
 
 const APPS: AppBuild[] = [
@@ -41,6 +58,7 @@ const APPS: AppBuild[] = [
     cwd: join(REPO_ROOT, "frontend"),
     buildArgs: ["run", "build:schema:demo"],
     distDir: join(REPO_ROOT, "frontend", "dist"),
+    requiredFiles: [join(REPO_ROOT, "frontend", ".env.demo")],
   },
   {
     name: "schema-editor (hosted mode)",
@@ -68,6 +86,13 @@ describe.each(APPS)("production bundle: $name", (app) => {
   it(
     "contains no console.log( in the built JS",
     () => {
+      for (const requiredFile of app.requiredFiles ?? []) {
+        expect(
+          existsSync(requiredFile),
+          `Required file missing -- the build would silently skip this config: ${requiredFile}`
+        ).toBe(true);
+      }
+
       execFileSync("npm", app.buildArgs, {
         cwd: app.cwd,
         stdio: "pipe",

@@ -3851,12 +3851,13 @@ export class WebFormConnection {
     } else {
       const jsonStr = JSON.stringify(message);
 
-      // Redacted to {type, size} (bd polyglot-pdf-8v8i7): the message body can
+      // Redacted to {size} (bd polyglot-pdf-8v8i7): the message body can
       // carry a field value or a client-link token, and this console.error is
-      // not stripped by the build-time `pure` backstop.
+      // not stripped by the build-time `pure` backstop. No `type` field here
+      // -- the branch guard is `message.type === undefined`, so it is always
+      // undefined inside this block and would add nothing.
       if (message.type === undefined) {
         console.error('[WebFormConnection] [warn] SUSPICIOUS: Sending message without type!', {
-          type: message.type,
           size: jsonStr.length,
         });
       } else {

@@ -73,10 +73,6 @@ export default defineConfig({
   // polyglot-pdf-8v8i7) -- NOT `drop: ['console']`, which would also remove
   // console.warn/console.error. Pinned by
   // frontend/src/shared/bundleNoConsoleLog.test.ts.
-  // Strip console.log/console.debug from the production bundle (bd
-  // polyglot-pdf-8v8i7) -- NOT `drop: ['console']`, which would also remove
-  // console.warn/console.error. Pinned by
-  // frontend/src/shared/bundleNoConsoleLog.test.ts.
   esbuild: {
     pure: ['console.log', 'console.debug'],
   },
