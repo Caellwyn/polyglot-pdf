@@ -53,6 +53,21 @@ current stamp (bd `dfxet` is the doctrine bead for that stacking problem).
 
 **Fresh-eyes (sonnet): one round, NO-GAPS.** No findings adopted or filed.
 
+**Opus cross-surface review: two rounds.** Round 1 GAPS-FOUND (2), both
+adopted: the collapsed stamp conflicted with dev's same-day `p4ale` stamp
+(#784) -- resolved by merging dev and keeping ONE stamp line carrying both
+clauses, a deliberate deviation from bd `dfxet`'s take-dev's-paragraph rule
+since that rule would have restored the 15-bead chain the collapse removed;
+and the new paragraph pointed at prose the doc did not contain -- made
+self-contained. The first attempt at that merge committed conflict markers
+(a `;`-chained resolver ran `git add` past a failed assertion) and was
+corrected in the next commit; lesson recorded. Round 2 NO-GAPS. Filed by
+the reviewers: `polyglot-pdf-mrrtg` (a stale `URL_BAKING_SEVERITY`
+citation, pre-existing), `polyglot-pdf-g44so` (pin the set of bare-name
+external-tool spawns), `polyglot-pdf-fgzue` (its premise -- the local gate
+always inconclusive for the operator -- did not reproduce against the real
+project; narrowed to surfacing gcloud's stderr in the inconclusive warning).
+
 **Housekeeping reviewed and left:** other sessions' in-progress beads and the
 stale docs the checker lists for files this branch did not touch
 (`technical_guide.md` mentions the module but its claims are still correct).
