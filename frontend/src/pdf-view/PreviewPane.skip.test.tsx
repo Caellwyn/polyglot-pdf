@@ -64,10 +64,9 @@ const REQUIRED_FIELD: FormField = {
 } as any;
 
 /**
- * A field required ONLY when another field says so. This is why the popover
- * needs the WHOLE field list: isFieldRequired resolves require_if through
- * evaluateConditionGroup, which reads the other field's value. Passing just the
- * one field under edit would mis-evaluate exactly this case.
+ * A field required ONLY when another field says so -- so the gate has to go
+ * through isFieldRequired (which evaluates require_if against fieldValues)
+ * rather than reading validation.required alone.
  */
 const CONDITIONAL_FIELD: FormField = {
   id: 'interpreter_name',
@@ -205,10 +204,15 @@ describe('the Preview skip gate matches the form view (bd polyglot-pdf-ykfx0)', 
     expect(screen.getByText(/needs follow-up/i)).toBeTruthy();
   });
 
-  it('resolves a CONDITIONAL requirement using the whole field list', () => {
-    // require_if points at ANOTHER field. If the popover were handed only the
-    // field under edit, evaluateConditionGroup could not see the trigger's
-    // value and this would silently not offer the button.
+  it('offers it for a field required only CONDITIONALLY, once the condition holds', () => {
+    // require_if points at another field's value. This pins that the gate goes
+    // through isFieldRequired (which evaluates require_if) rather than reading
+    // validation.required alone -- a field with no `required` flag still offers
+    // the control when its condition is met.
+    //
+    // It does NOT pin the `allFields` argument: the evaluator accepts that
+    // parameter and never reads it, so passing [field] instead changes nothing.
+    // Verified by mutation. See the prop's docstring in FieldEditPopover.
     const schema = schemaOf(TRIGGER_FIELD, CONDITIONAL_FIELD);
 
     renderPreviewEditing(CONDITIONAL_FIELD.id, {
@@ -219,6 +223,7 @@ describe('the Preview skip gate matches the form view (bd polyglot-pdf-ykfx0)', 
       screen.getByRole('button', { name: /skip for now/i }),
       'a field required BECAUSE of another field must offer the skip control',
     ).toBeTruthy();
+    // Mutation-verified: dropping `required` from the gate reddens this.
   });
 
   it('withholds it when that same conditional requirement is NOT met', () => {

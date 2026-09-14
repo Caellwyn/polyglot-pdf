@@ -32,11 +32,21 @@ export interface FieldEditPopoverProps {
   /** Wrapped FieldValue map (conditional logic; evaluators unwrap internally). */
   allFieldValues: Record<string, any>;
   /**
-   * The WHOLE schema field list, not just this field. isFieldRequired hands it
-   * to evaluateConditionGroup to resolve a `require_if` that references ANOTHER
-   * field, so passing `[field]` here would silently mis-evaluate exactly the
-   * conditional-requirement case and offer (or withhold) the skip button
-   * wrongly.
+   * The WHOLE schema field list, passed on to isFieldRequired -- the same third
+   * argument SectionRenderer gives it in the form view, so the two surfaces
+   * call the predicate identically.
+   *
+   * HONEST NOTE ON WHAT THIS DOES TODAY: nothing observable. isFieldRequired
+   * forwards it to evaluateConditionGroup -> evaluateAtomicCondition, which
+   * ACCEPTS a `fields` parameter and never reads it -- the trigger value is
+   * looked up in `fieldValues`, not in `fields`. Verified by mutation: passing
+   * `[field]` here changes no test outcome, because it changes no behaviour.
+   *
+   * It is passed anyway because the alternative is worse: hard-coding `[field]`
+   * would bake in an assumption about an evaluator internal that is not part of
+   * its contract, and would break silently the day a conditional needs to look a
+   * field up by id. Do NOT add a test asserting this argument matters until it
+   * does -- such a test could only pass by coincidence.
    */
   allFields: FormField[];
   error?: string | null;
@@ -125,6 +135,10 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
   // view and not the other for the identical field. SectionRenderer additionally
   // has a `disabled` prop; the popover has no disabled mode (a read-only field
   // is handled separately below), so there is nothing to mirror for it.
+  //
+  // `empty` must use the shared isBlankFieldValue, not a bare === '': a
+  // space-filled required field has to remain skippable, which is the shape bd
+  // polyglot-pdf-xtj97 pinned on the voice side.
   const required = isFieldRequired(field, allFieldValues, allFields);
   const empty = isBlankFieldValue(unwrapFieldValue(value));
   const canSkip = !!onFieldSkip && required && empty && !skipped;

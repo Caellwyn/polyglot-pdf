@@ -146,9 +146,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                   // show an empty input and risk overwriting the real answer.
                   value={readFieldEntryWithAlias(fieldValues, editingHere.id)}
                   allFieldValues={fieldValues}
-                  // The WHOLE field list: the popover's skip gate calls
-                  // isFieldRequired, which resolves a require_if referencing
-                  // another field through it.
+                  // The whole field list, mirroring SectionRenderer's call into
+                  // isFieldRequired. Inert today (the evaluator ignores the
+                  // argument) -- see the prop's docstring.
                   allFields={fields}
                   error={validationErrors?.[editingHere.id] ?? null}
                   onChange={(value) => onFieldChange!(editingHere.id, value)}
