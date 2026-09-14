@@ -50,6 +50,7 @@ production default calls the real binary via subprocess.
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 from typing import Callable
@@ -66,14 +67,29 @@ class ServiceUnreachable(Exception):
 def _default_gcloud_runner(argv: list) -> "tuple[int, str, str]":
     """Run gcloud for real. stdout and stderr are captured SEPARATELY --
     never merged -- so a gcloud component-update nag or deprecation notice on
-    stderr can never satisfy the stdout text match below."""
-    proc = subprocess.run(
-        argv,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    stderr can never satisfy the stdout text match below.
+
+    argv[0] is resolved through shutil.which first: on Windows, CreateProcess
+    resolves a bare "gcloud" only to gcloud.exe, and the Cloud SDK ships
+    gcloud.cmd (plus a POSIX shell script named gcloud), so the bare spawn
+    fails with WinError 2. shutil.which applies PATHEXT there and is a no-op
+    on a POSIX host; an unresolvable name is passed through unchanged.
+
+    A spawn that fails outright (binary missing, not on PATH) is an
+    INCONCLUSIVE IAM read -- the caller's warn-and-continue path -- not a
+    crash: a traceback here exits 1 under the wrappers' `set -e` and aborts a
+    stage whose deploy has already succeeded (bd polyglot-pdf-o4f7c)."""
+    argv = [shutil.which(argv[0]) or argv[0]] + list(argv[1:])
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        return 127, "", "{}: {}".format(type(exc).__name__, exc)
     return proc.returncode, proc.stdout, proc.stderr
 
 
