@@ -2,7 +2,7 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
+*Last updated: 2026-09-14 (bd polyglot-pdf-62o4d: `GET /admin/firms/{firm_id}/alerts` new route + `PATCH .../acknowledge` gate widened to `require_app_admin_or_owning_manager_or_employee` with an employee refused inside the route body -- see Surface contract 32; no IAM or env-var change.) (2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
 monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
 `pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
 fetched independently so one channel's failure never blanks the other's
@@ -72,7 +72,21 @@ alert_routes.py`, `require_app_admin`) list the E3.5 `alerts/{id}` docs
 and acknowledge one -- the ONE mutation this bead ships, setting
 `acknowledged_by` (the actor's uid) + `acknowledged_at` inside ONE
 Firestore transaction with its audit row (mirrors `firm_routes.py`'s
-`_apply_firm_patch` shape); acknowledging twice is a 409. `GET
+`_apply_firm_patch` shape); acknowledging twice is a 409. **Widened by
+bd polyglot-pdf-62o4d** (firm alerts banner, no outbound email): a NEW
+`GET /admin/firms/{firm_id}/alerts` route reads the SAME collection
+scoped to one firm, behind `require_app_admin_or_owning_manager_or_
+employee` (the fifth gate) with a NARROWER response allowlist (`id,
+kind, level, ts, context, acknowledged_at` -- never `firm_id`,
+`acknowledged_by`, or `emailed_at`); `?channel=` is accepted and
+ignored (alerts carry no channel field, but `adminFetch` always sends
+one). `PATCH .../acknowledge`'s own gate widens to the same composite
+so a firm manager can acknowledge their own firm's alert (404 for
+another firm's, mirroring `_require_owning_firm`) -- an EMPLOYEE is
+refused with a 403 INSIDE THE ROUTE BODY, since the shared dependency
+must let an employee actor through for the sibling read route. See
+Surface contract 32. The operator-wide `GET /admin/alerts` and its
+own full allowlist are unchanged. `GET
 /admin/errors` (`admin_backend/routes/ops_routes.py`, `require_app_admin`)
 calls Cloud Error Reporting's `groupStats.list` REST endpoint (a new
 `admin_backend/services/error_stats.py`, authenticated with the runtime
