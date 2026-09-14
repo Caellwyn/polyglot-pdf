@@ -455,11 +455,17 @@ def _timeout_margin_note(elapsed_s: float) -> str:
     budget_s = _TESTS_TIMEOUT_S * _TESTS_MARGIN_WARN_FRACTION
     if elapsed_s <= budget_s:
         return ""
+    # Report the run's OWN fraction, not the threshold that tripped the warning.
+    # Quoting the threshold makes a 51%-of-ceiling run and a 99%-one -- a second
+    # from being killed with no verdict -- read identically, so the text never
+    # intensifies as the situation worsens. Since advance warning of that cliff
+    # is the entire purpose here, the number has to move with the run.
+    used_fraction = elapsed_s / float(_TESTS_TIMEOUT_S)
     return (
-        " -- NOTE: the run took {:.0f}s, over {:.0%} of the {}s ceiling; raise"
+        " -- NOTE: the run took {:.0f}s, {:.0%} of the {}s ceiling; raise"
         " _TESTS_TIMEOUT_S deliberately now, because a run that EXCEEDS the"
         " ceiling is killed and yields no verdict at all".format(
-            elapsed_s, _TESTS_MARGIN_WARN_FRACTION, _TESTS_TIMEOUT_S))
+            elapsed_s, used_fraction, _TESTS_TIMEOUT_S))
 
 
 def check_tests(py: Path, WT: Path) -> dict:

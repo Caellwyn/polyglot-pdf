@@ -831,6 +831,24 @@ class TestTests:
         assert "{:.0f}s".format(over) in r["summary"], (
             "the warning must report the OBSERVED duration, not just the ceiling")
 
+    def test_margin_note_severity_scales_with_the_actual_run(self):
+        """The reported fraction must be the RUN's, not the warn threshold.
+
+        The first version quoted _TESTS_MARGIN_WARN_FRACTION, so every warning
+        read "over 50%" whether the run sat at 51% of the ceiling or at 99% --
+        one second from being killed with no verdict at all. A warning whose
+        language never intensifies cannot give advance notice of the cliff,
+        which is the only reason this mechanism exists.
+        """
+        ceiling = prep._TESTS_TIMEOUT_S
+        barely = prep._timeout_margin_note(ceiling * 0.51)
+        nearly = prep._timeout_margin_note(ceiling * 0.99)
+
+        assert "51%" in barely, barely
+        assert "99%" in nearly, nearly
+        assert barely != nearly, (
+            "a run at 51% and one at 99% of the ceiling must not read the same")
+
     def test_margin_note_rides_a_failing_run_too(self, monkeypatch, tmp_path):
         """A red suite that is ALSO near the ceiling must report both.
 
