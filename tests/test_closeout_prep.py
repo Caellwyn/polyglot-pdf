@@ -817,8 +817,19 @@ class TestTests:
         # Still a PASS: the margin note is a warning, not a verdict change.
         assert r["status"] == prep.STATUS_OK
         assert "NOTE" in r["summary"]
-        assert str(prep._TESTS_TIMEOUT_S) in r["summary"], (
-            "the warning must name the ceiling so the reader knows what to raise")
+
+        # Name the KNOB, not just its current value. Asserting the number alone
+        # passed for the wrong reason: 1800 also appears as the "{}s ceiling"
+        # figure, so dropping the actionable constant name left the test green
+        # (caught by mutation, not by review). A warning that says a run is
+        # close to some ceiling, without saying what to raise, is a dead end.
+        assert "_TESTS_TIMEOUT_S" in r["summary"], (
+            "the warning must name the constant to raise, not merely quote its "
+            "current value -- the reader has to know what to change")
+        # And it must report what was actually observed, since that measurement
+        # is the whole point of the mechanism.
+        assert "{:.0f}s".format(over) in r["summary"], (
+            "the warning must report the OBSERVED duration, not just the ceiling")
 
     def test_margin_note_rides_a_failing_run_too(self, monkeypatch, tmp_path):
         """A red suite that is ALSO near the ceiling must report both.
