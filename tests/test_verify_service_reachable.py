@@ -21,6 +21,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import verify_service_reachable as gate  # noqa: E402
 from verify_service_reachable import (  # noqa: E402
     ServiceUnreachable,
     main,
@@ -202,3 +203,60 @@ def test_cli_warn_flag_exits_zero_over_an_unreachable_service(monkeypatch, capsy
 def test_cli_rejects_an_unknown_severity():
     with pytest.raises(SystemExit):
         main(["svc", "us-central1", "proj", "--severity", "maybe"])
+
+
+# ---------------------------------------------------------------------------
+# The default runner itself (bd polyglot-pdf-o4f7c).
+#
+# On Windows, CreateProcess resolves a bare "gcloud" only to gcloud.exe, and
+# the Cloud SDK ships gcloud.cmd (plus a POSIX shell script named gcloud), so
+# the bare spawn raised FileNotFoundError -- a traceback that exited 1 under
+# the wrappers' `set -e` and aborted a stage whose deploy had already
+# succeeded (the admin service's first deploy and a staging frontend deploy,
+# 2026-09-14). The module's own contract says an IAM read that cannot run is
+# INCONCLUSIVE and warns; a runner that cannot spawn gcloud is that case.
+# ---------------------------------------------------------------------------
+
+
+def test_a_runner_that_cannot_spawn_gcloud_is_inconclusive_not_a_crash(monkeypatch):
+    """Mutation: remove the OSError handling in _default_gcloud_runner -> red
+    (the FileNotFoundError propagates out of verify_service_reachable)."""
+
+    def _boom(*_args, **_kwargs):
+        raise FileNotFoundError(2, "The system cannot find the file specified")
+
+    monkeypatch.setattr(gate.subprocess, "run", _boom)
+    warnings = []
+    ok = verify_service_reachable(
+        "svc", "us-central1", "proj", severity="fatal",
+        warn=warnings.append, error=lambda _m: None,
+    )
+    assert ok is True, "an unrunnable IAM read must warn-and-continue, not fail closed"
+    assert any("Could not read the IAM policy" in w for w in warnings), warnings
+    # The CLI takes the same path: exit 0, never a traceback.
+    assert main(["svc", "us-central1", "proj", "--severity", "fatal"]) == 0
+
+
+def test_the_default_runner_resolves_gcloud_through_which(monkeypatch):
+    """Mutation: spawn argv[0] as the bare name -> red. shutil.which applies
+    PATHEXT on Windows (so it finds gcloud.cmd) and is a no-op elsewhere."""
+    seen = {}
+
+    class _Proc:
+        returncode, stdout, stderr = 0, "roles/run.invoker" + chr(10), ""
+
+    def _fake_run(argv, **_kwargs):
+        seen["argv"] = list(argv)
+        return _Proc()
+
+    monkeypatch.setattr(gate.subprocess, "run", _fake_run)
+    monkeypatch.setattr(gate.shutil, "which", lambda name: "C:/sdk/bin/gcloud.cmd" if name == "gcloud" else None)
+    assert verify_service_reachable("svc", "us-central1", "proj") is True
+    assert seen["argv"][0] == "C:/sdk/bin/gcloud.cmd", seen["argv"]
+    assert seen["argv"][1:4] == ["run", "services", "get-iam-policy"]
+
+    # No resolution available -> the bare name is passed through unchanged
+    # (a POSIX host where the binary is simply "gcloud" on PATH).
+    monkeypatch.setattr(gate.shutil, "which", lambda _name: None)
+    verify_service_reachable("svc", "us-central1", "proj")
+    assert seen["argv"][0] == "gcloud"
