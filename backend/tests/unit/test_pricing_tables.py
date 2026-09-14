@@ -171,16 +171,8 @@ def test_tts_pricing_table_has_a_chirp3_hd_row():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Chirp3-HD rate is unverified: cloud.google.com/text-to-speech/pricing "
-        "was unfetchable on 2026-09-09. STRICT -- filling the rate in turns this "
-        "RED, which is the prompt to delete this marker."
-    ),
-)
 def test_tts_pricing_is_filled_in():
-    """The TODO gate: xfail(strict) until the Chirp3-HD rate is verified.
+    """Every TTS tier carries a verified, positive per-character rate.
 
     This is the bead's explicit TODO gate, not an oversight. It is marked
     xfail(strict=True) rather than left plainly failing because a

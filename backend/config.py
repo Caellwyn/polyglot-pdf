@@ -1512,16 +1512,15 @@ def get_text_generation_pricing(model_name: str | None) -> dict[str, float] | No
 # Chirp 3 HD voices only ({locale}-Chirp3-HD-{persona}, see spellback_tts.py),
 # so that is the only tier that needs a row today.
 #
-# TODO(bd polyglot-pdf-wio6m): the Chirp3-HD rate is UNVERIFIED and therefore
-# None. https://cloud.google.com/text-to-speech/pricing could not be fetched on
-# 2026-09-09 -- the page truncates before the pricing table, and the
-# /docs/pricing alias 301s to a docs host that 404s. Per the bead contract, an
-# unfetchable page leaves an explicit None rather than a number typed from
-# memory: a wrong rate in a cost dashboard is worse than a visible gap.
-# backend/tests/unit/test_pricing_tables.py fails on this None until an operator
-# reads the live page and fills it in (with the date, in the shape above).
+# Chirp 3 HD: USD 0.00003 per character (USD 30 per 1M characters), SKU
+# F977-2280-6F1B, read from https://cloud.google.com/text-to-speech/pricing by
+# the maintainer on 2026-09-14 (the page would not load for an automated fetch
+# on 2026-09-09). Re-verify against the live page whenever a tier is added; a
+# tier with no verified rate stays None so callers emit cost_estimate_usd=None
+# rather than a guess, and backend/tests/unit/test_pricing_tables.py refuses
+# a None row.
 TTS_PRICING_USD_PER_CHAR: dict[str, float | None] = {
-	"Chirp3-HD": None,
+	"Chirp3-HD": 0.00003,
 }
 
 
