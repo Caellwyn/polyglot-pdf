@@ -119,8 +119,14 @@ async function confirmRefuses(value: unknown, required: boolean): Promise<boolea
   })
   await Promise.resolve()
   const ack = sentMessages(ws).filter(m => m.type === 'confirm_field_response')[0]
-  // No ack at all counts as refused: the model got nothing back, which is the
-  // deadlock shape rather than an escape.
+  // NO ACK COUNTS AS REFUSED, deliberately. The model got nothing back, so from
+  // the session's point of view that exit did not open -- which is the deadlock
+  // shape, not an escape.
+  //
+  // This does NOT hide a crashing handler behind a plausible-looking "refusal":
+  // verified by making handleSkipFieldRequest throw, which reddens the sweep
+  // loudly rather than passing. That is the right direction -- a handler that
+  // throws HAS removed an exit, so a deadlock report is the honest reading.
   return ack ? ack.recorded !== true : true
 }
 
