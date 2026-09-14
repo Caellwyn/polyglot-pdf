@@ -29,14 +29,22 @@ scar #10 rule (kits live in the bucket; freeze the specimen). Verified in
 a clean worktree with no `form-kits/w7/` present: the original test fails
 with the CI error, the fixed one passes (13 tests); typecheck clean. The
 other two apps' tests reference `form-kits` only as URL strings; the
-backend readers were frozen by #780 itself.
+backend W-7 readers are skip-guarded on the PDF's presence (silently
+dead in CI, a weaker state than frozen -- part of the `1mgkq` debt).
 
 ## Review record
 
 **Fresh-eyes (sonnet):** one round, NO-GAPS. Verified the fixture byte-identical to the last tracked schema, the section-landing assertions non-vacuous (8 real sections), and no remaining filesystem read of a kit path in any CI-collected test tree. Noted for later: nothing mechanically pins "no test reads form-kits/ by path"; that folds into the kit-coupled-tests debt (bd `1mgkq`) rather than a new bead.
 
-No Opus cross-surface pass: a test-data source swap with no runtime
-contract (the trivial-diff arm); fresh-eyes is the record.
+**Opus cross-surface review:** one round, NO-GAPS -- run because the
+auto-merge rule requires that gate and two reviewed PRs were waiting on
+this merge. It verified byte-identity three ways (same git blob id as
+the last tracked file), that the fixture cannot reach a shipped bundle,
+and that the `pretest:run` manifest generator still finds a `form-kits/`
+directory on a clean checkout. Two nits recorded, not adopted: the
+fixture carries no in-file provenance key (keeping it byte-identical to
+the tracked blob IS the provenance; the test comment names the commit),
+and the wording below about the backend readers.
 
 ## Lessons
 
