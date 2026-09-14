@@ -34,6 +34,12 @@ export interface PDFViewerProps {
    * read-only exactly as before.
    */
   editingFieldId?: string | null;
+  /**
+   * Mark a field intentionally unanswered, forwarded to the edit popover.
+   * Optional: absent, the popover renders no skip button, which is the state
+   * Preview shipped in (bd polyglot-pdf-ykfx0).
+   */
+  onFieldSkip?: (fieldId: string) => void;
   onOverlayClick?: (fieldId: string) => void;
   onCloseEditor?: () => void;
   validationErrors?: Record<string, string>;
@@ -70,6 +76,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   currentFieldId,
   onFirstPageLoad,
   editingFieldId,
+  onFieldSkip,
   onOverlayClick,
   onCloseEditor,
   validationErrors,
@@ -139,10 +146,15 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                   // show an empty input and risk overwriting the real answer.
                   value={readFieldEntryWithAlias(fieldValues, editingHere.id)}
                   allFieldValues={fieldValues}
+                  // The WHOLE field list: the popover's skip gate calls
+                  // isFieldRequired, which resolves a require_if referencing
+                  // another field through it.
+                  allFields={fields}
                   error={validationErrors?.[editingHere.id] ?? null}
                   onChange={(value) => onFieldChange!(editingHere.id, value)}
                   onBlur={onFieldBlur!}
                   onClose={onCloseEditor!}
+                  onFieldSkip={onFieldSkip}
                   anchor={pdfToScreenCoords(editingHere.pdf_position!, scale)}
                 />
               )}

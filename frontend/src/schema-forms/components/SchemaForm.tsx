@@ -990,6 +990,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
               onFieldChange={handleFieldChange}
               onFieldBlur={handleFieldBlur}
               onFieldFocus={handleFieldFocus}
+              // The SAME handler the form view passes to SectionRenderer, so
+              // both surfaces resolve a skip through one markFieldSkipped path
+              // (bd polyglot-pdf-ykfx0).
+              onFieldSkip={handleFieldSkip}
             />
           </React.Suspense>
         </PdfViewErrorBoundary>

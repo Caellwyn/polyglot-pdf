@@ -63,7 +63,7 @@ function makeSchema(): FormSchema {
   return {
     source: 'pdf',
     form_metadata: { title: 'Test Form', version: '1.0', language: 'en', form_number: 'T-1' },
-    sections: [{ id: 'sec1', label: 'Section One', order: 1, fields: ['f1', 'f2'] }],
+    sections: [{ id: 'sec1', label: 'Section One', order: 1, fields: ['f1', 'f2', 'f3'] }],
     fields: [
       {
         id: 'f1',
@@ -81,6 +81,17 @@ function makeSchema(): FormSchema {
         section_id: 'sec1',
         type: 'text',
         pdf_position: rect(200),
+      } as any,
+      // REQUIRED and empty -- the only shape that offers a skip control
+      // (bd polyglot-pdf-ykfx0).
+      {
+        id: 'f3',
+        name: 'USCIS Number',
+        spoken_name: 'USCIS number',
+        section_id: 'sec1',
+        type: 'text',
+        validation: { required: true },
+        pdf_position: rect(300),
       } as any,
     ],
   };
@@ -187,5 +198,84 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
     await user.click(screen.getByTestId('pdf-field-overlay-f2'));
     expect(screen.queryByTestId('pdf-field-edit-popover-f1')).toBeNull();
     expect(screen.getByTestId('pdf-field-edit-popover-f2')).toBeTruthy();
+  });
+});
+
+/**
+ * THE SKIP CONTROL REACHES PREVIEW (bd polyglot-pdf-ykfx0).
+ *
+ * The form view has had a "Skip for now" button since bd polyglot-pdf-4dxt --
+ * the sanctioned way to leave a required question deliberately unanswered
+ * ("said aloud, or via the skip control", docs/components/schema-forms.md).
+ * Preview shipped without one: SchemaForm rendered PreviewPane with
+ * onFieldChange/onFieldBlur/onFieldFocus and no onFieldSkip, so a user working
+ * on the PDF surface had no interface exit from a field they could not answer.
+ *
+ * These drive the WHOLE chain -- SchemaForm -> PreviewPane -> PDFViewer ->
+ * FieldEditPopover -- because the defect was an ABSENT PROP at the top of it.
+ * PreviewPane.skip.test.tsx pins the popover's own gating, but it renders
+ * PreviewPane directly, so it is structurally blind to SchemaForm dropping the
+ * prop -- which is exactly where the bug lived.
+ */
+describe('Preview mode skip control, end to end (bd polyglot-pdf-ykfx0)', () => {
+  // Same setup as the sibling describe: a fresh session per test, and DESKTOP
+  // width -- a mobile-width mount demotes a Preview choice, so without this the
+  // suite would never reach the surface under test.
+  beforeEach(() => {
+    sessionStorage.clear();
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('offers Skip for now on a required empty field and RECORDS the skip', async () => {
+    await mountInPreview();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    const skip = screen.getByRole('button', { name: /skip for now/i });
+
+    await user.click(skip);
+
+    // Assert the STATE, not merely that a handler fired: the point of the
+    // affordance is that the field ends up resolved the same way the form
+    // view's button resolves it (markFieldSkipped -> skipped: true).
+    const stored = storedFieldValues();
+    expect(
+      stored.f3?.skipped,
+      'the skip must land in SchemaFormState, not just call a callback',
+    ).toBe(true);
+  });
+
+  it('does NOT offer it on a field that is not required', async () => {
+    // f1 is optional, so there is nothing to skip -- matching SectionRenderer's
+    // gate, so the same field never offers the control in one view and
+    // withholds it in the other.
+    await mountInPreview();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('pdf-field-overlay-f1'));
+
+    expect(screen.queryByRole('button', { name: /skip for now/i })).toBeNull();
+  });
+
+  it('stops offering it once the field is skipped', async () => {
+    await mountInPreview();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    await user.click(screen.getByRole('button', { name: /skip for now/i }));
+
+    // Re-open the editor on the same field: it is resolved now.
+    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    expect(screen.queryByRole('button', { name: /skip for now/i })).toBeNull();
+    expect(screen.getByText(/needs follow-up/i)).toBeTruthy();
   });
 });
