@@ -99,6 +99,24 @@ debugging a "missing button" that was really a lost edit. Commit before
 mutating. The tell is a test failing for a reason that contradicts something you
 just verified.
 
+**A red suite is not evidence until you have the baseline.** The full suite
+failed 4, then 5, then 7 tests across three runs of IDENTICAL code, and two of
+those failures were in my own file -- which is exactly the shape that makes you
+start rewriting good tests. The failures turned out to be TIMEOUTS, never
+assertions.
+
+The measurement that settled it: a pristine `origin/dev` worktree, with none of
+my changes, fails the SAME tests under full-suite load (4 failed | 2254 passed),
+while those same files pass 18/18 there in isolation. So every failure on my
+branch is pre-existing, filed as `polyglot-pdf-acn4d` with that baseline
+recorded. My three new tests did inherit the slowness -- they mount the real
+lazy-loaded chain -- so they got explicit headroom; the pre-existing `7esr`
+tests in the same file were left alone as out of scope.
+
+Cost: this was chased twice in one session. The cheap discriminator is the one
+the repo already records -- run the failing file ALONE, and if it passes, get a
+baseline on a clean checkout of the base branch before touching anything.
+
 ## Doc freshness
 
 Not re-run for this branch. The Opus reviewer traced the two tier-2 docs that
