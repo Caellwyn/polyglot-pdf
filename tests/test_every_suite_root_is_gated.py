@@ -35,7 +35,6 @@ import configparser
 import io
 import pathlib
 import re
-import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTEST_INI = REPO_ROOT / "pytest.ini"
