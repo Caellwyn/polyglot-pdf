@@ -7,28 +7,26 @@
 // answers coming back, landing where they stopped, and being asked to agree
 // again rather than inheriting a tick from a session that ended days ago.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { applyResume } from './applyResume';
+import type { SchemaFormState } from './state/schemaFormState';
 
 /** Existing state holds FieldValue objects, not bare strings. */
 function fv(value: string) {
   return { value, confirmed: true, lastModified: 1 };
 }
-import type { SchemaFormState } from './state/schemaFormState';
 
-// THE REAL SHIPPED W-7, not a fixture. The invented one used
-// `fields: [{ id }]` -- a shape no kit produces -- and was the sole reason the
-// section-landing tests passed while the code returned the fallback for every
-// real client. A fixture you invented cannot falsify an assumption you also
-// invented.
-const SCHEMA = JSON.parse(
-  readFileSync(
-    resolve(process.cwd(), '..', 'form-kits', 'w7', 'schema.json'),
-    'utf-8',
-  ),
-);
+// THE REAL SHIPPED W-7, FROZEN -- a byte-for-byte copy of the last
+// git-tracked form-kits/w7/schema.json, not an invented shape. An invented
+// fixture once used `fields: [{ id }]` -- a shape no kit produces -- and was
+// the sole reason the section-landing tests passed while the code returned
+// the fallback for every real client. A fixture you invented cannot falsify
+// an assumption you also invented. Kits live in the bucket, not in git
+// (CLAUDE.md scar #10), so the specimen is frozen here rather than read
+// from a form-kits/ path that a clean checkout does not have.
+import w7Frozen from './__fixtures__/w7_schema_frozen.json';
+
+const SCHEMA = w7Frozen as unknown as SchemaFormState['schema'];
 
 /** Section ids in order, from the real schema. */
 const SECTIONS: Array<{ id: string; fields: string[] }> = SCHEMA.sections;
