@@ -190,7 +190,10 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
         {skipped && (
           // The SAME markup and classes SectionRenderer uses, not a popover-
           // specific variant: form-field__skipped is already styled (the amber
-          // badge treatment in schema-form.css, which is imported globally), and
+          // badge treatment in schema-form.css -- imported by schema-forms/main.tsx,
+          // the EAGER entry that also renders this lazily-loaded pane, so the
+          // stylesheet is always present before the popover can mount; the risky
+          // direction is the reverse one), and
           // role="status" announces the change -- which matters most here,
           // because pressing Skip makes the button vanish on the same render, so
           // a screen-reader user otherwise gets silence where the control was.
