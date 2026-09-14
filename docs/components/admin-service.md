@@ -2,6 +2,8 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-14 (bd `polyglot-pdf-362nk`: Epic 3 follow-up (b) to the maintainer's 2026-09-14 alerts decision -- FirmDetailPage.tsx gains an Alerts section over the SAME operator-wide `GET /admin/alerts?firm_id=<id>` route (bd `polyglot-pdf-mpebj`, E3.11a; NOT the separate firm-console route bd `polyglot-pdf-62o4d` added), listing this firm's alerts unacknowledged-first (a client-side stable sort -- the route's own ordering is newest-ts-first with no acknowledged-aware ordering) and Acknowledge (`PATCH /admin/alerts/{id}/acknowledge`, exactly once per click, re-reading on success only). Both this section and AlertsPage.tsx (E3.11b) now render through ONE new shared row component, `admin-console/src/components/AlertRow.tsx`, extracted byte-for-byte from AlertsPage.tsx's own inline row markup so the kind/level/plain-text rendering cannot drift into two copies; `showFirm` toggles the Firm column AlertsPage needs (cross-firm view) and FirmDetailPage does not (already scoped to one firm). A failed alerts fetch on FirmDetailPage sets its OWN isolated error state, never the page's shared `error`/`firm` state -- a fetch error there never blanks the profile/plan/ledger/links already rendered above it. No new route, IAM grant, or `adminApi.ts` function -- `listAlerts`/`acknowledgeAlert` already existed from E3.11b.)*
+
 *Last updated: 2026-09-14 (bd `polyglot-pdf-0euzk`: the firm-plan + monthly top-up follow-up to the maintainer's 2026-09-14 pricing decision -- new Surface contract 32. `firms/{firm_id}` gains `plan: {tier, monthly_credits, rollover}` (new `backend/services/plans.py`, a closed `PLAN_TIERS` list and `DEFAULT_PLAN` of `{tier: "starter", monthly_credits: 35, rollover: false}`), applied on firm create and backfilled by `scripts/backfill_firm_kind.py` for a pre-existing firm with none stored. NEW `PATCH /admin/firms/{firm_id}/plan` (`require_app_admin`, no confirm-twice -- a plan change is not a minting-eligibility change) and NEW `POST /admin/credits/monthly-topup` (`require_google_oidc`, its OWN Cloud Scheduler identity `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, separate from the sweep job's own -- cron `5 0 1 * *` UTC): for every active firm with a plan, writes ONE `subscription_grant` bringing the balance to (no rollover) or adding (rollover) `monthly_credits`, idempotent by a new nullable `period` field on the ledger entry (`credit_ledger.append_entry`). `credit_ledger.py`'s `subscription_grant` type moves from ALWAYS-requiring `usd_amount` to OPTIONAL-but-validated (`USD_OPTIONAL_TYPES`), since the automated top-up records no money moving while a human operator's manual grant still can -- `credit_routes.py`'s OWN grant-route 422 and `scripts/grant_credits.py`'s CLI check are both UNCHANGED and still require it. A reserved, writer-less `TYPE_OVERAGE_PURCHASE` constant is the seam Epic 5's Stripe pay-as-you-go work fills in later. Console: `FirmDetailPage.tsx` gains a one-write-per-save plan editor.)*
 
 *Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
@@ -829,7 +831,19 @@ one.
   Revoke is enabled only on a `minted` link, calls the route once, and
   re-reads the SAME channel's link list afterward). Every mutation on this
   page follows the same MUTATE-THEN-RE-READ round trip `ConfigEditorPage`/
-  `UsersPage` already use.
+  `UsersPage` already use. `FirmDetailPage.tsx` also has its own ALERTS
+  SECTION (bd polyglot-pdf-362nk) over the OPERATOR-WIDE `GET
+  /admin/alerts?firm_id=<id>` (bd polyglot-pdf-mpebj, E3.11a -- NOT the
+  separate firm-console route bd polyglot-pdf-62o4d added for the firm's
+  OWN console), listing this firm's alerts unacknowledged-first (a
+  client-side stable sort; the route's own ordering is newest-ts-first
+  only) and Acknowledge (exactly once per click, re-reading the alerts
+  list on success only) -- both this section and `pages/AlertsPage.tsx`
+  render through one shared `components/AlertRow.tsx` row component (see
+  "Monitoring pages" below for that extraction). A failed alerts fetch
+  sets its OWN error state and never touches this page's shared
+  `error`/`firm` state, so it can never blank the profile/plan/ledger/links
+  already rendered above it.
 - **Kit commercials page** (`pages/KitCommercialsPage.tsx`, bd
   polyglot-pdf-mzblw, Epic 2 Track C bead C1): the FIRST console page over
   `admin_backend/routes/kit_routes.py`'s three routes. Lists every kit
@@ -886,7 +900,12 @@ one.
   SUCCESS only -- mirrors `UsersPage.tsx`'s "a failed mutation must not
   trigger the success re-read" rule, so a 409 (already acknowledged by
   someone else) shows that route's own message next to the row without a
-  spurious extra read. `ErrorsPage.tsx` has channel tabs over `GET
+  spurious extra read. Its OWN row markup (bd polyglot-pdf-362nk) lives in
+  `components/AlertRow.tsx` -- extracted so `FirmDetailPage.tsx`'s alerts
+  section (see "Firms pages" above) renders the identical
+  kind/level/plain-text row rather than a second copy; `showFirm` toggles
+  the Firm column this cross-firm page needs and FirmDetailPage's
+  already-one-firm section omits. `ErrorsPage.tsx` has channel tabs over `GET
   /admin/errors`, one fetch per tab switch, rendering ONLY the five
   `ErrorGroup` fields `adminApi.ts` types (count, first/last seen,
   error_type, top_frame) BY NAME -- no spread, no key iteration -- so a
