@@ -102,6 +102,16 @@ function storedFieldValues(): Record<string, any> {
   return raw ? JSON.parse(raw).fieldValues ?? {} : {};
 }
 
+/**
+ * These tests mount the REAL chain, which means waiting on the React.lazy
+ * PreviewPane chunk AND driving userEvent with real timers. That reliably
+ * exceeds vitest's 5s default on a loaded machine -- observed as an intermittent
+ * timeout (never an assertion failure) in both these tests and the pre-existing
+ * bd polyglot-pdf-7esr one above. Headroom, not a behaviour change: a genuine
+ * regression still fails on its assertion long before this elapses.
+ */
+const LAZY_MOUNT_TIMEOUT_MS = 20000;
+
 async function mountInPreview() {
   render(<SchemaForm schema={makeSchema()} kitId="test" pdfUrl="/fake.pdf" />);
   await act(async () => {});
@@ -252,7 +262,7 @@ describe('Preview mode skip control, end to end (bd polyglot-pdf-ykfx0)', () => 
       stored.f3?.skipped,
       'the skip must land in SchemaFormState, not just call a callback',
     ).toBe(true);
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 
   it('does NOT offer it on a field that is not required', async () => {
     // f1 is optional, so there is nothing to skip -- matching SectionRenderer's
@@ -264,7 +274,7 @@ describe('Preview mode skip control, end to end (bd polyglot-pdf-ykfx0)', () => 
     await user.click(screen.getByTestId('pdf-field-overlay-f1'));
 
     expect(screen.queryByRole('button', { name: /skip for now/i })).toBeNull();
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 
   it('stops offering it once the field is skipped', async () => {
     await mountInPreview();
@@ -277,5 +287,5 @@ describe('Preview mode skip control, end to end (bd polyglot-pdf-ykfx0)', () => 
     await user.click(screen.getByTestId('pdf-field-overlay-f3'));
     expect(screen.queryByRole('button', { name: /skip for now/i })).toBeNull();
     expect(screen.getByText(/needs follow-up/i)).toBeTruthy();
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 });
