@@ -2,12 +2,20 @@
  * THE VOICE-PATH EXIT INVARIANT (bd polyglot-pdf-xtj97, criterion 3).
  *
  * A field the voice session is sitting on must ALWAYS have at least one exit:
- * the model can confirm it, skip it, or clear it. If all three refuse, the
- * session deadlocks -- computeNextField keeps re-offering the field, section
- * advance is gated on computeNextField, and the backend marks BOTH the confirm
- * and skip refusals NON-RETRYABLE (callback_handler.py), so the model is handed
- * a field it cannot answer, cannot skip, cannot clear, and is told not to try
- * again.
+ * the model can confirm it, skip it, or clear it. If all three refuse, the form
+ * can never be COMPLETED -- isSectionValid (schemaFormState.ts) fails forever on
+ * a required field that is blank and not skipped, and computeNextField's
+ * Priority-2 arm hands the field straight back. The backend compounds it by
+ * marking BOTH the confirm and skip refusals NON-RETRYABLE
+ * (callback_handler.py), so the model is handed a field it cannot answer,
+ * cannot skip, cannot clear, and is told not to try again.
+ *
+ * PRECISELY: the session is not frozen. `switch_to_field` pins another field,
+ * and resolveLivePin (navigation.ts) returns that pin ahead of both priority
+ * loops, so the model can move AROUND the bad field and keep working. What it
+ * can never do is finish: the pin resolves, Priority 2 re-offers the field, and
+ * the completion gate stays shut. Stranded-forever, not stuck-on-this-turn --
+ * which is worse, because it surfaces at the END of a long session.
  *
  * WHY THIS IS A MATRIX AND NOT ONE CASE. The deadlock bd polyglot-pdf-5ovod
  * nearly shipped was not caused by any single guard being wrong. Each of the
@@ -198,10 +206,11 @@ describe('the voice path always has an exit (bd polyglot-pdf-xtj97)', () => {
         expect(
           openExits,
           `DEADLOCK: a ${required ? 'required' : 'optional'} field holding ` +
-            `${shape.label} refuses confirm AND skip AND clear, so the voice ` +
-            `session cannot move past it -- and the backend marks the confirm ` +
-            `and skip refusals non-retryable, so the model is told to stop ` +
-            `trying. At least one exit must stay open.`,
+            `${shape.label} refuses confirm AND skip AND clear, so the form can ` +
+            `never be COMPLETED -- the model can switch away from it, but the ` +
+            `completion gate stays shut forever and Priority 2 keeps handing ` +
+            `the field back. The backend marks the confirm and skip refusals ` +
+            `non-retryable, so it is told to stop trying. One exit must stay open.`,
         ).not.toEqual([])
       })
     }
