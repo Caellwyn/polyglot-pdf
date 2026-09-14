@@ -82,9 +82,28 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const impl = vi.fn(async (url: unknown, init?: RequestInit) => {
     calls.push({ url: String(url), init });
+    // FirmAlertsBanner (bd polyglot-pdf-62o4d) now fetches
+    // /admin/firms/{firm_id}/alerts independently the moment this page
+    // mounts. It is recorded in `calls` like any other request (so a test
+    // that asserts on the FULL call list still sees it -- see the
+    // "sends NO employee_id" test's own path-filtered assertion below),
+    // but it must not be routed into a test's OWN link-list/revoke
+    // sequencing logic, which every existing handler here was written
+    // before the banner existed to expect. Answered with an empty list
+    // here, once, so the banner renders nothing and every other handler
+    // keeps counting only the calls IT cares about.
+    if (String(url).includes('/alerts')) {
+      return jsonResponse({ alerts: [] });
+    }
     return handler(String(url), init);
   });
   return { impl: impl as unknown as typeof fetch, calls };
+}
+
+/** Calls this test's OWN logic cares about -- everything except
+ * FirmAlertsBanner's own independent /alerts fetch. */
+function nonAlertCalls(calls: Array<{ url: string; init?: RequestInit }>) {
+  return calls.filter((c) => !c.url.includes('/alerts'));
 }
 
 afterEach(() => {
@@ -117,8 +136,9 @@ describe('LinkHistoryPage', () => {
     render(<LinkHistoryPage user={employeeUser('emp-1')} fetchImpl={impl} />);
 
     await screen.findByText('w7');
-    expect(calls).toHaveLength(1);
-    const url = new URL(calls[0].url);
+    const linkCalls = nonAlertCalls(calls);
+    expect(linkCalls).toHaveLength(1);
+    const url = new URL(linkCalls[0].url);
     expect(url.pathname).toBe('/admin/firms/firm-1/links');
     expect(url.searchParams.has('employee_id')).toBe(false);
     // No filter controls, no Revoke column/button at all for an employee.
@@ -152,6 +172,10 @@ describe('LinkHistoryPage', () => {
     vi.stubEnv('VITE_APP_CHANNEL', 'demo');
     let listCallCount = 0;
     const { impl, calls } = mockFetch((url, init) => {
+      // mockFetch's own alerts short-circuit already answers
+      // FirmAlertsBanner's independent fetch before this handler ever
+      // sees it, so `url` here is either the link list or the revoke
+      // call -- listCallCount stays a pure count of the LIST route.
       if (url.includes('/revoke')) {
         expect(init?.method).toBe('POST');
         return jsonResponse({ jti: 'jti-1', status: 'revoked' });
@@ -171,7 +195,7 @@ describe('LinkHistoryPage', () => {
 
     await waitFor(() => expect(screen.getByText('revoked')).toBeTruthy());
 
-    const revokeCalls = calls.filter((c) => c.url.includes('/revoke'));
+    const revokeCalls = nonAlertCalls(calls).filter((c) => c.url.includes('/revoke'));
     expect(revokeCalls).toHaveLength(1);
     expect(listCallCount).toBe(2);
   });
