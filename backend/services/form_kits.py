@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import os
 import re
 import shutil
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -474,6 +475,16 @@ class FormKitStore:
 class LocalFormKitStore(FormKitStore):
 	def __init__(self, root: Path):
 		self.root = root
+		# In-flight draft-snapshot claims, keyed (kit_id, snapshot_id), guarded
+		# by _in_flight_lock. See put_draft_snapshot / _claim_snapshot_id for
+		# why this exists: the reaper's `>= next_id` bound only protects a
+		# claim HIGHER than the reaping saver's own id, never a LOWER one that
+		# has claimed its directory but not yet written (delayed under load).
+		# This set is the reaper's other guard, correct only within one
+		# process -- which is the only case the local store needs to cover;
+		# the GCS store (the one that ships) uses compare-and-swap instead.
+		self._in_flight_claims: set[tuple[str, str]] = set()
+		self._in_flight_lock = threading.Lock()
 		_log.info("form_kits.local_store", root=str(self.root))
 
 	def _kit_dir(self, kit_id: str) -> Path:
@@ -762,11 +773,12 @@ class LocalFormKitStore(FormKitStore):
 	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
 		"""Delete an abandoned claim, without ever removing real work.
 
-		THREE guards here, each load-bearing for a DIFFERENT file, plus a
-		FOURTH at the only call site (the `>= next_id` id bound -- see the
-		comment there). Every guard below keys on directory CONTENTS, so none
-		of them protects another saver's freshly-claimed EMPTY directory; do
-		not read this list as complete without that one. None is redundant:
+		THREE guards here, each load-bearing for a DIFFERENT file, plus TWO
+		more at the only call site (the `>= next_id` id bound and the
+		in-flight claim registry -- see the comment there). Every guard below
+		keys on directory CONTENTS, so none of them protects another saver's
+		freshly-claimed EMPTY directory; do not read this list as complete
+		without those two. None is redundant:
 
 		1. The schema.json early return protects a COMPLETED snapshot's
 		   meta.json. The unlink below runs BEFORE rmdir is ever reached, so
@@ -832,6 +844,14 @@ class LocalFormKitStore(FormKitStore):
 			target = root / str(candidate)
 			try:
 				target.mkdir()
+				# Register the claim BEFORE returning: the reaper's id bound
+				# (`>= next_id`) only spares a claim HIGHER than the reaping
+				# saver's own id, never a LOWER one that is claimed but not
+				# yet written (delayed under load -- the tcwck CI failure).
+				# This registry is that other guard; put_draft_snapshot clears
+				# the entry once the write finishes or fails.
+				with self._in_flight_lock:
+					self._in_flight_claims.add((kit_id, str(candidate)))
 				return target, str(candidate)
 			except FileExistsError:
 				candidate += 1
@@ -859,21 +879,43 @@ class LocalFormKitStore(FormKitStore):
 		# directory owns the id, and the loser retries with the next one.
 		target, next_id = await anyio.to_thread.run_sync(
 			lambda: self._claim_snapshot_id(kit_id))
-		# The atomic temp+replace writer the archive uses: a concurrent read
-		# must never see half a schema.
-		await self._write_json(target / "schema.json", schema)
-		await self._write_json(target / "meta.json", {
-			"id": next_id,
-			"savedAt": datetime.now(timezone.utc).isoformat(),
-		})
+		try:
+			# The atomic temp+replace writer the archive uses: a concurrent
+			# read must never see half a schema.
+			await self._write_json(target / "schema.json", schema)
+			await self._write_json(target / "meta.json", {
+				"id": next_id,
+				"savedAt": datetime.now(timezone.utc).isoformat(),
+			})
+		finally:
+			# Clear the claim whether the write succeeded or failed -- a
+			# failed write leaves an abandoned directory that must remain
+			# reapable, not a permanently-protected phantom.
+			with self._in_flight_lock:
+				self._in_flight_claims.discard((kit_id, next_id))
 
 		# Reap abandoned claims -- empty directories left by a failure between
 		# the mkdir and the write. They no longer count as ring members (see
 		# _snapshot_ids), but without this they would accumulate forever and
 		# push the claim counter ever upward.
 		#
-		# TWO SEPARATE PROTECTIONS, for OPPOSITE cases. BOTH ARE LOAD-BEARING;
-		# deleting either loses snapshots:
+		# THREE SEPARATE PROTECTIONS, for DIFFERENT cases. ALL ARE LOAD-BEARING;
+		# deleting any one loses snapshots:
+		#
+		#   * `orphan in in_flight` protects a LOWER claim that is claimed but
+		#     not yet written -- a saver delayed between its mkdir and its
+		#     _write_json (thread-pool contention under load). The `>=
+		#     next_id` bound below does NOT cover this: it only spares a claim
+		#     HIGHER than this reap pass's own id, so a slower saver holding a
+		#     LOWER one was treated as abandoned and reaped out from under it,
+		#     and its own _write_json then died with FileExistsError on the
+		#     re-created directory's mkdir (bd polyglot-pdf-tcwck, reproduced
+		#     on Linux CI 2/2). This registry is populated at claim time and
+		#     cleared once the claiming call's write finishes (see the
+		#     try/finally above), so it reflects only genuinely in-flight
+		#     claims of THIS process -- the only case the local store needs to
+		#     cover, since the GCS store (the one that ships) uses
+		#     compare-and-swap instead.
 		#
 		#   * `int(orphan) >= int(next_id)` protects HIGHER in-flight claims.
 		#     A saver that claimed 3 while the max was 2 is still running when
@@ -892,8 +934,11 @@ class LocalFormKitStore(FormKitStore):
 		# already skips anything completed -- so it is the safe half to delete.
 		# The id bound is not.
 		written = set(self._snapshot_ids(kit_id))
+		with self._in_flight_lock:
+			in_flight = {sid for (kid, sid) in self._in_flight_claims
+						 if kid == kit_id}
 		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
-			if orphan in written or int(orphan) >= int(next_id):
+			if orphan in written or orphan in in_flight or int(orphan) >= int(next_id):
 				continue
 			await anyio.to_thread.run_sync(
 				lambda o=orphan: self._reap_if_still_empty(kit_id, o))

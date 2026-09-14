@@ -1247,3 +1247,130 @@ def test_the_reaper_SPARES_a_higher_in_flight_claim(client):
     assert (drafts / "8").exists(), (
         "the reaper deleted a higher in-flight claim -- its writer's "
         "_write_json would die with FileNotFoundError")
+
+
+def test_the_reaper_SPARES_a_LOWER_in_flight_claim(client):
+    """bd polyglot-pdf-tcwck: the id bound only protects a HIGHER claim.
+
+    The CI traceback: `FileExistsError` from `path.parent.mkdir(parents=True,
+    exist_ok=True)` inside A's own _write_json. pathlib's mkdir catches the
+    OSError from `os.mkdir` (the directory already existed -- A claimed it)
+    and re-raises ONLY if `not self.is_dir()` by the time it checks. So the
+    narrow window is: A's `os.mkdir` sees its own claimed directory and
+    raises FileExistsError, and BEFORE the follow-up `self.is_dir()` runs,
+    a concurrent saver B's reap pass -- which considers A's claim abandoned
+    because A's id is BELOW B's own `next_id`, and the `>= next_id` bound
+    only spares claims ABOVE it -- rmdir's that directory out from under A.
+    `is_dir()` then reports False and the exception re-raises right back out
+    as a FormKitStoreError, exactly the CI failure.
+
+    Deterministic rather than timing-dependent: a hook on `Path.is_dir` fires
+    exactly when A's mkdir checks it (not on any other is_dir call in the
+    process) and, in that instant, runs claimant B's ENTIRE real
+    put_draft_snapshot -- claim, write, and full reap pass -- against the
+    disk. That is the real reaper code, not a reimplementation, so the fix
+    (or its removal) is genuinely exercised rather than assumed.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+
+    # Claimant A has already claimed id "1" (the atomic mkdir in
+    # _claim_snapshot_id) but not yet written -- exactly the shape a delayed
+    # anyio worker leaves on disk. Called directly (it is a plain sync
+    # method): put_draft_snapshot itself only ever reaches it via
+    # anyio.to_thread.run_sync, which adds no behavior worth re-driving here.
+    claim_dir, claimed_id = store._claim_snapshot_id("w7")
+    assert claimed_id == "1"
+
+    real_is_dir = pathlib.Path.is_dir
+    state = {"fired": False}
+
+    def hooked_is_dir(self):
+        # Fire once, only for A's own claimed directory -- every other
+        # is_dir() call in the process (schema.json checks, _snapshot_ids
+        # scans inside B's own save) must pass straight through untouched.
+        if not state["fired"] and self == claim_dir:
+            state["fired"] = True
+            _run(store.put_draft_snapshot("w7", {"_tag": "B"}))
+        return real_is_dir(self)
+
+    pathlib.Path.is_dir = hooked_is_dir
+    try:
+        # A's write, driven directly at the exact point put_draft_snapshot
+        # would call it after claiming "1" above.
+        _run(store._write_json(claim_dir / "schema.json", {"_tag": "A"}))
+        _run(store._write_json(claim_dir / "meta.json", {"id": "1"}))
+    finally:
+        pathlib.Path.is_dir = real_is_dir
+
+    # Before the fix: the write above raised FormKitStoreError with
+    # "[Errno 17] File exists" / WinError 183 -- the CI traceback -- because
+    # B's reap pass rmdir'd A's claimed-but-then-empty directory in the
+    # instant between A's os.mkdir and its is_dir() re-check.
+    assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "A", (
+        "claimant A's snapshot did not survive -- the reaper took its "
+        "lower, still-in-flight claim")
+    snaps = _run(store.list_draft_snapshots("w7"))
+    tags = {_run(store.load_draft_snapshot("w7", s["id"]))["_tag"] for s in snaps}
+    assert tags == {"A", "B"}, f"expected both snapshots, got {tags}"
+
+
+def test_the_registry_still_SPARES_a_claim_DRIVEN_THROUGH_put_draft_snapshot(client):
+    """bd polyglot-pdf-tcwck, gap 1: pin that put_draft_snapshot itself clears
+    the in-flight entry AFTER the write, not right after the claim.
+
+    The sibling test above proves the registry mechanism works, but it
+    populates the registry via a direct `_claim_snapshot_id` call and then
+    drives `_write_json` by hand -- it never calls put_draft_snapshot for A
+    at all, so it cannot tell whether put_draft_snapshot's OWN placement of
+    the discard (in the try/finally around the write, rather than right
+    after the claim) is what matters. Moving that discard earlier would
+    still pass the sibling test, because the sibling never exercises
+    put_draft_snapshot's discard site in the first place.
+
+    This test drives A through the REAL put_draft_snapshot end to end. The
+    same is_dir hook as the sibling test fires at A's mkdir/is_dir re-check
+    -- now reached via put_draft_snapshot's own call chain -- and runs
+    claimant B's entire real put_draft_snapshot (claim, write, full reap
+    pass) in that instant. With the discard moved to right after the claim
+    (rather than after the write), the registry is already empty by the
+    time this fires, and B's reap treats A's claim as abandoned.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+
+    drafts = root / "w7" / "_drafts"
+    claim_dir = drafts / "1"
+
+    real_is_dir = pathlib.Path.is_dir
+    state = {"fired": False}
+
+    def hooked_is_dir(self):
+        # Fire once, only for A's own claimed directory -- every other
+        # is_dir() call in the process (schema.json checks, _snapshot_ids
+        # scans inside B's own save) must pass straight through untouched.
+        if not state["fired"] and self == claim_dir:
+            state["fired"] = True
+            _run(store.put_draft_snapshot("w7", {"_tag": "B"}))
+        return real_is_dir(self)
+
+    pathlib.Path.is_dir = hooked_is_dir
+    try:
+        # A's ENTIRE save, unlike the sibling test above which stops at a
+        # direct _claim_snapshot_id call -- this is what actually exercises
+        # where put_draft_snapshot places its own discard.
+        first_id = _run(store.put_draft_snapshot("w7", {"_tag": "A"}))
+    finally:
+        pathlib.Path.is_dir = real_is_dir
+
+    assert first_id == "1"
+    # Before the fix (or with the discard moved to right after the claim):
+    # B's reap pass, run above from inside A's own claim/write transition,
+    # finds the registry already clear of A's id and rmdir's A's claimed
+    # directory -- A's own write then hits the CI's FileExistsError.
+    assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "A", (
+        "claimant A's snapshot did not survive -- put_draft_snapshot cleared "
+        "the in-flight entry too early")
+    snaps = _run(store.list_draft_snapshots("w7"))
+    tags = {_run(store.load_draft_snapshot("w7", s["id"]))["_tag"] for s in snaps}
+    assert tags == {"A", "B"}, f"expected both snapshots, got {tags}"
