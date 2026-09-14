@@ -206,17 +206,12 @@ _KNOWN_GATES = (require_signin, require_auth, require_paid_client_work,
 _DELIBERATELY_UNGATED_HTTP_ROUTES = {
     ("GET", "/api/form-kits/{kit_id}/pdf"),   # public-kit non-gate (vccy)
     ("POST", "/dev/console-log"),             # dev-only, C4 workstream
-    ("POST", "/disclaimer-acceptance"),       # C4 workstream
-    ("POST", "/api/disclaimer-acceptance"),   # same route, mounted twice
-                                               # under the /api rewrite prefix
-                                               # (main.py includes
-                                               # websocket_routes.router both
-                                               # bare and with prefix="/api";
-                                               # disclaimer_routes.router
-                                               # itself already carries
-                                               # prefix="/api", so its ONE
-                                               # registration surfaces under
-                                               # /api/disclaimer-acceptance)
+    ("POST", "/api/disclaimer-acceptance"),   # C4 workstream. Registered
+                                               # ONCE: disclaimer_routes.router
+                                               # carries prefix="/api" itself
+                                               # and main.py includes it bare,
+                                               # so there is no un-prefixed
+                                               # twin of this path.
     ("POST", "/api/links/open"),              # THE CLIENT. Deliberately
                                                # unauthenticated -- the
                                                # signed link token IS the
