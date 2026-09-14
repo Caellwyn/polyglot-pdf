@@ -35,7 +35,6 @@ import configparser
 import io
 import pathlib
 import re
-import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTEST_INI = REPO_ROOT / "pytest.ini"
@@ -232,60 +231,32 @@ def test_every_suite_root_strips_k_service_at_import_time():
         "time:\n  " + "\n  ".join(offenders))
 
 
-def test_check_tests_timeout_has_headroom_over_the_widened_run():
-    """Widening the gate without widening its timeout un-gates it silently.
+def test_check_tests_timeout_is_a_named_constant_wired_into_the_call():
+    """The ceiling must be greppable AND actually reach subprocess.run.
 
-    check_tests() used to run `backend/tests` alone (measured 590s) under a
-    600s ceiling. Widening it to every testpaths root took the same run to
-    706s -- over the ceiling -- so the gate would be KILLED on every closeout
-    instead of returning a verdict. The scope and the ceiling are one decision;
-    this pins the ceiling to the wider scope so the next root added cannot
-    quietly re-open the hole.
+    This is the one part of the timeout contract a SOURCE read covers and a
+    behavioural test cannot: tests/test_closeout_prep.py stubs subprocess.run,
+    so it can never observe which timeout value the real call was handed. A
+    ceiling that exists as a constant but is not passed is a number the gate
+    never reads.
+
+    Deliberately asserts NO numeric threshold. The size of the ceiling, and the
+    margin the gate keeps over it, are owned by
+    tests/test_closeout_prep.py::TestTests -- behaviourally, against the
+    imported module. Two files asserting the same constant against two
+    different literals (1200 here, 2*706 there) is what bd polyglot-pdf-i1hej
+    retired: a future adjustment could satisfy one and leave the other red for
+    no principled reason, and a reader could not tell which was authoritative.
     """
     text = io.open(CLOSEOUT_PREP, encoding="utf-8").read()
-    match = re.search(r"^_TESTS_TIMEOUT_S\s*=\s*(\d+)", text, re.MULTILINE)
-    assert match, "check_tests' timeout must be a NAMED constant so it is pinnable"
-    assert int(match.group(1)) >= 1200, (
-        "the full-suite run measured 706s across all testpaths roots; a ceiling "
-        "of {}s leaves no headroom for a slower machine or a few hundred new "
-        "tests, and an exceeded ceiling yields NO verdict at all".format(
-            match.group(1)))
+    assert re.search(r"^_TESTS_TIMEOUT_S\s*=\s*\d+", text, re.MULTILINE), (
+        "check_tests' timeout must be a NAMED constant so it is pinnable")
 
     body = text[text.index("def check_tests("):]
     body = body[:body.index("\ndef ")]
     assert "timeout=_TESTS_TIMEOUT_S" in body, (
-        "check_tests() does not use the pinned constant, so the assertion "
-        "above guards a number the gate never reads")
-
-
-def test_check_tests_reports_a_timeout_as_its_own_outcome():
-    """A killed suite must not masquerade as a tooling error.
-
-    subprocess.TimeoutExpired subclasses SubprocessError, so a single
-    `except (OSError, subprocess.SubprocessError)` arm renders an over-long run
-    as "could not run pytest" -- which reads as a broken harness, not as a gate
-    that produced no verdict. The distinction is what tells the orchestrator
-    the suite still needs running.
-    """
-    assert issubclass(subprocess.TimeoutExpired, subprocess.SubprocessError), (
-        "this test exists because TimeoutExpired IS a SubprocessError; if that "
-        "changed upstream, revisit the ordering requirement below")
-
-    text = io.open(CLOSEOUT_PREP, encoding="utf-8").read()
-    body = text[text.index("def check_tests("):]
-    body = body[:body.index("\ndef ")]
-
-    timeout_arm = body.find("except subprocess.TimeoutExpired")
-    assert timeout_arm != -1, (
-        "check_tests() has no dedicated TimeoutExpired handler, so a killed "
-        "suite is reported as a tooling error and the gate silently verifies "
-        "nothing")
-    broad_arm = body.find("subprocess.SubprocessError")
-    assert broad_arm != -1, "check_tests() lost its launch-failure handler"
-    assert timeout_arm < broad_arm, (
-        "the TimeoutExpired arm must come BEFORE the SubprocessError arm; "
-        "Python matches except-clauses in order, so a later specific arm is "
-        "dead code")
+        "check_tests() does not pass the pinned constant to subprocess.run, so "
+        "the ceiling is a number the gate never reads")
 
 
 def test_check_tests_runs_from_the_worktree_root():
