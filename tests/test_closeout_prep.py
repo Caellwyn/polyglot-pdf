@@ -19,6 +19,7 @@ Run with the backend venv (the worktree has no venv of its own):
 import importlib.util
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -867,14 +868,26 @@ class TestTests:
         # Exactly at the budget the note must not fire at all.
         assert prep._timeout_margin_note(budget_s) == ""
 
-        # A hair past it, the note fires AND must not read as "50.0%".
+        # A hair past it, the note must fire AND the percentage it PRINTS must
+        # read as strictly over the threshold.
+        #
+        # Asserted positively -- by parsing the number actually shown -- rather
+        # than by banning a string. An earlier version asserted `"50.0%" not in
+        # note`, which was VACUOUS against the real regression: plain {:.0%}
+        # renders "50%", which contains no "50.0%", so the guard passed on the
+        # exact bug its docstring named. Only a sibling test's incidental
+        # failure was catching it.
+        threshold_pct = prep._TESTS_MARGIN_WARN_FRACTION * 100.0
         for over_by in (0.001, 0.5, 1.0, 9.0):
             note = prep._timeout_margin_note(budget_s + over_by)
             assert note, "the note must fire {}s past the budget".format(over_by)
-            assert "50.0%" not in note, (
-                "a fired warning rendered {:.1%} -- reads as NOT over the "
+
+            shown = re.search(r"(\d+(?:\.\d+)?)% of the", note)
+            assert shown, "no percentage found in: {}".format(note)
+            assert float(shown.group(1)) > threshold_pct, (
+                "a FIRED warning printed {}%, which reads as not over the {}% "
                 "threshold that triggered it: {}".format(
-                    prep._TESTS_MARGIN_WARN_FRACTION, note))
+                    shown.group(1), threshold_pct, note))
 
     def test_margin_note_rides_a_failing_run_too(self, monkeypatch, tmp_path):
         """A red suite that is ALSO near the ceiling must report both.
