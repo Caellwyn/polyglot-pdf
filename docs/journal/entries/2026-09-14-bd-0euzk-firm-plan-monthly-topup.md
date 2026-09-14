@@ -84,6 +84,61 @@ new row/writer later instead of a new code path.
    `PLAN_TIERS`, `DEFAULT_PLAN`, `setFirmPlan`, and `plan: FirmPlan` on
    `FirmRow`/`FirmDetail`.
 
+## Fresh-eyes round (post-review fixes)
+
+The pre-PR cross-surface review found one genuine gap and four nits, all
+addressed in this round -- nothing deferred, nothing filed as a separate
+bead (all four nits were trivial, in-scope doc/comment fixes rather than
+scoped work):
+
+- **ADOPTED (blocker, fixed).** The monthly top-up's idempotency was
+  check-then-act, not atomic: `_already_topped_up_this_period` read the
+  ledger BEFORE `append_entry`'s own transaction opened, so two
+  overlapping invocations (an overlapping Scheduler retry, or two manual
+  triggers close together) could both pass that check and both commit --
+  a double grant the module's own docstring claimed was impossible. Fixed
+  by adding a SECOND, race-safe check INSIDE `append_entry`'s transaction
+  itself (`query_period_entries()` + a new `DuplicatePeriodEntry`
+  exception, raised before any write): Firestore re-runs a contended
+  transaction body on the loser, so the loser's retry sees the winner's
+  just-committed `period` row and refuses there, on real state --
+  mirroring how `refund_expired_link`'s redemption/status read already
+  makes THAT function race-safe. The pre-transaction fast-path check
+  stays as a pure optimization (skips a wasted transaction round-trip for
+  the overwhelmingly common non-racing re-run) but is no longer what makes
+  the guarantee true. Proven with a new staged-concurrency test,
+  `test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once`
+  (test_credit_ledger.py), built on the same interleaved-transaction fake
+  the existing double-mint-race test uses -- mutation-verified by hoisting
+  the check back out of the transaction body and watching it double-grant
+  again. The existing `test_dropping_the_period_check_breaks_idempotency`
+  test was rewritten as `test_dropping_the_fast_path_check_alone_does_not_
+  double_grant` (now correctly expects NO double-grant with only the fast
+  path disabled, since the transactional layer is a real backstop) plus a
+  new `test_dropping_both_period_checks_breaks_idempotency` (stubs the
+  shared query helper both checks call, proving the pair together -- not
+  either alone -- is what the guarantee rests on). The reviewer's own
+  flagged absence of a Cloud Run --concurrency/--max-instances=1
+  constraint on the admin service is no longer a live gap once the
+  operation is atomic at the data layer -- not added, since the fix
+  addresses the race at its actual source rather than papering over it
+  with instance-level serialization.
+- **ADOPTED (nit, fixed).** A stale file-path reference in a
+  `credit_ledger.py` comment (`admin_backend/routes/
+  monthly_topup_routes.py`, a file that does not exist -- the real route
+  is in `credit_routes.py`, the very file the comment called "bypassed").
+- **ADOPTED (nit, fixed).** Corrupted triple-apostrophe artifacts in five
+  `adminApi.ts` JSDoc comments (an artifact of the scripted worktree-write
+  workflow), cleaned to plain apostrophes.
+- **ADOPTED (nit, fixed).** A self-contradicting test docstring in
+  `test_backfill_firm_kind_cli.py` (claimed the test "cannot distinguish"
+  what its own next line explicitly asserts via an identity check) --
+  corrected to describe what the assertions actually prove.
+- **REFUTED.** The reviewer's own "checked and it's fine" note on
+  `_run_monthly_topup`'s per-firm exception handling (outcome append vs.
+  the except block) was independently re-verified by re-reading the
+  control flow -- no bug, matches the reviewer's own conclusion.
+
 ## Lessons
 
 - **A "no money moved" grant needs its own validation category, not a
@@ -145,6 +200,7 @@ new row/writer later instead of a new code path.
 - `admin_backend/tests/unit/test_admin_route_auth.py`
 - `admin_backend/tests/unit/test_admin_audit_coverage.py`
 - `backend/tests/unit/test_credit_ledger.py`
+- `backend/tests/unit/_fake_firestore.py` (fresh-eyes round: where()/get(transaction=) support)
 - `backend/tests/unit/test_backfill_firm_kind_cli.py`
 - `backend/tests/unit/test_grant_credits_cli.py`
 - `tests/test_deploy_admin_sweep_env_vars.py`

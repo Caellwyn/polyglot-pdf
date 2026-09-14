@@ -75,15 +75,25 @@ credit_ledger.py's subscription_grant from always-requiring usd_amount to
 USD_OPTIONAL_TYPES (validated when given, never required) -- see that
 module's own comment on the split.
 
-IDEMPOTENT BY MONTH, ON THE LEDGER ITSELF, NOT ON A SEPARATE MARKER DOC.
-Every entry this route writes carries `period: "YYYY-MM"` (credit_ledger.py's
-new nullable `period` field, bd polyglot-pdf-0euzk); before writing, the
-route queries firms/{firm_id}/ledger for a subscription_grant entry with
-THAT SAME period and skips the firm entirely if one already exists. A
-re-run in the same month (a retried Scheduler call, or a second manual
-invocation) therefore writes NOTHING for any firm it already topped up --
-proven by test_monthly_topup.py by dropping the period check and watching a
-second run double-grant.
+IDEMPOTENT BY MONTH, ON THE LEDGER ITSELF, NOT ON A SEPARATE MARKER DOC,
+AND SAFE UNDER CONCURRENT INVOCATION. Every entry this route writes carries
+`period: "YYYY-MM"` (credit_ledger.py's nullable `period` field, bd
+polyglot-pdf-0euzk). TWO checks enforce this, not one: a fast pre-
+transaction query (_already_topped_up_this_period) that skips the common
+sequential re-run without paying for a transaction round trip, AND a
+second, RACE-SAFE check inside credit_ledger.append_entry()'s own
+transaction (raises DuplicatePeriodEntry) that is what actually makes two
+OVERLAPPING invocations safe -- Firestore re-runs a contended transaction
+body on the loser, so the loser re-reads the winner's just-committed
+period row and refuses there, on real state, rather than on a value read
+before either committed. A re-run in the same month (a retried Scheduler
+call, a second manual invocation, or two calls racing each other)
+therefore writes NOTHING for any firm already topped up that period --
+the sequential case proven by test_monthly_topup.py (dropping the fast
+check and watching a second run double-grant), the concurrent case by
+test_credit_ledger.py's transactional race test for this route
+(interleaving two append_entry calls with the same period and watching
+exactly one commit).
 
 MOCK FIRMS ARE TOPPED UP TOO (plan: "Mock firms are topped up too -- staging
 needs credits"), mirroring grant_credits/credit_routes.py's own "grants to
@@ -367,37 +377,24 @@ def _current_period(now: float) -> str:
 
 def _already_topped_up_this_period(db, firm_id: str, period: str) -> bool:
     """True if firms/{firm_id}/ledger already carries a subscription_grant
-    entry for THIS period -- the idempotency gate (bd polyglot-pdf-0euzk
-    exit criterion 1: "a second run in the same month writes nothing").
+    entry for THIS period -- the FAST-PATH half of the idempotency gate (bd
+    polyglot-pdf-0euzk exit criterion 1: "a second run in the same month
+    writes nothing").
 
-    A direct query on the ledger subcollection (type == subscription_grant
-    AND period == period), not a full credit_ledger.read_entries() scan:
-    a firm's ledger can carry any number of mint debits by the time this
-    route has run for a few months, and this route only needs to know
-    whether ONE specific row exists, not read the whole history.
+    Runs BEFORE append_entry's transaction even opens, purely to skip the
+    transaction round trip in the overwhelmingly common case (a re-run
+    hours or days later, never overlapping the original run). It is NOT
+    what makes idempotency safe under concurrency -- a caller-side
+    pre-check is check-then-act, and two overlapping calls could both pass
+    it before either commits. The RACE-SAFE half is
+    credit_ledger.append_entry()'s own in-transaction re-check (raises
+    DuplicatePeriodEntry), which _topup_one_firm below also treats as
+    skipped_already_run. Both halves call the SAME
+    credit_ledger.query_period_entries() so they can never disagree about
+    what "already topped up" means.
     """
-    try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
-
-        query = (
-            db.collection(credit_ledger.FIRMS_COLLECTION)
-            .document(firm_id)
-            .collection(credit_ledger.LEDGER_SUBCOLLECTION)
-            .where(filter=FieldFilter(
-                "type", "==", credit_ledger.TYPE_SUBSCRIPTION_GRANT))
-            .where(filter=FieldFilter("period", "==", period))
-            .limit(1)
-        )
-    except ImportError:
-        query = (
-            db.collection(credit_ledger.FIRMS_COLLECTION)
-            .document(firm_id)
-            .collection(credit_ledger.LEDGER_SUBCOLLECTION)
-            .where("type", "==", credit_ledger.TYPE_SUBSCRIPTION_GRANT)
-            .where("period", "==", period)
-            .limit(1)
-        )
-    return len(list(query.stream())) > 0
+    return len(credit_ledger.query_period_entries(
+        db, firm_id, credit_ledger.TYPE_SUBSCRIPTION_GRANT, period)) > 0
 
 
 def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
@@ -405,6 +402,17 @@ def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
     "topped_up", "skipped_at_cap", "skipped_already_run", or
     "skipped_no_plan" -- a per-firm outcome the route sums into its
     response, mirroring sweep_routes.py's refunded/skipped counts.
+
+    "skipped_already_run" comes back via TWO different paths: the fast
+    _already_topped_up_this_period check below (the common case -- a re-run
+    that does not overlap the original), or a caught
+    credit_ledger.DuplicatePeriodEntry from append_entry() itself (the rare
+    concurrent-overlap case, where this call's fast check ran before the
+    other call committed, and append_entry's own in-transaction re-check is
+    what actually catches it). Both outcomes are indistinguishable to the
+    caller on purpose -- "this firm was already topped up this period" is
+    true either way, and which of the two checks caught it is an
+    implementation detail the response does not need to expose.
 
     RAISES on a genuine write failure (a malformed plan, a Firestore
     hiccup) -- the caller (run_monthly_topup) catches per-firm, logs, and
@@ -459,12 +467,23 @@ def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
             request_id=audit_log.new_request_id(),
         )
 
-    credit_ledger.append_entry(
-        db, firm_id, entry_type=credit_ledger.TYPE_SUBSCRIPTION_GRANT,
-        amount=amount, actor=MONTHLY_TOPUP_ACTOR, usd_amount=None,
-        channel=None, reason="monthly top-up {}".format(period),
-        period=period, extra_writes=_audit,
-    )
+    try:
+        credit_ledger.append_entry(
+            db, firm_id, entry_type=credit_ledger.TYPE_SUBSCRIPTION_GRANT,
+            amount=amount, actor=MONTHLY_TOPUP_ACTOR, usd_amount=None,
+            channel=None, reason="monthly top-up {}".format(period),
+            period=period, extra_writes=_audit,
+        )
+    except credit_ledger.DuplicatePeriodEntry:
+        # The RACE this route's fast _already_topped_up_this_period check
+        # above cannot close by itself: two overlapping invocations can
+        # both pass that check before either commits. append_entry()'s own
+        # in-transaction re-check is what actually catches the loser here,
+        # on Firestore's automatic retry-on-contention -- see
+        # DuplicatePeriodEntry's own docstring. Same outcome as the fast
+        # path: this firm was (by the time this call is done) already
+        # topped up for this period, by the winner of the race.
+        return "skipped_already_run"
     return "topped_up"
 
 

@@ -460,19 +460,19 @@ export type FirmKind = (typeof FIRM_KINDS)[number];
 export const PLAN_TIERS = ["starter"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 
-/** A firm'''s plan: tier, monthly credit allotment, and whether the
+/** A firm's plan: tier, monthly credit allotment, and whether the
  * monthly top-up ADDS to the balance (rollover) or brings it UP TO the cap
- * (no rollover) -- backend/services/plans.py'''s doc shape, verbatim. */
+ * (no rollover) -- backend/services/plans.py's doc shape, verbatim. */
 export interface FirmPlan {
   tier: PlanTier;
   monthly_credits: number;
   rollover: boolean;
 }
 
-/** The maintainer'''s 2026-09-14 starting numbers
+/** The maintainer's 2026-09-14 starting numbers
  * (backend/services/plans.py::DEFAULT_PLAN) -- what GET /admin/firms/
  * {firm_id} and GET /admin/firms both return for a firm with no plan of
- * its own yet (firm_routes.py'''s _public_firm_view fallback). */
+ * its own yet (firm_routes.py's _public_firm_view fallback). */
 export const DEFAULT_PLAN: FirmPlan = {
   tier: "starter", monthly_credits: 35, rollover: false,
 };

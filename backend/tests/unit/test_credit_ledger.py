@@ -10,6 +10,12 @@ Pins the three exit criteria of bd polyglot-pdf-vnxew:
      final balance of 0.
   3. (the CLI half lives in test_grant_credits_cli.py)
 
+Also pins a fresh-eyes concurrency finding on bd polyglot-pdf-0euzk (the
+firm-plan monthly top-up): test_concurrent_monthly_topups_for_the_same_
+period_grant_exactly_once, staged identically to #2 above, one field over
+-- two overlapping append_entry() calls carrying the SAME period must
+leave exactly one subscription_grant entry, not two.
+
 plus the entry-shape rules the helper enforces (signed amounts per type, the
 two-way usd_amount requirement, the required actor, the required reason on
 an adjustment, the snapshotted firm_kind) and the ledger_export log line.
@@ -198,6 +204,70 @@ def test_mint_transaction_double_mint_race_is_safe(fake_db):
     assert len(rows) == 1, "expected exactly one entry, got {}".format(rows)
     assert rows[0]["link_jti"] == "jti-a"
     assert rows[0]["balance_after"] == 0
+
+
+def test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once(
+        fake_db):
+    """bd polyglot-pdf-0euzk fresh-eyes finding: the monthly top-up route's
+    idempotency guarantee (period is unique per firm) must hold under
+    CONCURRENT invocation, not just sequential re-runs. Two overlapping
+    append_entry() calls carrying the SAME period must leave exactly ONE
+    subscription_grant entry for that period and a balance reflecting only
+    ONE grant -- the loser must raise DuplicatePeriodEntry, not double-grant.
+
+    Staged exactly like test_mint_transaction_double_mint_race_is_safe
+    above, one field over: transaction B's body reads the firm (and the
+    period query, seeing no existing row) before transaction A commits
+    underneath it; B is then RE-RUN, and on the re-run its period query
+    sees A's just-committed row and refuses. If query_period_entries's
+    in-transaction read were hoisted out of the _txn body (read once,
+    before @firestore.transactional, and closed over), the re-run would
+    reuse the stale "no row yet" answer and B would also commit --
+    doubling the grant.
+
+    Mutation: in append_entry's _txn body, move the `if period is not
+    None: existing = query_period_entries(...)` block to BEFORE the
+    @firestore.transactional-decorated function (reading it once, outside
+    the body, and closing over the result) -- this goes red on all three
+    assertions: two grant rows exist, the balance is double what one grant
+    would produce, and the second call raises nothing at all. Verified
+    2026-09-14."""
+    fake_db.docs[("firms", "acme")]["balance_credits"] = 10
+
+    committed = []
+
+    def _first_topup(tx):
+        # Runs after B's body has read "no existing period row" but before
+        # B commits: this is transaction A landing underneath B, exactly
+        # like the mint race above.
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type="subscription_grant", amount=25,
+            actor="system:monthly_topup", usd_amount=None,
+            reason="monthly top-up 2026-09", period="2026-09", ts=1000.0,
+        )
+        committed.append("a")
+        return "retry"
+
+    fake_db.on_before_commit = _first_topup
+
+    with pytest.raises(credit_ledger.DuplicatePeriodEntry) as exc:
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type="subscription_grant", amount=25,
+            actor="system:monthly_topup", usd_amount=None,
+            reason="monthly top-up 2026-09", period="2026-09", ts=1001.0,
+        )
+
+    assert committed == ["a"], "the first top-up must have committed"
+    assert exc.value.firm_id == "acme"
+    assert exc.value.period == "2026-09"
+    assert fake_db.firm("acme")["balance_credits"] == 35, (
+        "10 + 25 from the ONE winning grant -- a double grant would be 60")
+    rows = [r for r in fake_db.ledger_rows("acme")
+            if r["type"] == "subscription_grant"]
+    assert len(rows) == 1, (
+        "expected exactly one subscription_grant entry, got {}".format(rows)
+    )
+    assert rows[0]["period"] == "2026-09"
 
 
 def test_a_refused_debit_commits_NOTHING(fake_db):

@@ -2,14 +2,30 @@
 
 Pins the bead's exit criterion 1: "three firms (balance 10 no-rollover,
 balance 40 no-rollover, balance 10 rollover=true) get exactly [+25, nothing,
-+35] with period stamped; a second run in the same month writes nothing
-(mutation-verified by dropping the period check)."
++35] with period stamped; a second run in the same month writes nothing."
+
+IDEMPOTENCY IS TWO LAYERS, SEQUENTIAL AND CONCURRENT (fresh-eyes finding
+added post-review): _already_topped_up_this_period is a pre-transaction
+fast path covering the sequential re-run case (mutation-verified here by
+disabling it ALONE and confirming the transactional layer still catches
+it -- test_dropping_the_fast_path_check_alone_does_not_double_grant), and
+credit_ledger.append_entry()'s own in-transaction re-check
+(DuplicatePeriodEntry) is what actually makes two OVERLAPPING invocations
+safe (pinned directly, with a staged concurrent commit, by
+test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once in
+test_credit_ledger.py). test_dropping_both_period_checks_breaks_idempotency
+below proves the pair together, not either alone, is what the guarantee
+rests on.
 
 THE FAKE FIRESTORE mirrors test_sweep_routes.py's _FakeDb (tuple-path
 documents, a real all-or-nothing transaction, and a `.where()`-filtered
-`.stream()` over a bare collection) -- this route's Firestore surface is a
-plain firms iteration plus the ledger-subcollection idempotency query, both
-shapes that fake already proves out.
+`.stream()`/`.get()` over a bare collection) -- this route's Firestore
+surface is a plain firms iteration plus the ledger-subcollection
+idempotency query, both shapes that fake already proves out. It has NO
+contention/retry model (unlike backend/tests/unit/_fake_firestore.py,
+which is what the concurrent race test above uses) -- this file's own
+_FakeDb is for the route's per-firm outcome-shape tests, not for staging a
+race.
 
 ASCII only.
 """
@@ -92,6 +108,15 @@ class _Query:
             if path[:-1] == self._path and self._matches(data)
         ]
         return iter([_Snap(path, data) for path, data in rows])
+
+    def get(self, transaction=None):
+        # credit_ledger.py's query_period_entries uses .get(transaction=...)
+        # (the real Admin SDK's transactional query read; .stream() does
+        # not accept a transaction) -- this fake has no contention/retry
+        # model (unlike _fake_firestore.py's _FakeDb, which is what the
+        # dedicated race test in test_credit_ledger.py drives), so `get`
+        # here is just `stream` as a list.
+        return list(self.stream())
 
 
 class _Collection:
@@ -296,9 +321,12 @@ def test_a_second_run_the_same_month_writes_nothing(
     call, or a second manual invocation) in the SAME period must top up
     NOTHING for a firm it already topped up.
 
-    Mutation-verified below (test_dropping_the_period_check_breaks_
-    idempotency) by removing the _already_topped_up_this_period call
-    entirely and watching this exact scenario double-grant."""
+    Mutation-verified below (test_dropping_both_period_checks_breaks_
+    idempotency) by disabling BOTH idempotency layers' shared query and
+    watching this exact scenario double-grant; the fast-path-only case is
+    covered separately by
+    test_dropping_the_fast_path_check_alone_does_not_double_grant, which
+    proves the transactional layer alone is already enough."""
     monkeypatch.setattr(
         credit_routes, "_current_period", lambda now: "2026-09")
     _seed_firm(fake_db, "firm-a", balance=10, plan={
@@ -320,23 +348,87 @@ def test_a_second_run_the_same_month_writes_nothing(
     assert len(grant_rows) == 1
 
 
-def test_dropping_the_period_check_breaks_idempotency(
+def test_dropping_the_fast_path_check_alone_does_not_double_grant(
         client, fake_db, scheduler_env, monkeypatch):
-    """TEST THE TEST (docs/standards/testing.md#test-the-tests): prove the
-    idempotency guarantee above is actually pinned by reverting the real
-    production behaviour it claims to check -- the period lookup -- and
-    confirming a second run then double-grants. Uses rollover=True (which
-    always grants monthly_credits regardless of balance, see
-    test_rollover_true_always_adds_even_when_already_over_cap) so the
-    at-cap skip cannot mask the missing idempotency check the way it would
-    for a no-rollover plan -- this is what makes the REAL
-    _already_topped_up_this_period check load-bearing rather than
-    redundant with the at-cap skip."""
+    """TEST THE TEST (docs/standards/testing.md#test-the-tests), UPDATED
+    after the fresh-eyes concurrency finding on bd polyglot-pdf-0euzk: this
+    route's idempotency is now TWO layers, not one --
+    _already_topped_up_this_period (a pre-transaction fast path, pure
+    optimization) and credit_ledger.append_entry()'s own in-transaction
+    re-check (raises DuplicatePeriodEntry -- the RACE-SAFE layer; see
+    test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once
+    in test_credit_ledger.py, which pins THAT layer directly against a
+    staged concurrent commit).
+
+    This test now proves the fast path is REDUNDANT with the transactional
+    layer for a plain sequential re-run, not that it is the only thing
+    standing between here and a double grant: with ONLY the fast path
+    disabled, a second run still writes nothing, because
+    _topup_one_firm catches the transactional layer's
+    DuplicatePeriodEntry and reports skipped_already_run.
+
+    Uses rollover=True (which always grants monthly_credits regardless of
+    balance, see test_rollover_true_always_adds_even_when_already_over_cap)
+    so the at-cap skip cannot mask a broken idempotency check the way it
+    would for a no-rollover plan.
+
+    Mutation: this test's own assertions were the ones that changed --
+    before the fix, a disabled fast path with no transactional backstop
+    let a second run reach balance 80 (45 + 35) with 2 grant rows; now it
+    correctly stays at 45 with 1 row. Verified 2026-09-14 by reverting the
+    _apply_entry_writes call to skip the DuplicatePeriodEntry check (see
+    test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once's
+    own mutation for the direct version of this)."""
     monkeypatch.setattr(
         credit_routes, "_current_period", lambda now: "2026-09")
     monkeypatch.setattr(
         credit_routes, "_already_topped_up_this_period",
         lambda db, firm_id, period: False)
+    _seed_firm(fake_db, "firm-a", balance=10, plan={
+        "tier": "starter", "monthly_credits": 35, "rollover": True})
+
+    first = _post_topup(client)
+    assert first.json()["topped_up"] == ["firm-a"]
+    assert fake_db.firm("firm-a")["balance_credits"] == 45  # 10 + 35
+
+    second = _post_topup(client)
+    assert second.status_code == 200, second.text
+    assert second.json()["topped_up"] == [], (
+        "the fast path was disabled, but append_entry's own in-transaction "
+        "re-check must still catch this and report skipped_already_run")
+    assert second.json()["skipped_already_run"] == ["firm-a"]
+    assert fake_db.firm("firm-a")["balance_credits"] == 45, (
+        "must NOT be 80 (45 + 35) -- the transactional layer is the "
+        "backstop, not just the fast path")
+
+    grant_rows = [r for r in fake_db.ledger_rows("firm-a")
+                  if r["type"] == "subscription_grant"]
+    assert len(grant_rows) == 1, (
+        "expected exactly one subscription_grant entry even with the fast "
+        "path disabled, got {}".format(grant_rows)
+    )
+
+
+def test_dropping_both_period_checks_breaks_idempotency(
+        client, fake_db, scheduler_env, monkeypatch):
+    """The genuine "both layers gone" case, for completeness: patching OUT
+    the shared credit_ledger.query_period_entries() helper that BOTH the
+    fast path and the in-transaction re-check call removes the guarantee
+    entirely and a second run in the same period double-grants -- proving
+    the fast path and the transactional check are not each independently
+    redundant window-dressing, they are the ONLY two places this guarantee
+    is enforced, and removing what both of them call under the hood is
+    what it actually takes to lose it.
+
+    Mutation: this IS the mutation -- there is no further code change to
+    apply; patching query_period_entries to always report "no existing
+    entry" is the direct simulation of both checks' shared read failing to
+    see the prior entry."""
+    monkeypatch.setattr(
+        credit_routes, "_current_period", lambda now: "2026-09")
+    monkeypatch.setattr(
+        credit_ledger, "query_period_entries",
+        lambda db, firm_id, entry_type, period, transaction=None: [])
     _seed_firm(fake_db, "firm-a", balance=10, plan={
         "tier": "starter", "monthly_credits": 35, "rollover": True})
 
@@ -348,9 +440,10 @@ def test_dropping_the_period_check_breaks_idempotency(
     grant_rows = [r for r in fake_db.ledger_rows("firm-a")
                   if r["type"] == "subscription_grant"]
     assert len(grant_rows) == 2, (
-        "with the idempotency check disabled, a second run in the SAME "
-        "period double-granted -- this is the exact bug the real check "
-        "prevents")
+        "with BOTH layers' shared query stubbed out, a second run in the "
+        "SAME period double-granted -- this is the exact bug the two "
+        "checks together prevent")
+
 
 def test_rollover_true_always_adds_even_when_already_over_cap(
         client, fake_db, scheduler_env, monkeypatch):

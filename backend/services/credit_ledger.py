@@ -150,13 +150,14 @@ USD_REQUIRED_TYPES = frozenset({TYPE_PURCHASE})
 # Validated WHEN PRESENT (the same three checks USD_REQUIRED_TYPES enforces:
 # numeric, not bool, non-negative) but never required and never refused --
 # the one entry type that is neither always-required nor always-refused.
-# admin_backend/routes/credit_routes.py's OWN, stricter, human-facing 422
-# still requires usd_amount for a MANUAL subscription_grant (a human
-# clicking "grant" must still supply the dollar figure) -- that route's own
-# check runs BEFORE this helper is ever called, so this widening does not
-# loosen it; only a caller that bypasses credit_routes.py entirely (the
-# monthly top-up route, admin_backend/routes/monthly_topup_routes.py,
-# calling append_entry() directly) can omit usd_amount on this type.
+# admin_backend/routes/credit_routes.py's grant route has its OWN,
+# stricter, human-facing 422 that still requires usd_amount for a MANUAL
+# subscription_grant (a human clicking "grant" must still supply the dollar
+# figure) -- that route's own check runs BEFORE this helper is ever
+# called, so this widening does not loosen it; only a caller that bypasses
+# that 422 (the monthly top-up route, ALSO in admin_backend/routes/
+# credit_routes.py -- run_monthly_topup calls append_entry() directly,
+# with no request body to validate) can omit usd_amount on this type.
 USD_OPTIONAL_TYPES = frozenset({TYPE_SUBSCRIPTION_GRANT})
 
 # Types whose amount must be strictly POSITIVE (they add credits) and
@@ -232,6 +233,40 @@ class InsufficientCredits(LedgerError):
         super().__init__(
             "firm {} has {} credits, which does not cover a debit of {}".format(
                 firm_id, balance, abs(amount)
+            )
+        )
+
+
+class DuplicatePeriodEntry(LedgerError):
+    """A caller passed `period`, and firms/{firm_id}/ledger ALREADY carries
+    an entry of the SAME entry_type for that SAME period. Nothing was
+    committed.
+
+    Raised from INSIDE append_entry()'s own transaction body (bd
+    polyglot-pdf-0euzk fresh-eyes finding: a caller-side pre-check, run
+    before the transaction opens, is check-then-act -- two concurrent calls
+    can both read "not yet run" and both commit). Firestore re-runs a
+    contended transaction body on the LOSER, so raising this from inside
+    the body means the loser re-reads the winner's just-committed row on
+    its retry and refuses here, on real state -- exactly the way
+    refund_expired_link's redemption/status read makes THAT function race-
+    safe by construction (see append_entry's period= param doc below).
+
+    The monthly top-up route (admin_backend/routes/credit_routes.py) is the
+    one caller that passes `period`; it keeps its own pre-transaction
+    _already_topped_up_this_period check as a fast path (skips the
+    transaction round trip entirely in the overwhelmingly common
+    non-racing case) and catches this exception for the rare contended
+    case, counting the firm as skipped_already_run either way.
+    """
+
+    def __init__(self, firm_id: str, entry_type: str, period: str):
+        self.firm_id = firm_id
+        self.entry_type = entry_type
+        self.period = period
+        super().__init__(
+            "firm {} already has a {} entry for period {}".format(
+                firm_id, entry_type, period
             )
         )
 
@@ -389,6 +424,53 @@ def _apply_entry_writes(
     captured["firm_kind"] = kind
 
 
+def query_period_entries(
+    db, firm_id: str, entry_type: str, period: str, *, transaction=None,
+) -> list:
+    """Every firms/{firm_id}/ledger entry of `entry_type` stamped with
+    `period`, as a list of DocumentSnapshot (empty if none). SHARED by (i)
+    the monthly top-up route's pre-transaction fast-path check
+    (admin_backend/routes/credit_routes.py::_already_topped_up_this_period)
+    and (ii) append_entry()'s own in-transaction re-check below -- ONE
+    query shape, so the fast path and the race-safe check can never drift
+    into disagreeing about what "already topped up" means.
+
+    `transaction` is optional: pass it (a Firestore Transaction) to read
+    this query AS PART OF that transaction -- required for the
+    in-transaction check to see a just-committed row on a contended retry,
+    and refused by Firestore if a transactional read follows a write in the
+    same transaction (reads-before-writes), so callers must run this before
+    any write. Omitted, the query runs as a plain (non-transactional) read
+    -- what the route's fast path wants, since it deliberately runs BEFORE
+    any transaction opens.
+
+    Uses `.get(transaction=...)` rather than `.stream()`: the Admin SDK
+    query object accepts a transaction only through `.get()`, and passing
+    one to `.stream()` does not attach the read to the transaction.
+    """
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = (
+            db.collection(FIRMS_COLLECTION)
+            .document(firm_id)
+            .collection(LEDGER_SUBCOLLECTION)
+            .where(filter=FieldFilter("type", "==", entry_type))
+            .where(filter=FieldFilter("period", "==", period))
+            .limit(1)
+        )
+    except ImportError:
+        query = (
+            db.collection(FIRMS_COLLECTION)
+            .document(firm_id)
+            .collection(LEDGER_SUBCOLLECTION)
+            .where("type", "==", entry_type)
+            .where("period", "==", period)
+            .limit(1)
+        )
+    return list(query.get(transaction=transaction))
+
+
 def append_entry(
     db,
     firm_id: str,
@@ -436,12 +518,19 @@ def append_entry(
     like link_jti/kit_id, stamped on the entry and returned unchanged. The
     ONE consumer is the monthly plan top-up route (admin_backend/routes/
     credit_routes.py::run_monthly_topup), which stamps the calendar month
-    it ran in and queries for an existing subscription_grant entry with the
-    SAME period before writing a second one -- this is what makes a re-run
-    (a retried Cloud Scheduler call, or a second manual invocation the same
-    month) a no-op rather than a double top-up. No other caller in this repo
-    sets it; it stores as None everywhere else, exactly like link_jti stores
-    as None on every entry that is not a mint debit or refund.
+    it ran in. When given, this function ITSELF re-checks (inside the
+    transaction body, before any write -- see query_period_entries() and
+    DuplicatePeriodEntry above) for an existing entry of the SAME
+    entry_type and period, raising DuplicatePeriodEntry rather than
+    writing a second one. This is the RACE-SAFE half of the top-up route's
+    idempotency: the route also runs a cheaper pre-transaction query of its
+    own to skip the common sequential re-run case without paying for a
+    transaction round trip, but THIS check -- inside the transaction --
+    is what makes two overlapping invocations safe, since Firestore
+    re-runs a contended body on the loser and the loser's re-run then sees
+    the winner's just-committed row. No other caller in this repo sets
+    `period`; it stores as None everywhere else, exactly like link_jti
+    stores as None on every entry that is not a mint debit or refund.
 
     extra_writes lets a CALLER join additional documents to this same
     transaction -- Epic 2 bead A3 passes the links/{jti} mint record so the
@@ -473,6 +562,25 @@ def append_entry(
             # listings. Refuse rather than conjure.
             raise LedgerError("firm {} does not exist".format(firm_id))
         firm = snap.to_dict() or {}
+
+        if period is not None:
+            # THE RACE-SAFE HALF of the period idempotency guarantee (bd
+            # polyglot-pdf-0euzk fresh-eyes finding). A caller-side
+            # pre-check (the monthly top-up route's own
+            # _already_topped_up_this_period, run BEFORE this transaction
+            # even opens) is check-then-act: two concurrent calls can both
+            # read "not yet run" and both reach here. This second read runs
+            # INSIDE the transaction, still before any write, so Firestore's
+            # automatic re-run-on-contention makes the LOSER of a race
+            # re-read the WINNER's just-committed row and refuse here --
+            # the same property refund_expired_link's redemption/status
+            # read gives that function, over the period field instead of a
+            # status flip. Must stay a read, never a write, and must run
+            # before _apply_entry_writes below (reads-before-writes).
+            existing = query_period_entries(
+                db, firm_id, entry_type, period, transaction=tx)
+            if existing:
+                raise DuplicatePeriodEntry(firm_id, entry_type, period)
 
         _apply_entry_writes(
             tx, firm_ref, entry_ref, firm, firm_id, stamp,

@@ -508,10 +508,12 @@ def test_plan_backfill_copies_the_default_not_a_shared_reference(
     itself).
 
     Mutation: drop the `dict(...)` copy (`payload["plan"] = plans.
-    DEFAULT_PLAN` instead of `dict(plans.DEFAULT_PLAN)`) -- this test alone
-    cannot distinguish the two by return value, but it DOES prove the
-    values still round-trip correctly and is paired with a direct identity
-    check that WOULD catch it."""
+    DEFAULT_PLAN` instead of `dict(plans.DEFAULT_PLAN)`) -- the `is not`
+    identity assertions below catch this directly: with the copy dropped,
+    firm-a's and firm-b's stored `plan` become the SAME object (and the
+    SAME object as plans_module.DEFAULT_PLAN itself), so both identity
+    checks flip from `is not` to `is` and this test goes red. Verified
+    2026-09-14."""
     import backend.services.plans as plans_module
 
     firms = {"firm-a": {"kind": "live", "balance_credits": 0},

@@ -72,42 +72,84 @@ class _DocRef:
 
 
 class _Query:
-    """Ordering and limiting are ONE query in Firestore, applied in that
-    fixed order regardless of the builder call sequence -- so the fake
-    models the RESULT (sort, then slice), and a test pins which entries come
-    back rather than which builder method was called first.
+    """Ordering, filtering and limiting are ONE query in Firestore, applied
+    in that fixed order regardless of the builder call sequence -- so the
+    fake models the RESULT (filter, sort, then slice), and a test pins
+    which entries come back rather than which builder method was called
+    first.
 
     `direction` is honoured (not just accepted) so a mutation that flips the
     sort is a red test rather than a TypeError that reddens everything.
+
+    `where()` clauses (credit_ledger.py's query_period_entries -- the
+    monthly top-up's idempotency query, bd polyglot-pdf-0euzk) are AND-ed
+    equality filters only: every clause this fake's one caller builds is
+    `field == value`, so that is the only operator modelled. A caller
+    passing anything else gets NotImplementedError rather than a silent
+    wrong answer.
     """
 
     def __init__(self, store, path, order_field=None, limit=None,
-                 descending=False):
+                 descending=False, clauses=()):
         self._store = store
         self._path = path
         self._order = order_field
         self._limit = limit
         self._descending = descending
+        self._clauses = tuple(clauses)
+
+    def where(self, *args, **kwargs):
+        if "filter" in kwargs:
+            ff = kwargs["filter"]
+            field, op, value = ff.field_path, ff.op_string, ff.value
+        else:
+            field, op, value = args
+        if op != "==":
+            raise NotImplementedError(
+                "fake _Query only models == filters, got {!r}".format(op))
+        return _Query(self._store, self._path, self._order, self._limit,
+                      self._descending, self._clauses + ((field, value),))
 
     def order_by(self, field, direction="ASCENDING"):
         return _Query(self._store, self._path, field, self._limit,
-                      str(direction).upper().startswith("DESC"))
+                      str(direction).upper().startswith("DESC"),
+                      self._clauses)
 
     def limit(self, n):
         return _Query(self._store, self._path, self._order, n,
-                      self._descending)
+                      self._descending, self._clauses)
 
-    def stream(self):
+    def _matches(self, data):
+        return all(data.get(field) == value for field, value in self._clauses)
+
+    def _rows(self):
         rows = [
             (path, data) for path, data in self._store.docs.items()
-            if path[:-1] == self._path
+            if path[:-1] == self._path and self._matches(data)
         ]
         if self._order:
             rows.sort(key=lambda kv: kv[1].get(self._order),
                       reverse=self._descending)
         if self._limit is not None:
             rows = rows[: self._limit]
-        return iter([_Snap(data) for _, data in rows])
+        return rows
+
+    def stream(self):
+        return iter([_Snap(data) for _, data in self._rows()])
+
+    def get(self, transaction=None):
+        """The transactional read form (credit_ledger.py's
+        query_period_entries passes `transaction=tx`, matching the real
+        Admin SDK's Query.get(transaction=...) -- .stream() does NOT accept
+        one). Records each matched doc's path on the transaction's `reads`
+        list, exactly like _DocRef.get(transaction=tx) does, so a query
+        read participates in the same reads-before-writes / retry-on-
+        contention model a single-doc read already gets."""
+        rows = self._rows()
+        if transaction is not None:
+            for path, _ in rows:
+                transaction.reads.append(path)
+        return [_Snap(data) for _, data in rows]
 
 
 class _Collection:
@@ -120,6 +162,9 @@ class _Collection:
             self._store.auto_id_counter += 1
             doc_id = "auto{}".format(self._store.auto_id_counter)
         return _DocRef(self._store, self._path + (doc_id,))
+
+    def where(self, *args, **kwargs):
+        return _Query(self._store, self._path).where(*args, **kwargs)
 
     def order_by(self, field):
         return _Query(self._store, self._path).order_by(field)
