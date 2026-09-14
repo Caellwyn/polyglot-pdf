@@ -31,30 +31,32 @@ import pytest
 
 from backend.utils.field_validator import _resolve_date_format, _validate_date
 
-_KITS = Path(__file__).resolve().parents[3] / "form-kits"
-
-
-def _find_field(node, field_id):
-    """Depth-first search for a field dict by id anywhere in a kit schema."""
-    if isinstance(node, dict):
-        if node.get("id") == field_id:
-            return node
-        for value in node.values():
-            found = _find_field(value, field_id)
-            if found:
-                return found
-    elif isinstance(node, list):
-        for value in node:
-            found = _find_field(value, field_id)
-            if found:
-                return found
-    return None
+_FROZEN = (Path(__file__).resolve().parent / "fixtures"
+           / "date_layout_fields_frozen.json")
 
 
 def _kit_field(kit, field_id):
-    schema = json.loads((_KITS / kit / "schema.json").read_text(encoding="utf-8"))
-    field = _find_field(schema, field_id)
-    assert field is not None, f"{field_id} missing from {kit} -- kit changed?"
+    """A real W-7 date field, read from the FROZEN fixture.
+
+    It used to open form-kits/<kit>/schema.json. No kit is tracked any more
+    (bd polyglot-pdf-q3u5r), so a working-tree read passes on a machine that
+    pulled the kit and SKIPS in CI -- CLAUDE.md scar #10.
+
+    Still REAL fields, which matters here: the bug was that no shipped kit sets
+    the flat `format` key at all (the layout lives in help.format_hint), so a
+    hand-built field risks encoding the very assumption the bug depended on.
+    """
+    assert kit == "w7", (
+        "the frozen fixture holds W-7 date fields only; add the kit's field to "
+        "fixtures/date_layout_fields_frozen.json by re-capturing it from the "
+        "bucket rather than hand-writing one"
+    )
+    fields = json.loads(_FROZEN.read_text(encoding="utf-8"))["fields"]
+    field = fields.get(field_id)
+    assert field is not None, (
+        f"{field_id} is not in the frozen fixture -- it holds EVIDENCE captured "
+        f"from the published kit, so re-capture rather than editing it"
+    )
     return field
 
 

@@ -178,6 +178,13 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="where to write the manifest JSON (pretty-printed)",
     )
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="permit a manifest with zero kits. Refused by default because "
+        "uploading one BLANKS the bucket catalogue; pass this only for a "
+        "genuinely empty bucket (initial setup) or a local dry run.",
+    )
     args = parser.parse_args(argv)
 
     form_kits_dir = Path(args.form_kits_dir)
@@ -205,6 +212,33 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     manifest = build_manifest(form_kits_dir, args.prefix)
+
+    # A PRESENT-but-empty directory is the dangerous case, and it became the
+    # DEFAULT on 2026-09-11 when the last form kit left git (bd
+    # polyglot-pdf-q3u5r): every clean checkout now has an empty form-kits/.
+    # The missing-directory guard above does not cover it -- the directory
+    # exists, it is simply empty -- so the manifest would be written, uploaded,
+    # and would BLANK the bucket catalogue while every kit blob survived
+    # untouched. index.json is authoritative (backend/services/form_kits.py
+    # refuses a convention fallback), so the forms just vanish from the app.
+    #
+    # Zero kits stays REACHABLE for the genuinely-empty-bucket case the
+    # original comment describes, but it is now opt-in rather than the silent
+    # default (bd polyglot-pdf-y0dzd / 387h0).
+    if not manifest["forms"] and not args.allow_empty:
+        print(
+            "[write_kits_manifest] ERROR: no kit under "
+            + str(form_kits_dir)
+            + " passed the complete-gate, so the manifest would be EMPTY -- "
+            "refusing to write it. Uploading an empty manifest blanks the "
+            "bucket's form list while leaving the kit blobs in place. Kits "
+            "are bucket-canonical and NOT in git: pull them with "
+            "scripts/pull-form-kits.sh, then re-run. Pass --allow-empty only "
+            "if an empty catalogue is genuinely what you want.",
+            file=sys.stderr,
+        )
+        return 1
+
     out_path = Path(args.out)
     out_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(
