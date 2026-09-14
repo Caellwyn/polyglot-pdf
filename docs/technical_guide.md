@@ -2629,7 +2629,13 @@ per click (a per-row busy guard blocks a double-click), and a re-read on
 SUCCESS ONLY -- a 409 (already acknowledged by someone else) shows that
 route's own message next to the row without an extra re-read, mirroring
 `UsersPage.tsx`'s established "a failed mutation must not trigger the
-success re-read" rule.
+success re-read" rule. `FirmDetailPage.tsx` (contract 24's B4 links page)
+gains its OWN alerts section (bd polyglot-pdf-362nk) over the SAME
+`GET /admin/alerts?firm_id=<id>` / `PATCH .../acknowledge` calls -- NOT a
+second pair of routes -- listing unacknowledged alerts first (a
+client-side stable sort; the route itself orders by ts only) and sharing
+`AlertsPage.tsx`'s row markup through a new `components/AlertRow.tsx`
+rather than a second copy of it.
 
 ### 30. Per-channel deploy config + the per-SHA build gate (Epic 4 bead E4.1, bd polyglot-pdf-1s3ko)
 
@@ -2854,10 +2860,11 @@ targets and modules this entry describes rather than changing them.
 Epic 3 follow-up from the maintainer's 2026-09-14 alerts decision: no
 outbound email for now; alerts appear (a) in the firm's own console where
 staff generate links (this bead) and (b) in the admin console's firm
-detail (contract 29's `AlertsPage.tsx`, already shipped, unaffected). Two
-changes to `admin_backend/routes/alert_routes.py`'s already-shipped
-surface (contract 21's `alerts/{id}` docs, contract 29's E3.11a routes),
-plus one new frontend component:
+detail (contract 29's `AlertsPage.tsx`, plus a NEW alerts section on
+`FirmDetailPage.tsx` added by bd polyglot-pdf-362nk -- see that bead's own
+entry below). Two changes to `admin_backend/routes/alert_routes.py`'s
+already-shipped surface (contract 21's `alerts/{id}` docs, contract 29's
+E3.11a routes), plus one new frontend component:
 
 - **`GET /admin/firms/{firm_id}/alerts` is a NEW route**, the firm-console
   counterpart of the operator-wide `GET /admin/alerts`: same underlying
