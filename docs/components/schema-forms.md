@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-96um6: the Enter->verify modal is the keyboard path to an audit claim, and reaches every field type -- radio/checkbox groups now carry id={field.id} on their first option, which is what makes them reachable at all. bd polyglot-pdf-38p0y: the AI-write gates honor flip_readonly_bit -- an unlockable read_only field is writable by the voice model once its condition SHOWS it.)*
+*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form, on idle timeout, and on staff logout via the new `StaffHeader`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from the production bundle.)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -151,6 +151,22 @@ so `SchemaForm` re-renders on same-window updates (cross-window uses the native
 `storage` event). `clear()` is `sessionStorage.removeItem(...)` — a **silent** wipe
 that does *not* fire the change event (a clear-on-logout feature must refresh the UI
 itself; same caveat noted in stateless-architecture).
+
+Automatic clearing (bd polyglot-pdf-8v8i7): `SchemaFormStateManager.clearAllClientState()`
+composes `clear()` + `clearOnboardingState()` + `clearClientLinkToken()` (in that order --
+`clearOnboardingState` reads `hasClientLinkToken()` first) and is the ONE path that wipes
+a device of a client's answers and link credential. It runs on three triggers, all in
+`components/SchemaForm.tsx` / `components/StaffHeader.tsx`: (a) COMPLETION -- after a
+SUCCESSFUL download or print of a form whose `isFormComplete` is true, in a client-link
+session only (staff sessions are never auto-cleared on download/print), a visible
+60-second non-restarting countdown with a "Done -- clear now" button, then the wipe;
+(b) IDLE -- once `status` is `idle_timeout` the warning shows for ~5 s (client-link copy
+says reopening the link resumes an unfinished form), then the wipe; (c) LOGOUT --
+`StaffHeader` (rendered only for a staff session) calls the existing `useAuth().logout()`
+and then the wipe. The manual Clear-form buttons still call the two-step path directly.
+`WebFormConnection.reset()` no longer exists. Pinned by
+`SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
+`StaffHeader.test.tsx` and `schemaFormState.clearAllClientState.test.ts`.
 
 Back-compat migrations on `load()`: `completedParts → completedSections`,
 `currentPartId → currentSectionId` — residue of the parts→sections rename.
