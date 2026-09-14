@@ -368,7 +368,16 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     setShowIdleClearWarning(true);
     const clearTimer = window.setTimeout(() => {
       SchemaFormStateManager.clearAllClientState();
-      setShowIdleClearWarning(false);
+      // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+      // round 2): this component stays MOUNTED with its in-memory `state`
+      // otherwise, and the next keystroke's updateField -> save() would
+      // re-persist a fresh schema_form_state from that stale copy --
+      // resurrecting exactly what the wipe erased. Mirrors the pre-existing
+      // "Start Fresh" button in SchemaFormDemo.tsx, which reloads for the
+      // same reason. For a CLIENT-LINK session the reload lands on the app's
+      // entry with no token in the URL any more -- the intended "session
+      // ended" state, not a bug.
+      window.location.reload();
     }, 5000);
     return () => window.clearTimeout(clearTimer);
   }, [status]);
@@ -404,12 +413,13 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     }, 1000);
     completionClearTimerRef.current = window.setTimeout(() => {
       SchemaFormStateManager.clearAllClientState();
-      setShowCompletionClearWarning(false);
-      completionClearTimerRef.current = null;
-      if (completionClearIntervalRef.current !== null) {
-        window.clearInterval(completionClearIntervalRef.current);
-        completionClearIntervalRef.current = null;
-      }
+      // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+      // round 2) -- see the idle-timeout effect's comment for why: this
+      // component stays mounted otherwise, and the next field edit would
+      // re-persist a fresh schema_form_state from the stale in-memory copy.
+      // For a CLIENT-LINK session the reload lands on the app's entry with
+      // no token any more -- the intended "session ended" state.
+      window.location.reload();
     }, 60000);
   }, []);
 
@@ -423,7 +433,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
       completionClearIntervalRef.current = null;
     }
     SchemaFormStateManager.clearAllClientState();
-    setShowCompletionClearWarning(false);
+    // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+    // round 2) -- same resurrection risk as the automatic triggers above:
+    // this component stays mounted otherwise, and the next field edit would
+    // re-persist a fresh schema_form_state from the stale in-memory copy.
+    window.location.reload();
   }, []);
 
   // The one gate for "does this download/print start the completion-clear

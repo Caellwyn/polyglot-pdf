@@ -140,6 +140,13 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
 
   it('starts the grace and clears storage after the countdown on a successful download of a COMPLETE client-link form', async () => {
     vi.useFakeTimers();
+    // Stub reload -- production code reloads immediately after the wipe (bd
+    // polyglot-pdf-8v8i7, fresh-eyes round 2); see the dedicated reload
+    // tests below for that behavior itself.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: vi.fn() },
+    });
     try {
       mockHasClientLinkToken = true;
       const schema = makeSchema(true);
@@ -276,6 +283,10 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
 
   it('a second download during the grace does not restart the visible countdown', async () => {
     vi.useFakeTimers();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: vi.fn() },
+    });
     try {
       mockHasClientLinkToken = true;
       const schema = makeSchema(true);
@@ -325,8 +336,13 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
     }
   });
 
-  it('the "Done -- clear now" button clears immediately without waiting for the countdown', async () => {
+  it('the "Done -- clear now" button clears immediately and reloads, without waiting for the countdown', async () => {
     vi.useFakeTimers();
+    const reloadFn = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadFn },
+    });
     try {
       mockHasClientLinkToken = true;
       const schema = makeSchema(true);
@@ -350,7 +366,106 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
       });
 
       expect(sessionStorage.getItem('schema_form_state')).toBeNull();
-      expect(screen.queryByText(/form is finished/i)).toBeNull();
+      expect(reloadFn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // bd polyglot-pdf-8v8i7, fresh-eyes round 2: clearAllClientState() alone
+  // does not stop this component from re-persisting a FRESH
+  // schema_form_state on the very next field edit -- it stays mounted with
+  // its stale in-memory `state`. The fix reloads the page immediately after
+  // the wipe (mirroring the pre-existing "Start Fresh" button in
+  // SchemaFormDemo.tsx, which reloads for the same reason).
+  it('reloads the page immediately after the completion-clear countdown finishes, exactly once', async () => {
+    vi.useFakeTimers();
+    const reloadFn = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadFn },
+    });
+    try {
+      mockHasClientLinkToken = true;
+      const schema = makeSchema(true);
+      seedSessionState(schema, true);
+
+      render(<SchemaForm schema={schema} kitId="test" pdfUrl="https://example/form.pdf" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      const downloadButton = screen.getByRole('button', { name: /download filled pdf/i });
+      await act(async () => {
+        fireEvent.click(downloadButton);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(reloadFn).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).toBeNull();
+      expect(reloadFn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The resurrection bug, made observable: reload is stubbed to a no-op (as
+  // every test here must be, since jsdom never actually navigates), so a
+  // real browser would already be on a fresh page by this point -- the
+  // correctness property is ORDER, not "no save ever happens again in this
+  // jsdom process". This pins that order: the wipe (and the reload call
+  // recording it happened) must be the LAST reliable event before a
+  // simulated field edit.
+  it('does not let a field change after the completion-clear wipe re-create schema_form_state before the reload fires', async () => {
+    vi.useFakeTimers();
+    const events: string[] = [];
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        reload: () => events.push('reload'),
+      },
+    });
+    try {
+      mockHasClientLinkToken = true;
+      const schema = makeSchema(true);
+      seedSessionState(schema, true);
+
+      const { container } = render(
+        <SchemaForm schema={schema} kitId="test" pdfUrl="https://example/form.pdf" />
+      );
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      const downloadButton = screen.getByRole('button', { name: /download filled pdf/i });
+      await act(async () => {
+        fireEvent.click(downloadButton);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      events.push('post-wipe-check:' + (sessionStorage.getItem('schema_form_state') === null));
+
+      const input = container.querySelector('input[name="f1"]') as HTMLInputElement | null;
+      if (input) {
+        act(() => {
+          input.value = 'resurrected value';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      }
+
+      expect(events[0]).toBe('reload');
+      expect(events).toContain('post-wipe-check:true');
     } finally {
       vi.useRealTimers();
     }

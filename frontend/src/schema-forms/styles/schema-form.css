@@ -558,3 +558,84 @@ select.field-highlight {
   border-color: #4f46e5;
   color: #fff;
 }
+
+/* ============================================================================
+   Staff header (bd polyglot-pdf-8v8i7) -- a slim bar, logout right-aligned.
+   Renders nothing for a client-link session (see StaffHeader.tsx).
+   ============================================================================ */
+
+.schema-form__staff-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  color: #6c757d;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.schema-form__staff-header-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schema-form__staff-header-logout {
+  padding: 0.3rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.schema-form__staff-header-logout:hover:not(:disabled) {
+  background: #eef1f6;
+}
+
+.schema-form__staff-header-logout:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ============================================================================
+   Browser PII hygiene banners (bd polyglot-pdf-8v8i7) -- a client-facing
+   warning that this device's saved answers are about to be cleared. Reuses
+   .form-field__warning's palette (#f57c00 / #fff3e0) so every "pay attention"
+   surface in this stylesheet reads the same way.
+   ============================================================================ */
+
+.schema-form__idle-clear-warning,
+.schema-form__completion-clear-warning {
+  max-width: 64rem;
+  margin: 0.75rem auto;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  color: #7c4a00;
+  background-color: #fff3e0;
+  border: 1px solid #f57c00;
+  border-left: 4px solid #f57c00;
+  border-radius: 4px;
+}
+
+.schema-form__completion-clear-now-button {
+  display: block;
+  margin-top: 0.6rem;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #7c4a00;
+  background: #ffffff;
+  border: 1px solid #f57c00;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.schema-form__completion-clear-now-button:hover {
+  background-color: #fff3e0;
+}
