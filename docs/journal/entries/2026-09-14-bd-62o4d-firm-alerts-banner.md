@@ -68,6 +68,12 @@ UNCHANGED (still `require_app_admin`, still the complete `ALERT_FIELDS`
 set) -- the new narrower view is a separate function, not a parameter on
 the shared one, so the two allowlists cannot drift together by accident.
 
+Two cross-surface review rounds followed this shipment, each finding one
+doc-only blocker (a stale "one route" restatement of the fifth gate's
+scope, in a different doc each time) and fixing it inline; see
+"Cross-surface review round 1" and "Cross-surface review round 2" below
+for the adopt/reject/defer breakdown of each.
+
 ## Lessons
 
 Reusing an established composite-gate pattern (bd scaig's
@@ -108,7 +114,7 @@ by call order/count.
   `scripts/check_doc_freshness.py` and left as-is -- none of them track
   any file this bead changed.
 
-## Cross-surface review round (2026-09-14)
+## Cross-surface review round 1 (2026-09-14)
 
 The Opus outer cross-surface review found the contract trace clean except
 for one blocker-tier doc gap: this bead's own diff to
@@ -149,6 +155,54 @@ Full backend, admin_backend, and root suites re-run after the doc fix:
 46 skipped) all green. No test code changed in this round (docs-only fix),
 so no new mutation-verification was needed.
 
+## Cross-surface review round 2 (2026-09-14)
+
+A second Opus outer cross-surface review pass, run after round 1's fixes
+landed, found the contract trace clean (every consumer of the new route,
+the widened gate, the narrow allowlist, the new component, its props, the
+new CSS classes, and both doc updates checked OK) except for one blocker:
+an untouched tier-2 doc, `docs/components/config-deployment.md:726`,
+still described the fifth gate
+(`require_app_admin_or_owning_manager_or_employee`) as "scoped to one
+route only (`GET /admin/firms/{firm_id}/links`)" -- a third restatement of
+the same claim round 1 had already corrected in `admin-service.md` and
+`technical_guide.md`, missed because it lives in a doc neither this
+bead's surfaces list nor round 1's enumeration named. Same CLAUDE.md scar
+#8 shape as round 1 (enumerate the set before fixing any of it) -- one
+more sibling of a "one route" restatement, one file the enumeration
+missed.
+
+Adopted (fixed in this round): rewrote the `config-deployment.md`
+sentence to name the small, named set of three routes now carrying the
+gate (the original `links` route plus this bead's `alerts` list and
+widened `acknowledge`), matching the phrasing already used in
+`admin-service.md`.
+
+Deferred (already filed as beads by the reviewer, not touched here):
+`admin_backend/routes/alert_routes.py`'s `_PAGE_LIMIT` comment, which
+states the opposite of what the per-firm-then-slice code actually does
+(`polyglot-pdf-lnvjg`); two stale citations of the renamed fifth-gate pin
+test, `test_only_the_link_listing_route_carries_the_fifth_gate`, in
+`test_admin_link_routes.py` and `admin-service.md`'s dated stamp block
+(`polyglot-pdf-6911x`); a pre-existing, non-deterministic frontend vitest
+flake on two files this bead never touched
+(`VoiceOverlay.voicemode.test.tsx`,
+`SchemaForm.previewEdit.test.tsx`) (`polyglot-pdf-630ej`).
+
+Rejected: none -- every round 2 finding was either the blocker (fixed) or
+an already-filed nit/pre-existing issue (left for its own bead).
+
+Refuted (accepted the reviewer's stated verdict, no code change): the
+`alerts` collection deliberately has no `?channel=` field and the route
+accepts-and-ignores the query param rather than validating it like
+`link_routes.py` does -- confirmed correct, not a gap.
+
+Full backend, admin_backend, and root suites re-run after this round's doc
+fix: 3837 passed (backend, 67 skipped, 3 deselected, 1 xfailed) + 538
+passed (admin_backend) + 1691 passed (root, 46 skipped), all green. No
+test code changed in this round (docs-only fix, one sentence in one file),
+so no new mutation-verification was needed.
+
 ## Files touched
 
 - `admin_backend/routes/alert_routes.py` -- new firm-scoped list route,
@@ -176,3 +230,6 @@ so no new mutation-verification was needed.
   rules.
 - `docs/technical_guide.md`, `docs/components/admin-service.md` -- see
   Doc freshness above.
+- `docs/components/config-deployment.md` -- cross-surface review round 2:
+  corrected the fifth-gate scope sentence to name the current three-route
+  set instead of the original single route.
