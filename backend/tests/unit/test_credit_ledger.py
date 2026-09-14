@@ -10,6 +10,12 @@ Pins the three exit criteria of bd polyglot-pdf-vnxew:
      final balance of 0.
   3. (the CLI half lives in test_grant_credits_cli.py)
 
+Also pins a fresh-eyes concurrency finding on bd polyglot-pdf-0euzk (the
+firm-plan monthly top-up): test_concurrent_monthly_topups_for_the_same_
+period_grant_exactly_once, staged identically to #2 above, one field over
+-- two overlapping append_entry() calls carrying the SAME period must
+leave exactly one subscription_grant entry, not two.
+
 plus the entry-shape rules the helper enforces (signed amounts per type, the
 two-way usd_amount requirement, the required actor, the required reason on
 an adjustment, the snapshotted firm_kind) and the ledger_export log line.
@@ -200,6 +206,70 @@ def test_mint_transaction_double_mint_race_is_safe(fake_db):
     assert rows[0]["balance_after"] == 0
 
 
+def test_concurrent_monthly_topups_for_the_same_period_grant_exactly_once(
+        fake_db):
+    """bd polyglot-pdf-0euzk fresh-eyes finding: the monthly top-up route's
+    idempotency guarantee (period is unique per firm) must hold under
+    CONCURRENT invocation, not just sequential re-runs. Two overlapping
+    append_entry() calls carrying the SAME period must leave exactly ONE
+    subscription_grant entry for that period and a balance reflecting only
+    ONE grant -- the loser must raise DuplicatePeriodEntry, not double-grant.
+
+    Staged exactly like test_mint_transaction_double_mint_race_is_safe
+    above, one field over: transaction B's body reads the firm (and the
+    period query, seeing no existing row) before transaction A commits
+    underneath it; B is then RE-RUN, and on the re-run its period query
+    sees A's just-committed row and refuses. If query_period_entries's
+    in-transaction read were hoisted out of the _txn body (read once,
+    before @firestore.transactional, and closed over), the re-run would
+    reuse the stale "no row yet" answer and B would also commit --
+    doubling the grant.
+
+    Mutation: in append_entry's _txn body, move the `if period is not
+    None: existing = query_period_entries(...)` block to BEFORE the
+    @firestore.transactional-decorated function (reading it once, outside
+    the body, and closing over the result) -- this goes red on all three
+    assertions: two grant rows exist, the balance is double what one grant
+    would produce, and the second call raises nothing at all. Verified
+    2026-09-14."""
+    fake_db.docs[("firms", "acme")]["balance_credits"] = 10
+
+    committed = []
+
+    def _first_topup(tx):
+        # Runs after B's body has read "no existing period row" but before
+        # B commits: this is transaction A landing underneath B, exactly
+        # like the mint race above.
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type="subscription_grant", amount=25,
+            actor="system:monthly_topup", usd_amount=None,
+            reason="monthly top-up 2026-09", period="2026-09", ts=1000.0,
+        )
+        committed.append("a")
+        return "retry"
+
+    fake_db.on_before_commit = _first_topup
+
+    with pytest.raises(credit_ledger.DuplicatePeriodEntry) as exc:
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type="subscription_grant", amount=25,
+            actor="system:monthly_topup", usd_amount=None,
+            reason="monthly top-up 2026-09", period="2026-09", ts=1001.0,
+        )
+
+    assert committed == ["a"], "the first top-up must have committed"
+    assert exc.value.firm_id == "acme"
+    assert exc.value.period == "2026-09"
+    assert fake_db.firm("acme")["balance_credits"] == 35, (
+        "10 + 25 from the ONE winning grant -- a double grant would be 60")
+    rows = [r for r in fake_db.ledger_rows("acme")
+            if r["type"] == "subscription_grant"]
+    assert len(rows) == 1, (
+        "expected exactly one subscription_grant entry, got {}".format(rows)
+    )
+    assert rows[0]["period"] == "2026-09"
+
+
 def test_a_refused_debit_commits_NOTHING(fake_db):
     """The other half of the race property, on its own: an InsufficientCredits
     refusal must leave the balance untouched and write no entry -- the
@@ -322,6 +392,37 @@ def test_the_entry_carries_EXACTLY_the_declared_field_set(fake_db):
     assert set(row) == credit_ledger.ENTRY_FIELDS
 
 
+def test_period_defaults_to_none_and_round_trips_when_given(fake_db):
+    """bd polyglot-pdf-0euzk: `period` is nullable like link_jti/kit_id --
+    every existing caller that never passes it gets None (not a KeyError,
+    not an empty string), and the ONE caller that does (the monthly plan
+    top-up) gets it back verbatim on the committed entry and the stored row.
+
+    Mutation: drop the `period=period` pass-through in append_entry's
+    _apply_entry_writes() call -- the second assertion goes red (the field
+    stays None even though "2026-09" was passed). Mutation: drop `period`
+    from the entry dict literal in _apply_entry_writes -- the shape test
+    above already catches this, and this test's first assertion catches it
+    too via a KeyError on row["period"]. Verified 2026-09-14."""
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type="promo_grant", amount=5,
+        actor="uid-ops",
+    )
+    assert result["period"] is None
+    row = fake_db.ledger_rows("acme")[0]
+    assert row["period"] is None
+
+    result2 = credit_ledger.append_entry(
+        fake_db, "acme", entry_type="subscription_grant", amount=10,
+        actor="system:monthly_topup", period="2026-09",
+    )
+    assert result2["period"] == "2026-09"
+    rows = fake_db.ledger_rows("acme")
+    stamped = [r for r in rows if r.get("period") == "2026-09"]
+    assert len(stamped) == 1
+    assert stamped[0]["type"] == "subscription_grant"
+
+
 @pytest.mark.parametrize("entry_type", sorted(credit_ledger.ENTRY_TYPES))
 def test_every_declared_type_can_be_written(fake_db, entry_type):
     """Derived from ENTRY_TYPES, not hand-listed: a type added to the tuple
@@ -429,19 +530,32 @@ def test_a_NEGATIVE_usd_amount_is_refused(fake_db, entry_type):
 
 @pytest.mark.parametrize(
     "entry_type",
-    sorted(set(credit_ledger.ENTRY_TYPES) - credit_ledger.USD_REQUIRED_TYPES),
+    sorted(
+        set(credit_ledger.ENTRY_TYPES)
+        - credit_ledger.USD_REQUIRED_TYPES
+        - credit_ledger.USD_OPTIONAL_TYPES
+    ),
 )
 def test_a_NON_income_type_REFUSES_a_usd_amount(fake_db, entry_type):
     """The requirement runs both ways: a dollar figure on a promo grant, a
     debit, a refund or an adjustment would be double-counted as income by
     the revenue view, which filters on type but sums usd_amount.
 
-    Derived as the SET COMPLEMENT of USD_REQUIRED_TYPES, so a new type lands
-    in exactly one of these two tests automatically (scar #8).
+    Derived as the SET COMPLEMENT of USD_REQUIRED_TYPES | USD_OPTIONAL_TYPES
+    (bd polyglot-pdf-0euzk widened subscription_grant from always-required to
+    optional-but-validated, so it moved OUT of this test's parametrization
+    and into test_a_usd_OPTIONAL_type_accepts_being_omitted /
+    test_a_usd_OPTIONAL_types_usd_amount_is_still_validated_when_given below)
+    -- a new type lands in exactly one of these tests automatically (scar #8).
 
     Mutation: delete the `elif usd_amount is not None: raise` branch in
     _validate -- every parametrization goes red. Verified 2026-09-08 per
-    parametrization."""
+    parametrization; re-verified 2026-09-14 after the USD_OPTIONAL_TYPES
+    split by dropping only the subscription_grant member's exclusion (which
+    only breaks the two NEW tests below, proving the complement is disjoint
+    the other way too) and separately by dropping the whole exclusion (every
+    parametrization here still passes -- promo_grant/mint_debit/expiry_refund/
+    adjustment are unaffected by the split)."""
     amount = -1 if entry_type in credit_ledger.NEGATIVE_ONLY_TYPES else 1
     kwargs = {"reason": "r"} if (
         entry_type in credit_ledger.REASON_REQUIRED_TYPES) else {}
@@ -450,6 +564,57 @@ def test_a_NON_income_type_REFUSES_a_usd_amount(fake_db, entry_type):
             fake_db, "acme", entry_type=entry_type, amount=amount,
             actor="uid-ops", usd_amount=9.99, **kwargs)
     assert fake_db.ledger_rows("acme") == []
+
+
+@pytest.mark.parametrize("entry_type", sorted(credit_ledger.USD_OPTIONAL_TYPES))
+def test_a_usd_OPTIONAL_type_accepts_being_omitted(fake_db, entry_type):
+    """subscription_grant (bd polyglot-pdf-0euzk, the monthly plan top-up)
+    is the ONE type that is neither always-required nor always-refused: a
+    usd_amount of None must commit cleanly, with the entry's own usd_amount
+    stored as None -- this is the shape the monthly top-up route relies on
+    ("usd_amount null (no money moved)", the bead's own words).
+
+    Mutation: move TYPE_SUBSCRIPTION_GRANT back into USD_REQUIRED_TYPES
+    (reverting the split) -- this goes red with "requires usd_amount".
+    Verified 2026-09-14."""
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type=entry_type, amount=10,
+        actor="uid-ops")
+    assert result["usd_amount"] is None
+    assert fake_db.ledger_rows("acme")[0]["usd_amount"] is None
+
+
+@pytest.mark.parametrize("entry_type", sorted(credit_ledger.USD_OPTIONAL_TYPES))
+def test_a_usd_OPTIONAL_types_usd_amount_is_still_validated_when_given(
+        fake_db, entry_type):
+    """The OTHER half of "optional, not unchecked": a human operator's real
+    paid subscription_grant still gets the SAME three checks USD_REQUIRED_
+    TYPES enforces (numeric, not bool, non-negative) -- optional-when-absent
+    must not mean unchecked-when-present, or a string/negative dollar figure
+    on a real paid grant would corrupt the income view exactly like it would
+    on a purchase.
+
+    Mutation: drop the `elif entry_type in USD_OPTIONAL_TYPES:` branch's
+    inner checks in _validate (fall through to accepting any value) -- every
+    case here goes from LedgerError to a committed (wrong) entry. Verified
+    2026-09-14 per parametrization (both the non-numeric and the negative
+    case)."""
+    with pytest.raises(credit_ledger.LedgerError):
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type=entry_type, amount=10,
+            actor="uid-ops", usd_amount="249.00")
+    assert fake_db.ledger_rows("acme") == []
+    with pytest.raises(credit_ledger.LedgerError):
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type=entry_type, amount=10,
+            actor="uid-ops", usd_amount=-1.0)
+    assert fake_db.ledger_rows("acme") == []
+    # And a REAL positive figure still commits and is stored verbatim -- the
+    # human-operator-paid-subscription path this type must keep supporting.
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type=entry_type, amount=10,
+        actor="uid-ops", usd_amount=49.99)
+    assert result["usd_amount"] == 49.99
 
 
 @pytest.mark.parametrize(

@@ -108,6 +108,20 @@ TYPE_MINT_DEBIT = "mint_debit"
 TYPE_EXPIRY_REFUND = "expiry_refund"
 TYPE_ADJUSTMENT = "adjustment"
 
+# RESERVED, NO WRITER (bd polyglot-pdf-0euzk, Epic 5 seam). Epic 5's Stripe
+# pay-as-you-go work adds the writer for this type without touching the
+# entry-type schema -- it is named here, as a constant, purely so that day's
+# change is additive (a new writer, not a new type). Kept OUT of ENTRY_TYPES
+# itself until Epic 5 actually writes it: an entry type nothing can
+# construct is dead vocabulary that would need test_every_declared_type_
+# can_be_written (test_credit_ledger.py, which derives its parametrization
+# from ENTRY_TYPES and proves a REAL write for each member) to either fail
+# or special-case a type with no path -- the write-nothing trap CLAUDE.md
+# scar #7 warns about ("remove the parameter, don't just default it off";
+# the mirror-image mistake here is "declare the type, don't just leave it
+# unwritable").
+TYPE_OVERAGE_PURCHASE = "overage_purchase"
+
 ENTRY_TYPES = (
     TYPE_SUBSCRIPTION_GRANT,
     TYPE_PURCHASE,
@@ -117,10 +131,34 @@ ENTRY_TYPES = (
     TYPE_ADJUSTMENT,
 )
 
-# The two types that record MONEY CHANGING HANDS, and therefore require a
-# usd_amount. Every other type must NOT carry one (see the module docstring:
-# a dollar figure on a promo or a debit would be double-counted as income).
-USD_REQUIRED_TYPES = frozenset({TYPE_PURCHASE, TYPE_SUBSCRIPTION_GRANT})
+# purchase ALWAYS records money changing hands, so it ALWAYS requires a
+# usd_amount -- refused (LedgerError) when absent, exactly as before.
+USD_REQUIRED_TYPES = frozenset({TYPE_PURCHASE})
+
+# subscription_grant is DIFFERENT (bd polyglot-pdf-0euzk, the firm-plan
+# monthly top-up). It can be either a human-operator grant that records a
+# real paid subscription (usd_amount given, summed into income exactly like
+# a purchase) OR the monthly scheduled top-up that brings a firm's balance
+# up to its plan's monthly_credits cap (usd_amount None -- "no money moved",
+# the plan's own words: the credits are the product a firm already pays a
+# flat recurring fee for outside this ledger). Both are the SAME entry type
+# because both move the SAME kind of credit (a subscription allotment, never
+# a one-off purchase or a promo), so a BigQuery income-view reader summing
+# usd_amount over subscription_grant rows gets the right total either way: a
+# null usd_amount contributes nothing to that sum, exactly like a
+# promo_grant's usd_amount (also always null) already contributes nothing.
+# Validated WHEN PRESENT (the same three checks USD_REQUIRED_TYPES enforces:
+# numeric, not bool, non-negative) but never required and never refused --
+# the one entry type that is neither always-required nor always-refused.
+# admin_backend/routes/credit_routes.py's grant route has its OWN,
+# stricter, human-facing 422 that still requires usd_amount for a MANUAL
+# subscription_grant (a human clicking "grant" must still supply the dollar
+# figure) -- that route's own check runs BEFORE this helper is ever
+# called, so this widening does not loosen it; only a caller that bypasses
+# that 422 (the monthly top-up route, ALSO in admin_backend/routes/
+# credit_routes.py -- run_monthly_topup calls append_entry() directly,
+# with no request body to validate) can omit usd_amount on this type.
+USD_OPTIONAL_TYPES = frozenset({TYPE_SUBSCRIPTION_GRANT})
 
 # Types whose amount must be strictly POSITIVE (they add credits) and
 # strictly NEGATIVE (they remove them). adjustment is in NEITHER set: it is
@@ -155,6 +193,7 @@ ENTRY_FIELDS = frozenset({
     "link_jti",
     "kit_id",
     "ts",
+    "period",
 })
 
 # The fields the ledger_export log line carries, per the plan's BigQuery
@@ -194,6 +233,40 @@ class InsufficientCredits(LedgerError):
         super().__init__(
             "firm {} has {} credits, which does not cover a debit of {}".format(
                 firm_id, balance, abs(amount)
+            )
+        )
+
+
+class DuplicatePeriodEntry(LedgerError):
+    """A caller passed `period`, and firms/{firm_id}/ledger ALREADY carries
+    an entry of the SAME entry_type for that SAME period. Nothing was
+    committed.
+
+    Raised from INSIDE append_entry()'s own transaction body (bd
+    polyglot-pdf-0euzk fresh-eyes finding: a caller-side pre-check, run
+    before the transaction opens, is check-then-act -- two concurrent calls
+    can both read "not yet run" and both commit). Firestore re-runs a
+    contended transaction body on the LOSER, so raising this from inside
+    the body means the loser re-reads the winner's just-committed row on
+    its retry and refuses here, on real state -- exactly the way
+    refund_expired_link's redemption/status read makes THAT function race-
+    safe by construction (see append_entry's period= param doc below).
+
+    The monthly top-up route (admin_backend/routes/credit_routes.py) is the
+    one caller that passes `period`; it keeps its own pre-transaction
+    _already_topped_up_this_period check as a fast path (skips the
+    transaction round trip entirely in the overwhelmingly common
+    non-racing case) and catches this exception for the rare contended
+    case, counting the firm as skipped_already_run either way.
+    """
+
+    def __init__(self, firm_id: str, entry_type: str, period: str):
+        self.firm_id = firm_id
+        self.entry_type = entry_type
+        self.period = period
+        super().__init__(
+            "firm {} already has a {} entry for period {}".format(
+                firm_id, entry_type, period
             )
         )
 
@@ -245,10 +318,26 @@ def _validate(
             raise LedgerError(
                 "usd_amount must not be negative, got {!r}".format(usd_amount)
             )
+    elif entry_type in USD_OPTIONAL_TYPES:
+        # subscription_grant: validated WHEN PRESENT, never required (the
+        # monthly top-up passes None; a human operator's paid grant passes a
+        # real figure) -- see USD_OPTIONAL_TYPES' own comment above.
+        if usd_amount is not None:
+            if not isinstance(usd_amount, (int, float)) or isinstance(
+                    usd_amount, bool):
+                raise LedgerError(
+                    "usd_amount must be a number, got {!r}".format(usd_amount)
+                )
+            if usd_amount < 0:
+                raise LedgerError(
+                    "usd_amount must not be negative, got {!r}".format(
+                        usd_amount)
+                )
     elif usd_amount is not None:
         raise LedgerError(
             "{} must not carry a usd_amount (only {} record income)".format(
-                entry_type, sorted(USD_REQUIRED_TYPES)
+                entry_type,
+                sorted(USD_REQUIRED_TYPES | USD_OPTIONAL_TYPES)
             )
         )
     if not isinstance(actor, str) or not actor.strip():
@@ -266,7 +355,7 @@ def _apply_entry_writes(
     entry_type: str, amount: int, usd_amount: Optional[float], actor: str,
     channel: Optional[str], reason: Optional[str], link_jti: Optional[str],
     kit_id: Optional[str], require_sufficient_balance: bool, extra_writes,
-    captured: dict,
+    captured: dict, period: Optional[str] = None,
 ) -> None:
     """The WRITE half of a ledger entry, shared by every caller that has
     ALREADY read the firm doc inside its own transaction.
@@ -315,6 +404,7 @@ def _apply_entry_writes(
         "link_jti": link_jti,
         "kit_id": kit_id,
         "ts": stamp,
+        "period": period,
     }
 
     # --- WRITES ----------------------------------------------------
@@ -334,6 +424,53 @@ def _apply_entry_writes(
     captured["firm_kind"] = kind
 
 
+def query_period_entries(
+    db, firm_id: str, entry_type: str, period: str, *, transaction=None,
+) -> list:
+    """Every firms/{firm_id}/ledger entry of `entry_type` stamped with
+    `period`, as a list of DocumentSnapshot (empty if none). SHARED by (i)
+    the monthly top-up route's pre-transaction fast-path check
+    (admin_backend/routes/credit_routes.py::_already_topped_up_this_period)
+    and (ii) append_entry()'s own in-transaction re-check below -- ONE
+    query shape, so the fast path and the race-safe check can never drift
+    into disagreeing about what "already topped up" means.
+
+    `transaction` is optional: pass it (a Firestore Transaction) to read
+    this query AS PART OF that transaction -- required for the
+    in-transaction check to see a just-committed row on a contended retry,
+    and refused by Firestore if a transactional read follows a write in the
+    same transaction (reads-before-writes), so callers must run this before
+    any write. Omitted, the query runs as a plain (non-transactional) read
+    -- what the route's fast path wants, since it deliberately runs BEFORE
+    any transaction opens.
+
+    Uses `.get(transaction=...)` rather than `.stream()`: the Admin SDK
+    query object accepts a transaction only through `.get()`, and passing
+    one to `.stream()` does not attach the read to the transaction.
+    """
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = (
+            db.collection(FIRMS_COLLECTION)
+            .document(firm_id)
+            .collection(LEDGER_SUBCOLLECTION)
+            .where(filter=FieldFilter("type", "==", entry_type))
+            .where(filter=FieldFilter("period", "==", period))
+            .limit(1)
+        )
+    except ImportError:
+        query = (
+            db.collection(FIRMS_COLLECTION)
+            .document(firm_id)
+            .collection(LEDGER_SUBCOLLECTION)
+            .where("type", "==", entry_type)
+            .where("period", "==", period)
+            .limit(1)
+        )
+    return list(query.get(transaction=transaction))
+
+
 def append_entry(
     db,
     firm_id: str,
@@ -349,6 +486,7 @@ def append_entry(
     require_sufficient_balance: bool = False,
     extra_writes=None,
     ts: Optional[float] = None,
+    period: Optional[str] = None,
 ) -> dict:
     """Append ONE ledger entry and update the firm's balance, atomically.
 
@@ -375,6 +513,24 @@ def append_entry(
     The default is False because the soft-launch mode deliberately lets the
     balance go negative -- the mint route's CREDITS_ENFORCED gate is what
     turns it on (Epic 2 bead A3).
+
+    period (bd polyglot-pdf-0euzk): an optional "YYYY-MM" string, nullable
+    like link_jti/kit_id, stamped on the entry and returned unchanged. The
+    ONE consumer is the monthly plan top-up route (admin_backend/routes/
+    credit_routes.py::run_monthly_topup), which stamps the calendar month
+    it ran in. When given, this function ITSELF re-checks (inside the
+    transaction body, before any write -- see query_period_entries() and
+    DuplicatePeriodEntry above) for an existing entry of the SAME
+    entry_type and period, raising DuplicatePeriodEntry rather than
+    writing a second one. This is the RACE-SAFE half of the top-up route's
+    idempotency: the route also runs a cheaper pre-transaction query of its
+    own to skip the common sequential re-run case without paying for a
+    transaction round trip, but THIS check -- inside the transaction --
+    is what makes two overlapping invocations safe, since Firestore
+    re-runs a contended body on the loser and the loser's re-run then sees
+    the winner's just-committed row. No other caller in this repo sets
+    `period`; it stores as None everywhere else, exactly like link_jti
+    stores as None on every entry that is not a mint debit or refund.
 
     extra_writes lets a CALLER join additional documents to this same
     transaction -- Epic 2 bead A3 passes the links/{jti} mint record so the
@@ -407,12 +563,31 @@ def append_entry(
             raise LedgerError("firm {} does not exist".format(firm_id))
         firm = snap.to_dict() or {}
 
+        if period is not None:
+            # THE RACE-SAFE HALF of the period idempotency guarantee (bd
+            # polyglot-pdf-0euzk fresh-eyes finding). A caller-side
+            # pre-check (the monthly top-up route's own
+            # _already_topped_up_this_period, run BEFORE this transaction
+            # even opens) is check-then-act: two concurrent calls can both
+            # read "not yet run" and both reach here. This second read runs
+            # INSIDE the transaction, still before any write, so Firestore's
+            # automatic re-run-on-contention makes the LOSER of a race
+            # re-read the WINNER's just-committed row and refuse here --
+            # the same property refund_expired_link's redemption/status
+            # read gives that function, over the period field instead of a
+            # status flip. Must stay a read, never a write, and must run
+            # before _apply_entry_writes below (reads-before-writes).
+            existing = query_period_entries(
+                db, firm_id, entry_type, period, transaction=tx)
+            if existing:
+                raise DuplicatePeriodEntry(firm_id, entry_type, period)
+
         _apply_entry_writes(
             tx, firm_ref, entry_ref, firm, firm_id, stamp,
             entry_type=entry_type, amount=amount, usd_amount=usd_amount,
             actor=actor, channel=channel, reason=reason, link_jti=link_jti,
             kit_id=kit_id, require_sufficient_balance=require_sufficient_balance,
-            extra_writes=extra_writes, captured=captured,
+            extra_writes=extra_writes, captured=captured, period=period,
         )
 
     _txn(db.transaction())

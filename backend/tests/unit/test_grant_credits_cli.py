@@ -435,10 +435,26 @@ def test_usd_required_types_match_service_constants():
     """Same drift guard for the usd_amount rule: if the service ever adds a
     third income type, the CLI's --usd requirement must move with it.
 
-    Mutation: remove "subscription_grant" from the CLI's set -- red.
-    Verified 2026-09-08."""
-    assert grant_credits.USD_REQUIRED_TYPES == set(
-        credit_ledger.USD_REQUIRED_TYPES)
+    bd polyglot-pdf-0euzk split the service's own set in two:
+    credit_ledger.USD_REQUIRED_TYPES (purchase only, ALWAYS required) and
+    credit_ledger.USD_OPTIONAL_TYPES (subscription_grant, validated when
+    given but no longer always-required -- the monthly plan top-up passes
+    None). The CLI is a HUMAN operator tool, deliberately stricter than the
+    helper: an operator running `grant --type subscription_grant` by hand is
+    always recording a real paid subscription, never the automated top-up,
+    so grant_credits.USD_REQUIRED_TYPES stays the UNION of both service sets
+    rather than following the narrower one -- --usd is still required for
+    both purchase and subscription_grant at the CLI.
+
+    Mutation: remove "subscription_grant" from the CLI's set -- red. Mutation
+    (2026-09-14): change this assertion back to comparing against only
+    credit_ledger.USD_REQUIRED_TYPES (undoing the union) -- red, since that
+    set no longer contains subscription_grant. Verified 2026-09-08;
+    re-verified 2026-09-14."""
+    assert grant_credits.USD_REQUIRED_TYPES == (
+        set(credit_ledger.USD_REQUIRED_TYPES)
+        | set(credit_ledger.USD_OPTIONAL_TYPES)
+    )
 
 
 def test_the_adjustment_type_matches_the_service_constant():

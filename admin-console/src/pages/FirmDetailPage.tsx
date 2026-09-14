@@ -1,10 +1,10 @@
 import React from 'react';
 import {
-  getFirm, setFirmAllowedKits, setFirmKind,
+  getFirm, setFirmAllowedKits, setFirmKind, setFirmPlan,
   grantCredits, adjustCredits, listFirmLinks, revokeLink,
-  FIRM_KINDS, GRANT_TYPES, USD_REQUIRED_GRANT_TYPES, LINK_CHANNELS,
-  type FirmDetail, type FirmKind, type GrantType, type LinkChannel,
-  type LinkRow,
+  FIRM_KINDS, GRANT_TYPES, USD_REQUIRED_GRANT_TYPES, LINK_CHANNELS, PLAN_TIERS,
+  type FirmDetail, type FirmKind, type FirmPlan, type GrantType,
+  type LinkChannel, type LinkRow, type PlanTier,
 } from '../utils/adminApi';
 
 interface FirmDetailPageProps {
@@ -57,6 +57,15 @@ function usdAmountApplies(type: GrantType): boolean {
  *
  * REVOKE CALLS THE ROUTE ONCE THEN RE-READS (exit criterion: "revoke calls
  * the route once and re-reads"), same as every other mutation on this page.
+ *
+ * PLAN EDITOR (bd polyglot-pdf-0euzk): tier + monthly_credits + rollover,
+ * ONE WRITE PER SAVE -- unlike kind, a plan change carries no "mints for
+ * free" failure mode (it only changes a monthly top-up amount a scheduled
+ * route applies once a month), so it skips the confirm-twice dance
+ * entirely. Client-side validation mirrors the route's own rules
+ * (monthly_credits a positive integer) ahead of the network call, but the
+ * route's own 422 detail is still what this page trusts for anything that
+ * check does not catch.
  */
 export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
   firmId, onAuthExpired, onBack,
@@ -81,6 +90,15 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
   const [confirmingKind, setConfirmingKind] = React.useState(false);
   const [savingKind, setSavingKind] = React.useState(false);
   const [kindError, setKindError] = React.useState<string | null>(null);
+
+  // Plan editor -- one write per save, no confirm-twice (see module
+  // docstring). String state for the number input so an operator can
+  // clear the field mid-edit without it snapping to 0/NaN.
+  const [planTier, setPlanTier] = React.useState<PlanTier>('starter');
+  const [planMonthlyCredits, setPlanMonthlyCredits] = React.useState('');
+  const [planRollover, setPlanRollover] = React.useState(false);
+  const [savingPlan, setSavingPlan] = React.useState(false);
+  const [planError, setPlanError] = React.useState<string | null>(null);
 
   // Grant form.
   const [grantType, setGrantType] = React.useState<GrantType>('subscription_grant');
@@ -109,6 +127,9 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
       const detail = await getFirm(firmId);
       setFirm(detail);
       setAllowedKitsInput(detail.allowed_kits.join(', '));
+      setPlanTier(detail.plan.tier);
+      setPlanMonthlyCredits(String(detail.plan.monthly_credits));
+      setPlanRollover(detail.plan.rollover);
     } catch (err) {
       if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : 'Could not load the firm');
@@ -221,6 +242,29 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
       setSavingKind(false);
     }
   }, [firmId, pendingKind, kindReason, loadFirm, onAuthExpired]);
+
+  const handleSavePlan = React.useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const monthlyCredits = Number(planMonthlyCredits);
+    if (!Number.isInteger(monthlyCredits) || monthlyCredits <= 0) {
+      setPlanError('Monthly credits must be a positive whole number.');
+      return;
+    }
+    const plan: FirmPlan = {
+      tier: planTier, monthly_credits: monthlyCredits, rollover: planRollover,
+    };
+    setSavingPlan(true);
+    setPlanError(null);
+    try {
+      await setFirmPlan(firmId, plan);
+      await loadFirm();
+    } catch (err) {
+      if (onAuthExpired(err)) return;
+      setPlanError(err instanceof Error ? err.message : 'Could not update the firm plan');
+    } finally {
+      setSavingPlan(false);
+    }
+  }, [firmId, planTier, planMonthlyCredits, planRollover, loadFirm, onAuthExpired]);
 
   const handleGrantTypeChange = React.useCallback((type: GrantType) => {
     setGrantType(type);
@@ -421,6 +465,54 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
 
             {kindError && <div className="mt-2 text-red-600">{kindError}</div>}
           </div>
+
+          {/* Plan (bd polyglot-pdf-0euzk) -- one write per save, no confirm-twice */}
+          <form onSubmit={(e) => void handleSavePlan(e)} className="mt-6 border border-gray-200 rounded p-4 text-sm" data-testid="plan-form">
+            <h3 className="font-medium text-gray-700">Plan</h3>
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <div>
+                <label className="block text-gray-700" htmlFor="plan-tier">Tier</label>
+                <select
+                  id="plan-tier"
+                  className="mt-1 border border-gray-300 rounded px-2 py-1"
+                  value={planTier}
+                  onChange={(e) => setPlanTier(e.target.value as PlanTier)}
+                >
+                  {PLAN_TIERS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-gray-700" htmlFor="plan-monthly-credits">
+                  Monthly credits
+                </label>
+                <input
+                  id="plan-monthly-credits"
+                  required
+                  type="number"
+                  className="mt-1 border border-gray-300 rounded px-2 py-1"
+                  value={planMonthlyCredits}
+                  onChange={(e) => setPlanMonthlyCredits(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <input
+                  id="plan-rollover"
+                  type="checkbox"
+                  checked={planRollover}
+                  onChange={(e) => setPlanRollover(e.target.checked)}
+                />
+                <label className="text-gray-700" htmlFor="plan-rollover">
+                  Rollover (add, don&apos;t cap)
+                </label>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={savingPlan}>
+                {savingPlan ? 'Saving...' : 'Save plan'}
+              </button>
+            </div>
+            {planError && <div className="mt-2 text-red-600">{planError}</div>}
+          </form>
 
           {/* Grant / adjust */}
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
