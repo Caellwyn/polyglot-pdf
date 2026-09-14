@@ -163,7 +163,11 @@ session only (staff sessions are never auto-cleared on download/print), a visibl
 (b) IDLE -- once `status` is `idle_timeout` the warning shows for ~5 s (client-link copy
 says reopening the link resumes an unfinished form), then the wipe; (c) LOGOUT --
 `StaffHeader` (rendered only for a staff session) calls the existing `useAuth().logout()`
-and then the wipe. The manual Clear-form buttons still call the two-step path directly.
+and then the wipe. Every automatic wipe (and the "Done -- clear now" button) ends in
+`window.location.reload()`, the same way the Start Fresh button does: the mounted form
+still holds the answers in React state, and without the reload the next keystroke would
+`save()` them straight back into the storage that was just cleared. The manual Clear-form
+buttons still call the two-step path directly.
 `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
 `StaffHeader.test.tsx` and `schemaFormState.clearAllClientState.test.ts`.
