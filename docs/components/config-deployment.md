@@ -723,8 +723,10 @@ shipped with its first consuming route, `POST /admin/links/sweep-expired`
 (see [`admin-service.md`](admin-service.md) for the route table and the
 sweep's own deploy-time env vars). A FIFTH dependency,
 `require_app_admin_or_owning_manager_or_employee` (bd
-`polyglot-pdf-scaig`), exists beside these four scoped to one route only
-(`GET /admin/firms/{firm_id}/links`) and is deliberately outside the
+`polyglot-pdf-scaig`), exists beside these four for a small, named set of
+routes (`GET /admin/firms/{firm_id}/links`; plus, from bd `polyglot-pdf-62o4d`,
+`GET /admin/firms/{firm_id}/alerts` and the widened
+`PATCH /admin/alerts/{alert_id}/acknowledge`) and is deliberately outside the
 four-gate vocabulary `test_admin_route_auth.py` enforces -- see
 [`admin-service.md`](admin-service.md) for the full shape. No deploy-time
 env var or config key changed for it. The FIRST
