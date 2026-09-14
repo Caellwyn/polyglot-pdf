@@ -201,7 +201,20 @@ describe('the Preview skip gate matches the form view (bd polyglot-pdf-ykfx0)', 
       fieldValues: { [REQUIRED_FIELD.id]: { value: '', skipped: true } },
     });
     expect(screen.queryByRole('button', { name: /skip for now/i })).toBeNull();
-    expect(screen.getByText(/needs follow-up/i)).toBeTruthy();
+
+    // Assert the ROLE, not just the text. Pressing Skip removes the button on
+    // the same render, so without role="status" a screen-reader user gets
+    // silence exactly where the control they just used disappeared. A plain
+    // getByText passes either way -- it cannot see the role -- which is how the
+    // first version of this shipped with the announcement missing.
+    const note = screen.getByRole('status');
+    expect(note.textContent).toMatch(/needs follow-up/i);
+
+    // And the SHARED styled classes, not a popover-specific variant: the
+    // form-field__skipped rules are what render the amber badge. An invented
+    // class name would leave this note unstyled while still matching on text.
+    expect(note.className).toContain('form-field__skipped');
+    expect(note.querySelector('.form-field__skipped-badge')?.textContent).toBe('Skipped');
   });
 
   it('offers it for a field required only CONDITIONALLY, once the condition holds', () => {

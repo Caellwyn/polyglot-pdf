@@ -188,9 +188,18 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
           confirmed={confirmed}
         />
         {skipped && (
-          <p className="pdf-field-edit-popover__skipped">
-            Marked as needs follow-up -- this required question was left
-            unanswered on purpose. Enter a value above to answer it.
+          // The SAME markup and classes SectionRenderer uses, not a popover-
+          // specific variant: form-field__skipped is already styled (the amber
+          // badge treatment in schema-form.css, which is imported globally), and
+          // role="status" announces the change -- which matters most here,
+          // because pressing Skip makes the button vanish on the same render, so
+          // a screen-reader user otherwise gets silence where the control was.
+          <p className="form-field__skipped" role="status">
+            <span className="form-field__skipped-badge">Skipped</span>
+            <span className="form-field__skipped-note">
+              marked as needs follow-up -- this required question was left
+              unanswered on purpose. Enter a value above to answer it.
+            </span>
           </p>
         )}
         {canSkip && (
