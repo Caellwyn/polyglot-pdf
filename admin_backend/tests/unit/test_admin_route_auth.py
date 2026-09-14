@@ -188,8 +188,10 @@ def test_the_registered_route_set_is_pinned():
         (("PATCH",), "/admin/firms/{firm_id}/status"),
         (("PATCH",), "/admin/firms/{firm_id}/allowed_kits"),
         (("PATCH",), "/admin/firms/{firm_id}/kind"),
+        (("PATCH",), "/admin/firms/{firm_id}/plan"),
         (("POST",), "/admin/firms/{firm_id}/credits/grant"),
         (("POST",), "/admin/firms/{firm_id}/credits/adjust"),
+        (("POST",), "/admin/credits/monthly-topup"),
         (("POST",), "/admin/links/sweep-expired"),
         (("GET",), "/admin/firms/{firm_id}/links"),
         (("POST",), "/admin/links/{jti}/revoke"),
@@ -275,6 +277,18 @@ def test_sweep_route_is_gated_by_require_google_oidc_specifically():
     "_dependency"), and so does the set pin above."""
     route = next(
         r for r in app.routes if r.path == "/admin/links/sweep-expired")
+    assert _dependency_names_for(route) == {"require_google_oidc"}
+
+
+def test_monthly_topup_route_is_gated_by_require_google_oidc_specifically():
+    """Pins WHICH gate the monthly plan top-up route carries (bd
+    polyglot-pdf-0euzk) -- the SAME shape as
+    test_sweep_route_is_gated_by_require_google_oidc_specifically above,
+    since both are Cloud Scheduler callers behind require_google_oidc's
+    factory-returned closure. Mutation: swap the dependency for
+    require_app_admin on this one route -- red."""
+    route = next(
+        r for r in app.routes if r.path == "/admin/credits/monthly-topup")
     assert _dependency_names_for(route) == {"require_google_oidc"}
 
 

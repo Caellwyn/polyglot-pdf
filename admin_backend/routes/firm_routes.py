@@ -1,7 +1,7 @@
 """Firm CRUD on the admin service (bd polyglot-pdf-zopqq, Epic 2 Track B
 bead B1).
 
-SIX ROUTES:
+SEVEN ROUTES:
 
     POST  /admin/firms                       create (kind REQUIRED)
     GET   /admin/firms                       list (kind, balance, status)
@@ -9,8 +9,10 @@ SIX ROUTES:
     PATCH /admin/firms/{firm_id}/status      active | suspended
     PATCH /admin/firms/{firm_id}/allowed_kits
     PATCH /admin/firms/{firm_id}/kind        reason required
+    PATCH /admin/firms/{firm_id}/plan        tier + monthly_credits + rollover
+                                              (bd polyglot-pdf-0euzk)
 
-ALL SIX behind require_app_admin -- unlike the user routes (bd
+ALL SEVEN behind require_app_admin -- unlike the user routes (bd
 polyglot-pdf-dmjl5), there is no firm-manager counterpart here in this
 bead: a firm manager never creates or reclassifies firms, and the plan lists
 this surface under the app-admin-only routes. (Link listing, which a
@@ -46,6 +48,20 @@ mirroring config_routes.py's _apply_config_write shape exactly: read
 (before), write, audit -- all three in the one transaction, so a forced
 audit failure leaves the firm doc unchanged (exit criterion 1's audit half,
 shared with credit_routes.py).
+
+PATCH .../plan (bd polyglot-pdf-0euzk, the firm-plan + monthly top-up
+follow-up). `firms/{firm_id}.plan` is a NEW sub-object -- {tier,
+monthly_credits, rollover} -- validated by backend/services/plans.py's
+validate_plan() (a closed PLAN_TIERS list; monthly_credits a positive int;
+rollover a bool) BEFORE the transaction opens, exactly like the kind and
+create routes validate their own enums up front. Same in-transaction audit
+form as every other patch route here. GET .../{firm_id} and POST /admin/firms
+(create) both now include `plan` in their response/write: create applies
+plans.DEFAULT_PLAN when the request carries none (mirroring
+scripts/backfill_firm_kind.py's own "only when plan is absent" rule for an
+EXISTING firm), and _public_firm_view falls back to DEFAULT_PLAN for any
+doc with no stored `plan` key (the same pre-backfill-window fallback
+pattern _public_firm_view already uses for `kind`).
 
 GET /admin/firms/{firm_id} RECONCILES BEFORE IT READS THE BALANCE
 (exit criterion 3). credit_ledger.reconcile_expired_for_firm() is a lazy,
@@ -91,7 +107,7 @@ from pydantic import BaseModel, Field
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
-from backend.services import credit_ledger, firms
+from backend.services import credit_ledger, firms, plans
 
 _log = structlog.get_logger().bind(module="admin_firm_routes")
 
@@ -110,6 +126,7 @@ ACTION_FIRM_CREATE = "firm.create"
 ACTION_FIRM_STATUS = "firm.status"
 ACTION_FIRM_ALLOWED_KITS = "firm.allowed_kits"
 ACTION_FIRM_KIND = "firm.kind"
+ACTION_FIRM_PLAN = "firm.plan"
 
 _FIRM_STATUSES = (firms.FIRM_STATUS_ACTIVE, firms.FIRM_STATUS_SUSPENDED)
 _FIRM_KINDS = (firms.FIRM_KIND_MOCK, firms.FIRM_KIND_LIVE)
@@ -174,6 +191,18 @@ class SetKindRequest(BaseModel):
     reason: str
 
 
+class SetPlanRequest(BaseModel):
+    """The three fields backend/services/plans.py's validate_plan() checks.
+    No confirm-twice here (unlike kind): a plan change has no "mints for
+    free" failure mode -- it only changes a monthly top-up amount the
+    scheduled route applies once a month, so a single console save is
+    enough (bd polyglot-pdf-0euzk exit criterion 3: "one write per save")."""
+
+    tier: str
+    monthly_credits: int
+    rollover: bool
+
+
 def _db():
     """The Firestore client, or a 503. Lazy-imported like every other
     Firestore caller in this repo (module import must not require
@@ -212,6 +241,15 @@ def _public_firm_view(firm_id: str, doc: dict) -> dict:
         "balance_credits": doc.get("balance_credits")
         if isinstance(doc.get("balance_credits"), int)
         and not isinstance(doc.get("balance_credits"), bool) else 0,
+        # A doc with no stored `plan` (the pre-backfill window, same as
+        # `kind` above) reads as the maintainer's own default rather than
+        # None -- a console page showing "no plan" for an unclassified firm
+        # would be misleading, since backend/services/plans.py's
+        # DEFAULT_PLAN is exactly what scripts/backfill_firm_kind.py and the
+        # monthly top-up route (admin_backend/routes/credit_routes.py) both
+        # already treat that firm as having.
+        "plan": doc.get("plan")
+        if isinstance(doc.get("plan"), dict) else dict(plans.DEFAULT_PLAN),
     }
 
 
@@ -316,6 +354,21 @@ def _apply_firm_patch(
             if "kind" in current else _ABSENT,
         }
         merged = {k: v for k, v in merged.items() if v is not _ABSENT}
+        # `plan` is deliberately NOT in the literal above (and therefore not
+        # part of the merged/upsert_firm key-set parity test -- see that
+        # test's own docstring): unlike name/contact_email/allowed_kits/
+        # status/kind, backend/services/firms.py::upsert_firm (the CLI
+        # bootstrap path) never writes it. It needs no explicit preservation
+        # code either: tx.set(..., merge=True) below already leaves every
+        # field not named in a write's payload untouched (Firestore's own
+        # merge semantics, mirrored exactly by the fake in
+        # test_firm_routes.py's _FakeDb.apply_set) -- so a status/
+        # allowed_kits/kind-only PATCH already carries a stored plan forward
+        # with no code here needing to say so, and a plan-only PATCH
+        # (set_firm_plan below) likewise never invents kind/status/
+        # allowed_kits. Verified by test_set_status_on_a_planned_doc_still_
+        # preserves_plan and test_set_plan_on_a_kindless_doc_does_not_
+        # invent_kind_status_or_allowed_kits.
         merged.update(patch)
         tx.set(firm_ref, {
             **merged,
@@ -385,6 +438,14 @@ def _do_create_firm(*, firm_id: str, body: CreateFirmRequest,
             payload["created_at"] = firestore.SERVER_TIMESTAMP
             payload["balance_credits"] = 0
             payload["balance_updated_at"] = firestore.SERVER_TIMESTAMP
+            # A brand-new firm gets the maintainer's default plan
+            # (backend/services/plans.py::DEFAULT_PLAN) immediately, rather
+            # than needing a separate scripts/backfill_firm_kind.py run just
+            # to become eligible for the monthly top-up -- mirrors
+            # balance_credits' own "0-initialize on first create" rule right
+            # above. dict(...) copies the module-level default rather than
+            # writing the same mutable object into two firm docs.
+            payload["plan"] = dict(plans.DEFAULT_PLAN)
             tx.set(firm_ref, payload)
         created_holder["created"] = not existed
 
@@ -654,4 +715,64 @@ async def set_firm_kind(
     return {
         "firm_id": firm_id, "kind": body.kind,
         "before_kind": result["before_kind"], "request_id": request_id,
+    }
+
+
+def _do_set_firm_plan(*, firm_id: str, body: SetPlanRequest,
+                      actor: AdminActor, request_id: str) -> dict:
+    """Synchronous body of set_firm_plan(), run under asyncio.to_thread."""
+    db = _db()
+    doc = _get_firm_or_404(db, firm_id)
+    before_plan = doc.get("plan") if isinstance(doc.get("plan"), dict) \
+        else dict(plans.DEFAULT_PLAN)
+    new_plan = {
+        "tier": body.tier,
+        "monthly_credits": body.monthly_credits,
+        "rollover": body.rollover,
+    }
+    _apply_firm_patch(
+        db=db, firm_id=firm_id, patch={"plan": new_plan},
+        actor=actor, action=ACTION_FIRM_PLAN,
+        before={"plan": before_plan}, after={"plan": new_plan},
+        request_id=request_id,
+    )
+    return {"before_plan": before_plan}
+
+
+@router.patch("/admin/firms/{firm_id}/plan")
+async def set_firm_plan(
+    firm_id: str,
+    body: SetPlanRequest,
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+) -> dict:
+    """Set a firm's plan (tier, monthly_credits, rollover) -- bd
+    polyglot-pdf-0euzk. Refuses BEFORE any write via backend/services/
+    plans.py::validate_plan (an unknown tier or a non-positive
+    monthly_credits is a 422, same shape as SetKindRequest's own kind
+    check). No confirm-twice (see SetPlanRequest's docstring) -- one write
+    per save."""
+    firm_id = _validated_firm_id(firm_id)
+    try:
+        plans.validate_plan({
+            "tier": body.tier, "monthly_credits": body.monthly_credits,
+            "rollover": body.rollover,
+        })
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    request_id = audit_log.new_request_id()
+    result = await asyncio.to_thread(
+        _do_set_firm_plan, firm_id=firm_id, body=body, actor=actor,
+        request_id=request_id,
+    )
+    _log.info("admin_firm_plan_set", firm_id=firm_id, tier=body.tier,
+              monthly_credits=body.monthly_credits, rollover=body.rollover,
+              actor_uid=actor.uid, request_id=request_id)
+    return {
+        "firm_id": firm_id,
+        "plan": {
+            "tier": body.tier, "monthly_credits": body.monthly_credits,
+            "rollover": body.rollover,
+        },
+        "before_plan": result["before_plan"], "request_id": request_id,
     }

@@ -27,7 +27,7 @@ from admin_backend.main import app
 from admin_backend.routes import firm_routes
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
-from backend.services import firms
+from backend.services import firms, plans
 
 
 # --------------------------------------------------------------------------
@@ -811,6 +811,124 @@ def test_a_forced_audit_failure_leaves_kind_unchanged(client, fake_db):
     assert resp.status_code == 500
     assert fake_db.firm("acme")["kind"] == "live"
     assert fake_db.audit_rows() == []
+
+
+# --------------------------------------------------------------------------
+# PATCH /admin/firms/{firm_id}/plan (bd polyglot-pdf-0euzk)
+# --------------------------------------------------------------------------
+
+def test_get_firm_returns_the_default_plan_when_none_is_stored(client, fake_db):
+    """A doc with no `plan` key (the pre-backfill window, same shape as
+    `kind`'s own fallback) reads as plans.DEFAULT_PLAN, not None/missing.
+
+    Mutation: change _public_firm_view's plan fallback to `None` -- red."""
+    _seed_kindless_firm(fake_db, "acme")
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["plan"] == dict(plans.DEFAULT_PLAN)
+
+
+def test_create_firm_writes_the_default_plan(client, fake_db):
+    """A brand-new firm gets DEFAULT_PLAN immediately, without a separate
+    backfill run.
+
+    Mutation: drop the `payload["plan"] = dict(plans.DEFAULT_PLAN)` line in
+    _do_create_firm -- this goes red (fake_db.firm() would have no plan
+    key at all)."""
+    resp = client.post("/admin/firms", json={
+        "firm_id": "newco", "name": "NewCo", "contact_email": "a@b.com",
+        "kind": "live",
+    })
+    assert resp.status_code == 200, resp.text
+    assert fake_db.firm("newco")["plan"] == dict(plans.DEFAULT_PLAN)
+
+
+def test_set_plan_writes_the_value_and_one_audit_row(client, fake_db):
+    _seed_firm(fake_db, "acme", plan={
+        "tier": "starter", "monthly_credits": 35, "rollover": False})
+    resp = client.patch("/admin/firms/acme/plan", json={
+        "tier": "starter", "monthly_credits": 50, "rollover": True,
+    })
+    assert resp.status_code == 200, resp.text
+    assert fake_db.firm("acme")["plan"] == {
+        "tier": "starter", "monthly_credits": 50, "rollover": True,
+    }
+    rows = fake_db.audit_rows()
+    assert len(rows) == 1
+    assert rows[0]["after"]["plan"] == {
+        "tier": "starter", "monthly_credits": 50, "rollover": True}
+    assert rows[0]["before"]["plan"] == {
+        "tier": "starter", "monthly_credits": 35, "rollover": False}
+
+
+def test_set_plan_refuses_an_unknown_tier(client, fake_db):
+    _seed_firm(fake_db, "acme", plan=dict(plans.DEFAULT_PLAN))
+    resp = client.patch("/admin/firms/acme/plan", json={
+        "tier": "gold", "monthly_credits": 50, "rollover": False,
+    })
+    assert resp.status_code == 422, resp.text
+    assert fake_db.firm("acme")["plan"] == dict(plans.DEFAULT_PLAN)
+    assert fake_db.audit_rows() == []
+
+
+@pytest.mark.parametrize("bad_credits", [0, -1, -35])
+def test_set_plan_refuses_a_non_positive_monthly_credits(
+        client, fake_db, bad_credits):
+    _seed_firm(fake_db, "acme", plan=dict(plans.DEFAULT_PLAN))
+    resp = client.patch("/admin/firms/acme/plan", json={
+        "tier": "starter", "monthly_credits": bad_credits, "rollover": False,
+    })
+    assert resp.status_code == 422, resp.text
+    assert fake_db.firm("acme")["plan"] == dict(plans.DEFAULT_PLAN)
+    assert fake_db.audit_rows() == []
+
+
+def test_set_plan_404s_for_an_unknown_firm(client, fake_db):
+    resp = client.patch("/admin/firms/ghost/plan", json={
+        "tier": "starter", "monthly_credits": 35, "rollover": False,
+    })
+    assert resp.status_code == 404
+    assert fake_db.audit_rows() == []
+
+
+def test_a_forced_audit_failure_leaves_the_plan_unchanged(client, fake_db):
+    _seed_firm(fake_db, "acme", plan=dict(plans.DEFAULT_PLAN))
+    fake_db.audit_write_error = RuntimeError("audit sink refused")
+    resp = client.patch("/admin/firms/acme/plan", json={
+        "tier": "starter", "monthly_credits": 99, "rollover": True,
+    })
+    assert resp.status_code == 500
+    assert fake_db.firm("acme")["plan"] == dict(plans.DEFAULT_PLAN)
+    assert fake_db.audit_rows() == []
+
+
+def test_set_plan_on_a_kindless_doc_does_not_invent_kind_status_or_allowed_kits(
+        client, fake_db):
+    """The plan route must not invent OTHER fields on a doc that never had
+    them, mirroring the kind/status/allowed_kits routes' own guard."""
+    _seed_kindless_firm(fake_db, "acme")
+    resp = client.patch("/admin/firms/acme/plan", json={
+        "tier": "starter", "monthly_credits": 35, "rollover": False,
+    })
+    assert resp.status_code == 200, resp.text
+    doc = fake_db.firm("acme")
+    assert "kind" not in doc
+    assert "status" not in doc
+    assert "allowed_kits" not in doc
+    assert doc["plan"] == {
+        "tier": "starter", "monthly_credits": 35, "rollover": False}
+
+
+def test_set_status_on_a_planned_doc_still_preserves_plan(client, fake_db):
+    """Guard against overcorrecting: a status-only patch must carry the
+    stored plan forward unchanged (mirrors test_set_status_on_a_fully_
+    seeded_doc_still_preserves_kind for the new field)."""
+    _seed_firm(fake_db, "acme", plan={
+        "tier": "starter", "monthly_credits": 99, "rollover": True})
+    client.patch("/admin/firms/acme/status", json={"status": "suspended"})
+    doc = fake_db.firm("acme")
+    assert doc["plan"] == {
+        "tier": "starter", "monthly_credits": 99, "rollover": True}
 
 
 # --------------------------------------------------------------------------
