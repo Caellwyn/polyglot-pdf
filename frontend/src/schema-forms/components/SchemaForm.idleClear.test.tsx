@@ -1,19 +1,29 @@
 // @vitest-environment jsdom
 //
-// SchemaForm's idle-timeout auto-clear (bd polyglot-pdf-8v8i7).
+// SchemaForm's idle-WIPE GRACE (bd polyglot-pdf-8v8i7, Opus cross-surface
+// round 5).
 //
-// `status` becomes 'idle_timeout' when WebFormConnection's onStatusChange
-// callback fires with that value (already the case before this bead --
-// see webFormConnection.ts's handleMessage). This pins the NEW behavior
-// layered on that existing signal: an on-screen warning appears immediately,
-// and SchemaFormStateManager.clearAllClientState() runs a few seconds later
-// so the warning is actually readable before the wipe.
+// `status === 'idle_timeout'` is the BACKEND's 120-second no-inbound-traffic
+// WebSocket watchdog (backend/config.py's WS_IDLE_TIMEOUT_SEC) -- it means
+// the socket went quiet, NOT "the client walked away". Two untouched
+// consumers react to the exact same status: VoiceOverlay/VoiceOverlayMobile
+// render a Reconnect button off it, and VoiceOverlay's useSaveNudge treats it
+// as `voiceEnding` and pops a Save modal with a spoken notice. A short
+// unconditional wipe (the earlier, now-replaced design) would destroy the
+// client's only copy of their answers while the app is actively telling them
+// to save it.
+//
+// So this pins the CORRECTED design: a long (IDLE_WIPE_GRACE_MS), ACTIVITY-
+// CANCELLABLE grace. Cancelled by any document-level pointerdown/keydown/
+// touchstart, the "Keep my answers" button, `status` leaving 'idle_timeout',
+// or a save (the `polyglot:save-form` event). Re-arms if `status` returns to
+// 'idle_timeout' again.
 //
 // Mirrors SchemaForm.test.tsx's mocking pattern: the connection manager is a
 // stub whose onStatusChange callback (2nd arg) is captured so the test can
 // drive `status` directly, without a real WebSocket.
 
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { render, screen, cleanup, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FormSchema } from '../types/schema';
 
@@ -59,8 +69,7 @@ vi.mock('../../shared/sessionCredential', async (importOriginal) => {
   };
 });
 
-import { SchemaForm } from './SchemaForm';
-import { SchemaFormStateManager } from '../state/schemaFormState';
+import { SchemaForm, IDLE_WIPE_GRACE_MS } from './SchemaForm';
 
 function makeSchema(): FormSchema {
   return {
@@ -86,7 +95,16 @@ function setWidth(width: number) {
   });
 }
 
-describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
+function stubReload() {
+  const reloadFn = vi.fn();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...window.location, reload: reloadFn },
+  });
+  return reloadFn;
+}
+
+describe('SchemaForm idle-wipe grace (bd polyglot-pdf-8v8i7)', () => {
   beforeEach(() => {
     sessionStorage.clear();
     setWidth(1280);
@@ -100,16 +118,9 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
     vi.useRealTimers();
   });
 
-  it('shows an on-screen warning immediately, then clears client state a few seconds later', async () => {
+  it('shows the banner immediately on idle_timeout, with the full grace remaining', async () => {
     vi.useFakeTimers();
-    // Stub reload -- jsdom does not actually navigate, and the production
-    // code reloads immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-
-    // eyes round 2), so a real browser would already be on a fresh page by
-    // this point; this test only pins the storage-clear + warning timing.
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...window.location, reload: vi.fn() },
-    });
+    stubReload();
     try {
       render(<SchemaForm schema={makeSchema()} kitId="test" />);
       await act(async () => {
@@ -117,43 +128,24 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
       });
 
       expect(capturedOnStatus).toBeTruthy();
-      // SchemaForm's own mount-time init() has already written real form
-      // state under this key -- that IS the state the idle-clear wipes.
       expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
 
       act(() => {
         capturedOnStatus!('idle_timeout');
       });
 
-      // Warning appears immediately -- before the clear delay elapses.
-      expect(screen.getByRole('alert').textContent).toMatch(/timed out/i);
+      const alertText = screen.getByRole('alert').textContent ?? '';
+      expect(alertText).toMatch(/inactive/i);
+      expect(alertText).toMatch(/10:00/); // full IDLE_WIPE_GRACE_MS, formatted
       expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
-
-      // Advance past the clear delay.
-      act(() => {
-        vi.advanceTimersByTime(5000);
-      });
-
-      expect(sessionStorage.getItem('schema_form_state')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  // bd polyglot-pdf-8v8i7, fresh-eyes round 2: clearAllClientState() alone
-  // does not stop the component from re-persisting a FRESH schema_form_state
-  // on the very next field edit -- it stays mounted with its stale in-memory
-  // `state`, and a keystroke's updateField -> save() would resurrect exactly
-  // what the wipe erased. The fix reloads the page immediately after the
-  // wipe (mirroring the pre-existing "Start Fresh" button in
-  // SchemaFormDemo.tsx, which reloads for the same reason).
-  it('reloads the page immediately after the wipe, exactly once', async () => {
+  it('clears client state and reloads exactly once after the FULL grace elapses with no activity', async () => {
     vi.useFakeTimers();
-    const reloadFn = vi.fn();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...window.location, reload: reloadFn },
-    });
+    const reloadFn = stubReload();
     try {
       render(<SchemaForm schema={makeSchema()} kitId="test" />);
       await act(async () => {
@@ -166,7 +158,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
       expect(reloadFn).not.toHaveBeenCalled();
 
       act(() => {
-        vi.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
       });
 
       expect(sessionStorage.getItem('schema_form_state')).toBeNull();
@@ -176,18 +168,6 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
     }
   });
 
-  // The resurrection bug, made observable: with reload stubbed to a no-op
-  // (as every test here must, since jsdom never actually navigates), the
-  // component in a real browser would already be gone by the time any
-  // further code runs -- so the correctness property to pin is ORDER, not
-  // "no save ever happens again in this jsdom process". A stub that only
-  // COUNTS calls cannot tell wipe-then-reload apart from reload-then-wipe --
-  // both run synchronously inside the same callback, so swapping the two
-  // lines still leaves both calls made exactly once before anything else
-  // runs (fresh-eyes round 4 caught an earlier version of this test that
-  // did not actually discriminate the order). This version has the reload
-  // stub CAPTURE sessionStorage's content at the moment it fires: if reload
-  // ever ran before the wipe, the captured value would be non-null.
   it('clears schema_form_state BEFORE reloading, not after', async () => {
     vi.useFakeTimers();
     let storedAtReloadTime: string | null = 'not-called';
@@ -210,7 +190,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
         capturedOnStatus!('idle_timeout');
       });
       act(() => {
-        vi.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
       });
 
       expect(storedAtReloadTime).toBeNull();
@@ -219,7 +199,198 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
     }
   });
 
-  it('tells a CLIENT-LINK session that reopening their link resumes the form (bd polyglot-pdf-8v8i7)', async () => {
+  it('a keydown one second before the grace ends CANCELS the wipe', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+
+      // Advance to 1 second before the grace would elapse (9:59 of a 10:00
+      // grace), then simulate a keydown anywhere in the document.
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS - 1000);
+      });
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+      });
+
+      // Advance well past when the ORIGINAL grace would have elapsed.
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pointerdown cancels the wipe (not just keydown)', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+      act(() => {
+        document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('status leaving idle_timeout (e.g. a successful Reconnect) cancels the wipe', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+      act(() => {
+        capturedOnStatus!('connected');
+      });
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the "Keep my answers" button cancels the wipe', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+
+      const keepButton = screen.getByRole('button', { name: /keep my answers/i });
+      act(() => {
+        fireEvent.click(keepButton);
+      });
+
+      expect(screen.queryByRole('alert')).toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a save (the polyglot:save-form event) cancels the wipe', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+      act(() => {
+        window.dispatchEvent(new CustomEvent('polyglot:save-form'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
+      });
+
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('RE-ARMS from the full duration on a second idle_timeout', async () => {
+    vi.useFakeTimers();
+    const reloadFn = stubReload();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      // First idle drop, cancelled by a reconnect.
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS - 1000);
+      });
+      act(() => {
+        capturedOnStatus!('connected');
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+
+      // Second idle drop -- must start from the FULL grace, not the 1 second
+      // that was left when it was cancelled.
+      act(() => {
+        capturedOnStatus!('idle_timeout');
+      });
+      expect(screen.getByRole('alert').textContent).toMatch(/10:00/);
+
+      act(() => {
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS - 1000);
+      });
+      // Not yet elapsed on the SECOND arming.
+      expect(sessionStorage.getItem('schema_form_state')).not.toBeNull();
+      expect(reloadFn).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(sessionStorage.getItem('schema_form_state')).toBeNull();
+      expect(reloadFn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tells a CLIENT-LINK session to reopen their link afterward to resume an unfinished form', async () => {
     vi.useFakeTimers();
     try {
       mockHasClientLinkToken = true;
@@ -238,7 +409,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
     }
   });
 
-  it('does NOT mention reopening a link for a STAFF session', async () => {
+  it('does NOT mention reopening a link for a STAFF session (same banner and grace apply though)', async () => {
     vi.useFakeTimers();
     try {
       mockHasClientLinkToken = false;
@@ -251,7 +422,9 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
         capturedOnStatus!('idle_timeout');
       });
 
-      expect(screen.getByRole('alert').textContent).not.toMatch(/reopen/i);
+      const alertText = screen.getByRole('alert').textContent ?? '';
+      expect(alertText).not.toMatch(/reopen/i);
+      expect(alertText).toMatch(/inactive/i);
     } finally {
       vi.useRealTimers();
     }
@@ -269,7 +442,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
         capturedOnStatus!('connected');
       });
       act(() => {
-        vi.advanceTimersByTime(10000);
+        vi.advanceTimersByTime(IDLE_WIPE_GRACE_MS);
       });
 
       expect(screen.queryByRole('alert')).toBeNull();

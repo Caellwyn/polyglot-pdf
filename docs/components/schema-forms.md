@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form (or its "Done -- clear now" button), on idle timeout, and on staff logout via `StaffHeader` (unconditionally, even when `logout()` itself rejects) -- all four sites reload the page right after the wipe, the complete set pinned by `wipeSitesReload.test.ts`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from the production bundle.)*
+*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form (or its "Done -- clear now" button), after a 10-minute activity-cancellable grace following the WebSocket's own idle timeout (not immediately -- that status means the socket went quiet, not that the client left, and untouched consumers still offer Reconnect / a save nudge off it), and on staff logout via `StaffHeader` (unconditionally, even when `logout()` itself rejects) -- all four sites reload the page right after the wipe, the complete set pinned by `wipeSitesReload.test.ts`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from each app's OWN production bundle test (frontend, schema-editor, admin-console each build only themselves, so CI's per-app jobs -- which `npm ci` only their own deps -- can run them).)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -160,9 +160,19 @@ a device of a client's answers and link credential. It runs on four call sites, 
 SUCCESSFUL download or print of a form whose `isFormComplete` is true, in a client-link
 session only (staff sessions are never auto-cleared on download/print), a visible
 60-second non-restarting countdown with a "Done -- clear now" button, then the wipe;
-(b) IDLE -- once `status` is `idle_timeout` the warning shows for ~5 s (client-link copy
-says reopening the link resumes an unfinished form), then the wipe; (c) the "Done --
-clear now" button itself, which skips the countdown; (d) LOGOUT -- `StaffHeader`
+(b) IDLE -- `status === 'idle_timeout'` is the BACKEND's 120-second no-inbound-traffic
+WebSocket watchdog (backend/config.py's `WS_IDLE_TIMEOUT_SEC`), not "the client left":
+VoiceOverlay/VoiceOverlayMobile render a Reconnect button off the same status, and
+VoiceOverlay's `useSaveNudge` treats it as `voiceEnding` and pops a Save modal with a
+spoken notice. So this is a long (`IDLE_WIPE_GRACE_MS`, 10 minutes, maintainer-tunable),
+ACTIVITY-CANCELLABLE grace rather than a short unconditional wipe: a persistent banner
+with a live countdown and a "Keep my answers" button, cancelled by any document-level
+pointerdown/keydown/touchstart, the Keep button, `status` leaving `idle_timeout` (e.g. a
+successful Reconnect), or a save (the `polyglot:save-form` event); it re-arms from the
+full duration if `status` returns to `idle_timeout` again. Applies to STAFF sessions too
+(a walked-away staff tablet carries the same harm as a client one); client-link copy
+additionally says reopening the link resumes an unfinished form; (c) the "Done --
+clear now" button itself, which skips the completion countdown; (d) LOGOUT -- `StaffHeader`
 (rendered only for a staff session) calls the existing `useAuth().logout()` and then the
 wipe, UNCONDITIONALLY (even when `logout()` itself rejects -- a failed sign-out leaves
 auth state unchanged and the tree mounted, so it needs the reload exactly as much as a
@@ -175,10 +185,12 @@ just cleared. `wipeSitesReload.test.ts` derives the complete set by scanning
 nearby by a reload, so a fifth site added later without one fails there instead of
 waiting for another review round. The three manual Clear-form / Start Fresh buttons
 (`SchemaFormDemo.tsx`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) are NOT on this
-path: they call `clear()` + `clearOnboardingState()` directly and reload at their own
-call sites, so they never clear `vff_client_link_token` -- an open gap, bd
-`polyglot-pdf-ylokf`, which `wipeSitesReload.test.ts` cannot see because it scans only
-`clearAllClientState()` calls.
+path: `VoiceOverlay.tsx`/`VoiceOverlayMobile.tsx` call `SchemaFormStateManager.clear()`
+directly, while `SchemaFormDemo.tsx` instead does a raw
+`sessionStorage.removeItem("schema_form_state")` (same key, not through the class); all
+three also call `clearOnboardingState()` and reload at their own call sites. None of the
+three clears `vff_client_link_token` -- an open gap, bd `polyglot-pdf-ylokf`, which
+`wipeSitesReload.test.ts` cannot see because it scans only `clearAllClientState()` calls.
 `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
 `StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts` and

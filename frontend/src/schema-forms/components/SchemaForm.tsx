@@ -57,6 +57,29 @@ export interface SchemaFormProps {
   initialLanguage?: string;
 }
 
+// How long the idle-wipe grace runs before clearing this device's stored
+// answers, once the WebSocket's own idle_timeout fires (bd polyglot-pdf-8v8i7,
+// Opus cross-surface round 5). `status === 'idle_timeout'` is the BACKEND's
+// 120-second no-inbound-traffic watchdog (backend/config.py's
+// WS_IDLE_TIMEOUT_SEC) -- it means the socket went quiet, not "the user left":
+// VoiceOverlay/VoiceOverlayMobile render a Reconnect button off this same
+// status, and VoiceOverlay's useSaveNudge treats it as `voiceEnding` and pops
+// a Save modal with a spoken notice. A short unconditional wipe would destroy
+// the client's only copy while the app is actively telling them to save it.
+// This constant is therefore a much longer, ACTIVITY-CANCELLABLE grace, not a
+// short unconditional countdown -- see the idle-timeout effect below for the
+// cancel conditions. A maintainer-tunable default; raise or lower it without
+// touching the cancellation logic.
+export const IDLE_WIPE_GRACE_MS = 10 * 60 * 1000;
+
+/** "MM:SS" for the idle-wipe grace countdown banner. */
+function formatMmSs(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
   const { user } = useAuth();
   // Fresh-token accessor for Sol's intro clip, which is fetched BEFORE any
@@ -144,11 +167,14 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
-  // On-screen warning shown just before an idle-timeout clear (bd
-  // polyglot-pdf-8v8i7): `status === 'idle_timeout'` already fires BEFORE the
-  // storage wipe below runs, so this banner and the wipe key off the same
-  // signal rather than a second client-side idle detector.
+  // Idle-wipe grace state (bd polyglot-pdf-8v8i7, Opus cross-surface round 5).
+  // `status === 'idle_timeout'` arms a persistent, activity-cancellable
+  // countdown (IDLE_WIPE_GRACE_MS above) rather than an unconditional short
+  // wipe -- see the idle-timeout effect below for why.
   const [showIdleClearWarning, setShowIdleClearWarning] = useState(false);
+  const [idleClearMsLeft, setIdleClearMsLeft] = useState(IDLE_WIPE_GRACE_MS);
+  const idleClearTimerRef = useRef<number | null>(null);
+  const idleClearIntervalRef = useRef<number | null>(null);
   // Completion-clear grace state (bd polyglot-pdf-8v8i7). Set true the first
   // time a CLIENT-LINK session downloads/prints an already-COMPLETE form
   // (never on a STAFF session -- staff may need repeat copies and have the
@@ -357,16 +383,58 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     focusField();
   };
 
-  // Idle-timeout auto-clear (bd polyglot-pdf-8v8i7). `status` becomes
-  // 'idle_timeout' when the backend sends its idle_timeout message -- BEFORE
-  // the socket actually closes (see webFormConnection.ts's handleMessage) --
-  // so this warning has a moment on screen before the wipe below runs. A
-  // short delay lets the warning actually be read rather than flashing and
-  // clearing in the same frame.
+  // Idle-wipe grace (bd polyglot-pdf-8v8i7, Opus cross-surface round 5).
+  //
+  // `status === 'idle_timeout'` is the BACKEND's 120-second no-inbound-
+  // traffic watchdog (backend/config.py's WS_IDLE_TIMEOUT_SEC) -- it means
+  // the WebSocket went quiet, NOT "the client walked away". Two untouched
+  // consumers react to the exact same status: VoiceOverlay/VoiceOverlayMobile
+  // render a Reconnect button off it (which rebuilds from sessionStorage),
+  // and VoiceOverlay's useSaveNudge treats it as `voiceEnding` -- popping a
+  // Save modal with a spoken TTS notice. A short unconditional wipe would
+  // destroy the client's only copy of their answers while the app is
+  // actively telling them to save it.
+  //
+  // So this is a LONG, ACTIVITY-CANCELLABLE grace (IDLE_WIPE_GRACE_MS, a
+  // maintainer-tunable default), not a short unconditional countdown. It
+  // applies to STAFF sessions too, not just client-link ones: a staff member
+  // has the logout control and the Clear-form buttons for an explicit wipe,
+  // but a staff tablet walked away from in a shared law office carries the
+  // exact same harm as a client one, and the backend's idle status makes no
+  // distinction between the two tiers.
+  //
+  // Cancelled by ANY of: a pointerdown/keydown/touchstart anywhere in the
+  // document (the activity listener below), the "Keep my answers" button,
+  // `status` leaving 'idle_timeout' (a Reconnect succeeded, or any other
+  // transition), or a save (the SaveNudge's Save button, which fires the
+  // `polyglot:save-form` event this component already listens for below).
+  // If `status` returns to 'idle_timeout' again later (a second idle drop),
+  // the grace re-arms from the full duration.
+  const cancelIdleClearGrace = useCallback(() => {
+    if (idleClearTimerRef.current !== null) {
+      window.clearTimeout(idleClearTimerRef.current);
+      idleClearTimerRef.current = null;
+    }
+    if (idleClearIntervalRef.current !== null) {
+      window.clearInterval(idleClearIntervalRef.current);
+      idleClearIntervalRef.current = null;
+    }
+    setShowIdleClearWarning(false);
+    setIdleClearMsLeft(IDLE_WIPE_GRACE_MS);
+  }, []);
+
   useEffect(() => {
-    if (status !== 'idle_timeout') return;
+    if (status !== 'idle_timeout') {
+      cancelIdleClearGrace();
+      return;
+    }
     setShowIdleClearWarning(true);
-    const clearTimer = window.setTimeout(() => {
+    setIdleClearMsLeft(IDLE_WIPE_GRACE_MS);
+    const startedAt = Date.now();
+    idleClearIntervalRef.current = window.setInterval(() => {
+      setIdleClearMsLeft(Math.max(0, IDLE_WIPE_GRACE_MS - (Date.now() - startedAt)));
+    }, 1000);
+    idleClearTimerRef.current = window.setTimeout(() => {
       SchemaFormStateManager.clearAllClientState();
       // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
       // round 2): this component stays MOUNTED with its in-memory `state`
@@ -378,9 +446,35 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
       // entry with no token in the URL any more -- the intended "session
       // ended" state, not a bug.
       window.location.reload();
-    }, 5000);
-    return () => window.clearTimeout(clearTimer);
-  }, [status]);
+    }, IDLE_WIPE_GRACE_MS);
+
+    return () => {
+      if (idleClearTimerRef.current !== null) {
+        window.clearTimeout(idleClearTimerRef.current);
+        idleClearTimerRef.current = null;
+      }
+      if (idleClearIntervalRef.current !== null) {
+        window.clearInterval(idleClearIntervalRef.current);
+        idleClearIntervalRef.current = null;
+      }
+    };
+  }, [status, cancelIdleClearGrace]);
+
+  // Any user activity cancels the running grace. Document-level so it fires
+  // regardless of which element the user interacts with -- the banner itself,
+  // a form field, or anywhere else on the page.
+  useEffect(() => {
+    if (!showIdleClearWarning) return;
+    const onActivity = () => cancelIdleClearGrace();
+    document.addEventListener('pointerdown', onActivity);
+    document.addEventListener('keydown', onActivity);
+    document.addEventListener('touchstart', onActivity);
+    return () => {
+      document.removeEventListener('pointerdown', onActivity);
+      document.removeEventListener('keydown', onActivity);
+      document.removeEventListener('touchstart', onActivity);
+    };
+  }, [showIdleClearWarning, cancelIdleClearGrace]);
 
   // Unmount safety: a pending completion-clear timer/interval must not fire
   // (or leak) after the component is gone.
@@ -912,8 +1006,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   // telling the client they saved -- and it permanently silences both nudges,
   // so they never learn otherwise. The ending variant has no dismiss button,
   // making that dead button its only exit. Found in cross-surface review.
+  //
+  // This is also one of the idle-wipe grace's cancel paths (bd polyglot-pdf-
+  // 8v8i7, Opus cross-surface round 5): the ENDING nudge shows specifically
+  // when `status === 'idle_timeout'`, so its Save button firing this event
+  // routes through handleDownloadPDF() below and can itself start the
+  // completion-clear grace on an already-complete client-link form -- both
+  // graces are acceptable to have live at once (the banners are independent
+  // and the 60s completion grace is strictly shorter).
   useEffect(() => {
-    const onSaveRequested = () => { void handleDownloadPDF(); };
+    const onSaveRequested = () => {
+      cancelIdleClearGrace();
+      void handleDownloadPDF();
+    };
     window.addEventListener('polyglot:save-form', onSaveRequested);
     return () => window.removeEventListener('polyglot:save-form', onSaveRequested);
   });
@@ -1014,18 +1119,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       {showIdleClearWarning && (
         <div className="schema-form__idle-clear-warning" role="alert">
-          {hasClientLinkToken() ? (
-            <>
-              This session timed out from inactivity. This device's saved
-              answers will be cleared in a moment -- reopen your original link
-              to resume an unfinished form.
-            </>
-          ) : (
-            <>
-              This session timed out from inactivity. This device's saved
-              answers will be cleared in a moment.
-            </>
+          You have been inactive. To protect your privacy, your answers will
+          be cleared from this device in {formatMmSs(idleClearMsLeft)} unless
+          you continue.{' '}
+          {hasClientLinkToken() && (
+            <>Reopen your original link afterward to resume an unfinished form.</>
           )}
+          <button
+            type="button"
+            className="schema-form__idle-clear-keep-button"
+            onClick={cancelIdleClearGrace}
+          >
+            Keep my answers
+          </button>
         </div>
       )}
 

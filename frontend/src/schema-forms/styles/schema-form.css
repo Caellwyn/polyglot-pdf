@@ -623,7 +623,8 @@ select.field-highlight {
   border-radius: 4px;
 }
 
-.schema-form__completion-clear-now-button {
+.schema-form__completion-clear-now-button,
+.schema-form__idle-clear-keep-button {
   display: block;
   margin-top: 0.6rem;
   padding: 0.4rem 1rem;
@@ -636,6 +637,7 @@ select.field-highlight {
   cursor: pointer;
 }
 
-.schema-form__completion-clear-now-button:hover {
+.schema-form__completion-clear-now-button:hover,
+.schema-form__idle-clear-keep-button:hover {
   background-color: #fff3e0;
 }
