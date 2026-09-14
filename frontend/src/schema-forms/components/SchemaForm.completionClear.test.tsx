@@ -415,20 +415,25 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
   });
 
   // The resurrection bug, made observable: reload is stubbed to a no-op (as
-  // every test here must be, since jsdom never actually navigates), so a
-  // real browser would already be on a fresh page by this point -- the
-  // correctness property is ORDER, not "no save ever happens again in this
-  // jsdom process". This pins that order: the wipe (and the reload call
-  // recording it happened) must be the LAST reliable event before a
-  // simulated field edit.
-  it('does not let a field change after the completion-clear wipe re-create schema_form_state before the reload fires', async () => {
+  // every test here must be, since jsdom never actually navigates). The
+  // correctness property to pin is ORDER -- the wipe must complete before
+  // reload fires -- and a stub that only COUNTS calls cannot discriminate
+  // that from reload-then-wipe, since both run synchronously in the same
+  // callback either way (fresh-eyes round 4 caught an earlier version of
+  // this test that did not actually discriminate the order). This version
+  // has the reload stub CAPTURE sessionStorage's content at the moment it
+  // fires: if reload ever ran before the wipe, the captured value would be
+  // non-null.
+  it('clears schema_form_state BEFORE reloading, not after', async () => {
     vi.useFakeTimers();
-    const events: string[] = [];
+    let storedAtReloadTime: string | null = 'not-called';
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
         ...window.location,
-        reload: () => events.push('reload'),
+        reload: () => {
+          storedAtReloadTime = sessionStorage.getItem('schema_form_state');
+        },
       },
     });
     try {
@@ -436,9 +441,7 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
       const schema = makeSchema(true);
       seedSessionState(schema, true);
 
-      const { container } = render(
-        <SchemaForm schema={schema} kitId="test" pdfUrl="https://example/form.pdf" />
-      );
+      render(<SchemaForm schema={schema} kitId="test" pdfUrl="https://example/form.pdf" />);
       await act(async () => {
         vi.runOnlyPendingTimers();
       });
@@ -454,18 +457,7 @@ describe('SchemaForm completion-clear grace (bd polyglot-pdf-8v8i7)', () => {
         vi.advanceTimersByTime(60000);
       });
 
-      events.push('post-wipe-check:' + (sessionStorage.getItem('schema_form_state') === null));
-
-      const input = container.querySelector('input[name="f1"]') as HTMLInputElement | null;
-      if (input) {
-        act(() => {
-          input.value = 'resurrected value';
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-      }
-
-      expect(events[0]).toBe('reload');
-      expect(events).toContain('post-wipe-check:true');
+      expect(storedAtReloadTime).toBeNull();
     } finally {
       vi.useRealTimers();
     }

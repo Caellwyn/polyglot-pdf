@@ -36,6 +36,15 @@ export function StaffHeader() {
       // a failed sign-out is still a staff member walking away from the
       // device, and stale form state must not survive that.
       SchemaFormStateManager.clearAllClientState();
+      // Reload unconditionally (bd polyglot-pdf-8v8i7, fresh-eyes round 3):
+      // on a SUCCESSFUL sign-out this is harmless -- ProtectedRoute is about
+      // to unmount this whole tree anyway once `user` goes null. On a
+      // FAILED logout() (the catch above), auth state does NOT change,
+      // SchemaForm stays mounted with its in-memory field values, and the
+      // next keystroke would save() them straight back into the storage
+      // just cleared -- the same resurrection bug the other three wipe
+      // sites were fixed for. Reloading here closes it for this site too.
+      window.location.reload();
       setLoggingOut(false);
     }
   };

@@ -61,6 +61,13 @@ describe('StaffHeader (bd polyglot-pdf-8v8i7)', () => {
   it('calls useAuth().logout() and clears client state on click', async () => {
     sessionStorage.setItem('schema_form_state', JSON.stringify({ fieldValues: {} }));
     saveOnboardingState({ formId: 'i-90', language: 'English' });
+    // Stub reload -- production code reloads unconditionally after the wipe
+    // (bd polyglot-pdf-8v8i7); see the dedicated reload tests below for
+    // that behavior itself.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: vi.fn() },
+    });
 
     render(<StaffHeader />);
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
@@ -70,13 +77,33 @@ describe('StaffHeader (bd polyglot-pdf-8v8i7)', () => {
     expect(sessionStorage.getItem(ONBOARDING_FORM_KEY)).toBeNull();
   });
 
-  it('still clears client state even when logout() itself rejects', async () => {
+  it('still clears client state AND reloads even when logout() itself rejects', async () => {
+    // bd polyglot-pdf-8v8i7, fresh-eyes round 3: on a FAILED logout(), auth
+    // state does not change and ProtectedRoute never unmounts this tree --
+    // so without an unconditional reload here, SchemaForm would stay
+    // mounted with its stale in-memory field values and the next keystroke
+    // would save() them straight back into the storage just cleared.
     mockLogout.mockRejectedValueOnce(new Error('network error'));
     sessionStorage.setItem('schema_form_state', JSON.stringify({ fieldValues: {} }));
+
+    // Capture what sessionStorage held at the exact moment reload() was
+    // called -- proves wipe-BEFORE-reload, not just "both eventually
+    // happened" (a stub that only counts calls cannot tell the two orders
+    // apart, since both run synchronously inside the same finally block).
+    let storedAtReloadTime: string | null = 'not-called';
+    const reloadFn = vi.fn(() => {
+      storedAtReloadTime = sessionStorage.getItem('schema_form_state');
+    });
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadFn },
+    });
 
     render(<StaffHeader />);
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
 
-    await waitFor(() => expect(sessionStorage.getItem('schema_form_state')).toBeNull());
+    await waitFor(() => expect(reloadFn).toHaveBeenCalledTimes(1));
+    expect(storedAtReloadTime).toBeNull();
+    expect(sessionStorage.getItem('schema_form_state')).toBeNull();
   });
 });

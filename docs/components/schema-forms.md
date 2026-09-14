@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form, on idle timeout, and on staff logout via the new `StaffHeader`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from the production bundle.)*
+*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form (or its "Done -- clear now" button), on idle timeout, and on staff logout via `StaffHeader` (unconditionally, even when `logout()` itself rejects) -- all four sites reload the page right after the wipe, the complete set pinned by `wipeSitesReload.test.ts`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from the production bundle.)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -155,22 +155,31 @@ itself; same caveat noted in stateless-architecture).
 Automatic clearing (bd polyglot-pdf-8v8i7): `SchemaFormStateManager.clearAllClientState()`
 composes `clear()` + `clearOnboardingState()` + `clearClientLinkToken()` (in that order --
 `clearOnboardingState` reads `hasClientLinkToken()` first) and is the ONE path that wipes
-a device of a client's answers and link credential. It runs on three triggers, all in
+a device of a client's answers and link credential. It runs on four call sites, all in
 `components/SchemaForm.tsx` / `components/StaffHeader.tsx`: (a) COMPLETION -- after a
 SUCCESSFUL download or print of a form whose `isFormComplete` is true, in a client-link
 session only (staff sessions are never auto-cleared on download/print), a visible
 60-second non-restarting countdown with a "Done -- clear now" button, then the wipe;
 (b) IDLE -- once `status` is `idle_timeout` the warning shows for ~5 s (client-link copy
-says reopening the link resumes an unfinished form), then the wipe; (c) LOGOUT --
-`StaffHeader` (rendered only for a staff session) calls the existing `useAuth().logout()`
-and then the wipe. Every automatic wipe (and the "Done -- clear now" button) ends in
-`window.location.reload()`, the same way the Start Fresh button does: the mounted form
-still holds the answers in React state, and without the reload the next keystroke would
-`save()` them straight back into the storage that was just cleared. The manual Clear-form
-buttons still call the two-step path directly.
+says reopening the link resumes an unfinished form), then the wipe; (c) the "Done --
+clear now" button itself, which skips the countdown; (d) LOGOUT -- `StaffHeader`
+(rendered only for a staff session) calls the existing `useAuth().logout()` and then the
+wipe, UNCONDITIONALLY (even when `logout()` itself rejects -- a failed sign-out leaves
+auth state unchanged and the tree mounted, so it needs the reload exactly as much as a
+successful one, which is harmless there because `ProtectedRoute` is about to unmount the
+tree anyway). All FOUR sites end in `window.location.reload()`, the same way the Start
+Fresh button does: the mounted form still holds the answers in React state, and without
+the reload the next keystroke would `save()` them straight back into the storage that was
+just cleared. `wipeSitesReload.test.ts` derives the complete set by scanning
+`frontend/src` for every `clearAllClientState()` call and asserts each one is followed
+nearby by a reload, so a fifth site added later without one fails there instead of
+waiting for another review round. The manual Clear-form buttons still call the two-step
+path directly (no reload -- they already trigger one via `window.location.reload()` at
+their own call sites in `SchemaFormDemo.tsx` / the voice overlays, outside this bead).
 `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
-`StaffHeader.test.tsx` and `schemaFormState.clearAllClientState.test.ts`.
+`StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts` and
+`wipeSitesReload.test.ts`.
 
 Back-compat migrations on `load()`: `completedParts → completedSections`,
 `currentPartId → currentSectionId` — residue of the parts→sections rename.

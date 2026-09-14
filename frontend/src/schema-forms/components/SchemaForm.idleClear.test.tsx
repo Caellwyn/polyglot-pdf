@@ -179,25 +179,29 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
   // The resurrection bug, made observable: with reload stubbed to a no-op
   // (as every test here must, since jsdom never actually navigates), the
   // component in a real browser would already be gone by the time any
-  // further code runs -- so the correctness property is ORDER, not "no save
-  // ever happens again in this jsdom process". This pins that order: the
-  // wipe (and the reload call recording it happened) must be the LAST
-  // reliable event -- a field change dispatched in the same tick as the
-  // clear must not have persisted new state before the reload macrotask
-  // fires. Proven red by removing the reload() call (see the mutation in
-  // this bead's PR history).
-  it('does not let a field change after the wipe re-create schema_form_state before the reload fires', async () => {
+  // further code runs -- so the correctness property to pin is ORDER, not
+  // "no save ever happens again in this jsdom process". A stub that only
+  // COUNTS calls cannot tell wipe-then-reload apart from reload-then-wipe --
+  // both run synchronously inside the same callback, so swapping the two
+  // lines still leaves both calls made exactly once before anything else
+  // runs (fresh-eyes round 4 caught an earlier version of this test that
+  // did not actually discriminate the order). This version has the reload
+  // stub CAPTURE sessionStorage's content at the moment it fires: if reload
+  // ever ran before the wipe, the captured value would be non-null.
+  it('clears schema_form_state BEFORE reloading, not after', async () => {
     vi.useFakeTimers();
-    const events: string[] = [];
+    let storedAtReloadTime: string | null = 'not-called';
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
         ...window.location,
-        reload: () => events.push('reload'),
+        reload: () => {
+          storedAtReloadTime = sessionStorage.getItem('schema_form_state');
+        },
       },
     });
     try {
-      const { container } = render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
       await act(async () => {
         vi.runOnlyPendingTimers();
       });
@@ -209,24 +213,7 @@ describe('SchemaForm idle-timeout auto-clear (bd polyglot-pdf-8v8i7)', () => {
         vi.advanceTimersByTime(5000);
       });
 
-      events.push('post-wipe-check:' + (sessionStorage.getItem('schema_form_state') === null));
-
-      // Simulate a field edit AFTER the wipe -- in a real browser this could
-      // never actually run (reload has already navigated away), but jsdom
-      // does not navigate, so this proves the ORDER held: the wipe (and the
-      // reload that must immediately follow it) happened, and is recorded,
-      // BEFORE this edit -- which is the one thing that matters, since a
-      // reload preempts everything queued after it in a real browser.
-      const input = container.querySelector('input[name="f1"]') as HTMLInputElement | null;
-      if (input) {
-        act(() => {
-          input.value = 'resurrected value';
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-      }
-
-      expect(events[0]).toBe('reload');
-      expect(events).toContain('post-wipe-check:true');
+      expect(storedAtReloadTime).toBeNull();
     } finally {
       vi.useRealTimers();
     }
