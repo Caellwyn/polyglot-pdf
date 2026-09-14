@@ -84,7 +84,7 @@ new row/writer later instead of a new code path.
    `PLAN_TIERS`, `DEFAULT_PLAN`, `setFirmPlan`, and `plan: FirmPlan` on
    `FirmRow`/`FirmDetail`.
 
-## Fresh-eyes round (post-review fixes)
+## Fresh-eyes round 1 (post-review fixes)
 
 The pre-PR cross-surface review found one genuine gap and four nits, all
 addressed in this round -- nothing deferred, nothing filed as a separate
@@ -138,6 +138,59 @@ scoped work):
   `_run_monthly_topup`'s per-firm exception handling (outcome append vs.
   the except block) was independently re-verified by re-reading the
   control flow -- no bug, matches the reviewer's own conclusion.
+
+## Fresh-eyes round 2 (post-review fixes)
+
+The pre-PR outer review found one legitimate blocker-tier gap (a missing
+boundary test) plus two low-confidence notes and one pre-existing nit --
+one item adopted, the rest refuted or deferred as pre-existing/not
+bead-worthy:
+
+- **ADOPTED (blocker, fixed).** `credit_routes.py`'s no-rollover at-cap
+  check (`if balance >= monthly_credits:`) had no test pinning the exact
+  `balance == monthly_credits` boundary -- every existing scenario used a
+  balance strictly under the cap (10) or strictly over it (40), so a
+  future one-character `>=` -> `>` regression would ship with all tests
+  green, computing `amount = 0`, tripping `credit_ledger._validate`'s
+  "amount must be non-zero" `LedgerError` (uncaught by `_topup_one_firm`,
+  which only catches `DuplicatePeriodEntry`), and silently miscounting the
+  firm as `failed` instead of `skipped_at_cap` in production. Added
+  `test_no_rollover_exactly_at_the_cap_is_skipped_not_failed`
+  (`admin_backend/tests/unit/test_monthly_topup.py`), seeding
+  `balance=35, monthly_credits=35, rollover=False` and asserting
+  `skipped_at_cap == ["firm-a"]` with no ledger row. Mutation-verified by
+  applying the exact predicted regression (`>=` -> `>`) in a scratch copy:
+  the new test went red with precisely the predicted failure mode (a
+  `LedgerError` propagating to the generic exception handler, the firm
+  landing in `failed` instead of `skipped_at_cap`); reverted, confirmed
+  `credit_routes.py` byte-identical to HEAD afterward.
+- **REFUTED (no code change).** The reviewer's own boundary-check claim --
+  "the current code correctly uses `>=`, not `>`" -- independently
+  re-verified by reading `credit_routes.py:447` directly; no bug, matches
+  the reviewer's conclusion.
+- **DEFERRED (pre-existing, not bead-worthy).** `_public_firm_view`'s
+  `plan` fallback checks `isinstance(dict)` only, not key-completeness
+  (mirrors the existing `kind` fallback's identical shallow-check
+  pattern). Low-confidence, unreachable under every current writer (all
+  writers apply either `DEFAULT_PLAN` or a `validate_plan`-gated shape);
+  the reviewer's own report explicitly declined to flag it as a gap or
+  file a bead for it, and this round agrees it does not warrant one.
+- **DEFERRED (pre-existing, confirmed via `git show origin/dev`).**
+  `deploy-admin.sh`'s `SWEEP_ENV` variable name also carries
+  `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` and (pre-existing)
+  `BACKEND_URLS_JSON` -- a naming nit the reviewer confirmed predates this
+  diff (`git show origin/dev:deploy-admin.sh` shows the same
+  multi-purpose accumulation already present) and explicitly declined to
+  file as a bead given its triviality. Not filed here either -- no new
+  bead created this round, since the reviewer's own report already
+  classified both remaining notes as non-actionable rather than leaving
+  them for this round to pick up.
+
+Full test suites re-run after the fix: `admin_backend/tests/` (556
+passed), root `tests/` (1698 passed, 46 skipped), `backend/tests/` (3864
+passed, 67 skipped, 3 deselected, 1 xfailed) -- all green, `-m "not
+external"`.
+
 
 ## Lessons
 

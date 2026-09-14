@@ -462,6 +462,43 @@ def test_rollover_true_always_adds_even_when_already_over_cap(
     assert fake_db.firm("firm-a")["balance_credits"] == 135
 
 
+def test_no_rollover_exactly_at_the_cap_is_skipped_not_failed(
+        client, fake_db, scheduler_env, monkeypatch):
+    """Pins the exact `balance == monthly_credits` boundary of the
+    no-rollover at-cap check (fresh-eyes finding on bd polyglot-pdf-0euzk:
+    every existing scenario used a balance strictly under the cap (10) or
+    strictly over it (40), never exactly AT it, so a one-character `>=` ->
+    `>` regression would slip through green).
+
+    At exactly the cap there is nothing to grant: amount would compute to
+    monthly_credits - balance == 0, and credit_ledger._validate rejects a
+    zero amount with LedgerError("amount must be non-zero") -- a
+    LedgerError, not DuplicatePeriodEntry, which _topup_one_firm does not
+    catch, so it would propagate to _run_monthly_topup's generic
+    except Exception and silently misclassify this firm as "failed"
+    instead of "skipped_at_cap".
+
+    Mutation: change `if balance >= monthly_credits:` to
+    `if balance > monthly_credits:` in _topup_one_firm -- this goes red:
+    firm-a moves from skipped_at_cap/no ledger row to failed/(still) no
+    ledger row, both assertions below flip. Verified 2026-09-14."""
+    monkeypatch.setattr(
+        credit_routes, "_current_period", lambda now: "2026-09")
+    _seed_firm(fake_db, "firm-a", balance=35, plan={
+        "tier": "starter", "monthly_credits": 35, "rollover": False})
+
+    resp = _post_topup(client)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["skipped_at_cap"] == ["firm-a"]
+    assert body["failed"] == []
+    assert body["topped_up"] == []
+    assert fake_db.firm("firm-a")["balance_credits"] == 35
+
+    assert [r for r in fake_db.ledger_rows("firm-a")
+            if r["type"] == "subscription_grant"] == []
+
+
 def test_a_negative_balance_is_brought_up_to_the_cap(
         client, fake_db, scheduler_env, monkeypatch):
     """The metered soft-launch mode can leave a firm's balance negative
