@@ -102,8 +102,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    doubled the most expensive step for a marginal catch rate). **Only a BEHAVIORAL
    fix voids a clear** -- filing a bead, a comment/docstring edit, docs prose, or a
    journal entry does not re-run the review. The subagents' STATUS lines are read
-   directly -- there is **no bot watcher and no `@codex review` /
-   `pr_review_watcher.py` / `requested_reviewers` trigger** (all dead path).
+   directly (no bot watcher -- see the closeout skill).
    **Docs-only changes get ONE adversarial HAIKU review** instead (the
    `docs-reviewer` agent -- prose review, not a contract trace); only a genuinely
    TRIVIAL diff skips adversarial review entirely (fresh-eyes `NO-GAPS` is its
@@ -292,13 +291,11 @@ Run this decision procedure for any choice you face:
    to do it yourself. You never `git push --force` (the safe `--force-with-lease`
    is likewise reserved for the maintainer). Force-pushing and `bd dolt push
    --force` stay hard-barred regardless of review state.
-   - **`gh pr merge` is NO LONGER on the NEVER list** (autonomy increase
-     2026-07-04): you MAY merge a PR yourself, but ONLY under the **auto-merge
-     rule** below. This is a gated permission, not a blanket one -- merging a PR
-     that fails any gate, or a consequence-bearing PR, is the violation. See
-     "Auto-merge vs. maintainer merge" immediately below.
-   - **Demo deploy is NO LONGER on the NEVER list** (autonomy increase 2026-06-10):
-     you MAY run `deploy-demo.sh`, but it is a **per-instance ASK** (step 2 below),
+   - **`gh pr merge` is permitted only under the auto-merge rule** below. It is
+     a gated permission, not a blanket one -- merging a PR that fails any gate,
+     or a consequence-bearing PR, is the violation. See "Auto-merge vs.
+     maintainer merge" immediately below.
+   - **`deploy-demo.sh` is permitted only as a per-instance ASK** (step 2 below),
      never standing pre-authorization, and only after the test gates in
      "Deployment / promotion" below. Running it without an explicit per-instance
      yes is the violation. **`deploy-staging.sh` is gated the SAME way** for now
@@ -310,7 +307,7 @@ Run this decision procedure for any choice you face:
      fast-forwarding the main checkout to `origin/dev`, and running the local test
      stack (`scripts/dev-local.ps1` / the `/run-local` skill), need no ask.
 
-**Auto-merge vs. maintainer merge (autonomy increase 2026-07-04).** The maintainer
+**Auto-merge vs. maintainer merge.** The maintainer
 takes the product-owner seat, not the engineering-lead seat: routine, low-risk PRs
 that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
@@ -604,9 +601,7 @@ Do NOT hand-roll the review cycle. In particular:
   the outer review ON THE LOCAL BRANCH, before the PR opens. For a SOURCE diff it
   spawns the `cross-surface-reviewer` agent (`model: opus`) on the local diff
   (`origin/dev...HEAD`) and loops it to `NO-GAPS`. **That single clearing pass is
-  the gate**, and only a BEHAVIORAL fix voids it.
-  There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
-  `requested_reviewers` reviewer API** -- all dead path. **Docs-only / `.beads`-only /
+  the gate**, and only a BEHAVIORAL fix voids it. **Docs-only / `.beads`-only /
   journal-only changes get the cheap arm instead: ONE adversarial HAIKU review** (the
   `docs-reviewer` agent, same loop, prose review rather than a contract trace). Only a
   genuinely TRIVIAL change gets no adversarial review at all.

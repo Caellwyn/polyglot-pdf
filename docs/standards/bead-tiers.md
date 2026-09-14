@@ -2,7 +2,7 @@
 
 **Tracks:** .claude/agents/ .claude/skills/next-bead/SKILL.md .claude/skills/plan-epic/SKILL.md scripts/next_bead.py
 
-*Last updated: 2026-08-05. See [../journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md](../journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md) for closeout details.*
+*Last updated: 2026-09-13. See [../journal/entries/2026-09-13-bd-9jhhe-prompt-audit-cleanup-harness-instruction-fossils.md](../journal/entries/2026-09-13-bd-9jhhe-prompt-audit-cleanup-harness-instruction-fossils.md) for closeout details.*
 
 Every bead carries two metadata keys saying **which model tier should pick it up**
 and **what class of work it is**. They exist so a cheap session can query the
