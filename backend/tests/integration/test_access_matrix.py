@@ -83,7 +83,8 @@ _TOKENS = {
 
 
 class _AccessMatrixStore:
-    """One public + two private kits (one per firm), synthetic ids only."""
+    """One public + three private kits (two for firm-a, one for firm-b),
+    synthetic ids only."""
 
     def __init__(self):
         self.meta = {
@@ -97,6 +98,14 @@ class _AccessMatrixStore:
                 "status": "complete",
                 "visibility": "private",
                 "owner_firm_id": "firm-b",
+            },
+            # A SECOND private firm-a kit, so the client-link cross-kit row
+            # reaches the visibility gate instead of 404ing on a kit that
+            # does not exist (an unknown id is refused before any gate runs).
+            "kit-a-second": {
+                "status": "complete",
+                "visibility": "private",
+                "owner_firm_id": "firm-a",
             },
         }
         self.archive = {
@@ -112,6 +121,7 @@ class _AccessMatrixStore:
             {"id": "pub-kit", "label": "Public"},
             {"id": "kit-a-priv", "label": "Firm A private"},
             {"id": "kit-b-priv", "label": "Firm B private"},
+            {"id": "kit-a-second", "label": "Firm A private, second"},
         ]})
 
     async def load_metadata(self, kit_id: str):
