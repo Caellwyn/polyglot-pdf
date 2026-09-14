@@ -7,7 +7,7 @@
 // answers coming back, landing where they stopped, and being asked to agree
 // again rather than inheriting a tick from a session that ended days ago.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { applyResume } from './applyResume';
@@ -18,17 +18,21 @@ function fv(value: string) {
 }
 import type { SchemaFormState } from './state/schemaFormState';
 
-// THE REAL SHIPPED W-7, not a fixture. The invented one used
+// THE REAL SHIPPED W-7, not an invented fixture. The invented one used
 // `fields: [{ id }]` -- a shape no kit produces -- and was the sole reason the
 // section-landing tests passed while the code returned the fallback for every
 // real client. A fixture you invented cannot falsify an assumption you also
-// invented.
-const SCHEMA = JSON.parse(
-  readFileSync(
-    resolve(process.cwd(), '..', 'form-kits', 'w7', 'schema.json'),
-    'utf-8',
-  ),
-);
+// invented. No kit lives in git any more (PR #780), so a checkout that still
+// carries the live kit folder is preferred and CI reads a mechanical projection
+// of the real schema (sections + field ids, the only keys applyResume.ts reads)
+// under __fixtures__/ -- see its README for the source and refresh command.
+function loadRealW7Schema(): unknown {
+  const live = resolve(process.cwd(), '..', 'form-kits', 'w7', 'schema.json');
+  const frozen = resolve(__dirname, '__fixtures__', 'w7_sections_frozen.json');
+  const path = existsSync(live) ? live : frozen;
+  return JSON.parse(readFileSync(path, 'utf-8'));
+}
+const SCHEMA = loadRealW7Schema() as any;
 
 /** Section ids in order, from the real schema. */
 const SECTIONS: Array<{ id: string; fields: string[] }> = SCHEMA.sections;
