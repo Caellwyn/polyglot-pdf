@@ -76,6 +76,7 @@ import './styles/console.css';
 import { useAuth } from '../contexts/AuthContext';
 import { adminFetch, errorDetail } from './adminApi';
 import { AuthError, ForbiddenError } from './adminApi';
+import { FirmAlertsBanner } from './FirmAlertsBanner';
 
 /** The allowlisted row shape B4's `_public_link_view` returns -- every key
  * that route can send, and the only keys this page ever reads off a row.
@@ -289,6 +290,7 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
 
   return (
     <div className="mint-page">
+      <FirmAlertsBanner user={user} fetchImpl={doFetch} />
       <h1>Link history</h1>
       <p>
         {isManager

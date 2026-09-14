@@ -28,6 +28,7 @@ import { useCallback, useEffect, useState } from 'react';
 // polyglot-pdf-41ay8 exists because the markup shipped with no CSS at all).
 import './styles/console.css';
 import { useAuth } from '../contexts/AuthContext';
+import { FirmAlertsBanner } from './FirmAlertsBanner';
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller';
 import { resolveStaffToken } from '../shared/sessionCredential';
 
@@ -63,6 +64,10 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
   const [link, setLink] = useState('');
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
+  // Bumped on a 402 (insufficient credits) so FirmAlertsBanner re-fetches
+  // and (once the ledger debit's own alert hook has run) shows the firm's
+  // now-current credit_low/credit_exhausted alert without a page reload.
+  const [alertsRefreshSignal, setAlertsRefreshSignal] = useState(0);
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
     // resolveSTAFFToken, not resolveSessionToken: this is a staff-only action,
@@ -158,6 +163,12 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
             ? `Your firm does not have enough credits to mint a link (balance: ${balance}).`
             : 'Your firm does not have enough credits to mint a link.',
         );
+        // A 402 means a credit debit was refused, which is exactly the
+        // moment the ledger's own alert hook (backend/services/alerts.py's
+        // record_credit_threshold) may have just written a new
+        // credit_low/credit_exhausted doc -- refresh the banner so it does
+        // not wait for an unrelated page action to notice.
+        setAlertsRefreshSignal((n) => n + 1);
         return;
       }
       if (response.status === 403) {
@@ -233,6 +244,7 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
 
   return (
     <div className="mint-page">
+      <FirmAlertsBanner user={user} fetchImpl={doFetch} refreshSignal={alertsRefreshSignal} />
       <h1>Send someone a link</h1>
       <p>
         Creates a one-time link for a single form. Send it to the person

@@ -5,6 +5,8 @@
 *Last updated: 2026-09-14 (bd `polyglot-pdf-0euzk`: the firm-plan + monthly top-up follow-up to the maintainer's 2026-09-14 pricing decision -- new Surface contract 32. `firms/{firm_id}` gains `plan: {tier, monthly_credits, rollover}` (new `backend/services/plans.py`, a closed `PLAN_TIERS` list and `DEFAULT_PLAN` of `{tier: "starter", monthly_credits: 35, rollover: false}`), applied on firm create and backfilled by `scripts/backfill_firm_kind.py` for a pre-existing firm with none stored. NEW `PATCH /admin/firms/{firm_id}/plan` (`require_app_admin`, no confirm-twice -- a plan change is not a minting-eligibility change) and NEW `POST /admin/credits/monthly-topup` (`require_google_oidc`, its OWN Cloud Scheduler identity `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, separate from the sweep job's own -- cron `5 0 1 * *` UTC): for every active firm with a plan, writes ONE `subscription_grant` bringing the balance to (no rollover) or adding (rollover) `monthly_credits`, idempotent by a new nullable `period` field on the ledger entry (`credit_ledger.append_entry`). `credit_ledger.py`'s `subscription_grant` type moves from ALWAYS-requiring `usd_amount` to OPTIONAL-but-validated (`USD_OPTIONAL_TYPES`), since the automated top-up records no money moving while a human operator's manual grant still can -- `credit_routes.py`'s OWN grant-route 422 and `scripts/grant_credits.py`'s CLI check are both UNCHANGED and still require it. A reserved, writer-less `TYPE_OVERAGE_PURCHASE` constant is the seam Epic 5's Stripe pay-as-you-go work fills in later. Console: `FirmDetailPage.tsx` gains a one-write-per-save plan editor.)*
 
 *Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
+
+*Last updated: 2026-09-14 (bd polyglot-pdf-62o4d: `GET /admin/firms/{firm_id}/alerts` new route + `PATCH .../acknowledge` gate widened to `require_app_admin_or_owning_manager_or_employee` with an employee refused inside the route body -- see Surface contract 32; no IAM or env-var change.) (2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
 monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
 `pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
 fetched independently so one channel's failure never blanks the other's
@@ -74,7 +76,21 @@ alert_routes.py`, `require_app_admin`) list the E3.5 `alerts/{id}` docs
 and acknowledge one -- the ONE mutation this bead ships, setting
 `acknowledged_by` (the actor's uid) + `acknowledged_at` inside ONE
 Firestore transaction with its audit row (mirrors `firm_routes.py`'s
-`_apply_firm_patch` shape); acknowledging twice is a 409. `GET
+`_apply_firm_patch` shape); acknowledging twice is a 409. **Widened by
+bd polyglot-pdf-62o4d** (firm alerts banner, no outbound email): a NEW
+`GET /admin/firms/{firm_id}/alerts` route reads the SAME collection
+scoped to one firm, behind `require_app_admin_or_owning_manager_or_
+employee` (the fifth gate) with a NARROWER response allowlist (`id,
+kind, level, ts, context, acknowledged_at` -- never `firm_id`,
+`acknowledged_by`, or `emailed_at`); `?channel=` is accepted and
+ignored (alerts carry no channel field, but `adminFetch` always sends
+one). `PATCH .../acknowledge`'s own gate widens to the same composite
+so a firm manager can acknowledge their own firm's alert (404 for
+another firm's, mirroring `_require_owning_firm`) -- an EMPLOYEE is
+refused with a 403 INSIDE THE ROUTE BODY, since the shared dependency
+must let an employee actor through for the sibling read route. See
+Surface contract 32. The operator-wide `GET /admin/alerts` and its
+own full allowlist are unchanged. `GET
 /admin/errors` (`admin_backend/routes/ops_routes.py`, `require_app_admin`)
 calls Cloud Error Reporting's `groupStats.list` REST endpoint (a new
 `admin_backend/services/error_stats.py`, authenticated with the runtime
@@ -384,7 +400,8 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/reports/cost` | GET | `require_app_admin` | Parameterised BigQuery read over `cost_by_{firm\|kit\|employee}_month` (bd polyglot-pdf-mpebj, via `admin_backend/services/bigquery_reports.py`). `?from=&to=&group_by=` REQUIRED (422 on missing/malformed/a range over 12 months); `?channel=` optional. Every value is bound as a `bigquery.ScalarQueryParameter`, never interpolated SQL text. Carries `delayed: true` plus a sink-lag note. A read, so no audit row. |
 | `/admin/reports/income` | GET | `require_app_admin` | Parameterised BigQuery read over `income_month` (real firms only -- the view's own `firm_kind = 'live'` filter, contract 25). `?from=&to=` REQUIRED; `?channel=` optional. Same parameterisation, 12-month ceiling, and `delayed: true` as the cost report. A read, so no audit row. |
 | `/admin/alerts` | GET | `require_app_admin` | Lists `alerts/{id}` docs (bd polyglot-pdf-mpebj; docs: bd polyglot-pdf-bo95a), newest first, page-capped, an explicit key allowlist. Optional `?acknowledged=`/`?firm_id=`/`?kind=` filters (422 on an unrecognized `kind`). A read, so no audit row. |
-| `/admin/alerts/{alert_id}/acknowledge` | PATCH | `require_app_admin` | Acknowledge one alert -- sets `acknowledged_by` (the ACTOR's uid) + `acknowledged_at` in one Firestore transaction with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). 404 for an unknown id; 409 for one already acknowledged, naming who acknowledged it first. The ONE mutating route this bead adds. |
+| `/admin/firms/{firm_id}/alerts` | GET | `require_app_admin_or_owning_manager_or_employee` | The firm-console counterpart of `/admin/alerts` above (bd polyglot-pdf-62o4d), for `FirmAlertsBanner.tsx`. A manager or employee reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Optional `?acknowledged=`; `?channel=` is accepted and ignored (alerts carry no channel field -- `adminFetch` appends it unconditionally). Returns a NARROWER explicit key allowlist than the operator-wide route above: `id`, `kind`, `level`, `ts`, `context`, `acknowledged_at` -- deliberately not `firm_id`, `acknowledged_by`, or `emailed_at`. A read, so no audit row. |
+| `/admin/alerts/{alert_id}/acknowledge` | PATCH | `require_app_admin_or_owning_manager_or_employee` (widened by bd polyglot-pdf-62o4d; was `require_app_admin`) | Acknowledge one alert -- sets `acknowledged_by` (the ACTOR's uid) + `acknowledged_at` in one Firestore transaction with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape). 404 for an unknown id, OR one belonging to a firm the caller (a manager or employee) does not own (same 404 either way); 409 for one already acknowledged, naming who acknowledged it first. An EMPLOYEE actor passes the dependency but is then refused with 403 by an explicit in-route check (this route's read and write actor sets are identical, unlike `link_routes.py`'s two-dependency split) -- so a manager may acknowledge their own firm's alerts, an employee may not. The ONE mutating route this bead adds. |
 | `/admin/errors` | GET | `require_app_admin` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd polyglot-pdf-mpebj, via `admin_backend/services/error_stats.py`), filtered to `polyglot-backend`/`polyglot-backend-staging`. `?channel=` REQUIRED. Returns count, first/last seen, and the group's representative TYPE and top FRAME ONLY -- the API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's PII rule already guarantees is the bare type name with no message text; the rest of that message is never returned. A read, so no audit row. |
 | `/admin/health` | GET | `require_app_admin` | Fans out to one channel's PUBLIC backend `/health` + `/version` over a short-timeout HTTP call, plus this service's own `/version` (bd polyglot-pdf-mpebj). `?channel=` REQUIRED. `configured: false` when `BACKEND_URLS_JSON` has no entry for this channel; `reachable: false` (never a 500) when the entry exists but the HTTP calls fail -- `reachable` requires BOTH `/health` and `/version` to succeed. A read, so no audit row. |
 
@@ -402,11 +419,17 @@ added without exactly one of the PLAN'S four gate names
 exist; `require_google_oidc` shipped with its first consuming route above
 (bd polyglot-pdf-8vgfh) -- Epic 4 4.3's Pub/Sub push route will be its
 second. A FIFTH dependency, `require_app_admin_or_owning_manager_or_employee`
-(bd polyglot-pdf-scaig), exists beside these four for the ONE route that
-needs a third actor kind (`GET /admin/firms/{firm_id}/links` -- see that
-gate's own subsection below); it is deliberately outside the four-gate
-vocabulary the set-pin test enforces and is instead pinned directly on its
-one route. Read that test, not this table, for the authoritative set the
+(bd polyglot-pdf-scaig), exists beside these four for routes that need a
+third actor kind: `GET /admin/firms/{firm_id}/links` (its original route --
+see that gate's own subsection below), plus two more bd polyglot-pdf-62o4d
+added onto the SAME dependency -- `GET /admin/firms/{firm_id}/alerts` and
+the widened `PATCH /admin/alerts/{alert_id}/acknowledge` (which then
+refuses an employee actor with an explicit in-route 403 check, since this
+gate's own read/write actor sets are identical here, unlike the links
+route's read/write split below) -- it is deliberately outside the
+four-gate vocabulary the set-pin test enforces and is instead pinned
+directly on its routes. Read that test, not this table, for the
+authoritative set the
 day a new route lands.
 
 ## `require_app_admin` (`admin_backend/services/admin_auth.py`)
@@ -469,22 +492,34 @@ whole claims object, the same trap `scripts/bootstrap_firm.py` documents).
 
 ## `require_app_admin_or_owning_manager_or_employee` (bd polyglot-pdf-scaig)
 
-The ONLY gate on `GET /admin/firms/{firm_id}/links`. Same first two
-branches as `require_app_admin_or_owning_manager` above (app admin, then
-firm manager), PLUS a third: a firm **employee**, resolved via a new sibling
-rule beside `manager_firm_id`, `backend/services/firms.py::employee_firm_id
-(claims)` -- accepts only `firm_role == "employee"`, the same shape one role
-over. An employee actor's `firm_id` is their own firm and `employee_id` is
-their own uid, both from the **verified token**; the route forces
-`employee_id` to that value whenever the actor is an employee, silently
-overriding any `?employee_id=` the query names (unlike the manager firm-body
-rule, naming a DIFFERENT value here is not itself refused -- there is
-exactly one value an employee's own filter could ever legitimately mean, so
-substituting it is applying the only correct answer, not papering over a
-disagreement). `_require_owning_firm` (`link_routes.py`) covers the
-employee actor with the SAME check it already used for a manager (both
-kinds carry `firm_id` on the actor identically), so an employee naming
-another firm gets the same 404-not-403 existence-hiding refusal.
+Originally the gate on `GET /admin/firms/{firm_id}/links` alone; bd
+polyglot-pdf-62o4d put two more routes on the SAME dependency:
+`GET /admin/firms/{firm_id}/alerts` and the widened
+`PATCH /admin/alerts/{alert_id}/acknowledge` (`alert_routes.py`'s own
+`_require_owning_firm`, a second small caller of the identical
+manager_firm_id/employee_firm_id rule -- not a copy of link_routes.py's
+version; see that module's docstring). Same first two branches as
+`require_app_admin_or_owning_manager` above (app admin, then firm manager),
+PLUS a third: a firm **employee**, resolved via a new sibling rule beside
+`manager_firm_id`, `backend/services/firms.py::employee_firm_id (claims)`
+-- accepts only `firm_role == "employee"`, the same shape one role over. On
+the links route, an employee actor's `firm_id` is their own firm and
+`employee_id` is their own uid, both from the **verified token**; the
+route forces `employee_id` to that value whenever the actor is an
+employee, silently overriding any `?employee_id=` the query names (unlike
+the manager firm-body rule, naming a DIFFERENT value here is not itself
+refused -- there is exactly one value an employee's own filter could ever
+legitimately mean, so substituting it is applying the only correct answer,
+not papering over a disagreement). `_require_owning_firm` (`link_routes.py`
+for links; `alert_routes.py`'s own copy of the same rule for alerts)
+covers the employee actor with the SAME check it already used for a
+manager (both kinds carry `firm_id` on the actor identically), so an
+employee naming another firm gets the same 404-not-403 existence-hiding
+refusal on any of the three routes. On the acknowledge route specifically,
+the dependency lets an employee actor through but the route body then
+refuses them with an explicit 403 -- see that route's own row above and
+docstring, since its read and write actor sets are NOT the same the way
+the links route's are.
 
 **Why a separate dependency, not a third branch on
 `require_app_admin_or_owning_manager` itself:** that gate is also the gate
