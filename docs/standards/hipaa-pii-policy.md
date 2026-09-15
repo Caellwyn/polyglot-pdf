@@ -60,10 +60,13 @@ a value-handling logger in a brand-new module is covered the moment it lands —
 `GUARDED_FILES` edit required (`polyglot-pdf-uov.15`). The sweep self-checks that
 it scanned `>=20` files (the backend has ~40 production modules; the floor is a
 gross-undercount tripwire, not a tight bound) so a broken path glob fails loudly
-rather than passing vacuously. The remaining blind spot is the **sink/shape**, not the file set: only
-two shapes are detected (kwargs in `_log.*` calls + `print()` f-strings), so a
-leak via a different sink (`logging.getLogger`, `sys.stderr.write`) still would
-not be caught. One member of that blind spot is now closed by construction
+rather than passing vacuously. The remaining blind spot is the **sink/shape**, not the file set: the
+guard's call-start pattern matches `_log.*(...)` calls, `print()` f-strings, and
+(since bd polyglot-pdf-2k2os widened it to close a gap the usage-event-v2
+emitters opened) `get_structured_logger().log_text_ai_usage(/log_tts_usage(/
+log_gemini_api_response(` -- but a leak via any OTHER sink (`logging.getLogger`,
+`sys.stderr.write`, a future `get_structured_logger()` method this list does not
+yet name) still would not be caught. One member of that blind spot is now closed by construction
 rather than by the grep: the **exception message**, which reached Cloud Logging
 through structlog's renderer from call sites that look perfectly clean in source
 (`self._log.exception("tool_callback_error", tool=tool_name)` has no sensitive
@@ -76,4 +79,4 @@ The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed i
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-09-15 (bd polyglot-pdf-6088m: the dev console ingest also fails closed on `K_SERVICE`, and the `.dockerignore` exclusion of `backend/.env.*` is pinned by a test.)*
+*Last updated: 2026-09-15. See [2026-09-15-bd-2k2os-widen-pii-guard-call-shapes.md](../journal/entries/2026-09-15-bd-2k2os-widen-pii-guard-call-shapes.md) for closeout details. (bd polyglot-pdf-6088m also touched this doc the same day: the dev console ingest fails closed on `K_SERVICE`, and the `.dockerignore` exclusion of `backend/.env.*` is pinned by a test.)*
