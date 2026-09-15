@@ -109,7 +109,17 @@ the maintainer's desktop.
 
 ## Review record
 
-REVIEW_RECORD
+Fresh-eyes (Sonnet, read-only): round 1 found the Dockerfile RUN written
+with literal backslash-n and the three Dockerfile tests never appended;
+round 2 found the npm audits unrun and a comment-joiner edge; round 3
+found `testing.md` omitting semgrep. Opus cross-surface round 1 followed
+the requirements split out into the `.bat` mirrors of two dev scripts
+(still on the runtime file), the `testing.md` Tracks line, and three
+pre-existing items filed as beads (`polyglot-pdf-o9b51` editor deploy
+`npm ci`, `polyglot-pdf-g4p1j` Dependabot merge path, and after round 2
+`polyglot-pdf-datcz` the start_backend venv-path mismatch); round 2: NO-GAPS. Every pin was
+mutation-verified in a hidden single process; no reviewer started a
+process.
 
 Fresh-eyes round 1 found the two defects worth recording: the Dockerfile's
 new RUN carried the two characters backslash + n instead of a real line
@@ -140,8 +150,10 @@ and the dev-requirements pin now derives its file set by glob over every
 vacuity floor. `testing.md`'s Tracks line gained `requirements-dev.txt`.
 Pre-existing findings filed rather than fixed here: `deploy-editor.sh` /
 `deploy-admin-console.sh` only `npm install` when `node_modules` is absent,
-so a local editor deploy after a lockfile change builds stale packages;
-Dependabot PRs close no bead and the doctrine has no path for them. The
+so a local editor deploy after a lockfile change builds stale packages
+(`polyglot-pdf-o9b51`); Dependabot PRs close no bead and the doctrine has
+no path for them (`polyglot-pdf-g4p1j`); `start_backend.bat` and
+`start_backend.sh` look for the venv in different places (`polyglot-pdf-datcz`). The
 secret-scan baseline's whole-directory exclusion of
 `backend/tests/unit/fixtures/` is accepted as-is (one non-frozen schema
 snapshot; narrowing it means a rescan).
