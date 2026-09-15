@@ -2,7 +2,7 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/routes/deploy_routes.py admin_backend/routes/deploy_webhook.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py admin_backend/services/cloud_build.py admin_backend/services/promotion_gate.py deploy/targets.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
+*Last updated: 2026-09-15 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
 route, Pub/Sub build-status webhook, and the `deployments` collection.
 POST/GET `/admin/deploys` + GET `/admin/deploys/{deploy_id}`
 (`admin_backend/routes/deploy_routes.py`, `require_app_admin`) trigger a
