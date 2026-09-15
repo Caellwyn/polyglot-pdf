@@ -347,6 +347,21 @@ def test_literal_check_is_present(check):
         "infra_posture.sh no longer declares the check " + check)
 
 
+def test_no_undeclared_literal_checks():
+    """The SET of literal check names, pinned in both directions (CLAUDE.md
+    scar #8): a check recorded under a new literal name without updating
+    LITERAL_CHECKS would otherwise drift in silently. Templated names
+    (those containing ${...}) are pinned by their own template tests.
+    """
+    text = _script_text()
+    literal = set(re.findall(r'record "([a-zA-Z0-9_]+)"', text))
+    assert literal == set(LITERAL_CHECKS), (
+        "literal record names in infra_posture.sh differ from LITERAL_CHECKS; "
+        "only in script: {}; only in pin: {}".format(
+            sorted(literal - set(LITERAL_CHECKS)),
+            sorted(set(LITERAL_CHECKS) - literal)))
+
+
 @pytest.mark.parametrize("prefix", SA_ROLE_CHECK_PREFIXES)
 def test_service_account_role_check_is_wired(prefix):
     """Each SA-envelope check is both DEFINED (check_sa_roles is called with

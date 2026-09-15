@@ -411,7 +411,7 @@ else:
     # getIamPolicy permission) also produces empty output, and treating
     # that as a clean PASS would report the scope guard as satisfied
     # PRECISELY BECAUSE the read that would have caught a real widening
-    # never happened (cross-surface review round 2, gap 2).
+    # never happened.
     run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
         --flatten="bindings[].members" \
         --filter="bindings.members:serviceAccount:admin-backend-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/storage.objectAdmin" \
@@ -523,7 +523,7 @@ fi
 # project-level IAM query for polyglot-cloudbuild-sa's own
 # iam.serviceAccountUser bindings), so running it once per target issued an
 # identical query twice and printed two identically-worded verdicts for one
-# underlying condition (cross-surface review round 2 nit). The per-target
+# underlying condition. The per-target
 # resource-scoped presence checks above stay in the loop -- only the
 # project-wide SCOPE guard, which does not vary by target, moved out.
 CLOUD_BUILD_ACTAS_TARGETS="polyglot-backend-sa admin-backend-sa"
