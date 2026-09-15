@@ -76,9 +76,41 @@ profile fix does not reach agent sessions -- which are the cascade source.
   the cascade fix, which was wrong. Carries a note to re-measure before
   spending on it.
 
-**Assess outcome.** Exit criteria scored 2/2 PASS (see PR body). Fresh-eyes and
-the outer cross-surface review both cleared; round counts and triage breakdown
-are in the merge ping.
+**Assess outcome.** Exit criteria scored 2/2 PASS (see PR body). Fresh-eyes
+cleared in one round (`NO-GAPS`), surfacing one blocker fixed inline: the
+`pr_review_watcher.py` copy of `windowless_creationflags()` carried a rationale
+comment ("importing swarm_config mutates PATH -- side effects this script must
+not take on") that was FALSE in that file, which already imports
+`swarm_config` and calls `swarm_config.repo()`. Aliased to the real helper
+instead. A comment contradicting its code is a blocker, not a nit.
+
+The Opus cross-surface review took two rounds. Round 1 returned
+`GAPS-FOUND (2)`, both in-scope blockers, both genuine:
+
+- **A regression this branch introduced.** In the three bootstrap scripts,
+  `_project_python()` runs at IMPORT time, but the batch patch inserted
+  `windowless_creationflags()` AFTER that call site -- and those files import
+  `subprocess` FUNCTION-locally, so the helper had no `subprocess` in scope
+  either. Every call raised `NameError`, swallowed by the function's own
+  `except Exception: pass`, which skipped the git resolution and fell back to
+  `__file__`'s tree. From a worktree that resolved to a venv path that does
+  not exist -- **the exact bug that function's docstring exists to describe.**
+  Fixed by inlining the flag expression where `subprocess` is already in
+  scope.
+- **The guard could not have caught it.** It pinned that `creationflags=` is
+  PRESENT, not that it RESOLVES. Added
+  `test_every_creationflags_expression_resolves_where_it_is_used`.
+
+Round 2 returned `NO-GAPS`, having verified the fix by *executing*
+`_project_python()` in all three scripts rather than reading it, and probing
+the new guard against five adversarial shapes (four caught, one -- an
+attribute call -- correctly skipped as carrying its own scope).
+
+Deferred: `polyglot-pdf-6peeg` (the `settings.json` PATH uses `;`, which on
+POSIX splits on `:` and would delete the first real PATH entry),
+`polyglot-pdf-enot7` (the same line's hardcoded username),
+`polyglot-pdf-5j51t` (a wall-clock flake in the client-cache concurrency test,
+proven pre-existing).
 
 ## Lessons
 
@@ -114,6 +146,24 @@ the test "passed" against an unmutated file. Always confirm the mutation
 actually landed before reading the result -- this is why
 `docs/standards/testing.md` says to check.
 
+**A mechanical patch applied to N files needs N verifications, not one.** The
+17 `creationflags` insertions were made by one AST-ish script that appended a
+helper after the last import block. That is correct in 14 files and wrong in
+three, where a function ABOVE the insertion point runs at import time -- and
+because the call sites all *looked* identical in the diff, spot-checking one
+proved nothing about the others. Worse, the guard test written in the same
+breath passed on all three, because it checked the shape I had in mind rather
+than the property I wanted. **When a patch is uniform but its context is not,
+verify per-file behavior, not per-file textual presence.**
+
+**A guard that pins presence cannot pin correctness.** The first version of
+`test_script_spawns_are_windowless` asserted `creationflags=` appears at every
+spawn site. That is exactly the shape of assertion `docs/standards/testing.md`
+warns about: it describes the code rather than specifying the behavior, so it
+stayed green through a change that made three of those very sites raise at
+runtime. The reviewer's phrasing is worth keeping: *the class it exists to
+prevent re-entered through a side door.*
+
 **Test stubs that pin an exact signature break on correct changes.** Adding
 `creationflags=` broke `test_guidance_regen_serialization`'s `fake_run`, which
 declared a fixed parameter list. A stub standing in for `subprocess.run` must
@@ -147,7 +197,17 @@ one-liner was added because it would restate an existing rule verbatim.
   `scripts/bakeoff/order_probe.py` -- `creationflags` added to every spawn
   site (17 total), helper added where absent.
 - `backend/tests/unit/test_script_spawns_are_windowless.py` -- NEW. Static
-  AST guard pinning the whole spawn set + vacuity guard.
+  AST guard pinning the whole spawn set, a vacuity guard, and a resolvability
+  guard (a named helper must be defined ABOVE its call site; a function
+  reading `subprocess` must have it in scope).
+- `scripts/bootstrap_admin_user.py`, `scripts/bootstrap_editor_user.py`,
+  `scripts/bootstrap_voice_dev.py` -- flag expression INLINED inside
+  `_project_python()` and the misordered module-level helper removed (the
+  import-time `NameError` the first patch introduced).
+- `docs/freshness/components~admin-service.md.ack`,
+  `components~auth.md.ack`, `components~config-deployment.md.ack` --
+  reviewed-and-left acks (the tracked scripts gained only window
+  suppression, so no prose changed and no stamp was bumped).
 - `tests/test_doc_freshness.py` -- `TestBatchedCommitTimes`: real-git fixture
   (two commits per path, reverse order, so a `setdefault -> overwrite`
   regression cannot survive), directory-token parity against git itself,
