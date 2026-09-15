@@ -61,7 +61,10 @@ const FIRM_DETAIL = {
     {
       type: 'subscription_grant', amount: 100,
       usd_amount: 49.99, firm_kind: 'live' as const, channel: null,
-      balance_after: 100, actor: 'admin-1', reason: null,
+      balance_after: 100, actor: 'admin-1',
+      // bd polyglot-pdf-cpsi0: actor_label is what the console displays;
+      // 'admin-1' (the raw uid) is kept on `actor` for the title tooltip.
+      actor_label: 'ops@example.com', reason: null,
       link_jti: null, kit_id: null, ts: 1700000000,
     },
   ],
@@ -69,7 +72,9 @@ const FIRM_DETAIL = {
 };
 
 const LINK_MINTED = {
-  jti: 'jti-1', kit_id: 'w7', employee_id: 'emp-1', status: 'minted',
+  jti: 'jti-1', kit_id: 'w7', employee_id: 'emp-1',
+  // bd polyglot-pdf-cpsi0: same relationship as the ledger's actor_label.
+  employee_label: 'staffer@example.com', status: 'minted',
   minted_at: 1700000000, open_deadline: 1700003600, opened_at: null,
   completed_at: null, spend_usd: null, turns: null, cap_usd: 3,
   credit_cost: 1,
@@ -116,7 +121,46 @@ describe('FirmDetailPage', () => {
     // 'subscription_grant' also appears as <option> text in the grant
     // form's type <select>, so this scopes the lookup to the ledger table.
     expect(within(screen.getByTestId('ledger-table')).getByText('subscription_grant')).toBeInTheDocument();
-    expect(screen.getByText('emp-1')).toBeInTheDocument();
+    // bd polyglot-pdf-cpsi0: the links table shows employee_label (an
+    // email here), with the raw uid (employee_id) as a hover tooltip
+    // rather than the visible cell text.
+    const employeeCell = screen.getByText('staffer@example.com');
+    expect(employeeCell).toBeInTheDocument();
+    expect(employeeCell).toHaveAttribute('title', 'emp-1');
+  });
+
+  it('shows the ledger actor_label with the raw uid as a title tooltip', async () => {
+    await renderLoaded();
+
+    // bd polyglot-pdf-cpsi0 exit criterion 3: FirmDetailPage renders the
+    // label (an email here) with the uid as a title attribute, never the
+    // other way around.
+    const actorCell = within(screen.getByTestId('ledger-table')).getByText('ops@example.com');
+    expect(actorCell).toBeInTheDocument();
+    expect(actorCell).toHaveAttribute('title', 'admin-1');
+  });
+
+  it('prettifies a system actor label instead of showing the raw origin string', async () => {
+    vi.mocked(getFirm).mockResolvedValueOnce({
+      ...FIRM_DETAIL,
+      ledger: [
+        {
+          ...FIRM_DETAIL.ledger[0],
+          actor: 'system:backfill_firm_kind',
+          actor_label: 'system:backfill_firm_kind',
+        },
+      ],
+    });
+
+    await renderLoaded();
+
+    // Mutation: remove prettifyActorLabel's call site in the ledger cell
+    // (render entry.actor_label directly) -- red (the raw
+    // "system:backfill_firm_kind" string would show instead).
+    const actorCell = within(screen.getByTestId('ledger-table'))
+      .getByText('system: backfill firm kind');
+    expect(actorCell).toBeInTheDocument();
+    expect(actorCell).toHaveAttribute('title', 'system:backfill_firm_kind');
   });
 
   it('renders the ledger table without a React key warning when rows carry no doc_id', async () => {

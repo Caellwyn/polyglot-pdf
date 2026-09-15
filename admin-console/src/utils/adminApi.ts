@@ -578,6 +578,13 @@ export interface LedgerEntry {
   channel: string | null;
   balance_after: number;
   actor: string;
+  /** bd polyglot-pdf-cpsi0: a human-readable label for `actor` -- the
+   * row's own stored actor_email when present, else a batched Auth
+   * lookup's result, else `actor` itself. Never absent from the response
+   * (identity_labels.label_for_actor always returns something for a
+   * non-null actor); prefer this over `actor` for display, and keep
+   * `actor` around (e.g. as a title/tooltip) for the raw uid. */
+  actor_label: string;
   reason: string | null;
   link_jti: string | null;
   kit_id: string | null;
@@ -794,6 +801,11 @@ export interface LinkRow {
   jti: string;
   kit_id: string | null;
   employee_id: string | null;
+  /** bd polyglot-pdf-cpsi0: a human-readable label for `employee_id` --
+   * same resolution rule as LedgerEntry.actor_label, one field over. Null
+   * only when employee_id itself is null (identity_labels.label_for_actor
+   * returns None for a null actor); otherwise always a string. */
+  employee_label: string | null;
   status: string | null;
   minted_at: number | null;
   open_deadline: number | null;
