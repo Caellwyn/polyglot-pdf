@@ -151,14 +151,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: E402
 
 # Suppress the child console window every subprocess opens on Windows
-# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
-# imported from swarm_config because importing that module mutates PATH and
-# loads a config file -- side effects this script must not take on.
-def windowless_creationflags() -> int:
-    """subprocess creationflags that suppress child console windows on Windows."""
-    if sys.platform == "win32":
-        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return 0
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). This module already imports
+# swarm_config above, so use its helper rather than duplicating it -- the
+# PATH/config side effect of that import is already paid here.
+windowless_creationflags = swarm_config.windowless_creationflags
 
 
 
