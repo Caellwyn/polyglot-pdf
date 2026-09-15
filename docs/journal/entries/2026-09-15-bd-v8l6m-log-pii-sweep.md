@@ -132,7 +132,20 @@ retention (the last one on 2026-10-14).
 
 ## Review record
 
-REVIEW_RECORD
+Fresh-eyes (Sonnet, read-only -- no reviewer started a process): round 1 on
+the gcloud-subprocess version found raw API text reaching the report,
+the per-day row cap, a URL-span miss, a phantom project-mismatch refusal,
+an unbounded window and a case-sensitive verbosity guard; round 2 on the
+in-process rewrite found the per-span scrub splice, uncaught connection
+errors, the parenthesised phone form and the weakness of substring pins;
+round 3: GAPS-FOUND (0). Opus cross-surface round 1 followed the BigQuery
+column allowlist out into `sql/telemetry_views.sql` and found it named no
+output alias of the deployed view (the live scan had read zero cells),
+plus list leaves unswept and an undisclosed row cap; round 2 after the
+fixes: NO-GAPS, three nits (an inaccurate docstring and a missing
+hits+truncated pin, both folded in; RECORD/REPEATED columns unswept,
+filed as `polyglot-pdf-k7h3l`). Every fix was mutation-verified in a
+hidden single process, and every live run carried a spawn guard.
 
 ## Lessons
 
