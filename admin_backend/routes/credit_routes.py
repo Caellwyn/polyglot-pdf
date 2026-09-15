@@ -191,7 +191,16 @@ class GrantRequest(BaseModel):
 # (an id is enough to look the entry up). The ledger and audit-log copies
 # remain -- an operator's stated reason for a balance change is exactly what
 # those two stores exist to record -- but bounded, never arbitrary-length.
-_REASON_MAX_LENGTH = 500
+#
+# IMPORTED FROM credit_ledger, not redeclared here (Opus cross-surface
+# review finding, bd bnkuv): scripts/grant_credits.py's `adjust` subcommand
+# is a SECOND, unbounded door into the SAME ledger -- it calls
+# append_entry() directly, bypassing this Pydantic model entirely. The bound
+# now lives at credit_ledger._validate() (append_entry's own gate), which
+# covers both doors; this alias keeps existing references to
+# credit_routes._REASON_MAX_LENGTH working, but there is only ONE number,
+# defined once, so the two callers cannot silently drift apart.
+_REASON_MAX_LENGTH = credit_ledger.REASON_MAX_LENGTH
 
 
 class AdjustRequest(BaseModel):

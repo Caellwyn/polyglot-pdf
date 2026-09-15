@@ -24,8 +24,8 @@ ASCII only.
 """
 from __future__ import annotations
 
+import ast
 import asyncio
-import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -778,40 +778,276 @@ AUDITED_ACTIONS_BY_FILE = {
 
 _ROUTES_DIR = Path(admin_backend_routes_path := credit_routes.__file__).parent
 
-# Matches an ACTION_* constant NAME passed as the `action=` kwarg to any of
-# the three audit_log writer entry points -- not the constant's VALUE, since
-# the source text carries the name, not the string it resolves to.
-_ACTION_KWARG_RE = re.compile(
-    r"audit_log\.(?:record_in_transaction|record_pending|mark_committed)\s*"
-    r"\([^)]*?action\s*=\s*([A-Za-z_][A-Za-z0-9_]*)",
-    re.DOTALL,
-)
+_MODULE_BY_FILENAME = {
+    "credit_routes.py": credit_routes,
+    "firm_routes.py": firm_routes,
+    "user_routes.py": user_routes,
+    "sweep_routes.py": sweep_routes,
+    "link_routes.py": link_routes,
+    "kit_routes.py": kit_routes,
+    "config_routes.py": config_routes,
+    "alert_routes.py": alert_routes,
+}
 
-# mark_committed does not itself take an `action=` kwarg (it operates on a
-# ref returned by record_pending) -- so a route using the pending-then-
-# committed form has exactly ONE action= site (on record_pending) per
-# action, which _ACTION_KWARG_RE's non-greedy match against each
-# audit_log.<fn>(...) call already finds correctly without extra handling.
+# The three audit_log entry points that take (or, for mark_committed,
+# never take) an `action=` keyword. Matched by bare attribute/name (fresh-
+# eyes nit: a `from ...audit_log import record_in_transaction` alias must
+# resolve too -- see _is_audit_writer_call below).
+_AUDIT_WRITER_NAMES = frozenset({"record_in_transaction", "record_pending"})
 
 
-def _actions_referenced_in_file(path: Path) -> set:
-    text = path.read_text(encoding="utf-8")
-    found = set()
-    # Scan call-by-call (splitting on the writer names) rather than one
-    # regex over the whole file, so a record_pending(...) call's action=
-    # is not accidentally associated with a LATER mark_committed(...) call
-    # that has no action= of its own.
-    for match in re.finditer(
-        r"audit_log\.(?:record_in_transaction|record_pending|"
-        r"mark_committed)\s*\((.*?)\n    \)",
-        text, re.DOTALL,
-    ):
-        call_text = match.group(0)
-        action_match = re.search(r"action\s*=\s*([A-Za-z_][A-Za-z0-9_]*)",
-                                 call_text)
-        if action_match:
-            found.add(action_match.group(1))
-    return found
+class _UnresolvableAction(Exception):
+    """An action= argument could not be traced to a literal ACTION_*
+    constant. Raised, never swallowed -- the fresh-eyes GAP this rewrite
+    fixes was exactly a silent drop of unresolvable cases, so this walker
+    fails loudly instead (module docstring: 'if unresolvable, FAIL loudly,
+    never skip')."""
+
+
+def _is_audit_writer_call(call_node: ast.Call) -> bool:
+    func = call_node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr in _AUDIT_WRITER_NAMES
+    if isinstance(func, ast.Name):
+        return func.id in _AUDIT_WRITER_NAMES
+    return False
+
+
+def _action_arg_node(call_node: ast.Call):
+    """The AST node bound to `action=` on this writer call, or None if the
+    call carries no such keyword (mark_committed never does)."""
+    for kw in call_node.keywords:
+        if kw.arg == "action":
+            return kw.value
+    return None
+
+
+def _enclosing_functions(tree: ast.AST, target: ast.AST) -> "list":
+    """Every FunctionDef/AsyncFunctionDef in `tree` that contains `target`,
+    innermost first -- a name referenced inside a nested closure
+    (config_routes.py's `_txn(tx):`, or credit_routes.py's `_audit(tx,
+    firm):`) can be a FREE VARIABLE closed over from an OUTER function
+    (credit_routes.py's `action = kwargs.pop("_action")` lives in
+    `_run_append_entry`, one level up from the `_audit` closure that
+    actually calls record_in_transaction), so a caller resolving a
+    parameter/kwargs-pop reference must be able to walk outward, not just
+    take the single innermost function."""
+    containing = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for sub in ast.walk(node):
+            if sub is target:
+                containing.append(node)
+                break
+    # Innermost first: the SMALLEST span is the most deeply nested.
+    containing.sort(key=_node_span)
+    return containing
+
+
+def _node_span(node: ast.AST) -> int:
+    """A rough 'how much source this node covers' proxy (end minus start
+    line), used only to prefer the SMALLEST (innermost) enclosing function
+    when more than one contains the target node."""
+    return getattr(node, "end_lineno", node.lineno) - node.lineno
+
+
+def _param_names(func_node) -> "list[str]":
+    args = func_node.args
+    return [a.arg for a in (args.posonlyargs + args.args + args.kwonlyargs)]
+
+
+def _kwargs_pop_key(func_node, param_name: str):
+    """If `param_name` is assigned via `param_name = kwargs.pop("KEY")`
+    inside `func_node` (credit_routes.py's _run_append_entry shape --
+    `action = kwargs.pop("_action")`), return "KEY"; else None.
+    """
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Assign):
+            continue
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        if node.targets[0].id != param_name:
+            continue
+        call = node.value
+        if (isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "pop"
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "kwargs"
+                and call.args
+                and isinstance(call.args[0], ast.Constant)):
+            return call.args[0].value
+    return None
+
+
+def _call_site_keyword_or_positional(call_node: ast.Call, func_node,
+                                     param_name: str):
+    """The AST node bound to `param_name` at ONE call site of `func_node`,
+    matching either a keyword (`param_name=...` or, for the
+    kwargs.pop("_action") shape, `_action=...`) or the equivalent
+    positional slot. Returns None if this call site does not supply it
+    (a default was used, or it truly is not passed -- callers of this
+    helper decide whether that is an error).
+    """
+    pop_key = _kwargs_pop_key(func_node, param_name)
+    keyword_names = {param_name}
+    if pop_key is not None:
+        keyword_names.add(pop_key)
+
+    for kw in call_node.keywords:
+        if kw.arg in keyword_names:
+            return kw.value
+
+    # Positional fallback: only meaningful when the parameter is a plain
+    # positional/regular arg (not the **kwargs-popped shape, which is never
+    # positional in this repo's call sites).
+    if pop_key is None:
+        params = _param_names(func_node)
+        if param_name in params:
+            idx = params.index(param_name)
+            if idx < len(call_node.args):
+                return call_node.args[idx]
+    return None
+
+
+# asyncio.to_thread(func, *args, **kwargs) is this repo's own convention
+# for running a sync Firestore/Auth helper off the event loop (every route
+# in this file's coverage does this) -- a plain `ast.Call` walk looking
+# for `Call(func=Name(id=owner.name))` misses every one of these, since
+# the actual keyword arguments (credit_routes.py's `_action=...` among
+# them) live on the OUTER `asyncio.to_thread(...)` call, with `owner.name`
+# passed as to_thread's first positional argument, not called directly.
+def _call_sites_of(tree: ast.AST, func_name: str) -> "list[ast.Call]":
+    """Every ast.Call that invokes `func_name`, either directly
+    (`func_name(...)`) or via `asyncio.to_thread(func_name, ...)` -- in the
+    to_thread case, the RETURNED node is the to_thread call itself, since
+    that is where the keyword arguments actually live."""
+    sites = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        direct_name = (func.id if isinstance(func, ast.Name)
+                       else func.attr if isinstance(func, ast.Attribute)
+                       else None)
+        if direct_name == func_name:
+            sites.append(node)
+            continue
+        is_to_thread = (
+            (isinstance(func, ast.Attribute) and func.attr == "to_thread")
+            or (isinstance(func, ast.Name) and func.id == "to_thread")
+        )
+        if is_to_thread and node.args and isinstance(node.args[0], ast.Name) \
+                and node.args[0].id == func_name:
+            sites.append(node)
+    return sites
+
+
+def _resolve_action_names(tree: ast.AST, module, source_file: str) -> set:
+    """Every ACTION_* string VALUE actually reachable from an `action=`
+    argument to record_in_transaction/record_pending in this module's
+    AST -- resolving straight-through module-level constant references
+    AND indirect ones (the argument is a function PARAMETER, and the
+    actual constant is supplied by each call site of that function in the
+    same module -- firm_routes.py's `_apply_firm_patch(action, ...)` and
+    credit_routes.py's `_run_append_entry(..., **kwargs)` with
+    `action = kwargs.pop("_action")` are both this shape).
+
+    FAILS LOUDLY (raises _UnresolvableAction) rather than silently
+    dropping anything it cannot trace -- the fresh-eyes gap this function
+    exists to close was exactly a silent drop (the old regex-based
+    version's `hasattr` filter).
+    """
+    resolved = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and _is_audit_writer_call(node)):
+            continue
+        arg = _action_arg_node(node)
+        if arg is None:
+            # mark_committed never carries action=; a record_* call with no
+            # action= at all would be a different, real bug -- but that is
+            # exactly what the OTHER coverage test in this file
+            # (test_admin_audit_coverage.py's sibling machinery) pins via a
+            # different property. This function's only job is resolving
+            # actions that ARE present.
+            continue
+
+        if isinstance(arg, ast.Attribute):
+            # module.ACTION_X -- not a shape any file in this repo uses
+            # today, but resolve it rather than fail if one ever does.
+            const_name = arg.attr
+        elif isinstance(arg, ast.Name):
+            const_name = arg.id
+        else:
+            raise _UnresolvableAction(
+                "cannot resolve action for {}:{} -- action= is neither a "
+                "plain name nor an attribute reference ({!r})".format(
+                    source_file, node.lineno, ast.dump(arg))
+            )
+
+        if hasattr(module, const_name):
+            resolved.add(getattr(module, const_name))
+            continue
+
+        # Not a module-level constant: must be a parameter (or a
+        # kwargs.pop("_KEY")-derived local) of SOME enclosing function --
+        # tried innermost first, then outward, since the name can be a
+        # FREE VARIABLE closed over from an outer function (credit_routes
+        # .py's `_audit(tx, firm)` closure reads `action`, which is
+        # actually bound one level up in `_run_append_entry` via
+        # `action = kwargs.pop("_action")`).
+        owner = None
+        for candidate in _enclosing_functions(tree, node):
+            if (const_name in _param_names(candidate)
+                    or _kwargs_pop_key(candidate, const_name) is not None):
+                owner = candidate
+                break
+        if owner is None:
+            raise _UnresolvableAction(
+                "cannot resolve action for {}:{} -- {!r} is not a "
+                "module-level ACTION_* constant and not a parameter (or "
+                "kwargs.pop-derived local) of any enclosing function".format(
+                    source_file, node.lineno, const_name)
+            )
+
+        found_any_call_site = False
+        for call_site in _call_sites_of(tree, owner.name):
+            value_node = _call_site_keyword_or_positional(
+                call_site, owner, const_name)
+            if value_node is None:
+                continue
+            found_any_call_site = True
+            if isinstance(value_node, ast.Attribute):
+                call_const_name = value_node.attr
+            elif isinstance(value_node, ast.Name):
+                call_const_name = value_node.id
+            else:
+                raise _UnresolvableAction(
+                    "cannot resolve action for {}:{} -- {}() is called "
+                    "with a non-name/attribute value for {!r} at line {} "
+                    "({!r})".format(
+                        source_file, node.lineno, owner.name,
+                        const_name, call_site.lineno, ast.dump(value_node))
+                )
+            if not hasattr(module, call_const_name):
+                raise _UnresolvableAction(
+                    "cannot resolve action for {}:{} -- {}() caller at "
+                    "line {} passes {!r} for {!r}, which is not a "
+                    "module-level constant".format(
+                        source_file, node.lineno, owner.name,
+                        call_site.lineno, call_const_name, const_name)
+                )
+            resolved.add(getattr(module, call_const_name))
+
+        if not found_any_call_site:
+            raise _UnresolvableAction(
+                "cannot resolve action for {}:{} -- {!r} is bound in "
+                "{}(), but no call site in this module supplies it".format(
+                    source_file, node.lineno, const_name, owner.name)
+            )
+
+    return resolved
 
 
 def test_every_audit_writing_route_file_has_a_table_row():
@@ -847,29 +1083,33 @@ def test_every_audit_writing_route_file_has_a_table_row():
 
 
 def test_every_referenced_action_constant_is_in_the_table():
-    """The content half: every action= constant actually referenced in each
-    audited file's source must appear in that file's table entry -- so a
-    NEW action added to an already-covered file (a second mutating route in
-    kit_routes.py, say) without extending the table also fails here."""
+    """The content half: every action= constant actually reachable in each
+    audited file's source (AST-resolved, not regex-matched -- see the
+    module-level rewrite above, fresh-eyes round 3) must appear in that
+    file's table entry -- so a NEW action added to an already-covered file
+    (a second mutating route in kit_routes.py, say) without extending the
+    table also fails here, and so does an action= that is an indirect
+    parameter/kwargs-pop reference the old regex-based version silently
+    dropped (bd polyglot-pdf-uaxt5 fresh-eyes round 3: config_routes.py's
+    nested-closure indentation defeated the old regex entirely; firm_routes
+    .py's `_apply_firm_patch(action, ...)` and credit_routes.py's
+    `_run_append_entry`'s `kwargs.pop("_action")` both resolved to nothing
+    under `hasattr` and were silently dropped).
+
+    Mutation (proven on a scratch copy, not committed): rename
+    ACTION_CONFIG_SET to ACTION_CONFIG_WIPE in config_routes.py -- the OLD
+    regex-based test stayed GREEN under this rename (config_routes.py's
+    call is indented 8 spaces, inside the `_txn` closure, so the old
+    `\\n    )` regex never matched it at all -- zero actions were ever
+    checked for that file). This AST version goes RED, since
+    ACTION_CONFIG_WIPE is a real, resolved module-level constant not
+    present in AUDITED_ACTIONS_BY_FILE["config_routes.py"].
+    """
     for filename, table_actions in AUDITED_ACTIONS_BY_FILE.items():
         path = _ROUTES_DIR / filename
-        referenced = _actions_referenced_in_file(path)
-        # referenced holds CONSTANT NAMES (e.g. "ACTION_LINK_REVOKE"); the
-        # table holds the resolved STRING VALUES. Resolve each referenced
-        # name against the route module's own globals to compare like with
-        # like.
-        module = {
-            "credit_routes.py": credit_routes,
-            "firm_routes.py": firm_routes,
-            "user_routes.py": user_routes,
-            "sweep_routes.py": sweep_routes,
-            "link_routes.py": link_routes,
-            "kit_routes.py": kit_routes,
-            "config_routes.py": config_routes,
-            "alert_routes.py": alert_routes,
-        }[filename]
-        resolved = {getattr(module, name) for name in referenced
-                   if hasattr(module, name)}
+        module = _MODULE_BY_FILENAME[filename]
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        resolved = _resolve_action_names(tree, module, filename)
         missing = resolved - table_actions
         assert not missing, (
             "{} references audit action(s) {} not listed in "

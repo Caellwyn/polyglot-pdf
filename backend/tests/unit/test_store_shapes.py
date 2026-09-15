@@ -49,6 +49,20 @@ LINKS_MINT_RECORD_ALLOWED_KEYS = frozenset({
     "expire_at",
 })
 
+# A SECOND writer of this SAME collection (found during bd polyglot-pdf-uaxt5's
+# Opus cross-surface review, the same "another writer touches this doc"
+# class as link_redemptions' own link_spend.py finding above):
+# backend/services/links_store.py::mark_opened() is a best-effort mirror
+# that stamps `opened_at` (an int timestamp) on the FIRST open, alongside
+# flipping `status` from minted to opened -- `status` is already in the
+# base set above, so `opened_at` is the only NEW key. This is the union
+# allowlist for the LIVE inventory: a real deployed doc can carry it once a
+# client has opened the link, mirroring
+# REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND's own shape below.
+LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED = LINKS_MINT_RECORD_ALLOWED_KEYS | {
+    "opened_at",
+}
+
 
 def test_links_mint_record_key_set():
     """Mutation: add a stray field to links_store.build_mint_record()'s
@@ -102,6 +116,89 @@ def test_mint_record_refuses_a_blank_identifier(missing_field):
     kwargs[missing_field] = ""
     with pytest.raises(ValueError):
         links_store.build_mint_record(**kwargs)
+
+
+class _FakeLinksSnapshot:
+    def __init__(self, data):
+        self._data = data
+
+    @property
+    def exists(self):
+        return self._data is not None
+
+    def to_dict(self):
+        return dict(self._data) if self._data is not None else None
+
+
+class _FakeLinksDocRef:
+    def __init__(self, store, jti):
+        self._store = store
+        self._jti = jti
+
+    def get(self):
+        return _FakeLinksSnapshot(self._store.get(self._jti))
+
+    def set(self, data, merge=False):
+        if merge and self._jti in self._store:
+            self._store[self._jti].update(data)
+        else:
+            self._store[self._jti] = dict(data)
+
+    def update(self, data):
+        self._store[self._jti].update(data)
+
+
+class _FakeLinksCollection:
+    def __init__(self, store):
+        self._store = store
+
+    def document(self, jti):
+        return _FakeLinksDocRef(self._store, jti)
+
+
+@pytest.fixture
+def fake_links_store(monkeypatch):
+    store: dict = {}
+    monkeypatch.setattr(links_store, "_collection",
+                        lambda *a, **k: _FakeLinksCollection(store))
+    return store
+
+
+def test_mark_opened_stays_within_the_union_allowlist(fake_links_store):
+    """backend/services/links_store.py::mark_opened() is a SECOND writer of
+    the links[_<channel>] collection (found in Opus cross-surface review):
+    it flips `status` minted->opened and stamps `opened_at` on the FIRST
+    open. Mutation: add a stray field to mark_opened()'s ref.update(...)
+    call -- this goes red on the exact-set check against the union
+    allowlist."""
+    record = links_store.build_mint_record(
+        jti="jti-open", firm_id="acme", kit_id="i-90", employee_id="emp-1",
+        credit_cost=5, cap_usd=1.5, open_deadline=1234567890,
+    )
+    fake_links_store["jti-open"] = record
+
+    stuck = links_store.mark_opened("jti-open", now=1000.0)
+    assert stuck is True
+
+    rec = fake_links_store["jti-open"]
+    assert set(rec) <= LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED, (
+        "mark_opened() wrote a key outside the union allowlist: {}"
+    ).format(set(rec) - LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED)
+    assert rec["opened_at"] == 1000
+    assert rec["status"] == links_store.STATUS_OPENED
+
+
+def test_a_stray_key_from_mark_opened_is_caught(fake_links_store):
+    """Test the test: hand-inject a stray key past the union allowlist."""
+    record = links_store.build_mint_record(
+        jti="jti-open2", firm_id="acme", kit_id="i-90", employee_id="emp-1",
+        credit_cost=5, cap_usd=1.5, open_deadline=1234567890,
+    )
+    fake_links_store["jti-open2"] = record
+    links_store.mark_opened("jti-open2", now=1000.0)
+    fake_links_store["jti-open2"]["_mutation_stray_key"] = "x"
+    assert not (set(fake_links_store["jti-open2"])
+               <= LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED)
 
 
 # --------------------------------------------------------------------------

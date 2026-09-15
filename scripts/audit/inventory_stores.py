@@ -124,17 +124,59 @@ PINNED_ALLOWLISTS: dict[str, frozenset] = {
         "balance_after", "actor", "reason", "link_jti", "kit_id", "ts",
         "period",
     }),
-    # backend/services/links_store.py::build_mint_record, pinned in
-    # backend/tests/unit/test_store_shapes.py::LINKS_MINT_RECORD_ALLOWED_KEYS.
+    # backend/services/usage_rollups.py::record_session_end -- the nested
+    # firms/{firm_id}/usage/{YYYY-MM[_channel]} subcollection doc. The
+    # by_kit/by_employee/by_language maps are keyed on IDENTIFIERS (a kit
+    # id, a uid, a spoken-language name) with {sessions, cost_usd} values --
+    # this collection's own allowlist covers the TOP-LEVEL field names only
+    # (by_kit/by_employee/by_language themselves); the identifier-shaped
+    # keys one level down are reported separately by _summarize_docs'
+    # nested_keys, never flagged against a closed set (an identifier is
+    # expected to vary per doc). links_opened/links_completed are a SECOND
+    # writer of this SAME doc (record_link_opened/record_link_completed,
+    # called from link_redemptions.py's open_link/complete_link) -- this is
+    # the union of both writers' fields, since a real doc carries either or
+    # both depending on the month's traffic.
+    "firms_usage": frozenset({
+        "connections_ended", "sessions_completed", "cost_usd_total",
+        "by_kit", "by_employee", "by_language", "kind", "channel",
+        "links_opened", "links_completed",
+    }),
+    # backend/services/usage_rollups.py::record_session_end -- the nested
+    # kits/{kit_id}/usage/{YYYY-MM[_channel]} subcollection doc. by_firm is
+    # keyed on firm ids (identifiers, reported via nested_keys as above).
+    "kits_usage": frozenset({
+        "connections_ended", "sessions_completed", "cost_usd_total",
+        "by_firm", "kind", "channel",
+    }),
+    # backend/services/link_metering.py::record_mint -- the nested
+    # firms/{firm_id}/link_usage/{YYYY-MM} subcollection doc (billing
+    # counter for the per-firm monthly link-mint allowance; NOT abuse
+    # prevention, per that module's own docstring -- it counts and
+    # reports, never gates a mint).
+    "firms_link_usage": frozenset({
+        "minted", "updated_at",
+    }),
+    # backend/services/links_store.py::build_mint_record (base shape, pinned
+    # in backend/tests/unit/test_store_shapes.py::
+    # LINKS_MINT_RECORD_ALLOWED_KEYS) PLUS mark_opened(), a SECOND writer of
+    # this SAME collection (found in bd polyglot-pdf-uaxt5's Opus cross-
+    # surface review, the same "a second writer touches this doc" class as
+    # link_redemptions' own link_spend.py finding above) -- mark_opened()
+    # stamps `opened_at` alongside flipping `status` (already in the base
+    # set) from minted to opened on the link's FIRST open. The union is
+    # test_store_shapes.py::LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED,
+    # since a real deployed doc can carry it once a client has opened the
+    # link.
     "links": frozenset({
         "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
         "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
-        "expire_at",
+        "expire_at", "opened_at",
     }),
     "links_staging": frozenset({
         "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
         "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
-        "expire_at",
+        "expire_at", "opened_at",
     }),
     # backend/services/link_redemptions.py::open_link/complete_link (base
     # shape, pinned in backend/tests/unit/test_store_shapes.py::
@@ -258,6 +300,7 @@ def _summarize_docs(docs: list, allowlist: "Optional[frozenset]") -> dict:
         "doc_count": int,
         "keys": {key: {"types": {type_name, ...}, "max_str_len": int|None}},
         "flagged_keys": [key, ...],   # keys outside `allowlist`, sorted
+        "nested_keys": {top_level_key: [nested_key_name, ...]},
     }
 
     `allowlist=None` means "no closed set to check against" -- every key is
@@ -265,8 +308,23 @@ def _summarize_docs(docs: list, allowlist: "Optional[frozenset]") -> dict:
     "reporting only" mode for a collection with no single pinned writer,
     e.g. kits/app_config, so this script does not manufacture false
     positives against a shape it was never told to expect).
+
+    NESTED DICT VALUES, ONE LEVEL DOWN: usage_rollups.py's rollup docs carry
+    maps like `by_employee`/`by_language`/`by_kit`/`by_firm` whose KEYS are
+    identifiers (an employee uid, a spoken-language name, a kit id, a firm
+    id) -- not schema fields. A flat top-level scan would report only
+    "by_employee: types=[dict]" and miss that an identifier-shaped string is
+    sitting one level down. So for every top-level key whose value is a
+    dict, this also collects the NESTED key NAMES (never their values,
+    which are always plain counts here) into `nested_keys`, printed
+    separately by the caller as "possible identifiers embedded as map keys"
+    -- informational, not flagged against any allowlist (an identifier is
+    expected to vary per doc; the allowlist question is about the outer
+    field name, e.g. "by_employee", which the normal `keys`/`flagged_keys`
+    machinery above already covers).
     """
     keys: dict[str, dict[str, Any]] = {}
+    nested_keys: dict[str, set] = {}
     for doc in docs:
         data = doc.to_dict() or {}
         for key, value in data.items():
@@ -275,18 +333,30 @@ def _summarize_docs(docs: list, allowlist: "Optional[frozenset]") -> dict:
             if isinstance(value, str):
                 cur = entry["max_str_len"] or 0
                 entry["max_str_len"] = max(cur, len(value))
+            if isinstance(value, dict):
+                nested_keys.setdefault(key, set()).update(value.keys())
 
     flagged: list[str] = []
     if allowlist is not None:
         flagged = sorted(set(keys) - allowlist)
 
     return {
+        # ALWAYS True: a successful summarize (even of zero docs -- an
+        # empty collection is not a failure) reached the store and read it.
+        # The `reachable` flag is the ONE property every branch of this
+        # script's report (Firestore collections, the bucket, BigQuery)
+        # checks the SAME way -- see the print loop below, which used to
+        # check `"error" in summary` for Firestore but `reachable` for
+        # everything else (bd polyglot-pdf-uaxt5, Opus cross-surface review
+        # nit).
+        "reachable": True,
         "doc_count": len(docs),
         "keys": {
             k: {"types": sorted(v["types"]), "max_str_len": v["max_str_len"]}
             for k, v in keys.items()
         },
         "flagged_keys": flagged,
+        "nested_keys": {k: sorted(v) for k, v in nested_keys.items()},
     }
 
 
@@ -303,25 +373,40 @@ def inventory_collection(
     return _summarize_docs(docs, allowlist)
 
 
-def inventory_ledger_subcollections(
-    db, *, firm_sample_size: int, ledger_sample_size: int,
+def inventory_subcollection(
+    db, *, parent_collection: str, subcollection: str, allowlist,
+    parent_sample_size: int, child_sample_size: int,
 ) -> dict:
-    """firms/{firm_id}/ledger is NESTED -- sample a handful of firms, then a
-    handful of ledger entries per firm, and summarize the UNION (the ledger
-    shape is the same across every firm; sampling several just guards
-    against one firm's doc being unrepresentative)."""
-    firm_docs = list(db.collection("firms").limit(firm_sample_size).stream())
-    all_entries = []
-    firm_ids_sampled = []
-    for firm_snap in firm_docs:
-        firm_ids_sampled.append(firm_snap.id)
-        entries = list(
-            db.collection("firms").document(firm_snap.id)
-            .collection("ledger").limit(ledger_sample_size).stream()
+    """Sample a handful of PARENT docs (firms, kits), then a handful of
+    SUBCOLLECTION docs per parent, and summarize the UNION -- the shape is
+    the same across every parent (every firm's ledger entry looks the same
+    shape-wise; every firm's usage rollup does too), so sampling several
+    parents just guards against one parent's doc being unrepresentative.
+
+    Generalized from the original ledger-only sampler (bd polyglot-pdf-
+    uaxt5, Opus cross-surface review finding: the inventory omitted
+    firms/{id}/usage, kits/{id}/usage and firms/{id}/link_usage -- three of
+    the four SUBCOLLECTION-suffixed stores this repo's backend/services/
+    writes into. `grep -rn "SUBCOLLECTION" backend/services/` finds
+    EXACTLY four: credit_ledger.LEDGER_SUBCOLLECTION ("ledger", already
+    inventoried), usage_rollups.USAGE_SUBCOLLECTION ("usage", mounted under
+    BOTH firms and kits), and link_metering._USAGE_SUBCOLLECTION
+    ("link_usage", firms only) -- so this generalization plus the three new
+    call sites below make the subcollection inventory COMPLETE.
+    """
+    parent_docs = list(
+        db.collection(parent_collection).limit(parent_sample_size).stream())
+    all_children = []
+    parent_ids_sampled = []
+    for parent_snap in parent_docs:
+        parent_ids_sampled.append(parent_snap.id)
+        children = list(
+            db.collection(parent_collection).document(parent_snap.id)
+            .collection(subcollection).limit(child_sample_size).stream()
         )
-        all_entries.extend(entries)
-    summary = _summarize_docs(all_entries, PINNED_ALLOWLISTS["ledger"])
-    summary["firms_sampled"] = firm_ids_sampled
+        all_children.extend(children)
+    summary = _summarize_docs(all_children, allowlist)
+    summary["{}_sampled".format(parent_collection)] = parent_ids_sampled
     return summary
 
 
@@ -507,10 +592,18 @@ def main(argv: "Optional[list]" = None) -> int:
         db = None
         incomplete = True
 
+    # Collections handled specially below (nested subcollections walked
+    # per-parent, or a live-resolved allowlist) rather than through the
+    # flat inventory_collection() loop.
+    _SPECIAL_CASED = frozenset({
+        "app_config", "ledger", "firms_usage", "kits_usage",
+        "firms_link_usage",
+    })
+
     if db is not None:
         for coll_name, allowlist in PINNED_ALLOWLISTS.items():
-            if coll_name in ("app_config", "ledger"):
-                continue  # handled specially below
+            if coll_name in _SPECIAL_CASED:
+                continue
             try:
                 report["collections"][coll_name] = inventory_collection(
                     db, coll_name, sample_size=args.sample_size,
@@ -522,18 +615,28 @@ def main(argv: "Optional[list]" = None) -> int:
                 }
                 incomplete = True
 
-        try:
-            report["collections"]["firms/*/ledger"] = (
-                inventory_ledger_subcollections(
-                    db, firm_sample_size=min(args.sample_size, 5),
-                    ledger_sample_size=args.sample_size,
+        # The four SUBCOLLECTION-suffixed stores (grep-confirmed complete --
+        # see inventory_subcollection's own docstring): firms/*/ledger,
+        # firms/*/usage, kits/*/usage, firms/*/link_usage.
+        for report_name, parent_collection, subcollection, allowlist_key in [
+            ("firms/*/ledger", "firms", "ledger", "ledger"),
+            ("firms/*/usage", "firms", "usage", "firms_usage"),
+            ("kits/*/usage", "kits", "usage", "kits_usage"),
+            ("firms/*/link_usage", "firms", "link_usage", "firms_link_usage"),
+        ]:
+            try:
+                report["collections"][report_name] = inventory_subcollection(
+                    db, parent_collection=parent_collection,
+                    subcollection=subcollection,
+                    allowlist=PINNED_ALLOWLISTS[allowlist_key],
+                    parent_sample_size=min(args.sample_size, 5),
+                    child_sample_size=args.sample_size,
                 )
-            )
-        except Exception as exc:  # noqa: BLE001
-            report["collections"]["firms/*/ledger"] = {
-                "reachable": False, "error": str(exc),
-            }
-            incomplete = True
+            except Exception as exc:  # noqa: BLE001
+                report["collections"][report_name] = {
+                    "reachable": False, "error": str(exc),
+                }
+                incomplete = True
 
         try:
             report["collections"]["app_config"] = inventory_app_config(db)
@@ -562,8 +665,13 @@ def main(argv: "Optional[list]" = None) -> int:
     print("=== data-at-rest inventory: project {} ===".format(args.project))
     any_flagged = False
     for coll_name, summary in report["collections"].items():
-        if "error" in summary:
-            print("  [{}] UNREACHABLE: {}".format(coll_name, summary["error"]))
+        # `reachable` is the ONE flag every branch of this report checks
+        # the same way -- Firestore collections, the bucket, and BigQuery
+        # alike (bd polyglot-pdf-uaxt5, Opus cross-surface review nit: this
+        # used to check `"error" in summary` here specifically).
+        if not summary.get("reachable"):
+            print("  [{}] UNREACHABLE: {}".format(
+                coll_name, summary.get("error")))
             continue
         flagged = summary.get("flagged_keys", [])
         any_flagged = any_flagged or bool(flagged)
@@ -574,6 +682,10 @@ def main(argv: "Optional[list]" = None) -> int:
                 key, info["types"], info["max_str_len"], marker))
         if flagged:
             print("      FLAGGED KEYS: {}".format(flagged))
+        nested = summary.get("nested_keys") or {}
+        for outer_key, inner_names in sorted(nested.items()):
+            print("      {}.<key> names seen (identifiers, never "
+                 "values): {}".format(outer_key, inner_names))
 
     if "bucket" in report:
         b = report["bucket"]
