@@ -216,6 +216,37 @@ def test_run_survives_a_missing_executable(monkeypatch):
 
 
 # --------------------------------------------------------------------------
+# The CLOUDSDK_PYTHON hint: a local `bq.cmd` shim can fail with a
+# "python3.14: command not found"-shaped message when a broken interpreter
+# shim sits earlier on PATH, even though `bq` works fine once CLOUDSDK_PYTHON
+# points at a real one -- confirmed live against polyglot-demo-aa709.
+# --------------------------------------------------------------------------
+
+def test_bq_unreachable_hint_added_for_a_python_not_found_error():
+    detail = inv._bq_unreachable_hint(
+        "bq.cmd: python3.14: command not found")
+    assert "CLOUDSDK_PYTHON" in detail
+
+
+def test_bq_unreachable_hint_left_alone_for_an_unrelated_error():
+    """The hint must not paper over a genuinely different failure (a real
+    permissions error, say) with advice that would not help."""
+    detail = inv._bq_unreachable_hint("403 Permission denied on dataset")
+    assert detail == "403 Permission denied on dataset"
+
+
+def test_inventory_bigquery_table_surfaces_the_hint_on_failure(monkeypatch):
+    def fake_run(argv):
+        return 127, "", "python3.14: command not found"
+
+    monkeypatch.setattr(inv, "_run", fake_run)
+    result = inv.inventory_bigquery_table(
+        "polyglot-demo-aa709", "polyglot_telemetry", "ledger_export")
+    assert result["reachable"] is False
+    assert "CLOUDSDK_PYTHON" in result["error"]
+
+
+# --------------------------------------------------------------------------
 # Every PINNED_ALLOWLISTS entry must be a frozenset or the None sentinel --
 # a plain set or list would allow a silent mutation of the pin at runtime.
 # --------------------------------------------------------------------------

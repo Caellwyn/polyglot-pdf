@@ -118,6 +118,22 @@ REDEMPTION_RECORD_ALLOWED_KEYS = frozenset({
     "completed_at",
 })
 
+# A THIRD writer of this SAME collection (found during bd polyglot-pdf-uaxt5's
+# fresh-eyes follow-up, grepping for other callers of link_redemptions'
+# underscore-private _collection): backend/services/link_spend.py's
+# record_spend() imports link_redemptions._collection directly (its own
+# module comment: "_collection and _enabled are underscore-private to
+# link_redemptions, and this is a deliberate second caller") and adds
+# `spend_usd` (a running Increment total) and, when turns > 0, `turns` --
+# plus `spend_updated_at`, stamped on every call regardless of turns. This is
+# the UNION allowlist for the LIVE inventory (a real deployed doc can carry
+# these in addition to the base open/complete shape); the open/complete
+# tests below keep asserting the NARROWER base set exactly, since neither of
+# those two writers touches the spend fields.
+REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND = REDEMPTION_RECORD_ALLOWED_KEYS | {
+    "spend_usd", "turns", "spend_updated_at",
+}
+
 
 class _FakeSnapshot:
     def __init__(self, data):
@@ -205,3 +221,70 @@ def test_a_stray_key_on_the_redemption_record_is_caught(
     link_redemptions.open_link(jti="jti-3", firm_id="acme", kit_id="i-90")
     fake_redemptions_store["jti-3"]["_mutation_stray_key"] = "should be caught"
     assert set(fake_redemptions_store["jti-3"]) != REDEMPTION_RECORD_ALLOWED_KEYS
+
+
+def test_link_spend_record_spend_stays_within_the_union_allowlist(
+        fake_redemptions_store, monkeypatch):
+    """link_spend.py's record_spend() is a THIRD writer of link_redemptions
+    (imports _collection directly). Mutation: add a stray field to
+    record_spend()'s `updates` dict -- this goes red on the exact-set check
+    against the union allowlist."""
+    from backend.services import link_spend
+
+    class _FakeIncrement:
+        """firebase_admin.firestore.Increment(x) -- record_spend() only
+        needs a value it can store and later read back as a plain number
+        for this test's purposes (the real SDK server-side-increments; this
+        fake just stores the delta as the value, which is enough since no
+        assertion here depends on the ACCUMULATED total)."""
+
+        def __init__(self, value):
+            self.value = value
+
+    class _FakeFirestoreModule:
+        Increment = _FakeIncrement
+
+    import sys
+
+    import firebase_admin
+    fake_module = _FakeFirestoreModule()
+    monkeypatch.setattr(firebase_admin, "firestore", fake_module,
+                        raising=False)
+    # `from firebase_admin import firestore` (link_spend.py's own inline
+    # import) resolves a dotted submodule name through sys.modules FIRST
+    # once the real firebase_admin.firestore has ever been imported by an
+    # earlier test in the same session -- patching only the package
+    # attribute above is invisible to that lookup path. Both must be
+    # patched together, or this test is ORDER-DEPENDENT (passes alone,
+    # fails after any test that has genuinely imported firebase_admin.
+    # firestore first) -- exactly the get_settings()-style trap this repo
+    # has hit before (see memory: get-settings-singleton-test-ordering-trap).
+    monkeypatch.setitem(sys.modules, "firebase_admin.firestore", fake_module)
+
+    # link_spend.py does `from backend.services.link_redemptions import
+    # _collection` at MODULE LEVEL (a direct name binding into link_spend's
+    # own namespace) -- so patching link_redemptions._collection (what
+    # fake_redemptions_store already does) is invisible to link_spend's
+    # OWN already-bound name. Patch it there too.
+    monkeypatch.setattr(link_spend, "_collection",
+                        lambda *a, **k: _FakeCollection(fake_redemptions_store))
+
+    link_redemptions.open_link(jti="jti-4", firm_id="acme", kit_id="i-90")
+    link_spend.record_spend(jti="jti-4", cost_usd=0.05, turns=2)
+
+    rec = fake_redemptions_store["jti-4"]
+    assert set(rec) <= REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND, (
+        "link_spend.record_spend() wrote a key outside the union "
+        "allowlist: {}"
+    ).format(set(rec) - REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND)
+    # And the spend fields ARE the ones actually added (not vacuously true
+    # because record_spend wrote nothing).
+    assert {"spend_usd", "turns", "spend_updated_at"} <= set(rec)
+
+
+def test_a_stray_key_from_link_spend_is_caught(fake_redemptions_store):
+    """Test the test: hand-inject a stray key past the union allowlist."""
+    link_redemptions.open_link(jti="jti-5", firm_id="acme", kit_id="i-90")
+    fake_redemptions_store["jti-5"]["_mutation_stray_key"] = "x"
+    assert not (set(fake_redemptions_store["jti-5"])
+               <= REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND)

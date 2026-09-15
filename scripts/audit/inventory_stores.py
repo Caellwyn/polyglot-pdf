@@ -11,15 +11,20 @@ the STATIC half (every store the deployed system writes, incl. second
 copies and repo-as-a-store) is enumerated in this bead's PR report and in
 docs/sprint_23_security-audit_plan.md's workstream-A section.
 
-SHAPE COPIED FROM scripts/read_confirmations.py: operator ADC (not the
-Cloud Run runtime SA -- your own gcloud/application-default credentials
-need Firestore/Storage/BigQuery read access on the target project),
-`--project` REQUIRED and pins the query deterministically (pre-initializes
-firebase_admin with this projectId, which beats the ADC credential's own
-project resolution -- an env var alone can silently query the wrong
-project), and a DEAD_PROJECTS refusal mirroring scripts/grant_credits.py's
-(same former-prod project, same reason: a stale muscle-memory invocation
-must not hang or half-write -- though this script never writes at all).
+SHAPE: operator ADC (not the Cloud Run runtime SA -- your own gcloud/
+application-default credentials need Firestore/Storage/BigQuery read access
+on the target project) and `--project` REQUIRED, pinning the query
+deterministically (pre-initializes firebase_admin with this projectId,
+which beats the ADC credential's own project resolution -- an env var alone
+can silently query the wrong project) -- the same rationale
+scripts/read_confirmations.py's own --project flag documents. The
+DEAD_PROJECTS refusal and the resolved-project-mismatch check are copied
+from scripts/grant_credits.py (and scripts/bootstrap_firm.py, which
+originated the --project pattern grant_credits.py itself follows) --
+read_confirmations.py carries neither check itself, only the --project
+flag's determinism rationale above. Same former-prod project, same reason:
+a stale muscle-memory invocation must not hang or half-write -- though this
+script never writes at all.
 
 NEVER PRINTS A VALUE. Every collection has a PINNED_ALLOWLISTS entry (the
 exact key set its own writer emits, copied from that module's own
@@ -131,13 +136,22 @@ PINNED_ALLOWLISTS: dict[str, frozenset] = {
         "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
         "expire_at",
     }),
-    # backend/services/link_redemptions.py::open_link/complete_link, pinned
-    # in backend/tests/unit/test_store_shapes.py::REDEMPTION_RECORD_ALLOWED_KEYS.
+    # backend/services/link_redemptions.py::open_link/complete_link (base
+    # shape, pinned in backend/tests/unit/test_store_shapes.py::
+    # REDEMPTION_RECORD_ALLOWED_KEYS) PLUS backend/services/link_spend.py's
+    # record_spend(), a THIRD writer of this SAME collection (imports
+    # link_redemptions._collection directly) that adds spend_usd/turns/
+    # spend_updated_at -- the union is
+    # test_store_shapes.py::REDEMPTION_RECORD_ALLOWED_KEYS_WITH_SPEND, since
+    # a real deployed doc can carry either shape depending on whether a paid
+    # session has run against it yet.
     "link_redemptions": frozenset({
         "jti", "firm_id", "kit_id", "opened_at", "completed_at",
+        "spend_usd", "turns", "spend_updated_at",
     }),
     "link_redemptions_staging": frozenset({
         "jti", "firm_id", "kit_id", "opened_at", "completed_at",
+        "spend_usd", "turns", "spend_updated_at",
     }),
     # admin_backend/services/audit_log.py::ROW_FIELDS is the INITIAL write
     # shape (build_row(), pinned by test_audit_log.py) -- but mark_committed
@@ -201,12 +215,15 @@ def _run(argv: list) -> "tuple[int, str, str]":
 
 
 def _init_firebase_admin(project: str) -> None:
-    """Pin firebase_admin's resolved project DETERMINISTICALLY -- mirrors
+    """Pin firebase_admin's resolved project DETERMINISTICALLY. The
+    initialize_app(options={"projectId": project}) call mirrors
     scripts/read_confirmations.py's own rationale exactly: firebase_admin
     resolves the project from the ADC CREDENTIAL first, so an env var alone
     can silently query whatever project the operator's gcloud ADC defaults
     to. Must run before any backend module that touches firebase_admin is
-    imported."""
+    imported. The resolved-project-mismatch check below it (raise on
+    `resolved != project`) is copied from scripts/grant_credits.py instead --
+    read_confirmations.py does not carry that second check."""
     import firebase_admin
 
     if not firebase_admin._apps:
@@ -360,20 +377,42 @@ def inventory_bucket(bucket: str) -> dict:
 # BigQuery telemetry tables -- SCHEMA only (column names/types), never rows.
 # ---------------------------------------------------------------------------
 
+def _bq_unreachable_hint(detail: str) -> str:
+    """A one-line, current-state hint appended to a failed `bq` call.
+
+    A local `bq.cmd` shim resolves its own Python interpreter, and on a
+    machine with a broken/placeholder `python3.14` earlier on PATH (e.g. a
+    Windows Store alias) `bq` fails with a "python3.14: command not found"
+    -shaped message even though a perfectly good interpreter is available.
+    Setting CLOUDSDK_PYTHON to that interpreter fixes it without touching
+    PATH.
+    """
+    if "python3.14" in detail or "not found" in detail.lower():
+        return (
+            detail
+            + " -- if this says python3.14 was not found, set CLOUDSDK_PYTHON "
+            "to a working interpreter (e.g. the backend venv's python.exe) "
+            "and retry."
+        )
+    return detail
+
+
 def inventory_bigquery_table(project: str, dataset: str, table: str) -> dict:
     code, out, err = _run([
         "bq", "show", "--format=prettyjson", "--project_id", project,
         "{}:{}.{}".format(project, dataset, table),
     ])
     if code != 0:
-        return {"reachable": False, "error": err.strip() or "bq exit {}".format(code)}
+        detail = err.strip() or "bq exit {}".format(code)
+        return {"reachable": False, "error": _bq_unreachable_hint(detail)}
 
     import json
 
     try:
         parsed = json.loads(out)
     except json.JSONDecodeError as exc:
-        return {"reachable": False, "error": "unparseable bq output: {}".format(exc)}
+        return {"reachable": False, "error": _bq_unreachable_hint(
+            "unparseable bq output: {}".format(exc))}
 
     fields = parsed.get("schema", {}).get("fields", [])
     return {
@@ -393,9 +432,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--project", required=True,
         help="target GCP/Firebase project (deterministic: pre-initializes "
-        "firebase_admin with this projectId AND asserts the resolved app "
-        "project matches -- see scripts/read_confirmations.py's identical "
-        "rationale)",
+        "firebase_admin with this projectId, per scripts/read_confirmations.py's "
+        "own rationale, AND asserts the resolved app project matches, per "
+        "scripts/grant_credits.py's own guard)",
     )
     parser.add_argument(
         "--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE,
@@ -412,8 +451,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="BigQuery dataset holding the telemetry tables",
     )
     parser.add_argument(
-        "--bq-tables", nargs="+", default=["ledger_export", "usage_events"],
-        help="BigQuery telemetry table names to inspect",
+        "--bq-tables", nargs="+",
+        default=["cost_by_firm_month", "cost_by_kit_month",
+                "cost_by_employee_month", "income_month",
+                "hosting_cost_by_service_month"],
+        help="BigQuery telemetry table/view names to inspect -- the "
+        "sql/telemetry_views.sql views admin_backend/services/"
+        "bigquery_reports.py reads, plus the billing-export view "
+        "(live-verified against polyglot-demo-aa709, bd polyglot-pdf-uaxt5: "
+        "as of this run only hosting_cost_by_service_month exists there -- "
+        "the cost_by_*_month/income_month views and their underlying "
+        "TELEMETRY_TABLE_STDOUT/STDERR sink tables have not been deployed "
+        "to that project yet, so this script reports them UNREACHABLE, "
+        "which is the correct, honest answer, not a script defect)",
     )
     parser.add_argument(
         "--skip-bucket", action="store_true",

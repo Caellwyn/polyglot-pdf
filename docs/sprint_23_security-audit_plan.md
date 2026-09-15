@@ -194,7 +194,7 @@ Runs before anything else; nothing depends on it and it depends on nothing.
   (scar #10).
 - **Live (read-only, redacted):** new `scripts/audit/inventory_stores.py`
   (operator ADC, `--project` required + dead-project refusal, same shape as
-  `scripts/read_confirmations.py`): for each Firestore collection sample N
+  `scripts/grant_credits.py`): for each Firestore collection sample N
   docs and print KEY NAMES, value TYPES and max string length per key --
   never a value -- and flag any key outside the collection's pinned
   allowlist; `gcloud storage ls -r` the bucket for unexpected objects; `bq
