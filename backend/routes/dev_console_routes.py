@@ -10,7 +10,22 @@ frames it produced. This removes the copy/paste loop for frontend logs.
 HARD-GATED on DEV_LOGGING_ENABLED (the backend/.env.DEV marker): in production the
 route returns 404, so the browser never ships console output to the server and no
 PII/PHI is captured server-side (same gating as the rest of the dev logger).
+
+SECOND, INDEPENDENT GATE on K_SERVICE (bd polyglot-pdf-6088m, sprint 23 C4;
+PF-10). The marker-file gate above is a FILE presence check: it is correct only
+because backend/.env.* is excluded by .dockerignore (pinned by
+tests/test_dockerignore_env_exclusion.py), so the marker can never exist inside
+a built container. That is one indirection between "we are in production" and
+"this route 404s" -- a dockerignore edit that narrowed the pattern, or a build
+context that bypassed it, would silently re-enable this route in prod with no
+code change here. K_SERVICE is set by Cloud Run and by nothing else (the same
+signal backend/services/auth.py's VFF_DISABLE_AUTH bypass checks), so checking
+it directly closes the route even if the marker-file gate is ever defeated by a
+packaging mistake. Neither gate is redundant: the marker gate is what makes
+local dev logging opt-in at all; K_SERVICE is the fail-closed backstop for a
+deployed service specifically.
 """
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -42,8 +57,10 @@ async def ingest_console_log(batch: ConsoleBatch) -> Dict[str, Any]:
     """Append a batch of frontend console lines to the dev log stream.
 
     No-op-by-404 unless dev logging is enabled, so production never accepts this.
+    Fails closed on K_SERVICE too (see module docstring) -- a deployed service
+    404s here even if the marker-file gate were ever defeated.
     """
-    if not DEV_LOGGING_ENABLED:
+    if not DEV_LOGGING_ENABLED or os.getenv("K_SERVICE"):
         # Do not advertise the endpoint in prod.
         raise HTTPException(status_code=404, detail="Not found")
 

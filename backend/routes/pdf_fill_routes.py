@@ -5,16 +5,18 @@ Uses PyMuPDF to fill PDF forms (supports XFA and AcroForm).
 Stateless: receives data -> fills PDF -> returns bytes (no storage).
 """
 from typing import Any, Dict, Optional
+import concurrent.futures
 import os
 import re
 import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
 import structlog
 
+from backend.config import get_settings
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.pdf_structure import (
 	StructureMismatch,
@@ -42,6 +44,75 @@ _log = structlog.get_logger().bind(module="pdf_fill_routes")
 # far below a size that would hurt to decode. Anything larger is not a saved
 # form, and handing it to a PDF parser is a cheap denial vector.
 _MAX_RESUME_UPLOAD_BYTES = 25 * 1024 * 1024
+
+# A dedicated pool for wall-clock-bounded PDF parses (bd polyglot-pdf-6088m,
+# sprint 23 C4; PF-10). /api/resume-form runs fitz.open + the structural
+# comparison on attacker-controlled bytes -- a client uploads a PDF straight
+# off their own disk -- and PyMuPDF has no built-in wall-clock guard. A
+# thread (not the running event loop) is what makes future.result(timeout=)
+# meaningful: a pure asyncio.wait_for around a synchronous, CPU-bound call
+# would not actually interrupt it, since nothing yields control back to the
+# loop while fitz is parsing. A dedicated pool (rather than the default
+# asyncio.to_thread executor) keeps a hung parse from starving unrelated
+# to_thread work elsewhere in the process.
+_RESUME_PARSE_POOL = concurrent.futures.ThreadPoolExecutor(
+	max_workers=4, thread_name_prefix="resume-form-parse"
+)
+
+
+def _reject_body_over(cap_bytes: int, *, label: str):
+	"""Build a FastAPI dependency that refuses a body whose Content-Length
+	exceeds cap_bytes BEFORE FastAPI parses it (bd polyglot-pdf-6088m, sprint
+	23 C4; PF-10).
+
+	A caller can lie about or omit the header, so this alone is not
+	sufficient -- it is the cheap first layer: an HONEST oversized request is
+	refused for the cost of reading a header, not decoding a body. The
+	SECOND, byte-accurate layer is enforced on the decoded/read value itself
+	at each call site (resume_form's base64-length-before-decode check, and
+	its existing decoded-byte-length check).
+
+	Parameterized rather than a single shared cap: /fill-pdf's JSON body has
+	no other size bound, so it uses MAX_UPLOAD_MB directly. /resume-form's
+	body is a base64-encoded PDF wrapped in a small amount of JSON, bounded
+	by its OWN long-standing _MAX_RESUME_UPLOAD_BYTES (25MB, deliberately
+	larger than MAX_UPLOAD_MB's 5MB -- see that constant's docstring); base64
+	inflates 3 bytes to 4, so the JSON envelope for a legitimate resume can
+	exceed MAX_UPLOAD_MB even though the underlying PDF does not exceed its
+	own cap. Applying MAX_UPLOAD_MB here would silently reject legitimate
+	resumes between 5MB and 25MB.
+	"""
+	async def _check(request: Request) -> None:
+		content_length = request.headers.get("content-length")
+		if content_length is None:
+			return
+		try:
+			declared = int(content_length)
+		except ValueError:
+			return
+		if declared > cap_bytes:
+			raise HTTPException(
+				status_code=413,
+				detail=f"Request body exceeds the {label} upload limit",
+			)
+	return _check
+
+
+async def _reject_oversized_fill_pdf_body(
+	request: Request, settings=Depends(get_settings)
+) -> None:
+	cap_bytes = int(settings.MAX_UPLOAD_MB * 1024 * 1024)
+	await _reject_body_over(cap_bytes, label=f"{settings.MAX_UPLOAD_MB}MB")(request)
+
+
+# base64 inflates 3 bytes to 4, plus the small JSON envelope around it
+# (kit_id, pdf_filename) -- rounded up generously so the Content-Length
+# pre-check never rejects a legitimate resume upload the byte-length check
+# below would accept.
+_MAX_RESUME_BODY_BYTES = (_MAX_RESUME_UPLOAD_BYTES * 4 // 3) + (64 * 1024)
+_reject_oversized_resume_body = _reject_body_over(
+	_MAX_RESUME_BODY_BYTES, label=f"{_MAX_RESUME_UPLOAD_BYTES // (1024 * 1024)}MB"
+)
 
 
 def _safe_pdf_filename(pdf_filename: str) -> str:
@@ -187,7 +258,11 @@ class PDFFillRequest(BaseModel):
 
 
 @router.post("/fill-pdf")
-async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) -> Response:
+async def fill_pdf(
+	request: PDFFillRequest,
+	user: dict = Depends(require_auth),
+	_upload_cap: None = Depends(_reject_oversized_fill_pdf_body),
+) -> Response:
 	"""Fill a PDF form with provided values using PyMuPDF.
 
 	Auth-gated (bd polyglot-pdf-z2is): the request body carries user-entered
@@ -201,6 +276,9 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 	kit_id and empty field_values returned the private kit's blank template
 	to any authed user, defeating the invisibility the three form_kit_routes
 	reads enforce. Same gates, same 404 denial (existence is the secret).
+
+	MAX_UPLOAD_MB-capped (bd polyglot-pdf-6088m, sprint 23 C4): field_values +
+	form_schema are caller-controlled JSON with no other size bound.
 	"""
 
 	kit_id = _safe_kit_id(request.kit_id)
@@ -965,7 +1043,9 @@ class ResumeUploadRequest(BaseModel):
 
 @router.post("/resume-form")
 async def resume_form(
-	request: ResumeUploadRequest, user: dict = Depends(require_auth)
+	request: ResumeUploadRequest,
+	user: dict = Depends(require_auth),
+	_upload_cap: None = Depends(_reject_oversized_resume_body),
 ) -> Dict[str, Any]:
 	"""Verify a client's saved PDF and hand back the answers inside it.
 
@@ -990,14 +1070,33 @@ async def resume_form(
 	pdf_filename = _safe_pdf_filename(request.pdf_filename)
 	store = get_form_kit_store()
 
+	# Check the base64 STRING LENGTH before decoding (bd polyglot-pdf-6088m,
+	# sprint 23 C4; PF-10). b64decode materializes the full decoded buffer in
+	# one call, so a caller could previously force an allocation up to
+	# 3/4 of whatever body size the server would accept before the byte-length
+	# check below ever ran. Base64 encodes 3 bytes as 4 characters, so a
+	# decoded size of _MAX_RESUME_UPLOAD_BYTES corresponds to an encoded
+	# length of _MAX_RESUME_UPLOAD_BYTES * 4/3; refusing anything longer means
+	# the decode call itself never runs on an over-cap payload.
+	_max_b64_len = _MAX_RESUME_UPLOAD_BYTES * 4 // 3
+	if len(request.pdf_base64) > _max_b64_len:
+		_log.warning(
+			"resume_upload_too_large",
+			kit=kit_id,
+			b64_length=len(request.pdf_base64),
+		)
+		raise HTTPException(status_code=413, detail="File too large")
+
 	try:
 		uploaded = base64.b64decode(request.pdf_base64, validate=True)
 	except Exception as exc:  # noqa: BLE001
 		_log.info("resume_upload_undecodable", kit=kit_id)
 		raise HTTPException(status_code=400, detail="Unreadable file") from exc
 
-	# Bound the upload. These forms are ~150KB-2MB; anything far larger is not
-	# a saved form, and decoding it into a PDF parser is a cheap denial vector.
+	# Bound the DECODED upload too. These forms are ~150KB-2MB; anything far
+	# larger is not a saved form. This is a belt-and-suspenders check: base64
+	# padding/whitespace mean the encoded-length check above is not exact, so
+	# this is what actually enforces the byte cap.
 	if len(uploaded) > _MAX_RESUME_UPLOAD_BYTES:
 		_log.warning("resume_upload_too_large", kit=kit_id, size=len(uploaded))
 		raise HTTPException(status_code=413, detail="File too large")
@@ -1018,8 +1117,33 @@ async def resume_form(
 			status_code=502, detail="Unable to load the form for this kit"
 		) from exc
 
+	# WALL-CLOCK BOUNDED (bd polyglot-pdf-6088m, sprint 23 C4; PF-10).
+	# assert_matches_reference runs fitz.open on attacker-controlled bytes
+	# (via pdf_structure.digest_of_bytes) plus the structural comparison --
+	# both are synchronous, CPU-bound, and PyMuPDF has no built-in wall-clock
+	# guard, so a crafted file that is pathologically slow to parse could
+	# otherwise tie up a worker indefinitely. Run it in a thread so
+	# future.result(timeout=) can actually bound it -- a synchronous call
+	# awaited directly on this coroutine would give asyncio.wait_for nothing
+	# to interrupt, since nothing yields control back to the loop while fitz
+	# is parsing.
+	settings = get_settings()
+	future = _RESUME_PARSE_POOL.submit(assert_matches_reference, uploaded, reference)
 	try:
-		assert_matches_reference(uploaded, reference)
+		future.result(timeout=settings.RESUME_FORM_PARSE_TIMEOUT_S)
+	except concurrent.futures.TimeoutError:
+		# The worker thread is NOT cancelled (Python threads cannot be force-
+		# killed) -- it keeps running in the background and is abandoned, a
+		# known limitation of thread-based timeouts. That is an acceptable
+		# trade here: the alternative (no timeout at all) blocks the request
+		# indefinitely, and the pool is sized so a handful of abandoned
+		# parses cannot starve the whole process. Never log the file itself
+		# -- PII/PHI, and irrelevant to the timeout.
+		_log.warning("resume_upload_parse_timeout", kit=kit_id)
+		raise HTTPException(
+			status_code=408,
+			detail="That file took too long to process.",
+		) from None
 	except StructureMismatch as exc:
 		# ONE refusal for every structural failure -- wrong form, tampered
 		# form, unreadable form. Distinguishing them would tell an attacker
