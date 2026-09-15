@@ -198,6 +198,96 @@ Three admin routes and one webhook, all new surface on the admin service:
   tracked by four open beads, not this diff's problem). None of these met
   the bar for a new bead.
 
+**Fresh-eyes fix round 4 (outer cross-surface review, GAPS-FOUND(4)):**
+
+- ADOPT (blocker) -- `cloud_build.py::run_target()`'s `RepoSource` carried
+  only `commit_sha`, which is the API equivalent of
+  `gcloud builds triggers run --sha=SHA` alone -- it never set the `_SHA`
+  substitution `cloudbuild.yaml`'s own step 0 (`require-sha`) requires to be
+  non-empty, and every trigger this module runs is provisioned
+  (`scripts/setup-cloud-build.sh`) with only `_TARGET`/`_CHANNEL`
+  substitutions, no `_SHA`. Every console-triggered build therefore aborted
+  at step 0 with "ABORT: _SHA is empty" while the route had already
+  returned 200 with a real `build_id` and a `queued` row the webhook then
+  flipped to `failure` -- 100% of the time, on every target, invisible to
+  the route's own tests (which mock `run_build_trigger` entirely). Fixed by
+  adding `substitutions={"_SHA": sha}` to the `RepoSource`. New
+  `admin_backend/tests/unit/test_cloud_build.py` exercises `run_target`
+  directly against a fake `CloudBuildClient` (the route's own tests never
+  reach this code path) and pins the `_SHA` substitution. Mutation-verified:
+  reverting the kwarg reddens `test_run_target_passes_the_sha_substitution`.
+- ADOPT (blocker) -- `GET /admin/deploys` orders the `deployments`
+  collection on `ts`, a field `scripts/record_deployment.py` never wrote
+  (it wrote `created_at`, an ISO-8601 string) -- Firestore's `order_by()`
+  excludes any document missing the ordered-on field, so every
+  staging-success row that script writes (exactly the rows the promotion
+  gate reads, and what authorizes a demo promotion) was invisible to the
+  console's deploys list on a query ordered by `ts`, even with a green
+  build and a passing gate. Fixed by having `record()` also write a `ts`
+  float-epoch field (kept alongside `created_at`, which stays as the
+  human-readable display value). New `tests/test_record_deployment.py`
+  pins this. Mutation-verified: deleting the `ts` key reddens
+  `test_record_writes_a_float_ts_field`.
+- ADOPT (blocker) -- `scripts/record_deployment.py` blindly created a new
+  auto-id document on every call (`collection.document().set(doc)`), but
+  for a console-triggered `backend-staging`/`admin-service` build, the
+  webhook (`deploy_webhook.py`) already has a row for the SAME `build_id`
+  by the time this build step runs (Cloud Build publishes QUEUED/WORKING
+  before the build finishes) -- so this script created a SECOND document
+  carrying the same `build_id`, and a later Pub/Sub message's own
+  `.limit(1)` upsert lookup would pick one of the two non-deterministically,
+  leaving the other's status permanently stale. Fixed by having `record()`
+  query `deployments` for an existing row with the given `build_id` first
+  and `.update()` it in place; only a build with no pre-existing row
+  (typically bash-triggered) falls through to creating a new document,
+  matching the webhook's own upsert shape. `tests/test_record_deployment.py`
+  seeds a pre-existing webhook-style row and asserts exactly one row
+  remains after `record()` runs. Mutation-verified: reverting to the blind
+  `collection.document().set()` reddens
+  `test_record_updates_an_existing_row_for_the_same_build_id_instead_of_duplicating`
+  with a 2-row store instead of 1 -- reproducing the exact collision bug.
+- ADOPT (blocker) -- `PUBSUB_PUSH_SA_EMAIL` (the webhook's OIDC caller-email
+  allowlist) was set by NO deploy path: `scripts/setup-admin-service.sh`
+  only printed it as a one-time hand-run NOTE, absent from
+  `deploy/channels/admin.env`, `deploy-admin.sh`'s `SWEEP_ENV`, and
+  `cloudbuild.yaml`'s admin-service-deploy-tagged step -- and both deploy
+  paths use `--set-env-vars`, which REPLACES the entire env block, so even
+  a hand-set value would be wiped by the next deploy (the exact incident
+  `SWEEP_SCHEDULER_SA_EMAIL` already documents one section up). Every Cloud
+  Build status push was therefore rejected, permanently fail-closing
+  `POST /api/deploys/webhook` with no test or alert noticing. Fixed by
+  adding `PUBSUB_PUSH_SA_EMAIL` (a fixed literal, no gcloud lookup needed --
+  `PUBSUB_PUSH_SA_NAME` is fixed in `setup-admin-service.sh`) to BOTH
+  `deploy/channels/admin.env`'s `[SET_ENV_VARS]` (which `cloudbuild.yaml`'s
+  admin-service target reads via `CHANNEL_ENV`, covering that path with no
+  separate cloudbuild.yaml edit) and `deploy-admin.sh`'s `SWEEP_ENV`
+  concatenation, mirroring `SWEEP_SCHEDULER_SA_EMAIL`/
+  `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` exactly. Extended
+  `test_admin_channel_file_matches_the_wrapper` (parity between the two
+  live copies) and added
+  `test_pubsub_push_sa_email_is_computed_without_a_gcloud_lookup` /
+  `test_pubsub_push_sa_email_reaches_backend_extra_env` to
+  `tests/test_deploy_admin_sweep_env_vars.py`, mirroring the existing
+  sweep/monthly-topup pair. Mutation-verified three ways: deleting the
+  `deploy-admin.sh` assignment, dropping it from the `SWEEP_ENV`
+  concatenation, and changing `admin.env`'s value -- each reddens its
+  corresponding test.
+- DEFER (nit) -- `POST /admin/deploys`' audit row computed `channel` but
+  never passed it as the top-level `channel=` kwarg `record_pending`
+  accepts and `GET /admin/audit?channel=` filters on (the webhook's own
+  sibling audit calls DO pass it) -- filed as bd `polyglot-pdf-g8uzb`
+  rather than fixed here (nit, pre-filed by the reviewer).
+- DEFER (nit) -- `docs/technical_guide.md` Surface contract 34's producers
+  bullet claimed the webhook and `record_deployment.py` are "a second,
+  independent writer of the same document," which was wrong before this
+  round's fixes (the script minted a new document every time) and is now
+  actually TRUE after the build_id-upsert fix above -- filed as bd
+  `polyglot-pdf-mb4p0` by the reviewer; added a note to that bead recording
+  that its own premise changed mid-review (the doc fix should describe the
+  bead's CURRENT post-fix code, not what the reviewer originally observed)
+  so whoever picks it up re-verifies against live code rather than trusting
+  the bead's original description.
+
 Found this worktree with the implementation already substantially drafted
 (a prior session's work, interrupted before a checkpoint commit -- the
 bead's own PAUSED/UNPAUSED history suggests why). Verified it against the
@@ -257,3 +347,16 @@ bearing, not vacuous. No new generalizable lesson beyond what CLAUDE.md's
   `TestToEpoch` unit coverage, fresh-eyes fix round 3)
 - docs/components/admin-service.md
 - docs/technical_guide.md
+- admin_backend/services/cloud_build.py (fresh-eyes fix round 4: `_SHA`
+  substitution added to the RepoSource)
+- admin_backend/tests/unit/test_cloud_build.py (new, fresh-eyes fix round 4)
+- scripts/record_deployment.py (fresh-eyes fix round 4: writes `ts`,
+  upserts by `build_id` instead of blindly creating)
+- tests/test_record_deployment.py (new, fresh-eyes fix round 4)
+- deploy-admin.sh (fresh-eyes fix round 4: `PUBSUB_PUSH_SA_EMAIL` added)
+- deploy/channels/admin.env (fresh-eyes fix round 4: `PUBSUB_PUSH_SA_EMAIL`
+  added to `[SET_ENV_VARS]`)
+- tests/test_deploy_admin_sweep_env_vars.py (fresh-eyes fix round 4: two
+  new tests for `PUBSUB_PUSH_SA_EMAIL`)
+- tests/test_cloudbuild_yaml.py (fresh-eyes fix round 4: parity test
+  extended to `PUBSUB_PUSH_SA_EMAIL`)

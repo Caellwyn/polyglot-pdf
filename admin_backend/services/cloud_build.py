@@ -37,6 +37,24 @@ module mirrors that proven shape rather than guessing at repo_name's real
 requirement for a 2nd-gen trigger, which neither the REST reference nor the
 Python client docs state either way.
 
+THE RepoSource ALSO CARRIES substitutions={"_SHA": sha} (fresh-eyes/
+cross-surface finding, bd polyglot-pdf-tb3kp). commit_sha alone is the API
+equivalent of `gcloud builds triggers run --sha=SHA` ONLY -- it tells Cloud
+Build which commit to check out, but it does NOT populate the `_SHA`
+substitution cloudbuild.yaml's own step 0 (require-sha) requires to be
+non-empty (that substitution defaults to an empty string in the YAML, and
+every trigger this module runs is provisioned with
+`--substitutions="_TARGET=...,_CHANNEL=..."` and no `_SHA` at all --
+scripts/setup-cloud-build.sh). The documented human invocation ("gcloud
+builds triggers run polyglot-verify --sha=<sha> --substitutions=_SHA=<sha>",
+that same script's own printed usage) passes BOTH for exactly this reason;
+a RepoSource missing `substitutions` makes every console-triggered build
+abort at step 0 with "ABORT: _SHA is empty" while this route has already
+returned 200 with a real build_id and written a "queued" deployments row
+the webhook then flips to "failure" -- 100% of the time, on every target,
+with nothing short of watching a build's own log catching it (the route's
+own tests mock run_build_trigger entirely).
+
 RETURNS build id + log url, NOT the full Operation/Build message: the
 route only needs enough to write deployments/{id}'s build_id and log_url
 fields and return control to the caller -- run_build_trigger returns a
@@ -143,6 +161,12 @@ def run_target(
                     # the proven gcloud --sha=SHA CLI shape rather than
                     # guessing at a 2nd-gen value for that field.
                     commit_sha=sha,
+                    # _SHA substitution -- see module docstring's "THE
+                    # RepoSource ALSO CARRIES substitutions" section.
+                    # Without this, cloudbuild.yaml's require-sha step (the
+                    # build's own step 0) aborts every console-triggered
+                    # build before anything else runs.
+                    substitutions={"_SHA": sha},
                 ),
             ),
         )

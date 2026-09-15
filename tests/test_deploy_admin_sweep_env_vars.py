@@ -256,3 +256,73 @@ def test_monthly_topup_scheduler_sa_email_reaches_backend_extra_env():
         "never folds it into BACKEND_EXTRA_ENV (directly, or via a "
         "referenced intermediate variable) -- the monthly top-up route's "
         "allowlist gate would fail-closed (503) on every deploy")
+
+
+def test_pubsub_push_sa_email_is_computed_without_a_gcloud_lookup():
+    """PUBSUB_PUSH_SA_EMAIL (bd polyglot-pdf-tb3kp, E4.3's Cloud Build
+    build-status webhook OIDC gate) must be constructible from the fixed
+    PUBSUB_PUSH_SA_NAME literal ("admin-pubsub-push-sa") declared in
+    scripts/setup-admin-service.sh, mirroring
+    test_sweep_scheduler_sa_email_is_computed_without_a_gcloud_lookup's own
+    check. Fresh-eyes/cross-surface review finding: this var was set by NO
+    deploy path -- only printed as a one-time hand-run NOTE -- so
+    require_google_oidc's caller allowlist resolved to empty on every real
+    deploy, permanently fail-closing POST /api/deploys/webhook. Mutation:
+    delete the PUBSUB_PUSH_SA_EMAIL assignment in deploy-admin.sh -- this
+    goes red."""
+    deploy_admin_text = _live_text(DEPLOY_ADMIN)
+    match = re.search(
+        r'PUBSUB_PUSH_SA_EMAIL="([^"]+)"', deploy_admin_text)
+    assert match, (
+        "deploy-admin.sh does not declare PUBSUB_PUSH_SA_EMAIL")
+    assert match.group(1) == (
+        "admin-pubsub-push-sa@$PROJECT.iam.gserviceaccount.com"
+    ), (
+        "PUBSUB_PUSH_SA_EMAIL in deploy-admin.sh does not match the "
+        "scheduler SA name literal declared in scripts/setup-admin-"
+        "service.sh -- got {!r}".format(match.group(1)))
+
+    setup_text = _live_text(SETUP_ADMIN_SERVICE)
+    sa_name_match = re.search(r'PUBSUB_PUSH_SA_NAME="([^"]+)"', setup_text)
+    assert sa_name_match, (
+        "scripts/setup-admin-service.sh no longer declares "
+        "PUBSUB_PUSH_SA_NAME -- deploy-admin.sh's hard-coded "
+        "'admin-pubsub-push-sa' literal needs re-deriving against "
+        "whatever replaced it")
+    assert sa_name_match.group(1) in match.group(1), (
+        "deploy-admin.sh's PUBSUB_PUSH_SA_EMAIL ({!r}) does not embed "
+        "scripts/setup-admin-service.sh's actual PUBSUB_PUSH_SA_NAME "
+        "({!r}) -- the two would silently name different service "
+        "accounts".format(match.group(1), sa_name_match.group(1)))
+
+
+def test_pubsub_push_sa_email_reaches_backend_extra_env():
+    """THE SET GUARD, one env var over from test_both_sweep_env_vars_
+    reach_backend_extra_env: PUBSUB_PUSH_SA_EMAIL must actually reach the
+    BACKEND_EXTRA_ENV passed to ./deploy-all.sh -- computing it and never
+    using it is exactly as broken as not computing it at all. Mutation:
+    compute the value but drop it from the SWEEP_ENV concatenation -- this
+    goes red."""
+    text = _live_text(DEPLOY_ADMIN)
+    deploy_all_call = text.index("./deploy-all.sh --backend")
+    before_deploy = text[:deploy_all_call]
+
+    extra_env_match = re.search(
+        r'BACKEND_EXTRA_ENV="([^"]*)"', before_deploy)
+    assert extra_env_match, (
+        "no BACKEND_EXTRA_ENV assignment found before the ./deploy-all.sh "
+        "call in deploy-admin.sh")
+    extra_env_value = extra_env_match.group(1)
+
+    referenced_vars = re.findall(r'\$([A-Za-z_][A-Za-z0-9_]*)', extra_env_value)
+    resolved = extra_env_value
+    for var_name in referenced_vars:
+        for var_match in re.finditer(
+                r'{}="([^"]*)"'.format(re.escape(var_name)), before_deploy):
+            resolved += " " + var_match.group(1)
+
+    assert "PUBSUB_PUSH_SA_EMAIL" in resolved, (
+        "deploy-admin.sh computes PUBSUB_PUSH_SA_EMAIL but never folds it "
+        "into BACKEND_EXTRA_ENV (directly, or via a referenced "
+        "intermediate variable) -- the Cloud Build webhook's OIDC "
+        "allowlist gate would stay permanently fail-closed on every deploy")

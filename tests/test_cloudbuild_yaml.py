@@ -599,7 +599,10 @@ def test_admin_channel_file_matches_the_wrapper():
         "APP_MODULE -- the admin service would serve a different app "
         "depending on which path deployed it"
     )
-    for key in ("CORS_EXTRA_ORIGINS", "SWEEP_SCHEDULER_SA_EMAIL"):
+    for key in (
+        "CORS_EXTRA_ORIGINS", "SWEEP_SCHEDULER_SA_EMAIL",
+        "PUBSUB_PUSH_SA_EMAIL",
+    ):
         for origin in admin[key].split(";"):
             # SWEEP_SCHEDULER_SA_EMAIL embeds the project; the wrapper builds
             # it from $PROJECT, so compare the stable local part.
