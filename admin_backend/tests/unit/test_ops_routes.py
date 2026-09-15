@@ -18,6 +18,8 @@ ASCII only.
 """
 from __future__ import annotations
 
+import builtins
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -349,3 +351,49 @@ def test_health_reachable_requires_both_health_and_version_to_succeed(
     assert body["health"] == {"status": "ok"}
     assert body["version"] is None
     assert body["reachable"] is False
+
+
+def _block_import(name):
+    """A builtins.__import__ replacement that raises ImportError for one
+    module name only, delegating every other import to the real builtin --
+    simulates `requests` missing from the image without disturbing every
+    other import the test process needs (pytest, fastapi, etc)."""
+    real_import = builtins.__import__
+
+    def _import(mod_name, *args, **kwargs):
+        if mod_name == name or mod_name.startswith(name + "."):
+            raise ImportError("No module named {!r}".format(name))
+        return real_import(mod_name, *args, **kwargs)
+
+    return _import
+
+
+def test_health_returns_reachable_false_when_requests_is_not_importable(
+        client, monkeypatch):
+    """bd polyglot-pdf-c92sa exit criterion 2 (ops_routes half). Mutation:
+    remove the try/except ImportError guard around `import requests` in
+    _fetch_backend_probe -- this would 500 instead of returning
+    reachable: false, matching bigquery_reports.py's existing pattern."""
+    monkeypatch.setenv(
+        "BACKEND_URLS_JSON", "demo=https://polyglot-backend-demo.example")
+    monkeypatch.setattr("builtins.__import__", _block_import("requests"))
+
+    resp = client.get("/admin/health?channel=demo")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()["backend"]
+    assert body["reachable"] is False
+    assert body["health"] is None
+    assert body["version"] is None
+
+
+def test_errors_maps_a_missing_requests_module_to_503(client, monkeypatch):
+    """bd polyglot-pdf-c92sa exit criterion 2 (error_stats half). Mutation:
+    remove the try/except ImportError guard around `import requests` in
+    _fetch_group_stats -- this would 500 instead of 503, matching
+    bigquery_reports.py's existing pattern."""
+    monkeypatch.setattr(error_stats, "_project_id", lambda: "test-project")
+    monkeypatch.setattr(error_stats, "_access_token", lambda: "tok")
+    monkeypatch.setattr("builtins.__import__", _block_import("requests"))
+
+    resp = client.get("/admin/errors?channel=demo")
+    assert resp.status_code == 503, resp.text

@@ -351,3 +351,46 @@ def test_label_prefers_email_but_falls_back_to_uid():
     assert _MANAGER.label() == "ada@acme.example"
     assert CompositeActor(uid="u9",
                           kind=ACTOR_KIND_APP_ADMIN).label() == "u9"
+
+
+# --------------------------------------------------------------------------
+# CompositeActor's kind/employee_id pairing invariant (bd polyglot-pdf-wiju0)
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("employee_id", [None, ""],
+                         ids=["missing", "empty-string"])
+def test_an_employee_actor_with_no_employee_id_cannot_be_constructed(
+        employee_id):
+    """The route-level bug this pins: list_firm_links's `if employee_id is
+    not None` scoping filter FAILS OPEN when an employee actor carries no
+    employee_id -- it would list the WHOLE FIRM's links instead of none.
+    Guarding it at construction means no future caller can reintroduce the
+    regression, even one that never runs this route's own tests.
+
+    Mutation: remove the `is_employee and not has_employee_id` branch from
+    _employee_id_matches_kind -- both cases go red (raise nothing instead
+    of ValueError)."""
+    with pytest.raises(ValueError):
+        CompositeActor(uid="e", kind=ACTOR_KIND_FIRM_EMPLOYEE,
+                       firm_id="acme", employee_id=employee_id)
+
+
+@pytest.mark.parametrize(
+    "kind", [ACTOR_KIND_APP_ADMIN, ACTOR_KIND_FIRM_MANAGER],
+    ids=["app-admin", "firm-manager"])
+def test_a_non_employee_actor_cannot_carry_an_employee_id(kind):
+    """The inverse direction of the same invariant: an app admin or manager
+    actor is never scoped by employee_id, so one carrying a stray value
+    would be silent, unused state at best and a sign the caller mixed up
+    two actor kinds at worst. Mutation: remove the
+    `not is_employee and has_employee_id` branch -- goes red."""
+    with pytest.raises(ValueError):
+        CompositeActor(uid="x", kind=kind, employee_id="stray-uid")
+
+
+def test_a_correctly_paired_employee_actor_still_constructs():
+    """Guard the guard: the validator must not reject the ONE shape that is
+    supposed to work."""
+    actor = CompositeActor(uid="e", kind=ACTOR_KIND_FIRM_EMPLOYEE,
+                           firm_id="acme", employee_id="e-uid")
+    assert actor.employee_id == "e-uid"

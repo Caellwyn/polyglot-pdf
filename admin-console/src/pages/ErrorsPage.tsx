@@ -42,6 +42,7 @@ export const ErrorsPage: React.FC<ErrorsPageProps> = ({ onAuthExpired }) => {
       if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : 'Could not load channel errors');
       setGroups([]);
+      setService('');
     } finally {
       setLoading(false);
     }

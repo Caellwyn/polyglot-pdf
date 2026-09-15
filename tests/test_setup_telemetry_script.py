@@ -438,3 +438,55 @@ def test_script_requires_both_tables_before_applying_views():
         "script would proceed to substitute an EMPTY table name into the "
         "SQL when only one of the two tables exists yet".format(guard.group(1))
     )
+
+
+def test_both_usage_strings_name_the_optional_second_argument():
+    """bd polyglot-pdf-un0es: the header comment and the runtime error must
+    both tell the operator BILLING_EXPORT_TABLE exists -- an operator who
+    only sees `<PROJECT_ID>` has no way to learn the argument that unlocks
+    view creation exists at all. Mutation: drop `[BILLING_EXPORT_TABLE]`
+    from either string -- red."""
+    text = _script_text()
+    assert re.search(
+        r"# Usage: \./scripts/setup-telemetry\.sh <PROJECT_ID> "
+        r"\[BILLING_EXPORT_TABLE\]", text), (
+        "the header usage comment does not name the optional second argument")
+    assert re.search(
+        r'Usage: \$0 <PROJECT_ID> \[BILLING_EXPORT_TABLE\]', text), (
+        "the runtime argument-error message does not name the optional "
+        "second argument")
+
+
+def test_billing_export_table_comment_says_optional_not_required():
+    """The comment directly above `BILLING_EXPORT_TABLE=$2` must agree with
+    the code immediately below it, which skips view creation and exits 0
+    when the argument is absent -- that is optional-with-skip, not required.
+    Mutation: restore the word 'REQUIRED' -- red."""
+    text = _script_text()
+    assert "REQUIRED second argument" not in text, (
+        "comment still calls BILLING_EXPORT_TABLE a REQUIRED argument, but "
+        "the code below treats a missing value as optional (skip + exit 0)")
+    assert "OPTIONAL second argument" in text, (
+        "comment above BILLING_EXPORT_TABLE=$2 should say OPTIONAL, "
+        "matching the skip-on-absence code path"
+    )
+
+
+def test_no_billing_arg_path_does_not_read_as_unqualified_success():
+    """When BILLING_EXPORT_TABLE is omitted, the script's LAST printed line
+    (before exit 0) must say views were not created -- otherwise an operator
+    sees only the final '[INFO] ... setup complete for $PROJECT_ID!' line and
+    reasonably concludes the whole script succeeded, missing that zero views
+    were ever created. Mutation: revert to the unqualified 'setup complete
+    for $PROJECT_ID!' with no views-skipped qualifier -- red."""
+    text = _script_text()
+    match = re.search(
+        r'No BILLING_EXPORT_TABLE argument given -- skipping view creation'
+        r'.*?\n(.*?)\n\s*exit 0',
+        text, re.DOTALL)
+    assert match, "could not locate the no-BILLING_EXPORT_TABLE skip block"
+    final_line = match.group(1)
+    assert "NO VIEWS CREATED" in final_line or "no views" in final_line.lower(), (
+        "the final line printed before exit 0 in the no-billing-arg path "
+        "does not say views were NOT created: {!r}".format(final_line)
+    )

@@ -99,16 +99,11 @@ def test_the_env_var_hint_names_every_service_that_serves_the_bucket():
     """
     text = _hint_text()
     services = {"polyglot-backend", "polyglot-backend-staging"}
-    printed = {
-        m.group(1)
-        for line in _gcloud_env_flag_invocation_lines(text)
-        for m in [re.search(r"gcloud run services update (\S+)", line)]
-        if m
-    }
-    # The invocation and its flag are on separate printed lines, so recover the
-    # service from the `gcloud run services update` line just above each.
-    if not printed:
-        printed = set(re.findall(r"gcloud run services update (\S+)", text))
+    # The `gcloud run services update <svc>` line and its `--*-env-vars` flag
+    # are printed as two separate lines, so recover the service name directly
+    # from the whole text rather than from _gcloud_env_flag_invocation_lines
+    # (which returns only the flag lines and never contains this substring).
+    printed = set(re.findall(r"gcloud run services update (\S+)", text))
     assert printed == services, (
         f"the env-var hint names {sorted(printed)}, expected {sorted(services)}. "
         f"Every service serving the shared form-kits bucket needs its env "

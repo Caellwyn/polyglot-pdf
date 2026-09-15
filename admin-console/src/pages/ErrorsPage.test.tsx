@@ -94,6 +94,21 @@ describe('ErrorsPage', () => {
     expect(screen.queryByText('Sign-in required')).not.toBeInTheDocument();
   });
 
+  it('a failed channel switch clears the PREVIOUS channel service label (bd s8bhx)', async () => {
+    vi.mocked(getChannelErrors).mockResolvedValueOnce({ channel: 'demo', service: 'polyglot-backend', groups: [] });
+    render(<ErrorsPage onAuthExpired={noAuthExpired} />);
+    expect(await screen.findByText('Service: polyglot-backend')).toBeInTheDocument();
+
+    vi.mocked(getChannelErrors).mockRejectedValueOnce(new Error('staging errors unavailable'));
+    fireEvent.click(screen.getByRole('button', { name: 'staging' }));
+
+    await waitFor(() => expect(screen.getByText('staging errors unavailable')).toBeInTheDocument());
+    // The demo service name must not linger on screen while the Staging tab
+    // is selected and showing an error -- it would mislabel which service
+    // the page is reporting on.
+    expect(screen.queryByText('polyglot-backend', { exact: false })).not.toBeInTheDocument();
+  });
+
   it('an extra `message` key on the payload never reaches the DOM (allowlist pin)', async () => {
     vi.mocked(getChannelErrors).mockResolvedValue({
       channel: 'demo', service: 'polyglot-backend', groups: [GROUP_WITH_EXTRA_KEY],
