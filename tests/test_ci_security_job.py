@@ -69,12 +69,33 @@ def test_the_three_npm_audits_cover_the_three_apps():
         assert "working-directory: " + app in job, app
 
 
+def _install_lines():
+    """Every `pip install` of the backend requirements anywhere an operator or
+    a runner would follow: CI, Cloud Build, the dev scripts in every shell
+    dialect (.sh / .bat / .ps1) and the two READMEs. Derived by glob, so a
+    new script is covered the day it is added."""
+    files = [CI, CLOUDBUILD, REPO_ROOT / "README.md", REPO_ROOT / "scripts" / "README.md"]
+    for pattern in ("*.sh", "*.bat", "*.ps1"):
+        files.extend(sorted((REPO_ROOT / "scripts").glob(pattern)))
+    for path in files:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("#", "REM ", "::")):
+                continue  # prose about the files, not an install
+            if "pip install" in line and "requirements" in line:
+                yield path.relative_to(REPO_ROOT).as_posix(), line.strip()
+
+
 def test_every_pytest_runner_installs_the_dev_requirements():
-    """pytest lives in requirements-dev.txt now; a runner that installs only
-    requirements.txt has no test runner and goes red on the first PR."""
-    for path in (CI, CLOUDBUILD):
-        text = path.read_text(encoding="utf-8")
-        assert "backend/requirements-dev.txt" in text, str(path)
+    """pytest lives in requirements-dev.txt now; a runner or a dev script
+    that installs only requirements.txt has no test runner. The .bat mirrors
+    of the .sh scripts are part of this set (CLAUDE.md scar #8)."""
+    lines = list(_install_lines())
+    assert len(lines) >= 8, "the install-line scan is vacuous: " + repr(lines)
+    bare = [(f, l) for f, l in lines if "requirements-dev" not in l]
+    assert not bare, "these still install the runtime file alone: " + repr(bare)
+    for runner in (CI, CLOUDBUILD):
+        assert "backend/requirements-dev.txt" in runner.read_text(encoding="utf-8")
 
 
 def test_dependabot_covers_every_ecosystem():

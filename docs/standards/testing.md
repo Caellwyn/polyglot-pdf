@@ -1,6 +1,6 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
+**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt backend/requirements-dev.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit, semgrep), pinned by `tests/test_ci_security_job.py`.)*
 

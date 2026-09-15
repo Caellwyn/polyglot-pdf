@@ -132,6 +132,20 @@ listing the job's tools without semgrep; fixed, and the informational pin now
 requires EVERY scanner step to carry `continue-on-error` (a step added
 without it fails the test, mutation-verified) instead of a loose count.
 
+The Opus cross-surface review found the `.bat` mirrors of `fix_venv.sh` and
+`start_backend.sh` still installing the runtime file alone (the set was
+{sh, bat} x 2 and only the sh half had been fixed -- scar #8); both fixed,
+and the dev-requirements pin now derives its file set by glob over every
+`.sh`/`.bat`/`.ps1` under `scripts/` plus the runners and READMEs, with a
+vacuity floor. `testing.md`'s Tracks line gained `requirements-dev.txt`.
+Pre-existing findings filed rather than fixed here: `deploy-editor.sh` /
+`deploy-admin-console.sh` only `npm install` when `node_modules` is absent,
+so a local editor deploy after a lockfile change builds stale packages;
+Dependabot PRs close no bead and the doctrine has no path for them. The
+secret-scan baseline's whole-directory exclusion of
+`backend/tests/unit/fixtures/` is accepted as-is (one non-frozen schema
+snapshot; narrowing it means a rescan).
+
 ## Lessons
 
 - **A non-root image must own what the app writes at import time.** Two
@@ -159,9 +173,9 @@ Bumped: `docs/standards/testing.md` (pins location, the security job),
 - Dockerfile -- digest pin; non-root user
 - backend/requirements.txt -- test tooling removed; three pins bumped
 - backend/requirements-dev.txt -- new
-- cloudbuild.yaml, scripts/start_backend.sh, scripts/fix_venv.sh, scripts/dev_env.ps1, scripts/dev-local.ps1, scripts/dev-local.sh, scripts/run-schema-editor.sh, README.md, scripts/README.md -- install the dev file
+- cloudbuild.yaml, scripts/start_backend.sh, scripts/start_backend.bat, scripts/fix_venv.sh, scripts/fix_venv.bat, scripts/dev_env.ps1, scripts/dev-local.ps1, scripts/dev-local.sh, scripts/run-schema-editor.sh, README.md, scripts/README.md -- install the dev file
 - tests/test_ci_security_job.py -- new
-- tests/test_dockerfile_app_module.py -- three new pins
+- tests/test_dockerfile_app_module.py -- five new pins
 - tests/test_cloudbuild_yaml.py -- parity collector skips continue-on-error steps
 - docs/standards/testing.md, docs/components/config-deployment.md -- stamps + prose
 - docs/journal/entries/2026-09-15-bd-ikdnd-security-scanning.md -- this entry
