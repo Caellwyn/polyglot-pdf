@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit), pinned by `tests/test_ci_security_job.py`.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit, semgrep), pinned by `tests/test_ci_security_job.py`.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-21m1y: the no-real-Firestore guard, autouse in both `backend/tests/conftest.py` and `admin_backend/tests/conftest.py`). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for the THIRD collected suite (`admin_backend/tests`)'s closeout details.*
 
@@ -334,8 +334,9 @@ backend pytest suite (`-m "not external"`) plus all three vitest suites --
 preceded by its own `tsc --noEmit` typecheck step, on every PR. A fifth job,
 `security` (bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
 audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
-against `.secrets.baseline`, and bandit; every one of its steps is
-`continue-on-error`, so it reports and never gates either.
+against `.secrets.baseline`, bandit, and semgrep (Python + TypeScript
+rulesets); every one of its scanner steps is `continue-on-error`, so it
+reports and never gates either.
 It is **not** a required status check: the merge gate is the closeout merge
 decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
 merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge

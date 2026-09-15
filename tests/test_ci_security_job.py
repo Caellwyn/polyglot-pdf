@@ -48,9 +48,13 @@ def _security_job():
 def test_the_security_job_exists_and_is_informational():
     job = _security_job()
     assert "name: security scans (informational)" in job
-    # Every scanner step continues on error: one noisy tool must not hide
+    # EVERY scanner step continues on error: one noisy tool must not hide
     # the others, and the job never gates (ci.yml's non-blocking doctrine).
-    assert job.count("continue-on-error: true") >= len(SECURITY_TOOLS)
+    # Scanner steps are the `run:` steps other than the one that installs
+    # the scanners, so a step added without the flag fails here.
+    run_steps = job.count(chr(10) + "        run:")
+    assert run_steps >= len(SECURITY_TOOLS) + 1
+    assert job.count("continue-on-error: true") == run_steps - 1
 
 
 def test_every_security_tool_runs_in_the_job():

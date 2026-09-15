@@ -127,6 +127,11 @@ line-joiner would have swallowed a line after a comment ending in a
 backslash. Both fixed above; semgrep, named in the plan, was added to the
 job in the same round.
 
+Fresh-eyes round 3 (clean otherwise) caught `docs/standards/testing.md` still
+listing the job's tools without semgrep; fixed, and the informational pin now
+requires EVERY scanner step to carry `continue-on-error` (a step added
+without it fails the test, mutation-verified) instead of a loose count.
+
 ## Lessons
 
 - **A non-root image must own what the app writes at import time.** Two
