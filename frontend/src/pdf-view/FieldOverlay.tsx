@@ -203,6 +203,19 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
       const labels = optionRectsForName.map(o => optionLabel(field, o.value));
       return labels.join(', ');
     }
+    // A SELECT is the one type where paint-text and speech-text must differ.
+    // paintedValueFor deliberately paints the option's pdf_on_value -- the PDF
+    // EXPORT CODE -- because a speakable label ("Armed Forces Americas (AA)")
+    // clips in a 36px state box. That is a PIXEL constraint, and it does not
+    // transfer to speech: read aloud, "AA" tells the user nothing, and bd
+    // polyglot-pdf-jpjcv is on record that an alphabetic code is not speakable
+    // as itself. So speech resolves the LABEL while the box keeps the code.
+    // Radio and checkbox_group already speak labels, so select was the only
+    // path where reusing paint-text silently degraded the announcement
+    // (Opus cross-surface round 2).
+    if (field.type === 'select' && typeof rawValue === 'string' && rawValue !== '') {
+      return optionLabel(field, rawValue);
+    }
     const painted = paintedValueFor(field, rawValue);
     if (painted.kind === 'text') return painted.text;
     if (painted.kind === 'check') return 'checked';

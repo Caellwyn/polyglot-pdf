@@ -250,9 +250,15 @@ describe('the ANSWER survives the img leaf rule (bd polyglot-pdf-sagh6)', () => 
     // The box paints NOTHING in this case (the marks carry the display), so
     // without naming the selection the field would announce no answer at all.
     const name = nameOf([GROUP], { race: { value: ['white'], confirmed: true } }, 'race');
-    expect(name, 'a selected option must be named, and by its LABEL not its slug')
+    // toContain('White') IS the slug guard: the slug is 'white', so this fails
+    // the moment optionLabel stops resolving it. A companion
+    // `.not.toMatch(/\bwhite\b/)` used to sit here and was VACUOUS -- the regex
+    // is case-sensitive, so it could never match the label 'White' and passed
+    // whether the code was right or not (Opus cross-surface round 2). Deleted
+    // rather than repaired: a case-insensitive version would match INSIDE
+    // 'White', needing a contorted pattern for zero added coverage.
+    expect(name, 'a selected option must be named by its LABEL, not its slug')
       .toContain('White');
-    expect(name, 'the slug must not leak into speech').not.toMatch(/\bwhite\b(?![A-Za-z])/);
   });
 
   it('an unanswered field names no value', () => {
@@ -348,5 +354,59 @@ describe('the value is announced ONCE, on both paths (bd polyglot-pdf-sagh6)', (
     const painted = box.querySelector('.pdf-field-overlay__text');
     expect(painted?.getAttribute('aria-hidden')).toBe('true');
     expect(box.firstElementChild, 'still a direct flex child').toBe(painted);
+  });
+});
+
+describe('a select SPEAKS its label, not its export code (bd polyglot-pdf-sagh6)', () => {
+  // The one type where paint-text and speech-text must DIFFER, and the only
+  // path where reusing paintedValueFor silently degraded the announcement
+  // (Opus cross-surface round 2).
+  //
+  // paintedValueFor paints a select's pdf_on_value -- the PDF EXPORT CODE --
+  // because a speakable label ("Armed Forces Americas (AA)") clips in a 36px
+  // state box. That is a PIXEL constraint. Read aloud, "AA" tells the user
+  // nothing, and bd polyglot-pdf-jpjcv is on record that an alphabetic code is
+  // not speakable as itself.
+  const SELECT: FormField = {
+    id: 'state', name: 'Current State', spoken_name: 'state', section_id: 's1',
+    type: 'select',
+    options: [
+      { value: 'armed_forces_americas', label: 'Armed Forces Americas (AA)', pdf_on_value: 'AA' },
+      { value: 'legacy_no_code', label: 'Legacy Option' },
+    ],
+    // The real i-90 state box: too narrow for the label, which is the whole
+    // reason the paint side uses the code.
+    pdf_position: { page: 1, x: 10, y: 10, width: 36, height: 14 },
+  } as any;
+
+  function renderSelect(value: string) {
+    render(
+      <PDFViewer document={{} as any} numPages={1} scale={1} fields={[SELECT]}
+        fieldValues={{ state: { value, confirmed: true } }} currentFieldId={null} />,
+    );
+    return screen.getByTestId('pdf-field-overlay-state');
+  }
+
+  it('announces the LABEL while the box still paints the CODE', () => {
+    const box = renderSelect('armed_forces_americas');
+
+    expect(
+      box.getAttribute('aria-label'),
+      'a screen reader hearing "AA" learns nothing',
+    ).toContain('Armed Forces Americas (AA)');
+
+    // The paint side is UNCHANGED -- this must not have "fixed" speech by
+    // breaking the 36px box the code exists for.
+    expect(box.textContent, 'the box still paints the export code').toBe('AA');
+  });
+
+  it('falls back to the label for a legacy option carrying no export code', () => {
+    const box = renderSelect('legacy_no_code');
+    expect(box.getAttribute('aria-label')).toContain('Legacy Option');
+  });
+
+  it('does not leak the raw slug into speech', () => {
+    const label = renderSelect('armed_forces_americas').getAttribute('aria-label') ?? '';
+    expect(label, 'the stored slug is not human speech').not.toContain('armed_forces_americas');
   });
 });
