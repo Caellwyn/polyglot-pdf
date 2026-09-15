@@ -89,6 +89,18 @@ existing consumer's read of `values`/`known_keys`/`unknown_keys` changes),
 so it is flagged for the outer reviewer as a changed contract rather than
 edited unprompted.
 
+`closeout_prep.py` also flags `docs/components/config-deployment.md` as
+STALE relative to `admin_backend/routes/config_routes.py` and
+`admin-console/`'s new mtimes (that doc's Tracks line names both paths for
+DEPLOY-topology reasons -- env vars, Hosting sites, IAM). Reviewed: its
+prose describes deploy mechanics, not the config route's response shape or
+the console's rendering, and neither changed here (no new env var, deploy
+step, Hosting site, or IAM grant) -- left as-is rather than bumping the
+stamp with no real content change. Every other STALE doc `closeout_prep.py`
+listed is stale against files this bead did not touch at all (websocket
+routing, PDF filling, voice/VAD, etc.) and is left for whichever bead is
+already working that surface.
+
 Review outcomes recorded in the closeout ping.
 
 ## Files touched
