@@ -124,7 +124,7 @@ from typing import Annotated, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import (
@@ -177,12 +177,31 @@ class GrantRequest(BaseModel):
     kit_id: Optional[str] = None
 
 
+# The operator's free-text `reason` is the one unbounded string this route
+# accepts. Sprint 23 bead uaxt5 (PF-9): an unbounded reason was stored
+# verbatim in THREE stores at once -- firms/*/ledger (the entry itself,
+# where a text-length field is a legitimate audit need), admin_audit_log.after
+# (a second, evidence-adjacent copy), AND logged to Cloud Logging (a THIRD
+# copy with no retention control of its own) -- so an operator pasting a
+# client's intake notes into this box would land them in three places with no
+# bound. Bounding the field at the Pydantic model refuses the request BEFORE
+# any store is touched (a 422, not a truncation after the fact); the log-line
+# drop below (see admin_credits_adjusted) removes the THIRD copy entirely,
+# since a log line has no legitimate need for the free-text content at all
+# (an id is enough to look the entry up). The ledger and audit-log copies
+# remain -- an operator's stated reason for a balance change is exactly what
+# those two stores exist to record -- but bounded, never arbitrary-length.
+_REASON_MAX_LENGTH = 500
+
+
 class AdjustRequest(BaseModel):
     """The signed operator escape hatch. `reason` is required (plan:
-    "reason required"), matching credit_ledger.REASON_REQUIRED_TYPES."""
+    "reason required"), matching credit_ledger.REASON_REQUIRED_TYPES, and
+    bounded (bd polyglot-pdf-uaxt5, PF-9) so a free-text paste cannot carry
+    unbounded content into the ledger entry or the audit row."""
 
     amount: int
-    reason: str
+    reason: str = Field(max_length=_REASON_MAX_LENGTH)
 
 
 def _validated_firm_id(firm_id: str) -> str:
@@ -327,8 +346,14 @@ async def adjust_credits(
         _target="firms/{}/ledger#adjust".format(firm_id),
         _after={"amount": body.amount, "reason": body.reason},
     )
+    # bd polyglot-pdf-uaxt5 (PF-9): reason is DELIBERATELY absent from this
+    # line -- an operator's free-text content has no legitimate reason to
+    # reach Cloud Logging (a third copy, with no retention control of its
+    # own) when the ledger entry and the audit row already carry it, bounded,
+    # in stores that DO have access control. request_id is enough to look
+    # the full entry up in either of those.
     _log.info("admin_credits_adjusted", firm_id=firm_id, amount=body.amount,
-              reason=body.reason, actor_uid=actor.uid, request_id=request_id)
+              actor_uid=actor.uid, request_id=request_id)
     return {**result, "request_id": request_id}
 
 

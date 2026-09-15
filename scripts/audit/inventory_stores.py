@@ -1,0 +1,560 @@
+"""Read-only, redacted data-at-rest inventory of the deployed system (bd
+polyglot-pdf-uaxt5, sprint 23 workstream A: PF-8's retention half + PF-9).
+
+WHAT THIS IS. For every Firestore collection this app writes, sample N docs
+(default small) and print KEY NAMES, value TYPES, and max STRING LENGTH per
+key -- never a value -- flagging any key outside that collection's pinned
+allowlist. Then list the GCS kit bucket for unexpected top-level objects, and
+print both BigQuery telemetry tables' schemas (column names/types, never
+row data). This is the LIVE half of the sprint-23 data-at-rest inventory;
+the STATIC half (every store the deployed system writes, incl. second
+copies and repo-as-a-store) is enumerated in this bead's PR report and in
+docs/sprint_23_security-audit_plan.md's workstream-A section.
+
+SHAPE COPIED FROM scripts/read_confirmations.py: operator ADC (not the
+Cloud Run runtime SA -- your own gcloud/application-default credentials
+need Firestore/Storage/BigQuery read access on the target project),
+`--project` REQUIRED and pins the query deterministically (pre-initializes
+firebase_admin with this projectId, which beats the ADC credential's own
+project resolution -- an env var alone can silently query the wrong
+project), and a DEAD_PROJECTS refusal mirroring scripts/grant_credits.py's
+(same former-prod project, same reason: a stale muscle-memory invocation
+must not hang or half-write -- though this script never writes at all).
+
+NEVER PRINTS A VALUE. Every collection has a PINNED_ALLOWLISTS entry (the
+exact key set its own writer emits, copied from that module's own
+allowlist/test -- confirmation_logger.py, credit_ledger.ENTRY_FIELDS,
+audit_log.ROW_FIELDS, the firms doc keys pinned in
+admin_backend/tests/unit/test_audit_log_shapes.py, links_store /
+link_redemptions per backend/tests/unit/test_store_shapes.py, alerts.py).
+A collection with NO code-side writer in this repo (authorized_emails --
+managed out of band per firestore.rules' own comment) is sampled with an
+empty allowlist, so EVERY key it carries is reported as "outside the
+allowlist" -- which is the correct, honest answer for an unmanaged store:
+there is no pin to compare against, so nothing is silently assumed safe.
+
+WINDOWS NOTE: gcloud/bq are spawned via shutil.which(...) first (mirrors
+scripts/verify_service_reachable.py's own rationale) -- a bare "gcloud"
+raises WinError 2 on Windows, since CreateProcess resolves a bare name only
+to gcloud.exe while the Cloud SDK ships gcloud.cmd. Firestore reads go
+through google-cloud-firestore directly (backend/.venv already vendors it),
+not firebase_admin's own Firestore accessor, per the bead's own live-run
+rule.
+
+EXIT CODES: 0 = ran to completion (regardless of whether any key was
+flagged -- the SUMMARY line says whether anything was flagged; grep it, do
+not rely on the exit code to mean "clean"); 2 = refused (missing --project,
+dead project, project mismatch); 3 = a store could not be reached at all
+(the report still prints what it could; this signals "incomplete", not
+"clean").
+
+ASCII only.
+"""
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+# The former prod project is DEAD and unreachable (maintainer, 2026-08-14) --
+# the SAME refusal scripts/grant_credits.py and scripts/bootstrap_firm.py
+# carry, restated here because this is a read-only reporting tool an
+# operator might reach for out of the same muscle memory that hits the
+# write scripts.
+DEAD_PROJECTS = {"polyglot-forms-919f2"}
+
+DEFAULT_SAMPLE_SIZE = 20
+
+# ---------------------------------------------------------------------------
+# Pinned per-collection allowlists -- the exact key set THIS repo's own code
+# writes, copied from each store's own module/test (never re-derived by
+# guessing at the Firestore console). A key outside this set is flagged,
+# never silently accepted. An empty tuple means "no code-side writer in this
+# repo" -- every key found is then, correctly, outside the (empty) allowlist.
+# ---------------------------------------------------------------------------
+
+PINNED_ALLOWLISTS: dict[str, frozenset] = {
+    # backend/utils/confirmation_logger.py -- FOUR event shapes share one
+    # collection (field_confirmed, disclaimer_accepted, form_session_started,
+    # form_session_ended); this is the UNION of all four. The first two are
+    # pinned by test_confirmation_firestore_sink.py's own allowlist
+    # assertions; `link_jti`/`employee_id`/`section_id` come from
+    # log_form_session_start's own event dict (log_form_session_start /
+    # log_form_session_end have no equivalent allowlist test today -- found
+    # via this script's own live run against polyglot-demo-aa709, which
+    # flagged `section_id` before this line was added; a live-verified gap
+    # in test coverage, not a live-verified LEAK, since every key here is a
+    # metadata id/timestamp/enum, never a value).
+    "confirmation_events": frozenset({
+        "timestamp", "event", "form_id", "kit_id", "edition_date", "firm_id",
+        "form_session_id", "field_id", "field_name", "confirmation_method",
+        "language", "timestamp_unix_ms", "script_version", "user_agent",
+        "total_fields_confirmed", "completion_status", "expire_at",
+        "section_id", "link_jti", "employee_id",
+    }),
+    # firestore.rules: "entries are managed out of band (Firebase Console /
+    # admin tooling)" -- no writer in this repo, so no pin to compare
+    # against. Left EMPTY deliberately (see module docstring).
+    "authorized_emails": frozenset(),
+    # backend/services/firms.py::upsert_firm +
+    # admin_backend/routes/firm_routes.py's create/patch routes, pinned in
+    # admin_backend/tests/unit/test_audit_log_shapes.py::FIRM_DOC_ALLOWED_KEYS
+    # (this same bead).
+    "firms": frozenset({
+        "name", "contact_email", "allowed_kits", "status", "kind", "plan",
+        "balance_credits", "balance_updated_at", "created_at", "updated_at",
+    }),
+    # backend/services/credit_ledger.py::ENTRY_FIELDS -- the nested
+    # firms/{firm_id}/ledger subcollection. Sampled by name below since the
+    # CLI takes flat collection ids; the live run walks it per firm.
+    "ledger": frozenset({
+        "type", "amount", "usd_amount", "firm_kind", "channel",
+        "balance_after", "actor", "reason", "link_jti", "kit_id", "ts",
+        "period",
+    }),
+    # backend/services/links_store.py::build_mint_record, pinned in
+    # backend/tests/unit/test_store_shapes.py::LINKS_MINT_RECORD_ALLOWED_KEYS.
+    "links": frozenset({
+        "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
+        "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
+        "expire_at",
+    }),
+    "links_staging": frozenset({
+        "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
+        "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
+        "expire_at",
+    }),
+    # backend/services/link_redemptions.py::open_link/complete_link, pinned
+    # in backend/tests/unit/test_store_shapes.py::REDEMPTION_RECORD_ALLOWED_KEYS.
+    "link_redemptions": frozenset({
+        "jti", "firm_id", "kit_id", "opened_at", "completed_at",
+    }),
+    "link_redemptions_staging": frozenset({
+        "jti", "firm_id", "kit_id", "opened_at", "completed_at",
+    }),
+    # admin_backend/services/audit_log.py::ROW_FIELDS is the INITIAL write
+    # shape (build_row(), pinned by test_audit_log.py) -- but mark_committed
+    # / mark_failed (the PENDING-THEN-COMMITTED form's step 2) add
+    # `committed_ts` (both) and `error` (mark_failed only) on top of that
+    # base afterwards, per that module's own docstring ("update only state
+    # (plus error / committed_ts) on a row THIS process just created"). This
+    # allowlist is the UNION covering a row at any point in its lifecycle --
+    # found via this script's own live run against polyglot-demo-aa709,
+    # which flagged `committed_ts` before this line was added.
+    "admin_audit_log": frozenset({
+        "actor_uid", "actor_email", "action", "target", "before", "after",
+        "channel", "request_id", "state", "ts", "committed_ts", "error",
+    }),
+    # backend/services/runtime_config.py -- a free-form doc keyed on
+    # RUNTIME_CONFIG_KEYS (a growing, versioned list read live below rather
+    # than hand-copied here, since the whole point of that module is that
+    # new keys land there routinely and are already reported by its own
+    # known_keys/unknown_keys split).
+    "app_config": None,  # sentinel: resolved live from runtime_config
+    # backend/services/alerts.py::_write.
+    "alerts": frozenset({
+        "firm_id", "kind", "level", "ts", "context", "expire_at",
+        "acknowledged_by", "acknowledged_at", "emailed_at",
+    }),
+    # form-kit metadata docs (kit_commercials / usage rollups touch this
+    # collection too) -- admin_backend/routes/usage_routes.py's
+    # KITS_COLLECTION. No single writer owns the whole doc shape the way
+    # firms.py does, so this collection is sampled and reported, but not
+    # flagged against a closed allowlist (None has the same "report
+    # everything" meaning as an empty frozenset here, kept distinct from
+    # app_config's live-resolved case only for readability).
+    "kits": None,
+}
+
+
+class DeadProjectError(Exception):
+    """The named project is dead; refusing to query it."""
+
+
+def _resolve_exe(name: str) -> str:
+    """shutil.which first (Windows: gcloud.cmd, not gcloud.exe -- see module
+    docstring); pass the bare name through unchanged if unresolvable (a
+    POSIX host, or PATH genuinely missing it, in which case the subprocess
+    call fails informatively rather than this function guessing)."""
+    return shutil.which(name) or name
+
+
+def _run(argv: list) -> "tuple[int, str, str]":
+    """Run a subprocess, stdout/stderr captured SEPARATELY (never merged --
+    a component-update nag on stderr must never corrupt a stdout parse)."""
+    argv = [_resolve_exe(argv[0])] + list(argv[1:])
+    try:
+        proc = subprocess.run(
+            argv, capture_output=True, text=True, encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        return 127, "", "{}: {}".format(type(exc).__name__, exc)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _init_firebase_admin(project: str) -> None:
+    """Pin firebase_admin's resolved project DETERMINISTICALLY -- mirrors
+    scripts/read_confirmations.py's own rationale exactly: firebase_admin
+    resolves the project from the ADC CREDENTIAL first, so an env var alone
+    can silently query whatever project the operator's gcloud ADC defaults
+    to. Must run before any backend module that touches firebase_admin is
+    imported."""
+    import firebase_admin
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(options={"projectId": project})
+
+    resolved = firebase_admin.get_app().project_id
+    if resolved != project:
+        raise DeadProjectError(
+            "resolved firebase_admin project is {!r}, not {!r} -- refusing "
+            "to read the wrong project.".format(resolved, project)
+        )
+
+
+def _firestore_client(project: str):
+    """A plain google-cloud-firestore client (NOT firebase_admin's own
+    Firestore accessor), per the bead's own live-run instruction. Uses the
+    OPERATOR's ADC, same as every read in this script."""
+    from google.cloud import firestore
+
+    return firestore.Client(project=project)
+
+
+# ---------------------------------------------------------------------------
+# The value-shape summary: KEY NAMES, value TYPES, max STRING LENGTH -- and
+# THAT IS ALL. No branch here ever holds onto or prints a value.
+# ---------------------------------------------------------------------------
+
+def _summarize_docs(docs: list, allowlist: "Optional[frozenset]") -> dict:
+    """Reduce a batch of Firestore documents to a redacted shape summary.
+
+    Returns {
+        "doc_count": int,
+        "keys": {key: {"types": {type_name, ...}, "max_str_len": int|None}},
+        "flagged_keys": [key, ...],   # keys outside `allowlist`, sorted
+    }
+
+    `allowlist=None` means "no closed set to check against" -- every key is
+    reported in `keys` but `flagged_keys` stays empty (a deliberate
+    "reporting only" mode for a collection with no single pinned writer,
+    e.g. kits/app_config, so this script does not manufacture false
+    positives against a shape it was never told to expect).
+    """
+    keys: dict[str, dict[str, Any]] = {}
+    for doc in docs:
+        data = doc.to_dict() or {}
+        for key, value in data.items():
+            entry = keys.setdefault(key, {"types": set(), "max_str_len": None})
+            entry["types"].add(type(value).__name__)
+            if isinstance(value, str):
+                cur = entry["max_str_len"] or 0
+                entry["max_str_len"] = max(cur, len(value))
+
+    flagged: list[str] = []
+    if allowlist is not None:
+        flagged = sorted(set(keys) - allowlist)
+
+    return {
+        "doc_count": len(docs),
+        "keys": {
+            k: {"types": sorted(v["types"]), "max_str_len": v["max_str_len"]}
+            for k, v in keys.items()
+        },
+        "flagged_keys": flagged,
+    }
+
+
+def inventory_collection(
+    db, collection_name: str, *, sample_size: int, allowlist,
+) -> dict:
+    """Sample up to `sample_size` docs from `collection_name` and summarize.
+
+    A collection that does not exist (0 docs) is reported honestly as
+    empty, never conflated with a read failure -- see the CLI's own
+    exit-code note.
+    """
+    docs = list(db.collection(collection_name).limit(sample_size).stream())
+    return _summarize_docs(docs, allowlist)
+
+
+def inventory_ledger_subcollections(
+    db, *, firm_sample_size: int, ledger_sample_size: int,
+) -> dict:
+    """firms/{firm_id}/ledger is NESTED -- sample a handful of firms, then a
+    handful of ledger entries per firm, and summarize the UNION (the ledger
+    shape is the same across every firm; sampling several just guards
+    against one firm's doc being unrepresentative)."""
+    firm_docs = list(db.collection("firms").limit(firm_sample_size).stream())
+    all_entries = []
+    firm_ids_sampled = []
+    for firm_snap in firm_docs:
+        firm_ids_sampled.append(firm_snap.id)
+        entries = list(
+            db.collection("firms").document(firm_snap.id)
+            .collection("ledger").limit(ledger_sample_size).stream()
+        )
+        all_entries.extend(entries)
+    summary = _summarize_docs(all_entries, PINNED_ALLOWLISTS["ledger"])
+    summary["firms_sampled"] = firm_ids_sampled
+    return summary
+
+
+def inventory_app_config(db) -> dict:
+    """app_config/{channel} -- resolved live against RUNTIME_CONFIG_KEYS
+    rather than a hand-copied constant (see PINNED_ALLOWLISTS' own comment).
+    """
+    from backend.services.runtime_config import RUNTIME_CONFIG_KEYS
+
+    docs = list(db.collection("app_config").stream())
+    return _summarize_docs(docs, frozenset(RUNTIME_CONFIG_KEYS))
+
+
+# ---------------------------------------------------------------------------
+# GCS bucket listing -- object PATHS only, never content.
+# ---------------------------------------------------------------------------
+
+def inventory_bucket(bucket: str) -> dict:
+    """`gcloud storage ls -r` the kit bucket. Reports counts per top-level
+    prefix (<kit>/, _archive/, _drafts/) and any object whose path does not
+    fall under a recognized prefix, flagged as unexpected. Never prints an
+    object's CONTENT -- paths only, which are kit ids and filenames, not
+    client data (form-kit schemas/PDFs carry no user answers by design)."""
+    code, out, err = _run(
+        ["gcloud", "storage", "ls", "-r", "gs://{}/**".format(bucket)])
+    if code != 0:
+        return {"reachable": False, "error": err.strip() or "gcloud exit {}".format(code)}
+
+    known_prefixes = ("_archive/", "_drafts/")
+    counts: dict[str, int] = {"_archive/": 0, "_drafts/": 0, "<kit>/": 0}
+    unexpected: list[str] = []
+    prefix = "gs://{}/".format(bucket)
+    for line in out.splitlines():
+        line = line.strip()
+        if not line or not line.startswith(prefix) or line.endswith("/"):
+            continue
+        rel = line[len(prefix):]
+        if rel.startswith(known_prefixes):
+            counts[rel.split("/", 1)[0] + "/"] += 1
+        elif "/" in rel:
+            counts["<kit>/"] += 1
+        else:
+            unexpected.append(rel)
+
+    return {
+        "reachable": True,
+        "counts": counts,
+        "unexpected_top_level_objects": sorted(unexpected),
+    }
+
+
+# ---------------------------------------------------------------------------
+# BigQuery telemetry tables -- SCHEMA only (column names/types), never rows.
+# ---------------------------------------------------------------------------
+
+def inventory_bigquery_table(project: str, dataset: str, table: str) -> dict:
+    code, out, err = _run([
+        "bq", "show", "--format=prettyjson", "--project_id", project,
+        "{}:{}.{}".format(project, dataset, table),
+    ])
+    if code != 0:
+        return {"reachable": False, "error": err.strip() or "bq exit {}".format(code)}
+
+    import json
+
+    try:
+        parsed = json.loads(out)
+    except json.JSONDecodeError as exc:
+        return {"reachable": False, "error": "unparseable bq output: {}".format(exc)}
+
+    fields = parsed.get("schema", {}).get("fields", [])
+    return {
+        "reachable": True,
+        "columns": [
+            {"name": f.get("name"), "type": f.get("type")} for f in fields
+        ],
+    }
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Read-only, redacted data-at-rest inventory of the "
+        "deployed system (Firestore collections, the GCS kit bucket, "
+        "BigQuery telemetry tables). Never prints a stored value."
+    )
+    parser.add_argument(
+        "--project", required=True,
+        help="target GCP/Firebase project (deterministic: pre-initializes "
+        "firebase_admin with this projectId AND asserts the resolved app "
+        "project matches -- see scripts/read_confirmations.py's identical "
+        "rationale)",
+    )
+    parser.add_argument(
+        "--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE,
+        help="docs to sample per collection (default {})".format(
+            DEFAULT_SAMPLE_SIZE),
+    )
+    parser.add_argument(
+        "--bucket", default=None,
+        help="the form-kit GCS bucket name (defaults to "
+        "<project>-form-kits, this repo's naming convention)",
+    )
+    parser.add_argument(
+        "--bq-dataset", default="polyglot_telemetry",
+        help="BigQuery dataset holding the telemetry tables",
+    )
+    parser.add_argument(
+        "--bq-tables", nargs="+", default=["ledger_export", "usage_events"],
+        help="BigQuery telemetry table names to inspect",
+    )
+    parser.add_argument(
+        "--skip-bucket", action="store_true",
+        help="skip the GCS bucket listing (Firestore + BigQuery only)",
+    )
+    parser.add_argument(
+        "--skip-bigquery", action="store_true",
+        help="skip the BigQuery schema checks (Firestore + bucket only)",
+    )
+    return parser
+
+
+def main(argv: "Optional[list]" = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+    if args.project in DEAD_PROJECTS:
+        print(
+            "project {} is DEAD and unreachable (maintainer 2026-08-14); "
+            "refusing.".format(args.project),
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        _init_firebase_admin(args.project)
+    except DeadProjectError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    incomplete = False
+    report: dict[str, Any] = {"project": args.project, "collections": {}}
+
+    try:
+        db = _firestore_client(args.project)
+    except Exception as exc:  # noqa: BLE001 -- report, do not crash
+        print(
+            "FAILED to open a Firestore client: {}. Nothing Firestore-side "
+            "could be inspected.".format(exc),
+            file=sys.stderr,
+        )
+        db = None
+        incomplete = True
+
+    if db is not None:
+        for coll_name, allowlist in PINNED_ALLOWLISTS.items():
+            if coll_name in ("app_config", "ledger"):
+                continue  # handled specially below
+            try:
+                report["collections"][coll_name] = inventory_collection(
+                    db, coll_name, sample_size=args.sample_size,
+                    allowlist=allowlist,
+                )
+            except Exception as exc:  # noqa: BLE001
+                report["collections"][coll_name] = {
+                    "reachable": False, "error": str(exc),
+                }
+                incomplete = True
+
+        try:
+            report["collections"]["firms/*/ledger"] = (
+                inventory_ledger_subcollections(
+                    db, firm_sample_size=min(args.sample_size, 5),
+                    ledger_sample_size=args.sample_size,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            report["collections"]["firms/*/ledger"] = {
+                "reachable": False, "error": str(exc),
+            }
+            incomplete = True
+
+        try:
+            report["collections"]["app_config"] = inventory_app_config(db)
+        except Exception as exc:  # noqa: BLE001
+            report["collections"]["app_config"] = {
+                "reachable": False, "error": str(exc),
+            }
+            incomplete = True
+
+    if not args.skip_bucket:
+        bucket = args.bucket or "{}-form-kits".format(args.project)
+        report["bucket"] = inventory_bucket(bucket)
+        if not report["bucket"].get("reachable"):
+            incomplete = True
+
+    if not args.skip_bigquery:
+        report["bigquery"] = {}
+        for table in args.bq_tables:
+            result = inventory_bigquery_table(
+                args.project, args.bq_dataset, table)
+            report["bigquery"][table] = result
+            if not result.get("reachable"):
+                incomplete = True
+
+    # ---- print the redacted report -------------------------------------
+    print("=== data-at-rest inventory: project {} ===".format(args.project))
+    any_flagged = False
+    for coll_name, summary in report["collections"].items():
+        if "error" in summary:
+            print("  [{}] UNREACHABLE: {}".format(coll_name, summary["error"]))
+            continue
+        flagged = summary.get("flagged_keys", [])
+        any_flagged = any_flagged or bool(flagged)
+        print("  [{}] {} doc(s) sampled".format(coll_name, summary["doc_count"]))
+        for key, info in sorted(summary["keys"].items()):
+            marker = " <-- OUTSIDE ALLOWLIST" if key in flagged else ""
+            print("      {}: types={} max_str_len={}{}".format(
+                key, info["types"], info["max_str_len"], marker))
+        if flagged:
+            print("      FLAGGED KEYS: {}".format(flagged))
+
+    if "bucket" in report:
+        b = report["bucket"]
+        if b.get("reachable"):
+            print("  [bucket] counts={} unexpected={}".format(
+                b["counts"], b["unexpected_top_level_objects"]))
+            if b["unexpected_top_level_objects"]:
+                any_flagged = True
+        else:
+            print("  [bucket] UNREACHABLE: {}".format(b.get("error")))
+
+    if "bigquery" in report:
+        for table, result in report["bigquery"].items():
+            if result.get("reachable"):
+                print("  [bigquery.{}] columns={}".format(
+                    table, result["columns"]))
+            else:
+                print("  [bigquery.{}] UNREACHABLE: {}".format(
+                    table, result.get("error")))
+
+    print("=== SUMMARY: {} ===".format(
+        "KEYS OR OBJECTS OUTSIDE ALLOWLIST FLAGGED ABOVE" if any_flagged
+        else "no keys outside any pinned allowlist"))
+    if incomplete:
+        print(
+            "=== INCOMPLETE: at least one store could not be reached -- "
+            "this is NOT a clean report ===", file=sys.stderr,
+        )
+        return 3
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
