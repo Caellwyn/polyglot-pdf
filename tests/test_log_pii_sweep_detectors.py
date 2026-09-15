@@ -334,6 +334,15 @@ def test_entry_json_string_fields_skips_non_string_leaves():
     assert fields == {"name": "x"}
 
 
+def test_entry_json_string_fields_walks_list_leaves():
+    """`fields=list(updates.values())` -- a list of the client's answers
+    instead of its keys -- is exactly the leak the static PII guard exists
+    for; it lands in Cloud Logging as a JSON array and must be swept."""
+    entry = {"jsonPayload": {"fields": ["A123456789", 7, {"nested": "staff@example.com"}]}}
+    fields = sweep._entry_json_string_fields(entry)
+    assert fields == {"fields[0]": "A123456789", "fields[2].nested": "staff@example.com"}
+
+
 # ---------------------------------------------------------------------------
 # The redaction property -- the load-bearing guarantee of the whole script.
 # format_report must be structurally unable to emit a matched substring,
@@ -663,7 +672,7 @@ def test_sweep_bigquery_table_selects_only_string_columns_never_star(monkeypatch
         return [{"firm_id": "f-not-a-hit"}]
     monkeypatch.setattr(sweep, "_bq_query_rows", rows)
     sweep.sweep_bigquery_table("polyglot-demo-aa709", "polyglot_telemetry", "cost_by_firm_month")
-    assert "SELECT firm_id " in seen["query"]
+    assert "SELECT `firm_id` " in seen["query"]
     assert "*" not in seen["query"]
     assert "cost_usd" not in seen["query"]
 
@@ -953,4 +962,69 @@ def test_a_token_refresh_failure_is_a_scrubbed_transport_error_without_retry(mon
     assert "RefreshError" in str(info.value)
     assert "leak.sentinel@example.com" not in str(info.value)
     assert session.calls == 1 and slept == []
+
+
+# --- BigQuery: columns come from the live schema, never an allowlist -------
+
+def test_sweep_bigquery_table_sweeps_every_string_column_the_schema_has(monkeypatch):
+    """The deployed view's string columns are month/gcp_service/resource_name;
+    none of them is an id or a model name. A name allowlist matched nothing
+    and scanned zero cells on the first live run; the live schema is the
+    only honest source."""
+    monkeypatch.setattr(sweep, "_bq_table_schema", lambda p, d, t: [
+        ("month", "STRING"), ("gcp_service", "STRING"), ("resource_name", "STRING"),
+        ("cost_usd", "FLOAT")])
+    seen = {}
+
+    def rows(p, sql):
+        seen["sql"] = sql
+        return [{"month": "2026-09", "gcp_service": "Cloud Run",
+                 "resource_name": "note staff@example.com"}]
+    monkeypatch.setattr(sweep, "_bq_query_rows", rows)
+    r = sweep.sweep_bigquery_table("polyglot-demo-aa709", "polyglot_telemetry",
+                                   "hosting_cost_by_service_month")
+    assert r.string_cols == ["month", "gcp_service", "resource_name"]
+    assert "`cost_usd`" not in seen["sql"] and "*" not in seen["sql"]
+    assert "LIMIT" not in seen["sql"]
+    assert r.rows_seen == 1
+    assert r.row_hits == {("resource_name", "email"): 1}
+
+
+def test_report_distinguishes_nothing_read_from_a_clean_scan():
+    read = sweep.BQTableResult(reachable=True, string_cols=["month"], rows_seen=12)
+    unread = sweep.BQTableResult(reachable=True)  # no string columns at all
+    report = sweep.format_report("p", sweep.SweepResult(), {"a": read, "b": unread})
+    assert "[a] no detector hit (rows=12 columns=month)" in report
+    assert "[b] NO SWEEPABLE STRING COLUMNS" in report
+    assert "[b] no detector hit" not in report
+
+
+def test_a_truncated_bigquery_read_is_reported_and_incomplete(monkeypatch):
+    monkeypatch.setattr(sweep, "_BQ_MAX_ROWS", 2)
+    monkeypatch.setattr(sweep, "_bq_table_schema", lambda p, d, t: [("month", "STRING")])
+    monkeypatch.setattr(sweep, "_bq_query_rows", lambda p, q: [{"month": "x"}] * 3)
+    r = sweep.sweep_bigquery_table("p", "d", "t")
+    assert r.truncated is True and r.rows_seen == 2
+    report = sweep.format_report("p", sweep.SweepResult(), {"t": r})
+    assert "TRUNCATED after 2 rows" in report
+    monkeypatch.setattr(sweep, "run_cloud_logging_sweep", lambda *a, **k: sweep.SweepResult())
+    monkeypatch.setattr(sweep, "run_bigquery_sweep", lambda *a, **k: {"t": r})
+    monkeypatch.setattr(sweep, "check_project_matches_adc", lambda p: None)
+    monkeypatch.setattr(sweep, "ensure_credentials", lambda: object())
+    assert sweep.main(["--project", "polyglot-demo-aa709"]) == 3
+
+
+def test_bq_query_rows_stops_one_past_the_ceiling(monkeypatch):
+    monkeypatch.setattr(sweep, "_BQ_MAX_ROWS", 2)
+
+    class _Job:
+        def result(self):
+            return iter([{"a": str(i)} for i in range(10)])
+
+    class _Client:
+        def query(self, sql):
+            return _Job()
+    monkeypatch.setattr(sweep, "_bq_client", lambda project: _Client())
+    rows = sweep._bq_query_rows("p", "SELECT `a` FROM `x`")
+    assert len(rows) == 3  # the +1 is what lets the caller detect truncation
 

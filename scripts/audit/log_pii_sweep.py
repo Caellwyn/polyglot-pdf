@@ -134,16 +134,12 @@ DEFAULT_BQ_TABLES = (
     "hosting_cost_by_service_month",
 )
 
-# Fields BigQuery telemetry rows carry that are TEXT and worth sweeping --
-# ids/model names/free-form strings a detector could (wrongly) fire on.
-# Numeric/cost/count columns are not string-swept (a detector cannot match a
-# FLOAT). Discovered from sql/telemetry_views.sql's SELECT lists; kept as a
-# frozenset here rather than re-parsed from the .sql file, since a BigQuery
-# STRING column is what this sweep can regex at all.
-BQ_STRING_COLUMNS = frozenset({
-    "firm_id", "kit_id", "employee_id", "link_jti", "channel", "model",
-    "usage_kind", "type", "service", "sku_description",
-})
+# BigQuery columns are NOT allowlisted by name: the sweep reads each
+# table/view's live schema and selects every STRING column it finds, named
+# explicitly (never SELECT *). A name-based allowlist drifted from
+# sql/telemetry_views.sql's output aliases on its first live run and scanned
+# zero cells while reporting "no detector hit".
+_BQ_MAX_ROWS = 100000  # rows read per table before the sweep reports TRUNCATED
 
 
 class RefusedError(Exception):
@@ -532,10 +528,17 @@ def _bq_table_schema(project: str, dataset: str, table: str) -> "Optional[list[t
 
 
 def _bq_query_rows(project: str, sql: str) -> "list[dict]":
+    """Every row of the query (the client pages transparently), up to
+    _BQ_MAX_ROWS + 1 so the caller can tell a full read from a truncated one."""
+    rows: "list[dict]" = []
     try:
-        return [dict(r) for r in _bq_client(project).query(sql).result()]
+        for r in _bq_client(project).query(sql).result():
+            rows.append(dict(r))
+            if len(rows) > _BQ_MAX_ROWS:
+                break
     except Exception as exc:  # noqa: BLE001 -- surfaced as UNREACHABLE, scrubbed
         raise TransportError(scrub("{}: {}".format(type(exc).__name__, exc)))
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -568,8 +571,8 @@ def _short_log_name(log_name: str) -> str:
 
 def _day_windows(start: datetime, end: datetime) -> "Iterable[tuple[datetime, datetime]]":
     """Yield [day_start, day_end) pairs covering [start, end), so a 30-day
-    sweep issues ~30 bounded `gcloud logging read` calls instead of one
-    unbounded one."""
+    sweep issues ~30 bounded entries.list queries (each walked to its end
+    with page tokens) instead of one unbounded one."""
     cur = start
     while cur < end:
         nxt = min(cur + timedelta(days=1), end)
@@ -593,9 +596,15 @@ def _entry_json_string_fields(entry: dict) -> "dict[str, str]":
         if isinstance(node, dict):
             for k, v in node.items():
                 walk("{}.{}".format(prefix, k) if prefix else k, v)
+        elif isinstance(node, (list, tuple)):
+            # A list of strings is a real leak shape (a `fields=list(...)`
+            # kwarg carrying the client's answers instead of its keys), so
+            # every element is a leaf too, keyed as parent[i].
+            for i, v in enumerate(node):
+                walk("{}[{}]".format(prefix, i), v)
         elif isinstance(node, str):
             out[prefix] = node
-        # numbers/bools/lists/None: not string leaves, skip.
+        # numbers/bools/None: not string leaves, skip.
 
     walk("", entry.get("jsonPayload") or {})
     return out
@@ -659,6 +668,10 @@ def sweep_service_stream(
                 for _ in _url_scoped_spans(_LINK_TOKEN_RE, request_url):
                     hits.append(Hit(service, log_name, "link_token_in_url",
                                      None, insert_id, timestamp))
+                # The identity detectors also run over the URL (a query
+                # string can carry an A-number or an email). dob_date is the
+                # one jsonPayload-class detector deliberately NOT run here:
+                # a date-shaped path segment is routine and not a leak.
                 for name in ("a_number", "ssn", "email", "phone"):
                     for _ in DETECTORS[name](request_url):
                         hits.append(Hit(service, log_name, name, None,
@@ -709,17 +722,21 @@ class BQTableResult:
     absent: bool = False
     error: "Optional[str]" = None
     row_hits: "dict[tuple, int]" = field(default_factory=dict)  # (column, detector) -> count
+    string_cols: "list[str]" = field(default_factory=list)  # what was actually swept
+    rows_seen: int = 0
+    truncated: bool = False  # more than _BQ_MAX_ROWS rows: NOT a complete read
 
 
-def sweep_bigquery_table(
-    project: str, dataset: str, table: str, *, row_limit: int = 1000,
-) -> BQTableResult:
-    """SELECT the pinned STRING columns (never `SELECT *`, so a numeric/cost
-    column can never accidentally reach a text detector) from one telemetry
-    table/view and run every jsonPayload-class detector over each string
-    cell. A table/view that does not exist in this project is ABSENT (a
-    clean result), not UNREACHABLE: per bd polyglot-pdf-uaxt5's live finding
-    only hosting_cost_by_service_month exists on polyglot-demo-aa709 today.
+def sweep_bigquery_table(project: str, dataset: str, table: str) -> BQTableResult:
+    """SELECT every STRING column the live schema reports, named explicitly
+    (never `SELECT *`, so a numeric/cost column can never reach a text
+    detector), from one telemetry table/view and run every jsonPayload-class
+    detector over each string cell. A table/view that does not exist in this
+    project is ABSENT (a clean result), not UNREACHABLE: per bd
+    polyglot-pdf-uaxt5's live finding only hosting_cost_by_service_month
+    exists on polyglot-demo-aa709 today. The result records which columns
+    were swept and how many rows, so "no detector hit" can never be confused
+    with "nothing was read".
     """
     try:
         schema = _bq_table_schema(project, dataset, table)
@@ -728,20 +745,21 @@ def sweep_bigquery_table(
     if schema is None:
         return BQTableResult(reachable=False, absent=True, error="not found")
 
-    string_cols = [name for name, ftype in schema
-                   if ftype == "STRING" and name in BQ_STRING_COLUMNS]
+    string_cols = [name for name, ftype in schema if ftype == "STRING"]
     if not string_cols:
         # A real, reachable table/view with nothing string-shaped to sweep
-        # (e.g. all-numeric) -- reachable, zero hits, nothing more to do.
+        # (all-numeric): reachable, nothing read -- reported as such, not as
+        # a clean scan.
         return BQTableResult(reachable=True)
 
-    select_list = ", ".join(string_cols)
-    query = "SELECT {} FROM `{}.{}.{}` LIMIT {}".format(
-        select_list, project, dataset, table, row_limit)
+    select_list = ", ".join("`{}`".format(c) for c in string_cols)
+    query = "SELECT {} FROM `{}.{}.{}`".format(select_list, project, dataset, table)
     try:
         rows = _bq_query_rows(project, query)
     except TransportError as exc:
-        return BQTableResult(reachable=False, error=str(exc))
+        return BQTableResult(reachable=False, error=str(exc), string_cols=string_cols)
+    truncated = len(rows) > _BQ_MAX_ROWS
+    rows = rows[:_BQ_MAX_ROWS]
 
     row_hits: "dict[tuple, int]" = {}
     for row in rows:
@@ -755,7 +773,8 @@ def sweep_bigquery_table(
                     key = (col, name)
                     row_hits[key] = row_hits.get(key, 0) + n
 
-    return BQTableResult(reachable=True, row_hits=row_hits)
+    return BQTableResult(reachable=True, row_hits=row_hits, string_cols=string_cols,
+                         rows_seen=len(rows), truncated=truncated)
 
 
 def run_bigquery_sweep(
@@ -808,14 +827,20 @@ def format_report(
             lines.append("  [{}] ABSENT (not deployed to this project)".format(table))
         elif not res.reachable:
             lines.append("  [{}] UNREACHABLE: {}".format(table, scrub(res.error)))
-        elif not res.row_hits:
-            lines.append("  [{}] no detector hit".format(table))
-        else:
+        elif res.row_hits:
             for (col, detector), count in sorted(res.row_hits.items()):
                 lines.append(
                     "  [{}] column={} detector={} count={}".format(
                         table, col, detector, count)
                 )
+        elif not res.string_cols:
+            lines.append("  [{}] NO SWEEPABLE STRING COLUMNS (nothing read)".format(table))
+        else:
+            lines.append("  [{}] no detector hit (rows={} columns={})".format(
+                table, res.rows_seen, ",".join(res.string_cols)))
+        if res.truncated:
+            lines.append("  [{}] TRUNCATED after {} rows -- NOT a complete read".format(
+                table, res.rows_seen))
 
     any_hits = bool(log_result.counts) or any(
         r.row_hits for r in bq_results.values()
@@ -902,7 +927,7 @@ def main(argv: "Optional[list]" = None) -> int:
     print(format_report(args.project, log_result, bq_results))
 
     incomplete = log_result.incomplete or any(
-        (not r.reachable) and (not r.absent) for r in bq_results.values()
+        ((not r.reachable) and (not r.absent)) or r.truncated for r in bq_results.values()
     )
     if incomplete:
         print(

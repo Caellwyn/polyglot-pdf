@@ -55,9 +55,14 @@ exchange start with 2-9, separators all-or-none and identical, no word or
 hyphen neighbours -- the first live run's two
 phone hits were a 10-digit epoch timestamp inside an error message and a
 UUID fragment inside a request id, and both shapes are now negative cases);
-DOB-shaped dates only in `jsonPayload` string fields. The same detectors
-run over the pinned STRING columns of each telemetry view (never
-`SELECT *`); a view the project does not have is ABSENT, not UNREACHABLE.
+DOB-shaped dates only in `jsonPayload` string fields -- walked through
+nested dicts AND lists (a `fields=list(...)` kwarg carrying answers instead
+of keys is the leak the static guard exists for). The same detectors run
+over every STRING column each telemetry view's LIVE SCHEMA reports, named
+explicitly (never `SELECT *`), every row read (a ceiling of 100000 rows is
+reported as TRUNCATED and makes the run INCOMPLETE); a view the project does
+not have is ABSENT, not UNREACHABLE, and a view with no string column is
+reported as "nothing read", never as clean.
 
 Output is one choke point, `format_report`: counts per (service, logName,
 detector, jsonPayload key) plus insertIds and timestamps -- never matched
@@ -66,7 +71,7 @@ or a row) passes through `scrub()`, which merges overlapping detector spans
 (a JWT is also the head of a link-token shape), redacts each region and
 caps the length. Exit 0 ran, 2 refused, 3 a query could not complete.
 
-`tests/test_log_pii_sweep_detectors.py` (90 tests): a positive and a
+`tests/test_log_pii_sweep_detectors.py` (95 tests): a positive and a
 negative case per detector; the sentinel cannot reach the report through
 a Hit, a BigQuery hit, or either error channel; pagination, the 429 retry,
 the page ceiling, the connection-failure and token-refresh-failure paths
@@ -83,7 +88,12 @@ Run 2026-09-15 ~22:06-22:12 UTC, project `polyglot-demo-aa709`, 30-day
 window, exit 0 (every window completed after retries), 332 s, one process,
 no child process (a guard that raises on any spawn was active). Re-run on
 the shipped code after the review-round changes (~22:24-22:28 UTC, 282 s,
-same guard): identical hit groups and counts.
+same guard): identical hit groups and counts. The BigQuery half was re-run
+once more after the outer review (2026-09-15 ~22:55 UTC, 7 s) because the
+first runs had swept ZERO cells: a name allowlist of expected columns
+matched none of the deployed view's output aliases, and "no detector hit"
+was printed for a table nothing had been read from. The schema-driven
+version read the view's three string columns and three rows: zero hits.
 
 | service | stream | detector | count | first | last |
 |---|---|---|---|---|---|
@@ -93,7 +103,7 @@ same guard): identical hit groups and counts.
 | polyglot-backend-staging | requests | jwt | 13 | 2026-09-01T21:12Z | 2026-09-08T23:22Z |
 | polyglot-admin | any | any | 0 | | |
 | all three | stdout / stderr | any | 0 | | |
-| BigQuery `hosting_cost_by_service_month` | | any | 0 | | |
+| BigQuery `hosting_cost_by_service_month` (3 rows; month, gcp_service, resource_name) | | any | 0 | | |
 | BigQuery four other views | | | ABSENT | | |
 
 Every jwt hit is a subset of the ws_token hits (a Firebase ID token riding
@@ -140,6 +150,12 @@ REVIEW_RECORD
 - **Page limits hide hits; page tokens do not.** `--limit 1000` per day
   silently dropped everything past the cap on a busy day; the REST call is
   walked to the end.
+- **"No hit" must say what was read.** The BigQuery allowlist drifted from
+  the views' output aliases and the sweep reported a clean scan of zero
+  cells; the outer reviewer found it by following the column list OUT into
+  `sql/telemetry_views.sql`. Columns now come from the live schema, the
+  report prints row and column counts, and an empty column set is its own
+  line.
 - **A detector's first live run is its adversarial review.** Two phone hits
   were an epoch timestamp and a UUID fragment; the NANP rule (area code and
   exchange start with 2-9) removes both classes without weakening real
