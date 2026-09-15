@@ -76,18 +76,30 @@ describe('a skipped field does not paint as a blank (bd polyglot-pdf-c9dfo)', ()
     ).toBe('skipped');
   });
 
+  // EVERY CUE must distinguish, not merely the pair as a whole. Asserting
+  // `not.toEqual` on the {border, background} object was too weak: styling
+  // skipped with the SAME border as 'empty' still passed, because the
+  // background happened to differ, and styling it identically to 'current'
+  // passed for the same reason. Both mutations survived. A viewer reads ONE
+  // cue at a glance, so each has to carry the distinction on its own.
+  function expectDistinctPaint(
+    a: { border: string; background: string },
+    b: { border: string; background: string },
+    what: string,
+  ) {
+    expect(a.border, `skipped must not share a BORDER with ${what}`).not.toBe(b.border);
+    expect(a.background, `skipped must not share a BACKGROUND with ${what}`)
+      .not.toBe(b.background);
+  }
+
   it('paints DIFFERENTLY from an untouched field -- the actual defect', () => {
     const skipped = paintOf(renderWith(SKIPPED));
     cleanup();
     const untouched = paintOf(renderWith(undefined));
 
-    // This is the assertion the bug would fail. Both were previously 'empty',
-    // so both got a 1px grey border and a transparent background.
-    expect(
-      skipped,
-      'a deliberate skip must be visually distinguishable from a field the ' +
-        'user never answered -- otherwise the follow-up it needs is invisible',
-    ).not.toEqual(untouched);
+    // The assertion the bug fails. Both were previously 'empty', so both got a
+    // 1px grey border and a transparent background.
+    expectDistinctPaint(skipped, untouched, 'an untouched field');
 
     // And specifically: it carries a tint. 'empty' is transparent, and on a
     // printed form a border alone can be lost against a ruled box.
@@ -100,11 +112,10 @@ describe('a skipped field does not paint as a blank (bd polyglot-pdf-c9dfo)', ()
     cleanup();
     const current = paintOf(renderWith({ value: null }, FIELD.id));
 
-    expect(
-      skipped,
-      'skipped must not look like current -- the form view uses amber for its ' +
-        'Skipped badge, but amber is already current on this surface',
-    ).not.toEqual(current);
+    // The form view uses amber for its Skipped badge, but amber is already
+    // 'current' on this surface -- so reusing it would make a skipped field
+    // read as the one being asked about right now.
+    expectDistinctPaint(skipped, current, 'the current field');
   });
 
   it('is not confusable with a filled or confirmed field either', () => {
@@ -114,8 +125,8 @@ describe('a skipped field does not paint as a blank (bd polyglot-pdf-c9dfo)', ()
     cleanup();
     const confirmed = paintOf(renderWith({ value: 'A123', confirmed: true }));
 
-    expect(skipped).not.toEqual(filled);
-    expect(skipped).not.toEqual(confirmed);
+    expectDistinctPaint(skipped, filled, 'a filled field');
+    expectDistinctPaint(skipped, confirmed, 'a confirmed field');
   });
 
   it('an ordinary empty field still paints as before', () => {
