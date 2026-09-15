@@ -102,6 +102,23 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // (the border/background/snap cues must stay visible).
   const isDimmed = dimmed && fillState !== 'current';
 
+  // A dimmed SKIPPED field keeps its own colours while staying dimmed.
+  //
+  // Dimming otherwise replaces border AND background wholesale with
+  // grey-dashed + transparent -- which for a skipped field reproduces exactly
+  // the untouched-blank look bd polyglot-pdf-c9dfo exists to eliminate, one
+  // condition deeper. Reachable because `dimmed` tracks show_if ALONE: a field
+  // can be skipped and then hidden by a later answer, or hidden and then
+  // skipped.
+  //
+  // This is deliberately NARROWER than adding 'skipped' to the isDimmed
+  // exemption above. That would also make the field CLICKABLE and drop its
+  // 0.35 opacity, breaking bd polyglot-pdf-lp5v's rule that a show_if-hidden
+  // field is "dimmed, never removed, and never clickable". A hidden field must
+  // stay inert whatever its fill state; only its COLOUR needs to survive, so
+  // the follow-up it needs is still legible through the dimming.
+  const keepsColourWhileDimmed = isDimmed && fillState === 'skipped';
+
   // Dimmed = visible-but-inert: the cue for "make this active" is the
   // controlling field, and editing an invisible-in-Simplified field could
   // contradict it.
@@ -172,8 +189,10 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
           top: `${pos.y}px`,
           width: `${pos.width}px`,
           height: `${pos.height}px`,
-          border: isDimmed ? DIMMED_BORDER : BORDERS[fillState],
-          backgroundColor: isDimmed ? 'transparent' : BACKGROUNDS[fillState],
+          border:
+            isDimmed && !keepsColourWhileDimmed ? DIMMED_BORDER : BORDERS[fillState],
+          backgroundColor:
+            isDimmed && !keepsColourWhileDimmed ? 'transparent' : BACKGROUNDS[fillState],
           ...interactiveStyle,
         }}
         data-field-id={field.id}
