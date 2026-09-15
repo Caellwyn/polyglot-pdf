@@ -610,7 +610,7 @@ the gate crying wolf. The counts are pinned per script.
   served from a Hosting site ROOT (`app`/`app-staging` in the table above) or
   from dev-local's root, never from a subdirectory, so the relative form was
   never correct: a cold load at any path carrying a segment
-  (`/console/links`, `/console/employees`, )
+  (`/console/links`, `/console/employees`)
   asked for `/console/assets/...`, which does not exist, and the `**` ->
   `/index.html` catch-all rewrite (`firebase.json`, same file referenced
   above) answered with HTML — the browser then refuses the module script

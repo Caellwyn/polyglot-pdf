@@ -73,7 +73,9 @@ describe("frontend/vite.config.schema.ts: base is absolute", () => {
     // style or adding a trailing comment does not silently defeat this
     // (unlike a bare `includes("base: '/'")`, which a `base: '/console/'`
     // typo would still satisfy -- so also assert the relative form is gone).
-    const baseLineMatch = source.match(/base:\s*(['"])(.*?)\1/);
+    // Anchored to the START of a line so a `base: './'` mention inside the
+    // config's own comment block can never satisfy (or spuriously fail) this.
+    const baseLineMatch = source.match(/^\s*base:\s*(['"])(.*?)/m);
     expect(
       baseLineMatch,
       `Could not find a base: '...' assignment in ${VITE_CONFIG_PATH}`
