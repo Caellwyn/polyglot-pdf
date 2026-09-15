@@ -16,7 +16,9 @@ ASCII only.
 """
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -236,6 +238,14 @@ def test_email_negative_no_at_sign():
 
 def test_phone_positive_with_separators():
     assert _matches("phone", "call 555-234-5678 now") != []
+
+
+def test_phone_positive_parenthesised_area_code():
+    assert _matches("phone", "call (555) 234-5678 now") != []
+
+
+def test_phone_positive_with_country_prefix():
+    assert _matches("phone", "call +1 555-234-5678 or 1 555 234 5678") != []
 
 
 def test_phone_positive_no_separators():
@@ -757,7 +767,7 @@ def test_the_module_never_calls_google_auth_default():
     Windows. The transport loads the ADC file and the gcloud config directly."""
     src = Path(sweep.__file__).read_text(encoding="utf-8")
     assert "auth.default(" not in src
-    assert "load_credentials_from_file(" in src
+    assert "from_authorized_user_info(" in src
 
 
 def test_adc_project_reads_the_active_gcloud_configuration(tmp_path, monkeypatch):
@@ -820,4 +830,127 @@ def test_fetch_entries_gives_up_after_the_retry_budget(monkeypatch):
     with pytest.raises(sweep.TransportError) as info:
         sweep._fetch_entries("polyglot-demo-aa709", 'logName="x"')
     assert "429" in str(info.value)
+
+
+# --- scrub() must survive overlapping spans --------------------------------
+
+def test_scrub_merges_overlapping_spans_instead_of_splicing_twice():
+    """A JWT-shaped token whose second segment is 43 chars matches BOTH the
+    jwt detector (the head) and the link-token detector (the whole pair)
+    inside a URL. Splicing the two spans one after another against a string
+    whose length already changed would leave raw token characters behind;
+    the spans are merged first."""
+    head = "eyJ" + "a" * 24
+    tail = "eyJ" + "b" * 40  # 43 chars: the link-token second segment
+    text = "GET https://x.run.app/api/links/open?token=" + head + "." + tail + " 400"
+    out = sweep.scrub(text)
+    assert head not in out and tail not in out
+    assert "a" * 10 not in out and "b" * 10 not in out
+    assert out.count("<redacted:") == 1
+    assert "jwt" in out and "link_token_in_url" in out
+
+
+def test_scrub_of_adjacent_distinct_matches_keeps_both_markers():
+    out = sweep.scrub("ids 123-45-6789 and staff@example.com")
+    assert "<redacted:ssn>" in out and "<redacted:email>" in out
+    assert "123-45-6789" not in out and "staff@example.com" not in out
+
+
+# --- connection-level failures never escape as raw tracebacks --------------
+
+class _RaisingSession:
+    def __init__(self, exc):
+        self.exc = exc
+        self.calls = 0
+
+    def post(self, url, json=None, timeout=None):
+        self.calls += 1
+        raise self.exc
+
+
+def test_connection_error_becomes_a_scrubbed_transport_error(monkeypatch):
+    import requests
+    monkeypatch.setattr(sweep.time, "sleep", lambda s: None)
+    session = _RaisingSession(requests.ConnectionError(
+        "reset by peer while POSTing filter contact leak.sentinel@example.com"))
+    monkeypatch.setattr(sweep, "_authorized_session", lambda: session)
+    with pytest.raises(sweep.TransportError) as info:
+        sweep._fetch_entries("polyglot-demo-aa709", 'logName="x"')
+    assert "ConnectionError" in str(info.value)
+    assert "leak.sentinel@example.com" not in str(info.value)
+    assert session.calls == len(sweep._RETRY_BACKOFF_S) + 1
+
+
+def test_sweep_service_stream_reports_a_connection_failure_as_incomplete(monkeypatch):
+    import requests
+    monkeypatch.setattr(sweep.time, "sleep", lambda s: None)
+    monkeypatch.setattr(sweep, "_authorized_session",
+                         lambda: _RaisingSession(requests.Timeout("read timed out")))
+    hits, incomplete, error = sweep.sweep_service_stream(
+        "polyglot-demo-aa709", "polyglot-backend", "run.googleapis.com/stdout", *_window())
+    assert hits == [] and incomplete is True and "Timeout" in error
+
+
+# --- the property behind the string pins: no child process, ever -----------
+
+class _NoSpawn(subprocess.Popen):
+    def __init__(self, *a, **k):
+        raise AssertionError("a subprocess was spawned: " + repr(a[:1]))
+
+
+def test_credential_and_logging_paths_spawn_nothing(tmp_path, monkeypatch):
+    """Drive the real credential loader against a synthetic ADC file, the
+    real gcloud-config reader, the real session builder and the entries
+    walker (with a fake HTTP session) while subprocess.Popen raises. This is
+    the property the substring pins approximate: google.auth's default()
+    lookup would have shelled out to gcloud here."""
+    monkeypatch.setattr(subprocess, "Popen", _NoSpawn)
+    adc = tmp_path / "application_default_credentials.json"
+    adc.write_text(json.dumps({
+        "type": "authorized_user", "client_id": "x.apps.googleusercontent.com",
+        "client_secret": "not-a-real-secret", "refresh_token": "not-a-real-token",
+    }), encoding="utf-8")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))  # the gcloud-SDK ADC path
+    monkeypatch.setattr(sweep, "_credentials", None)
+    monkeypatch.setattr(sweep, "_session", None)
+    creds = sweep.ensure_credentials()
+    assert creds is not None
+    assert sweep.adc_project() is None
+    real_session = sweep._authorized_session()
+    assert real_session is not None
+    fake = _FakeSession([_FakeResp(200, {"entries": [{"insertId": "a"}]})])
+    monkeypatch.setattr(sweep, "_authorized_session", lambda: fake)
+    hits, incomplete, _ = sweep.sweep_service_stream(
+        "polyglot-demo-aa709", "polyglot-backend", "run.googleapis.com/stdout", *_window())
+    assert incomplete is False
+
+
+def test_an_unknown_credentials_kind_is_refused(tmp_path, monkeypatch):
+    adc = tmp_path / "application_default_credentials.json"
+    adc.write_text(json.dumps({"type": "external_account", "audience": "x"}), encoding="utf-8")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))
+    monkeypatch.setattr(sweep, "_credentials", None)
+    with pytest.raises(sweep.RefusedError) as info:
+        sweep.ensure_credentials()
+    assert "external_account" in str(info.value)
+
+
+def test_a_token_refresh_failure_is_a_scrubbed_transport_error_without_retry(monkeypatch):
+    """AuthorizedSession refreshes the token inside post(); a revoked or
+    expired ADC raises google.auth's RefreshError, which is NOT a requests
+    exception. It must surface as a scrubbed TransportError (the window is
+    INCOMPLETE) and must not be retried -- it is not transient."""
+    from google.auth import exceptions as gauth_exc
+    slept = []
+    monkeypatch.setattr(sweep.time, "sleep", lambda s: slept.append(s))
+    session = _RaisingSession(gauth_exc.RefreshError(
+        "invalid_grant for account leak.sentinel@example.com"))
+    monkeypatch.setattr(sweep, "_authorized_session", lambda: session)
+    with pytest.raises(sweep.TransportError) as info:
+        sweep._fetch_entries("polyglot-demo-aa709", 'logName="x"')
+    assert "RefreshError" in str(info.value)
+    assert "leak.sentinel@example.com" not in str(info.value)
+    assert session.calls == 1 and slept == []
 

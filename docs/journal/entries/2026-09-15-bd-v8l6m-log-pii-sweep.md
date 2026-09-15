@@ -31,23 +31,28 @@ empty window would report a false "zero hits").
 **The transport is in-process only.** The Cloud Logging `entries.list`
 REST endpoint through `google-auth` + `requests` and the `google-cloud-
 bigquery` client; the script spawns nothing. Credentials are loaded FROM
-the ADC file (`google.auth.load_credentials_from_file`), never through
+the ADC file through the typed constructor for its kind (`authorized_user`
+or `service_account`; anything else is refused), never through
 `google.auth.default()`, which shells out to `gcloud config get project`
-when the ADC file carries no project id. The project check reads gcloud's
+when the ADC file carries no project id -- a property test drives the real
+loader on the gcloud-SDK path with `subprocess.Popen` raising, and reverting
+to the default lookup fails it with exactly that gcloud command. The project check reads gcloud's
 `active_config` + `configurations/config_<name>` from disk. Each of the
 three services' three streams (`stdout`, `stderr`,
 `run.googleapis.com/requests`) is read in daily windows over the measured
 30-day retention, every window walked to the end with page tokens (a busy
 day is never truncated; more than 50 pages in one window is reported, not
-skipped); HTTP 429 / 5xx retried three times with backoff (the read quota
-is per minute and a full sweep trips it).
+skipped); HTTP 429 / 5xx and connection-level failures retried three times with
+backoff (the read quota is per minute and a full sweep trips it); after the
+budget the window is INCOMPLETE, never a raw traceback.
 
 Detectors, deliberately tight: `[?&]token=` in `httpRequest.requestUrl`; a
 two-segment JWT; the one-dot link-token shape only inside a URL span (a
 bare `key=<40+ chars>` pair counts as URL context); an A-number with explicit
 lookarounds (`\b` fails after an underscore); SSN; email; phone in NANP
-shape only (area code and exchange start with 2-9, separators all-or-none
-and identical, no word or hyphen neighbours -- the first live run's two
+shape only (optional +1, parenthesised or bare area code, area code and
+exchange start with 2-9, separators all-or-none and identical, no word or
+hyphen neighbours -- the first live run's two
 phone hits were a 10-digit epoch timestamp inside an error message and a
 UUID fragment inside a request id, and both shapes are now negative cases);
 DOB-shaped dates only in `jsonPayload` string fields. The same detectors
@@ -57,22 +62,28 @@ run over the pinned STRING columns of each telemetry view (never
 Output is one choke point, `format_report`: counts per (service, logName,
 detector, jsonPayload key) plus insertIds and timestamps -- never matched
 text -- and every free-text error string (an API error can echo a filter
-or a row) passes through `scrub()`, which redacts every detector match and
+or a row) passes through `scrub()`, which merges overlapping detector spans
+(a JWT is also the head of a link-token shape), redacts each region and
 caps the length. Exit 0 ran, 2 refused, 3 a query could not complete.
 
-`tests/test_log_pii_sweep_detectors.py` (81 tests): a positive and a
+`tests/test_log_pii_sweep_detectors.py` (90 tests): a positive and a
 negative case per detector; the sentinel cannot reach the report through
 a Hit, a BigQuery hit, or either error channel; pagination, the 429 retry,
-the page ceiling, the ADC-file load, the config-file project read, the
-missing-ADC refusal, the project mismatch refusal, the window bound, the
-case-insensitive verbosity guard; and the properties that the module never
-imports `subprocess` and never calls the google.auth default lookup.
+the page ceiling, the connection-failure and token-refresh-failure paths
+(the latter not retried), scrub over overlapping spans, the typed ADC-file load, the config-file project read, the
+missing-ADC and unknown-kind refusals, the project mismatch refusal, the
+window bound, the case-insensitive verbosity guard; the substring pins that
+the module never imports `subprocess` or names the google.auth default
+lookup; and the property behind them -- the real credential loader and the
+entries walker driven with `subprocess.Popen` raising.
 
 ## What the first complete run found (2026-09-15, redacted)
 
 Run 2026-09-15 ~22:06-22:12 UTC, project `polyglot-demo-aa709`, 30-day
 window, exit 0 (every window completed after retries), 332 s, one process,
-no child process (a guard that raises on any spawn was active).
+no child process (a guard that raises on any spawn was active). Re-run on
+the shipped code after the review-round changes (~22:24-22:28 UTC, 282 s,
+same guard): identical hit groups and counts.
 
 | service | stream | detector | count | first | last |
 |---|---|---|---|---|---|

@@ -175,14 +175,19 @@ _LINK_TOKEN_RE = re.compile(r"\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{43}\b")
 _A_NUMBER_RE = re.compile(r"(?<![\w])A[0-9]{8,9}(?![\w])")
 _SSN_RE = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-# NANP shape: area code and exchange both start with [2-9] (this is what
+# NANP shape (optionally +1 / 1 and a parenthesised area code): area code and
+# exchange both start with [2-9] (this is what
 # keeps a bare 10-digit epoch-seconds timestamp, "17xxxxxxxx", out), the
 # separators are all-or-none and identical (a UUID fragment "123456-7890"
 # is not a phone), and the neighbours may be neither word chars nor "-"
 # (a hex id continuing on either side is not a phone). First live sweep:
 # both phone hits were exactly those two shapes.
 _PHONE_RE = re.compile(
-    r"(?<![\w-])(?:[2-9]\d{2}([-. ])[2-9]\d{2}\1\d{4}|[2-9]\d{2}[2-9]\d{6})(?![\w-])"
+    r"(?<![\w-])(?:\+?1[-. ])?"
+    r"(?:\([2-9]\d{2}\) ?[2-9]\d{2}[-. ]\d{4}"      # (555) 234-5678
+    r"|[2-9]\d{2}([-. ])[2-9]\d{2}\1\d{4}"            # 555-234-5678, 555.234.5678, 555 234 5678
+    r"|[2-9]\d{2}[2-9]\d{6})"                            # 5552345678
+    r"(?![\w-])"
 )
 _DOB_DATE_RE = re.compile(
     r"\b(?:"
@@ -333,8 +338,19 @@ def scrub(text: "Any", limit: int = _ERROR_TEXT_LIMIT) -> str:
     for name, detect in DETECTORS.items():
         for a, b in detect(out):
             spans.append((a, b, name))
-    for a, b, name in sorted(spans, key=lambda t: t[0], reverse=True):
-        out = out[:a] + "<redacted:" + name + ">" + out[b:]
+    # Overlapping spans (a JWT is also the head of a link-token shape; an
+    # SSN can sit inside a longer digit run) are merged into one region
+    # BEFORE splicing: splicing them one by one against a string whose
+    # length has already changed would leave raw characters behind.
+    merged: "list[list]" = []
+    for a, b, name in sorted(spans, key=lambda t: (t[0], t[1])):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+            merged[-1][2].add(name)
+        else:
+            merged.append([a, b, {name}])
+    for a, b, names in reversed(merged):
+        out = out[:a] + "<redacted:" + "+".join(sorted(names)) + ">" + out[b:]
     return out[:limit]
 
 
@@ -355,22 +371,37 @@ def _adc_file() -> str:
 
 
 def ensure_credentials():
-    """Load the operator's application-default credentials FROM THE FILE.
-    Never the google.auth default() lookup: on a machine whose ADC file carries no
+    """Load the operator's application-default credentials FROM THE FILE,
+    through the typed constructor for the file's own kind. Never the
+    google.auth default() lookup: on a machine whose ADC file carries no
     project id, that helper shells out to `gcloud config get project`
     (a console window on Windows) -- the exact thing this transport exists
-    to avoid. Raises RefusedError when no ADC file exists."""
+    to avoid. Raises RefusedError when no ADC file exists or its kind is
+    not one this script knows how to load."""
     global _credentials
     if _credentials is None:
-        import google.auth
         path = _adc_file()
         if not os.path.exists(path):
             raise RefusedError(
                 "no application-default credentials at {}; run "
                 "`gcloud auth application-default login` first.".format(path)
             )
-        _credentials, _ = google.auth.load_credentials_from_file(
-            path, scopes=list(_SCOPES))
+        with open(path, encoding="utf-8") as f:
+            info = json.load(f)
+        kind = info.get("type")
+        if kind == "authorized_user":
+            from google.oauth2.credentials import Credentials
+            _credentials = Credentials.from_authorized_user_info(info, scopes=list(_SCOPES))
+        elif kind == "service_account":
+            from google.oauth2 import service_account
+            _credentials = service_account.Credentials.from_service_account_info(
+                info, scopes=list(_SCOPES))
+        else:
+            raise RefusedError(
+                "the credentials file at {} is of kind {!r}; only authorized_user "
+                "(gcloud auth application-default login) and service_account "
+                "files are loaded.".format(path, kind)
+            )
     return _credentials
 
 
@@ -417,13 +448,33 @@ def _error_message(resp: "Any") -> str:
 
 def _post_with_retry(session, body: "dict[str, Any]"):
     """One entries.list POST, retried on the retryable statuses (the
-    per-minute read quota answers 429 partway through a 30-day sweep)."""
-    resp = session.post(_LOGGING_ENDPOINT, json=body, timeout=120)
+    per-minute read quota answers 429 partway through a 30-day sweep) and
+    on a connection-level failure; after the retry budget either becomes a
+    TransportError (scrubbed), so a window is reported INCOMPLETE rather
+    than the sweep dying with a raw traceback."""
+    import requests
+    from google.auth import exceptions as gauth_exc
+
+    def _post():
+        try:
+            return session.post(_LOGGING_ENDPOINT, json=body, timeout=120)
+        except gauth_exc.GoogleAuthError as exc:
+            # A token refresh failure (revoked / expired ADC) is not transient:
+            # no retry, and the token endpoint's text is scrubbed like any other.
+            raise TransportError(scrub("{}: {}".format(type(exc).__name__, exc)))
+        except requests.RequestException as exc:
+            # A connection reset / timeout carries the URL (and could carry
+            # a filter) in its text: scrubbed, and never a bare traceback.
+            return TransportError(scrub("{}: {}".format(type(exc).__name__, exc)))
+
+    resp = _post()
     for delay in _RETRY_BACKOFF_S:
-        if resp.status_code not in _RETRY_STATUSES:
+        if not isinstance(resp, TransportError) and resp.status_code not in _RETRY_STATUSES:
             break
         time.sleep(delay)
-        resp = session.post(_LOGGING_ENDPOINT, json=body, timeout=120)
+        resp = _post()
+    if isinstance(resp, TransportError):
+        raise resp
     return resp
 
 
