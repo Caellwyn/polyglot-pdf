@@ -48,6 +48,7 @@ import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { withBuildLock } from "./testBuildLock";
 
 const APP_ROOT = join(__dirname, "..", "..");
 const BUILD_TIMEOUT_MS = 120_000;
@@ -71,11 +72,13 @@ describe("production bundle: frontend (schema form, demo mode)", () => {
         `Required file missing -- the build would silently skip this config: ${REQUIRED_FILE}`
       ).toBe(true);
 
-      execFileSync("npm", ["run", "build:schema:demo"], {
-        cwd: APP_ROOT,
-        stdio: "pipe",
-        shell: true,
-      });
+      withBuildLock(() =>
+        execFileSync("npm", ["run", "build:schema:demo"], {
+          cwd: APP_ROOT,
+          stdio: "pipe",
+          shell: true,
+        })
+      );
 
       const jsFiles = bundledJsFiles(DIST_DIR);
       expect(jsFiles.length).toBeGreaterThan(0);
