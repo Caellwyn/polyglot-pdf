@@ -472,9 +472,14 @@ export interface FirmPlan {
 /** The maintainer's 2026-09-14 starting numbers
  * (backend/services/plans.py::DEFAULT_PLAN) -- what GET /admin/firms/
  * {firm_id} and GET /admin/firms both return for a firm with no plan of
- * its own yet (firm_routes.py's _public_firm_view fallback). */
+ * its own yet (firm_routes.py's _public_firm_view fallback). rollover
+ * flipped True by bd polyglot-pdf-hnlj3, 2026-09-15 (maintainer decision:
+ * "credits roll over -- no real reason not to") -- was false at this
+ * constant's original 2026-09-14 launch; kept byte-identical to the Python
+ * DEFAULT_PLAN it mirrors so a console fallback can never disagree with
+ * what the backend actually defaults a new/backfilled firm to. */
 export const DEFAULT_PLAN: FirmPlan = {
-  tier: "starter", monthly_credits: 35, rollover: false,
+  tier: "starter", monthly_credits: 35, rollover: true,
 };
 
 /** The two firm statuses (backend/services/firms.py's FIRM_STATUS_ACTIVE /
