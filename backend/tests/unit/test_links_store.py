@@ -162,7 +162,11 @@ def test_record_mint_writes_the_full_schema(fake_db):
     rec = _mint(fake_db, channel="demo")
 
     assert set(rec) == {
-        "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
+        "jti", "firm_id", "kit_id", "employee_id",
+        # employee_email (bd polyglot-pdf-cpsi0): optional, None when the
+        # caller (record_mint's own caller here) passes none.
+        "employee_email",
+        "credit_cost", "cap_usd",
         "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
         "expire_at",
     }
@@ -170,6 +174,7 @@ def test_record_mint_writes_the_full_schema(fake_db):
     assert rec["firm_id"] == "acme"
     assert rec["kit_id"] == "i-90"
     assert rec["employee_id"] == "uid-emp"
+    assert rec["employee_email"] is None
     assert rec["credit_cost"] == 1
     assert rec["cap_usd"] == 3.0
     assert rec["minted_at"] == 1_000

@@ -313,6 +313,11 @@ def test_three_firms_get_exactly_the_bead_scenarios_amounts(
     assert a_rows[0]["amount"] == 25
     assert a_rows[0]["period"] == "2026-09"
     assert a_rows[0]["usd_amount"] is None
+    # bd polyglot-pdf-cpsi0: a scheduled job is a system actor with no
+    # human behind it at write time -- actor stays the "system:" string,
+    # and actor_email stays None, exactly as before this bead.
+    assert a_rows[0]["actor"] == credit_routes.MONTHLY_TOPUP_ACTOR
+    assert a_rows[0]["actor_email"] is None
 
     c_rows = [r for r in fake_db.ledger_rows("firm-c")
               if r["type"] == "subscription_grant"]

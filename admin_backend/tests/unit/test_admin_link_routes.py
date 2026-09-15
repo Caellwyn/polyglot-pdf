@@ -206,6 +206,13 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
                         raising=False)
     monkeypatch.setattr("backend.services.auth.get_db", lambda: db)
+    # bd polyglot-pdf-cpsi0: identity_labels.labels_for_uids caches by uid
+    # across the WHOLE process, and this file's fixture uids (emp-1, emp-b,
+    # emp-2) are shared across many tests -- clear before each so no test's
+    # fail-soft "uid as its own label" outcome (the only outcome this file's
+    # unmocked Auth path can ever produce) leaks into another.
+    import admin_backend.services.identity_labels as identity_labels
+    identity_labels.clear_cache()
     return db
 
 
@@ -412,10 +419,79 @@ def test_link_listing_response_is_allowlisted(admin_client, fake_db):
     assert set(row.keys()) == set(link_routes._ALLOWLISTED_KEYS)
     assert row == {
         "jti": "jti-1", "kit_id": "w7", "employee_id": "emp-1",
+        # No employee_email is stored on this fixture's mint record (it
+        # predates bd polyglot-pdf-cpsi0), and the fake Firestore this file
+        # uses is not a real Auth client -- identity_labels.labels_for_uids
+        # fails soft and falls back to the uid itself. See the two
+        # precedence tests below (prefers-its-own-stored-email and
+        # falls-back-to-the-batch-lookup) for the resolved-label cases.
+        "employee_label": "emp-1",
         "status": links_store.STATUS_MINTED, "minted_at": 1,
         "open_deadline": 500, "opened_at": 10, "completed_at": None,
         "spend_usd": 0.5, "turns": 3, "cap_usd": 5.0, "credit_cost": 2,
     }
+
+
+def test_link_listing_prefers_its_own_stored_employee_email(
+        admin_client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the no-lookup-needed half, mirroring
+    test_firm_routes.py's test_get_firm_ledger_row_prefers_its_own_stored_
+    actor_email exactly, but over THIS route's employee_id/employee_email
+    pair: a mint record written AFTER bd polyglot-pdf-cpsi0 already carries
+    employee_email -- employee_label must use it directly, with NO Auth call
+    at all (a real Auth call from this test would fail against the fake
+    firebase_admin app, which would surface as an identity_labels_lookup_
+    failed log line, not a wrong label -- so this test also proves no such
+    call is attempted).
+
+    Mutation: swap label_for_actor's argument order in link_routes.py's
+    _do_list_links (pass employee_id where employee_email goes and vice
+    versa) -- red (employee_label would fall back to the uid instead of the
+    stored email)."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1",
+          employee_email="staffer@example.com")
+
+    def _boom(uids):
+        raise AssertionError(
+            "labels_for_uids must not be called for a uid whose row "
+            "already carries employee_email")
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(identity_labels, "labels_for_uids",
+                        lambda uids: {} if not uids else _boom(uids))
+
+    resp = admin_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["links"][0]
+    assert row["employee_id"] == "emp-1"
+    assert row["employee_label"] == "staffer@example.com"
+
+
+def test_link_listing_falls_back_to_the_batch_lookup(
+        admin_client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the legacy-row half, mirroring test_firm_routes.py's
+    test_get_firm_ledger_row_falls_back_to_the_batch_lookup exactly, but over
+    THIS route's employee_id/employee_email pair: a mint record written
+    BEFORE this bead has no employee_email -- employee_label resolves
+    through the batched identity_labels.labels_for_uids lookup instead.
+
+    Mutation: never call labels_for_uids in _do_list_links (leave
+    employee_label as the raw employee_id always) -- red (employee_label
+    would be the uid, not the resolved email)."""
+    _mint(fake_db, jti="jti-1", firm_id="acme", employee_id="emp-1")
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(
+        identity_labels, "labels_for_uids",
+        lambda uids: {u: "resolved@example.com" for u in uids})
+
+    resp = admin_client.get(
+        "/admin/firms/acme/links", params={"channel": "demo"})
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["links"][0]
+    assert row["employee_id"] == "emp-1"
+    assert row["employee_label"] == "resolved@example.com"
 
 
 def test_a_link_never_opened_has_null_redemption_fields(admin_client, fake_db):

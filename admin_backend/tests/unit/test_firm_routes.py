@@ -237,6 +237,12 @@ def fake_db(monkeypatch):
     import firebase_admin
     monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
                         raising=False)
+    # bd polyglot-pdf-cpsi0: identity_labels.labels_for_uids caches by uid
+    # across the whole process -- clear before each test so a fail-soft
+    # "uid as its own label" outcome from one test cannot leak into another
+    # that reuses the same uid.
+    import admin_backend.services.identity_labels as identity_labels
+    identity_labels.clear_cache()
     return db
 
 
@@ -460,6 +466,124 @@ def test_get_firm_returns_profile_balance_and_ledger(client, fake_db):
     assert len(body["ledger"]) == 1
     assert body["ledger"][0]["type"] == "promo_grant"
     assert body["ledger_truncated"] is False
+
+
+def test_get_firm_ledger_row_prefers_its_own_stored_actor_email(
+        client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the no-lookup-needed half: a row written AFTER bd
+    polyglot-pdf-cpsi0 already carries actor_email -- actor_label must use
+    it directly, with NO Auth call at all (a real Auth call from this test
+    would fail against the fake firebase_admin app, which would surface as
+    an identity_labels_lookup_failed log line, not a wrong label -- so this
+    test also proves no such call is attempted).
+
+    Mutation: swap label_for_actor's precedence in firm_routes.py's
+    _do_get_firm to prefer `labels` over the row's own actor_email -- red
+    (the label would fall back to the uid instead)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "mint_debit", "amount": -1, "usd_amount": None,
+        "firm_kind": "live", "channel": "demo", "balance_after": 99,
+        "actor": "uid-staff-1", "actor_email": "staffer@example.com",
+        "reason": None, "link_jti": "jti-1", "kit_id": "w7", "ts": 1.0,
+    }
+
+    def _boom(uids):
+        raise AssertionError(
+            "labels_for_uids must not be called for a uid whose row "
+            "already carries actor_email")
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(identity_labels, "labels_for_uids",
+                        lambda uids: {} if not uids else _boom(uids))
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor"] == "uid-staff-1"
+    assert row["actor_label"] == "staffer@example.com"
+
+
+def test_get_firm_ledger_row_never_leaks_raw_actor_email(client, fake_db):
+    """bd polyglot-pdf-cpsi0 fresh-eyes finding: _do_get_firm's ledger rows
+    are built by allowlisting to credit_ledger.ENTRY_FIELDS (minus
+    actor_email) plus the resolved actor_label -- NOT a bare **row spread --
+    so the raw actor_email a row stores never itself rides onto the wire,
+    mirroring link_routes.py's hand-built _public_link_view allowlist for
+    the identical employee_email/employee_label pair. actor_label is the
+    ONLY actor-identifying field this response exposes.
+
+    Mutation: revert to `{**row, "actor_label": ...}` in _do_get_firm -- red
+    (actor_email would appear in the response verbatim)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "mint_debit", "amount": -1, "usd_amount": None,
+        "firm_kind": "live", "channel": "demo", "balance_after": 99,
+        "actor": "uid-staff-1", "actor_email": "staffer@example.com",
+        "reason": None, "link_jti": "jti-1", "kit_id": "w7", "ts": 1.0,
+    }
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert "actor_email" not in row
+    assert row["actor_label"] == "staffer@example.com"
+
+
+def test_get_firm_ledger_row_falls_back_to_the_batch_lookup(
+        client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the legacy-row half: a row written BEFORE this
+    bead has no actor_email -- actor_label resolves through the batched
+    identity_labels.labels_for_uids lookup instead.
+
+    Mutation: never call labels_for_uids in _do_get_firm (leave actor_label
+    as the raw uid always) -- red (the label would be the uid, not the
+    resolved email)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "promo_grant", "amount": 10, "usd_amount": None,
+        "firm_kind": "live", "channel": None, "balance_after": 110,
+        "actor": "uid-legacy-1", "reason": None, "link_jti": None,
+        "kit_id": None, "ts": 1.0,
+    }
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(
+        identity_labels, "labels_for_uids",
+        lambda uids: {u: "resolved@example.com" for u in uids})
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor"] == "uid-legacy-1"
+    assert row["actor_label"] == "resolved@example.com"
+
+
+def test_get_firm_ledger_row_falls_back_to_the_uid_when_lookup_cannot_resolve(
+        client, fake_db, monkeypatch):
+    """A uid the batch lookup could not resolve (deleted account, or the
+    fail-soft path when Auth itself is unreachable) falls back to the uid
+    itself -- the row must still render, never blank or 500.
+
+    Mutation: return None instead of the uid from label_for_actor's final
+    fallback -- red (actor_label would be null, not the uid string)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "promo_grant", "amount": 10, "usd_amount": None,
+        "firm_kind": "live", "channel": None, "balance_after": 110,
+        "actor": "uid-unresolvable", "reason": None, "link_jti": None,
+        "kit_id": None, "ts": 1.0,
+    }
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(
+        identity_labels, "labels_for_uids",
+        lambda uids: {u: u for u in uids})
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor_label"] == "uid-unresolvable"
 
 
 def test_get_firm_ledger_read_is_BOUNDED_not_the_whole_collection(

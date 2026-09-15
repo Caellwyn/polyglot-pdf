@@ -25,6 +25,23 @@ function usdAmountApplies(type: GrantType): boolean {
   return (USD_REQUIRED_GRANT_TYPES as readonly GrantType[]).includes(type);
 }
 
+/** bd polyglot-pdf-cpsi0: display-only prettifying for a SYSTEM actor's
+ * label. The backend never invents an email for "system:<origin>" -- it
+ * has none -- so actor_label for a system-written entry is the raw
+ * "system:backfill_firm_kind" string verbatim (identity_labels.
+ * label_for_actor's uid-fallback path treats it exactly like any other
+ * unresolvable "uid"). This is purely presentation: turn the origin's
+ * underscores into spaces and add a space after the colon, per the bead's
+ * own example ("system: backfill_firm_kind"). A real email (containing
+ * "@") or any other label passes through unchanged -- only a label
+ * starting with the literal "system:" prefix is reformatted, so this can
+ * never mangle a human's email address. */
+function prettifyActorLabel(label: string): string {
+  if (typeof label !== 'string' || !label.startsWith('system:')) return label;
+  const origin = label.slice('system:'.length).replace(/_/g, ' ');
+  return `system: ${origin}`;
+}
+
 /**
  * Firm detail page (bd polyglot-pdf-r8z9g, Epic 2 Track C bead C2): profile,
  * allowed_kits editor, kind change (confirm-twice + required reason),
@@ -705,7 +722,15 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
                     <td className="py-1 pr-4">{entry.usd_amount ?? ''}</td>
                     <td className="py-1 pr-4">{entry.balance_after}</td>
                     <td className="py-1 pr-4">{entry.reason ?? ''}</td>
-                    <td className="py-1 pr-4">{entry.actor}</td>
+                    {/* bd polyglot-pdf-cpsi0: actor_label is the display
+                        value (an email, or -- prettified here -- a system
+                        actor's "system: backfill_firm_kind" form); the raw
+                        uid rides in the title attribute rather than being
+                        dropped, so an operator can still see/copy it on
+                        hover without it cluttering the cell. */}
+                    <td className="py-1 pr-4" title={entry.actor}>
+                      {prettifyActorLabel(entry.actor_label)}
+                    </td>
                   </tr>
                 ))}
                 {firm.ledger.length === 0 && (
@@ -758,7 +783,14 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
                   {links.map((link) => (
                     <tr key={link.jti} className="border-b border-gray-100">
                       <td className="py-1 pr-4">{link.kit_id ?? ''}</td>
-                      <td className="py-1 pr-4">{link.employee_id ?? ''}</td>
+                      {/* bd polyglot-pdf-cpsi0: employee_label mirrors the
+                          ledger table's actor_label -- the raw uid rides
+                          in the title attribute. No system-actor
+                          prettifying here: a link is always minted by a
+                          real employee, never a system origin. */}
+                      <td className="py-1 pr-4" title={link.employee_id ?? ''}>
+                        {link.employee_label ?? ''}
+                      </td>
                       <td className="py-1 pr-4">{link.status ?? ''}</td>
                       <td className="py-1 pr-4">{link.spend_usd ?? ''}</td>
                       <td className="py-1 pr-4">

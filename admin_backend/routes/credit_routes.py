@@ -45,7 +45,11 @@ ALWAYS None (plan: "channel None" -- the admin service has no channel of its
 own; a channel-tagged debit only ever comes from the public backend's mint
 route), and firm_kind is SNAPSHOTTED BY append_entry ITSELF from the firm
 doc it reads inside its own transaction -- this module never reads the
-firm's kind and never passes one in.
+firm's kind and never passes one in. actor_email (bd polyglot-pdf-cpsi0) IS
+THE ADMIN'S VERIFIED-TOKEN EMAIL for grant/adjust (_run_append_entry passes
+actor.email alongside actor.uid); the monthly top-up's own actor is a
+"system:" string with no email (see MONTHLY_TOPUP_ACTOR below), so its
+append_entry() call passes none, exactly as it always has.
 
 SYNC HELPER, ASYNC ROUTE: append_entry is synchronous (Admin SDK), so both
 handlers run it under asyncio.to_thread, matching every other admin-service
@@ -269,7 +273,8 @@ def _run_append_entry(*, actor: AdminActor, request_id: str, **kwargs) -> dict:
 
     try:
         return credit_ledger.append_entry(
-            db, actor=actor.uid, extra_writes=_audit, **kwargs)
+            db, actor=actor.uid, actor_email=actor.email,
+            extra_writes=_audit, **kwargs)
     except credit_ledger.InsufficientCredits as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     except credit_ledger.LedgerError as exc:

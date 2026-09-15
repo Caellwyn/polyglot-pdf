@@ -2,6 +2,16 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/usage_rollups.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
+*Last updated: 2026-09-15 (bd polyglot-pdf-cpsi0: the mint record and the
+credit ledger entry each gain an optional human-readable email label
+alongside their uid -- `links_store.build_mint_record`'s `employee_email`
+and `credit_ledger.append_entry`'s `actor_email` kwarg/entry field. Neither
+is validated, required, or a substitute for the uid it rides alongside;
+`actor_email` never reaches the `ledger_export` log line. See the mint
+record and credit ledger sections below, and Surface contract 34 in
+docs/technical_guide.md for the read-side batched resolution
+(`admin_backend/services/identity_labels.py`) this bead also adds.)*
+
 *Last updated: 2026-09-09 (bd polyglot-pdf-scaig: a new sibling rule,
 `backend/services/firms.py`'s `employee_firm_id(claims)` -- the same shape
 as `manager_firm_id`, one role over -- backs a new admin-service dependency,
@@ -402,7 +412,14 @@ route's transaction writes what it returns with `tx.set()`, and the plain
 non-transactional `record_mint()` writes the same builder's output for
 callers with no credit to reserve (a migration backfill, a test fixture).
 The refund and revoke writers that transition `status` land in Epic 2 bead
-A5.
+A5. **`employee_email` (bd polyglot-pdf-cpsi0)** joins the shape as an
+OPTIONAL string -- the minting account's email claim, stamped ALONGSIDE
+`employee_id` (the uid), never instead of it; None on a token with no
+email claim and on every record written before this bead. The admin
+service's read-side batched Auth lookup
+(`admin_backend/services/identity_labels.py::labels_for_uids`) resolves a
+legacy record's `employee_id` to a label for display; it never backfills
+`employee_email` onto the stored document.
 
 `status` is a DERIVED CACHE and never decides money.
 `OPEN_BLOCKING_STATUSES` -- `revoked` and `refunded`, the two terminal money
@@ -432,6 +449,11 @@ that set.
 `promo_grant`, `mint_debit`, `expiry_refund`, `adjustment`), signed
 `amount`, nullable `usd_amount`, a `firm_kind` snapshot, nullable `channel`,
 `balance_after`, `actor` (a uid or `system:<origin>`, never blank),
+nullable `actor_email` (bd polyglot-pdf-cpsi0: a human-readable label for
+`actor`, stamped by the caller when it already has one -- a system actor
+passes none, and every entry written before this bead has none either;
+NEVER reaches the `ledger_export` log line, per
+docs/standards/hipaa-pii-policy.md),
 `reason`, `link_jti`, `kit_id`, `ts`. The rules run BOTH ways: `purchase`
 and `subscription_grant` REQUIRE `usd_amount` (that is the income figure),
 and the other four REFUSE it, because a dollar figure on a promo or a debit

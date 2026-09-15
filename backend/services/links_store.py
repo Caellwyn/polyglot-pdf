@@ -53,6 +53,12 @@ migration backfill, a test fixture). A5 adds the refund/revoke writers.
 
 DOC SHAPE (links[_<channel>]/{jti}):
     firm_id: str            kit_id: str             employee_id: str
+    employee_email: str | None
+                              (bd polyglot-pdf-cpsi0: the minting account's
+                               email claim, when the verified token carried
+                               one -- a human-readable label ALONGSIDE
+                               employee_id, never instead of it; no gate or
+                               query keys on this field)
     credit_cost: int         (snapshot at mint time)
     cap_usd: float            (snapshot at mint time -- the resolved
                                burn_cap_usd, closes bd polyglot-pdf-4tjt7)
@@ -201,6 +207,7 @@ def build_mint_record(
     cap_usd: float,
     open_deadline: int,
     now: Optional[float] = None,
+    employee_email: Optional[str] = None,
 ) -> dict:
     """The mint record DOCUMENT, validated but NOT written (Epic 2 bead A3).
 
@@ -214,6 +221,10 @@ def build_mint_record(
     Raises ValueError for a non-positive credit_cost or cap_usd (a link that
     costs nothing or has no spend ceiling is a configuration bug, not a
     valid mint) -- callers must not silently record a broken snapshot.
+
+    employee_email (bd polyglot-pdf-cpsi0): OPTIONAL, never validated -- a
+    human-readable label riding alongside employee_id, never a substitute
+    for it. See the module docstring's DOC SHAPE entry.
     """
     if not all(isinstance(v, str) and v for v in (jti, firm_id, kit_id, employee_id)):
         raise ValueError("jti, firm_id, kit_id and employee_id are required")
@@ -229,6 +240,7 @@ def build_mint_record(
         "kit_id": kit_id,
         "employee_id": employee_id,
         "credit_cost": credit_cost,
+        "employee_email": employee_email,
         "cap_usd": float(cap_usd),
         "minted_at": stamp,
         "open_deadline": int(open_deadline),
@@ -249,6 +261,7 @@ def record_mint(
     open_deadline: int,
     now: Optional[float] = None,
     channel: Optional[str] = None,
+    employee_email: Optional[str] = None,
 ) -> dict:
     """Write the mint record for a freshly-minted link. Returns the record.
 
@@ -272,6 +285,7 @@ def record_mint(
         cap_usd=cap_usd,
         open_deadline=open_deadline,
         now=now,
+        employee_email=employee_email,
     )
     try:
         _collection(channel).document(jti).set(record)

@@ -159,6 +159,7 @@ def _reserve_mint(
     channel: str,
     enforced: bool,
     now: Optional[float] = None,
+    employee_email: Optional[str] = None,
 ) -> dict:
     """Reserve one link's credit, ATOMICALLY, before any token is signed.
 
@@ -188,6 +189,15 @@ def _reserve_mint(
     `enforced` is passed IN rather than read here so the route resolves it
     once, off the event loop, alongside the minting flag -- and so a test
     can drive both settings without patching runtime_config's cache.
+
+    employee_email (bd polyglot-pdf-cpsi0): the minting account's email
+    claim, when the verified token carries one. Threaded to BOTH the mint
+    record (`employee_email`, via build_mint_record) and the ledger entry
+    (`actor_email`, via append_entry) so the two records the console reads
+    -- the links table and the ledger table -- agree on the same label for
+    the same mint. Optional: a token with no email claim (should not
+    happen for a real Firebase account, but is not assumed) leaves both
+    fields None, exactly as they were before this bead.
     """
     db = get_db()
     if db is None:
@@ -220,6 +230,7 @@ def _reserve_mint(
             cap_usd=cap_usd,
             open_deadline=open_deadline,
             now=now,
+            employee_email=employee_email,
         )
         tx.set(links_store.mint_record_ref(db, jti, channel), record)
 
@@ -230,6 +241,7 @@ def _reserve_mint(
             entry_type=TYPE_MINT_DEBIT,
             amount=-int(credit_cost),
             actor=employee_id,
+            actor_email=employee_email,
             channel=channel,
             link_jti=jti,
             kit_id=kit_id,
@@ -338,6 +350,14 @@ async def mint_link(
 
     firm_id = user.get("firm_id") if isinstance(user, dict) else None
     employee_id = user.get("uid") if isinstance(user, dict) else None
+    # bd polyglot-pdf-cpsi0: the verified token's email claim, purely a
+    # human-readable label riding alongside employee_id -- never validated,
+    # never required (an absent claim leaves the label None, exactly the
+    # prior behavior), and never used for identity: employee_id (the uid)
+    # remains the only value any gate or query keys on.
+    employee_email = user.get("email") if isinstance(user, dict) else None
+    if not isinstance(employee_email, str) or not employee_email:
+        employee_email = None
     if not isinstance(firm_id, str) or not firm_id:
         raise HTTPException(status_code=403, detail="Not a firm account")
     if not isinstance(employee_id, str) or not employee_id:
@@ -399,6 +419,7 @@ async def mint_link(
             channel,
             enforced,
             issued,
+            employee_email=employee_email,
         )
     except MintRefused as exc:
         _log.info("link_mint_refused", firm_id=firm_id, kit_id=body.kit_id,

@@ -44,11 +44,22 @@ from backend.tests.unit._fake_firestore import _FakeDb, _FakeFirestoreModule
 _SECRET = "s" * 40
 
 _TOKENS = {
-    "emp-a": {"uid": "u-emp-a", "firm_id": "firm-a", "firm_role": "employee"},
+    # emp-a carries an email claim (bd polyglot-pdf-cpsi0): every REAL
+    # Firebase account has one, so this is the representative case the
+    # existing (pre-cpsi0) tests already exercise unchanged -- none of them
+    # assert on the claims dict's exact key set, only on the fields they
+    # name.
+    "emp-a": {"uid": "u-emp-a", "firm_id": "firm-a", "firm_role": "employee",
+              "email": "emp-a@firm-a.example.com"},
     "mgr-a": {"uid": "u-mgr-a", "firm_id": "firm-a", "firm_role": "manager"},
     "emp-b": {"uid": "u-emp-b", "firm_id": "firm-b", "firm_role": "employee"},
     "nofirm": {"uid": "u-solo"},
     "nouid": {"firm_id": "firm-a", "firm_role": "employee"},
+    # No email claim at all -- the degraded-but-real case (bd
+    # polyglot-pdf-cpsi0): a token missing the claim must not crash the
+    # mint, and both new fields must simply come back None.
+    "emp-noemail": {"uid": "u-emp-noemail", "firm_id": "firm-a",
+                    "firm_role": "employee"},
 }
 
 _ALLOWED = {"firm-a": ["firm-a-intake"], "firm-b": ["firm-b-intake"]}
@@ -208,6 +219,52 @@ def test_the_link_is_attributed_to_the_MINTING_EMPLOYEE_from_the_token(client):
 
     assert payload["employee_id"] == "u-emp-a"
     assert payload["firm_id"] == "firm-a"
+
+
+def test_a_mint_stamps_actor_email_on_the_ledger_and_employee_email_on_the_record(
+        client):
+    """EXIT CRITERION 1: a mint on staging writes actor_email on the
+    mint_debit ledger entry AND employee_email on the links/{jti} mint
+    record -- both from the verified token's email claim, never the
+    request body (there is nowhere in MintLinkRequest to put one).
+
+    Mutation: drop `actor_email=employee_email` from the append_entry() call
+    in _reserve_mint -- the ledger assertion goes red. Mutation: drop
+    `employee_email=employee_email` from the build_mint_record() call --
+    the mint-record assertion goes red. Verified 2026-09-15."""
+    c, store = client
+
+    resp = _mint(c, token="emp-a")
+
+    assert resp.status_code == 200
+    jti = resp.json()["jti"]
+    rows = _ledger(store)
+    assert len(rows) == 1
+    assert rows[0]["actor"] == "u-emp-a"
+    assert rows[0]["actor_email"] == "emp-a@firm-a.example.com"
+    records = store.db.link_rows()
+    assert records[jti]["employee_id"] == "u-emp-a"
+    assert records[jti]["employee_email"] == "emp-a@firm-a.example.com"
+
+
+def test_a_mint_with_no_email_claim_leaves_both_fields_none(client):
+    """A token missing the email claim (should not happen for a real
+    Firebase account, but is not assumed) must not crash the mint, and must
+    not invent a placeholder -- both new fields come back None, exactly the
+    pre-cpsi0 shape.
+
+    Mutation: default employee_email to "" instead of None when the claim
+    is absent -- red (the stored value is "" instead of None)."""
+    c, store = client
+
+    resp = _mint(c, token="emp-noemail")
+
+    assert resp.status_code == 200
+    jti = resp.json()["jti"]
+    rows = _ledger(store)
+    assert rows[0]["actor_email"] is None
+    records = store.db.link_rows()
+    assert records[jti]["employee_email"] is None
 
 
 def test_minting_a_kit_the_firm_does_not_hold_is_a_404(client):
@@ -851,6 +908,11 @@ def test_the_mint_record_shape_matches_links_store(client):
         cap_usd=written["cap_usd"],
         open_deadline=written["open_deadline"],
         now=written["minted_at"],
+        # emp-a's token carries an email claim (bd polyglot-pdf-cpsi0) --
+        # see _TOKENS' own comment. Omitting this here would fail for the
+        # SAME reason the docstring names: a drift between the transactional
+        # writer and this builder.
+        employee_email="emp-a@firm-a.example.com",
     )
     assert written == expected
 

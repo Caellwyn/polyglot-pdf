@@ -207,6 +207,9 @@ def test_grant_writes_exactly_one_ledger_entry_and_one_audit_row(
     assert rows[0]["type"] == entry_type
     assert rows[0]["amount"] == 50
     assert rows[0]["actor"] == "admin-uid-1"
+    # bd polyglot-pdf-cpsi0: the operator's verified-token email rides on
+    # the ledger entry alongside the uid.
+    assert rows[0]["actor_email"] == "ops@example.com"
     assert fake_db.firm("acme")["balance_credits"] == 150
 
     audit_rows = fake_db.audit_rows()
@@ -231,6 +234,9 @@ def test_adjust_writes_exactly_one_ledger_entry_and_one_audit_row(
     assert rows[0]["type"] == "adjustment"
     assert rows[0]["amount"] == -30
     assert rows[0]["reason"] == "double-charged on 09-07"
+    # bd polyglot-pdf-cpsi0: same as grant -- the operator's email rides
+    # alongside the uid on the adjustment entry too.
+    assert rows[0]["actor_email"] == "ops@example.com"
     assert fake_db.firm("acme")["balance_credits"] == 70
 
     audit_rows = fake_db.audit_rows()

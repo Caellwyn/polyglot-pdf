@@ -87,6 +87,11 @@ interface LinkRow {
   jti: string | null;
   kit_id: string | null;
   employee_id: string | null;
+  /** bd polyglot-pdf-cpsi0: a human-readable label for employee_id (an
+   * email, when the mint stamped one or a batched Auth lookup resolved
+   * one) -- joins B4's allowlist the same by-hand way every other key did.
+   * Null only when employee_id itself is null. */
+  employee_label: string | null;
   status: string | null;
   minted_at: number | null;
   open_deadline: number | null;
@@ -338,6 +343,13 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
           <thead>
             <tr>
               <th>Form</th>
+              {/* bd polyglot-pdf-cpsi0: an Employee column, MANAGER-ONLY --
+                  an employee's own view already scopes to just their own
+                  links (see the module docstring's "who sees what"), so
+                  repeating their own label on every row would add nothing;
+                  a manager's view spans the whole firm's staff and is
+                  exactly who this label helps. */}
+              {isManager && <th>Employee</th>}
               <th>Status</th>
               <th>Minted</th>
               <th>Opened</th>
@@ -350,6 +362,11 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
             {rows.map((row) => (
               <tr key={row.jti ?? Math.random()}>
                 <td>{row.kit_id ?? '--'}</td>
+                {isManager && (
+                  <td title={row.employee_id ?? undefined}>
+                    {row.employee_label ?? '--'}
+                  </td>
+                )}
                 <td>{row.status ?? '--'}</td>
                 <td>{fmtTime(row.minted_at)}</td>
                 <td>{fmtTime(row.opened_at)}</td>
@@ -372,7 +389,7 @@ export function LinkHistoryPage({ user: userOverride, fetchImpl }: LinkHistoryPa
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={isManager ? 7 : 6}>No links yet.</td>
+                <td colSpan={isManager ? 8 : 6}>No links yet.</td>
               </tr>
             )}
           </tbody>

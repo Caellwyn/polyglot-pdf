@@ -61,6 +61,10 @@ const SAMPLE_ROW = {
   jti: 'jti-1',
   kit_id: 'w7',
   employee_id: 'emp-1',
+  // bd polyglot-pdf-cpsi0: the manager-only Employee column's display
+  // value; employee_id (the uid) remains on the row for the title
+  // tooltip.
+  employee_label: 'staffer@example.com',
   status: 'minted',
   minted_at: 1000,
   open_deadline: 2000,
@@ -126,6 +130,37 @@ describe('LinkHistoryPage', () => {
     // row -- confirms the page does not spread the row onto the DOM.
     expect(screen.queryByText('do-not-show')).toBeNull();
     expect(document.body.textContent).not.toContain('internal_secret');
+  });
+
+  it('a manager sees an Employee column showing the label, uid as a tooltip', async () => {
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'staging');
+    const { impl } = mockFetch(() => jsonResponse({ links: [SAMPLE_ROW] }));
+
+    render(<LinkHistoryPage user={managerUser()} fetchImpl={impl} />);
+
+    await screen.findByText('w7');
+    // bd polyglot-pdf-cpsi0 exit criterion 3: the manager view shows
+    // employee_label, with the raw uid (employee_id) as a title tooltip.
+    const employeeCell = screen.getByText('staffer@example.com');
+    expect(employeeCell).toBeTruthy();
+    expect(employeeCell.getAttribute('title')).toBe('emp-1');
+    expect(screen.getByRole('columnheader', { name: 'Employee' })).toBeTruthy();
+  });
+
+  it('an employee view has NO Employee column at all', async () => {
+    vi.stubEnv('VITE_ADMIN_API_BASE_URL', 'https://admin.example');
+    vi.stubEnv('VITE_APP_CHANNEL', 'demo');
+    const { impl } = mockFetch(() => jsonResponse({ links: [SAMPLE_ROW] }));
+
+    render(<LinkHistoryPage user={employeeUser('emp-1')} fetchImpl={impl} />);
+
+    await screen.findByText('w7');
+    // An employee's own rows are always their own -- repeating their own
+    // label on every row adds nothing, so the column is hidden entirely
+    // (mirrors the existing Revoke-column hiding for this same actor).
+    expect(screen.queryByRole('columnheader', { name: 'Employee' })).toBeNull();
+    expect(screen.queryByText('staffer@example.com')).toBeNull();
   });
 
   it('an employee view sends NO employee_id and hides the revoke controls', async () => {

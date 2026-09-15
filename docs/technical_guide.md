@@ -3112,3 +3112,82 @@ unchanged, only which behavior it defaults to.
   trip every other mutation on this page uses. `adminApi.ts` gains
   `FirmPlan`, `PLAN_TIERS`, `DEFAULT_PLAN`, `setFirmPlan`, and `plan:
   FirmPlan` on both `FirmRow` and `FirmDetail`.
+
+### 34. Actor/employee email labels: write-side stamp + read-side batched resolution (bd polyglot-pdf-cpsi0)
+
+Maintainer feedback (2026-09-15) after the first live mint on staging: the
+firm overview's ledger showed `actor` as a raw Firebase uid, "not really
+useful as is -- show which account produced the link." Two halves, write
+and read, because most rows that exist TODAY were written before this bead
+and carry no email at all.
+
+- **WRITE SIDE: `credit_ledger.append_entry()` gains a new OPTIONAL
+  `actor_email: Optional[str] = None` parameter and entry field**, joining
+  `ENTRY_FIELDS` the same way `period` (Surface contract 33) did -- stored
+  alongside `actor` (the uid), never instead of it. `actor` remains the
+  ledger's one attribution key for every existing consumer (audit, the
+  balance-invariant replay, every query); `actor_email` is purely a
+  human-readable label a caller may attach when it already knows one at
+  write time. Two producers pass it: `backend/routes/link_routes.py`'s
+  mint reservation (`_reserve_mint`, from the verified staff token's
+  `email` claim, `user.get("email")`) and `admin_backend/routes/
+  credit_routes.py`'s `_run_append_entry` (from `AdminActor.email`, the
+  SAME field its audit-row call already passed to `audit_log.
+  record_in_transaction` -- Surface contract 15). Every SYSTEM actor
+  (`"system:<origin>"` -- the sweep, the monthly top-up, the reconcile
+  pass) passes none; there is no email to attach to a scheduled job.
+  **NEVER REACHES THE `ledger_export` LOG LINE** (docs/standards/
+  hipaa-pii-policy.md: uids only in logs) -- `LEDGER_EXPORT_FIELDS` has no
+  email slot, and the `_log.info` call in `append_entry()` never passes
+  `actor_email`; `test_ledger_export_line_never_carries_an_at_sign` pins
+  this by asserting no `"@"` anywhere in the emitted payload's values.
+- **The SAME field, one name over, on the mint record: `links_store.
+  build_mint_record()` gains `employee_email: Optional[str] = None`**,
+  joining the mint-record schema (`backend/tests/unit/test_store_shapes.py`
+  `LINKS_MINT_RECORD_ALLOWED_KEYS`; `scripts/audit/inventory_stores.py`'s
+  `links`/`links_staging` allowlists). `backend/routes/link_routes.py`'s
+  `mint_link` route reads the SAME verified-token email claim ONCE and
+  threads it to BOTH the ledger call (`actor_email`) and the mint-record
+  builder (`employee_email`) -- one read, two writes that never disagree
+  about who minted.
+- **READ SIDE, for every row written before this bead (uid, no stored
+  email): NEW `admin_backend/services/identity_labels.py::
+  labels_for_uids(uids)`.** ONE BATCHED `firebase_admin.auth.get_users()`
+  call per request (never one call per uid -- a caller collects every
+  DISTINCT uid a page's rows need resolved first), backed by a per-uid,
+  per-process TTL cache (`TTL_SECONDS = 600`, longer than
+  `runtime_config`'s 45s -- see Surface contract 15's neighbor -- since a
+  staff email changes far less often than a config flag). An unknown or
+  deleted uid, or a store failure (Auth unreachable, `get_users` itself
+  raises), falls back to the UID ITSELF for every uid not already
+  resolved -- fail-soft, so a page always renders something, never a
+  blank cell or a 500. `label_for_actor(actor, actor_email, labels)` is
+  the ONE place the three-way precedence is decided (a row's own stored
+  email wins; the batch map is the fallback for a legacy row; the raw
+  actor/uid is the last resort), shared by every consumer below so they
+  cannot independently drift on which value wins.
+- **Consumers, both existing GET routes, unchanged surface otherwise:**
+  `admin_backend/routes/firm_routes.py`'s `_do_get_firm` (Surface contract
+  18's ledger-read half) resolves every distinct `actor` uid on the
+  returned ledger page through ONE `labels_for_uids` call and adds
+  `actor_label` to each row (the uid `actor` field is UNCHANGED -- an
+  additional field, never a replacement); `admin_backend/routes/
+  link_routes.py`'s `_do_list_links` (Surface contract 22) does the same
+  over `employee_id`, adding `employee_label` to `_ALLOWLISTED_KEYS` the
+  same by-hand way every other key joined that allowlist. Both routes read
+  labels ONLY, never write one back -- resolving a legacy row's label does
+  not backfill `actor_email`/`employee_email` onto the stored document.
+- **Console:** `admin-console/src/pages/FirmDetailPage.tsx`'s ledger table
+  renders `actor_label` (prettified client-side for a `"system:<origin>"`
+  string into `"system: <origin>"` with underscores turned to spaces --
+  display-only; the backend never invents a label for a system actor) with
+  the raw uid as a `title` tooltip; its links table does the same for
+  `employee_label`. `frontend/src/console/LinkHistoryPage.tsx` (Surface
+  contract 27) gains a MANAGER-ONLY Employee column (an employee's own
+  view already scopes to just their own links, so repeating their own
+  label on every row adds nothing) showing `employee_label` with the same
+  uid-as-tooltip convention. `adminApi.ts`'s `LedgerEntry.actor_label` and
+  `LinkRow.employee_label` are the new typed fields; both are non-optional
+  strings from the backend's own guarantee (`label_for_actor` always
+  returns something for a non-null actor) except `employee_label`, which
+  is `string | null` to match a null `employee_id`.
