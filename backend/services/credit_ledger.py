@@ -56,7 +56,24 @@ filter work). It is emitted AFTER the commit, never before: a line for an
 entry that never committed would inflate the income view with money that was
 not moved. It carries NO field values, no PII and no PHI
 (docs/standards/hipaa-pii-policy.md) -- ids, credit counts and dollar
-amounts only.
+amounts only. THIS INCLUDES actor_email (bd polyglot-pdf-cpsi0): the entry
+itself may carry the minting/granting account's email (see below), but
+LEDGER_EXPORT_FIELDS has no email slot and the _log.info calls never pass
+one -- uids only in logs, per the same doc.
+
+actor_email (bd polyglot-pdf-cpsi0, maintainer feedback after the first live
+mint on staging: the console's ledger table showed a raw Firebase uid,
+"not really useful as is -- show which account produced the link"). An
+OPTIONAL string, stored on the entry ALONGSIDE `actor` (the uid), never
+instead of it -- `actor` remains the ledger's attribution key (audit, the
+balance-invariant replay, every existing query) and this is purely a
+human-readable label a caller may attach when it already has one. Every
+caller MAY pass it; none is required to, and a system actor
+("system:<origin>") passes None, the same way it always has -- there is no
+email to attach to a scheduled job. Read-side label resolution for rows
+written BEFORE this landed (a uid with no actor_email) is
+admin_backend/services/identity_labels.py::labels_for_uids's job, not this
+module's -- this module only stores what a caller hands it.
 
 WHY usd_amount IS NULLABLE BUT NOT OPTIONAL. purchase and subscription_grant
 REQUIRE it (that is the income figure Epic 5's reporting sums, recorded from
@@ -203,6 +220,7 @@ ENTRY_FIELDS = frozenset({
     "channel",
     "balance_after",
     "actor",
+    "actor_email",
     "reason",
     "link_jti",
     "kit_id",
@@ -379,6 +397,7 @@ def _apply_entry_writes(
     channel: Optional[str], reason: Optional[str], link_jti: Optional[str],
     kit_id: Optional[str], require_sufficient_balance: bool, extra_writes,
     captured: dict, period: Optional[str] = None,
+    actor_email: Optional[str] = None,
 ) -> None:
     """The WRITE half of a ledger entry, shared by every caller that has
     ALREADY read the firm doc inside its own transaction.
@@ -423,6 +442,7 @@ def _apply_entry_writes(
         "channel": channel,
         "balance_after": new_balance,
         "actor": actor,
+        "actor_email": actor_email,
         "reason": reason,
         "link_jti": link_jti,
         "kit_id": kit_id,
@@ -510,6 +530,7 @@ def append_entry(
     extra_writes=None,
     ts: Optional[float] = None,
     period: Optional[str] = None,
+    actor_email: Optional[str] = None,
 ) -> dict:
     """Append ONE ledger entry and update the firm's balance, atomically.
 
@@ -563,6 +584,10 @@ def append_entry(
     whole transaction. It must not read (reads-before-writes), and because
     the body re-runs on contention it must write the same thing from the
     same inputs on every run.
+
+    actor_email (bd polyglot-pdf-cpsi0): an OPTIONAL human-readable label for
+    `actor`, stored alongside it and never validated or required -- see the
+    module docstring's own section. Never reaches the ledger_export log line.
     """
     _validate(entry_type, amount, usd_amount, actor, reason)
     if db is None:
@@ -611,6 +636,7 @@ def append_entry(
             actor=actor, channel=channel, reason=reason, link_jti=link_jti,
             kit_id=kit_id, require_sufficient_balance=require_sufficient_balance,
             extra_writes=extra_writes, captured=captured, period=period,
+            actor_email=actor_email,
         )
 
     _txn(db.transaction())
@@ -618,7 +644,8 @@ def append_entry(
     entry = captured["entry"]
     # AFTER the commit, never before: see the module docstring. A
     # ledger_export line for an entry that failed to commit would inflate
-    # the income view with money that never moved.
+    # the income view with money that never moved. NO actor_email here --
+    # see the module docstring's ledger_export section: uids only in logs.
     _log.info(
         LEDGER_EXPORT_EVENT,
         event_type=LEDGER_EXPORT_EVENT,

@@ -121,7 +121,11 @@ PINNED_ALLOWLISTS: dict[str, frozenset] = {
     # CLI takes flat collection ids; the live run walks it per firm.
     "ledger": frozenset({
         "type", "amount", "usd_amount", "firm_kind", "channel",
-        "balance_after", "actor", "reason", "link_jti", "kit_id", "ts",
+        "balance_after", "actor",
+        # actor_email (bd polyglot-pdf-cpsi0): the acting account's email,
+        # stamped alongside actor -- see ENTRY_FIELDS's own comment.
+        "actor_email",
+        "reason", "link_jti", "kit_id", "ts",
         "period",
     }),
     # backend/services/usage_rollups.py::record_session_end -- the nested
@@ -168,15 +172,18 @@ PINNED_ALLOWLISTS: dict[str, frozenset] = {
     # test_store_shapes.py::LINKS_MINT_RECORD_ALLOWED_KEYS_WITH_OPENED,
     # since a real deployed doc can carry it once a client has opened the
     # link.
+    # employee_email (bd polyglot-pdf-cpsi0): the minting account's email
+    # claim, stamped alongside employee_id -- see LINKS_MINT_RECORD_ALLOWED_
+    # KEYS's own comment in test_store_shapes.py.
     "links": frozenset({
-        "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
-        "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
-        "expire_at", "opened_at",
+        "jti", "firm_id", "kit_id", "employee_id", "employee_email",
+        "credit_cost", "cap_usd", "minted_at", "open_deadline", "status",
+        "revoked_by", "revoked_at", "expire_at", "opened_at",
     }),
     "links_staging": frozenset({
-        "jti", "firm_id", "kit_id", "employee_id", "credit_cost", "cap_usd",
-        "minted_at", "open_deadline", "status", "revoked_by", "revoked_at",
-        "expire_at", "opened_at",
+        "jti", "firm_id", "kit_id", "employee_id", "employee_email",
+        "credit_cost", "cap_usd", "minted_at", "open_deadline", "status",
+        "revoked_by", "revoked_at", "expire_at", "opened_at",
     }),
     # backend/services/link_redemptions.py::open_link/complete_link (base
     # shape, pinned in backend/tests/unit/test_store_shapes.py::

@@ -39,6 +39,12 @@ LINKS_MINT_RECORD_ALLOWED_KEYS = frozenset({
     "firm_id",
     "kit_id",
     "employee_id",
+    # bd polyglot-pdf-cpsi0: the minting account's email claim, stamped
+    # ALONGSIDE employee_id (never instead of it) so the console's link
+    # table can show a human-readable label instead of a raw uid. Optional
+    # -- None for a token with no email claim, and always None on any
+    # record written before this bead.
+    "employee_email",
     "credit_cost",
     "cap_usd",
     "minted_at",
