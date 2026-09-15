@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-o4f7c: `scripts/verify_service_reachable.py` resolves the gcloud binary through `shutil.which` and turns a spawn failure into the gate's warn-and-continue path instead of a traceback -- see "The reachability gate is ONE module". No env var, deploy step or config key changed.) (bd polyglot-pdf-p4ale, E4.5: `scripts/setup-cloud-build.sh` now provisions `polyglot-cloudbuild-sa` itself -- creates the SA, grants it `run.admin`/`firebasehosting.admin`/`firebaserules.admin`/`artifactregistry.writer`/`logging.logWriter`/`datastore.user` project-wide and `storage.objectAdmin` on the form-kits bucket only, then grants it resource-scoped actAs (`roles/iam.serviceAccountUser`) on BOTH `polyglot-backend-sa` and `admin-backend-sa`, and grants the Pub/Sub service agent `roles/iam.serviceAccountTokenCreator` for bead 4.3's future build-status webhook -- so every trigger's `--service-account` now names an identity this same script actually provisions and roles, pinned by the new `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` and `tests/test_setup_cloud_build_script.py`. `scripts/setup-admin-service.sh` gains the mirror-image grant -- `admin-backend-sa` actAs on `polyglot-cloudbuild-sa` ONLY, resource-scoped -- so the admin service's future trigger route can submit a build that runs as the build identity; `roles/run.admin` and `roles/firebasehosting.admin` are deleted (not deferred) from that script's DEFERRED_ROLES because the admin service never deploys anything itself.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -882,3 +882,25 @@ above for how both env vars are injected at deploy time, and Surface contract
 > is **no active prod**. The agent may run the demo deploy under a three-part gate
 > (local-test-first + per-instance permission + post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
+
+## Live infrastructure posture (read-only)
+
+`scripts/audit/infra_posture.sh --project <PROJECT_ID>` is the recurring,
+read-only runbook for verifying the LIVE deployed environment matches this
+doc and the repo's offline IAM pins (sprint 23 security-audit workstream D,
+bd `polyglot-pdf-m1dlv`). Under the operator's own `gcloud`/`bq`/`firebase`
+ADC — never a service-account key, and never a mutating call — it checks the
+project IAM policy, both runtime service accounts' roles against
+`backend/tests/unit/test_deployed_iam_envelope.py` and
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`, every Cloud Run
+service's env vars (no secret-shaped value, no dev/bypass flag, no verbosity
+knob) and secret bindings, the form-kits bucket's IAM and access-prevention
+settings, whether the deployed Firestore rules match the repo file, Cloud
+Logging retention/sinks/exclusions, BigQuery ACLs, Firebase Auth settings,
+Hosting response headers per site, container scan status, Cloud Build log
+content, and the Vertex/Cloud-TTS third-party-processor opt-out settings.
+Every check ends `PASS`, `FAIL`, or `N/A: <reason>` — never a silent skip —
+so a permission gap or a broken local tool (e.g. this operator's `bq` CLI)
+reports its own reason rather than aborting the run. `tests/test_infra_posture_script.py`
+pins the script's shipped check list the same way
+`tests/test_setup_monitoring_script.py` pins that script's metrics/policies.
