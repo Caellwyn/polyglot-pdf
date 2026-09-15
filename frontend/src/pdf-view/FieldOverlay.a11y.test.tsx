@@ -317,9 +317,25 @@ describe('the value is announced ONCE, on both paths (bd polyglot-pdf-sagh6)', (
     // The same text is still on screen -- and must be, for sighted users --
     // but excluded from the accessibility tree so it is not read twice.
     expect(box.textContent, 'the glyphs stay visible').toContain('A123456789');
-    const hidden = box.querySelector('[aria-hidden="true"]');
-    expect(hidden, 'the painted value must be hidden from assistive tech').toBeTruthy();
-    expect(hidden?.textContent).toContain('A123456789');
+
+    // aria-hidden sits on the EXISTING painted span, NOT on a wrapper. A
+    // wrapper would become the flex item and steal the free space that
+    // .pdf-field-overlay__check's `margin: 0 auto` needs to centre the X --
+    // a silent visual regression in an untouched stylesheet, which the Opus
+    // cross-surface review caught. Asserting the span ITSELF is what stops a
+    // future "tidy-up" reintroducing the wrapper.
+    const painted = box.querySelector('.pdf-field-overlay__text');
+    expect(painted, 'the painted span must still exist').toBeTruthy();
+    expect(
+      painted?.getAttribute('aria-hidden'),
+      'aria-hidden belongs ON the painted span, not on a wrapper around it',
+    ).toBe('true');
+    expect(painted?.textContent).toContain('A123456789');
+    expect(
+      box.firstElementChild,
+      'the painted span must be a DIRECT child -- its auto-margin centring ' +
+        'depends on being the flex item',
+    ).toBe(painted);
   });
 
   it('hides it on the READ-ONLY path too, so one rule covers both', () => {
@@ -329,6 +345,8 @@ describe('the value is announced ONCE, on both paths (bd polyglot-pdf-sagh6)', (
         currentFieldId={null} />,
     );
     const box = screen.getByTestId(`pdf-field-overlay-${FILLED.id}`);
-    expect(box.querySelector('[aria-hidden="true"]')).toBeTruthy();
+    const painted = box.querySelector('.pdf-field-overlay__text');
+    expect(painted?.getAttribute('aria-hidden')).toBe('true');
+    expect(box.firstElementChild, 'still a direct flex child').toBe(painted);
   });
 });

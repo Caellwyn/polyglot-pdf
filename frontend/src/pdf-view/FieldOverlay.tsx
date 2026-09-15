@@ -253,6 +253,22 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
       content = (
         <span
           className="pdf-field-overlay__check"
+          // DECORATIVE to assistive tech: the accessible name already says
+          // "checked" (see accessibleNameFor). Without this, the editable
+          // overlay -- role="button", which is NOT an ARIA leaf -- would have
+          // the value in its name AND expose this glyph as child text, so a
+          // screen reader could announce it twice (fresh-eyes round 2). The
+          // read-only overlay is role="img", an ARIA leaf, so its subtree is
+          // pruned anyway; this makes both paths agree.
+          //
+          // Set on the EXISTING span rather than a wrapper: .pdf-field-overlay
+          // is display:flex with no justify-content, and this span's
+          // `margin: 0 auto` (pdf-view.css) is what centres the X. A wrapper
+          // would become the flex item, leaving the auto margin no free space
+          // to distribute -- the X would jump to the left edge. A silent visual
+          // regression in an untouched stylesheet, invisible to the suite;
+          // caught by the Opus cross-surface review.
+          aria-hidden="true"
           style={{ fontSize: `${Math.max(8, Math.min(pos.height * 0.8, 24))}px` }}
         >
           X
@@ -263,6 +279,9 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
       content = (
         <span
           className="pdf-field-overlay__text"
+          // Decorative for the same reason as the check glyph above; likewise
+          // set on the existing span so the flex layout is untouched.
+          aria-hidden="true"
           style={{
             fontSize: `${fittedFontSize(painted.text, pos.width - 4, pos.height)}px`,
             whiteSpace: isMultiline ? 'normal' : 'nowrap',
@@ -299,23 +318,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
         data-testid={`pdf-field-overlay-${field.id}`}
         {...interactiveRest}
       >
-        {/*
-          The painted value is DECORATIVE to assistive tech: the accessible
-          name already carries it (see accessibleNameFor). Hiding the subtree
-          keeps the two paths consistent and stops the value being announced
-          twice on the editable one.
-
-          Why it differs by path: the read-only overlay is role="img", an ARIA
-          LEAF, so its subtree is pruned automatically -- which is exactly what
-          made the value unreachable until the name started carrying it. A
-          BUTTON is not a leaf, so its child text stays exposed and a screen
-          reader can read the value once from the name and again from the
-          content (fresh-eyes round 2). aria-hidden gives the button the same
-          pruning the img gets, so one mechanism serves both.
-
-          Purely presentational: the glyphs remain on screen for sighted users.
-        */}
-        <span aria-hidden="true">{content}</span>
+        {content}
       </div>
       {optionRects.map(({ value, position }) => {
         const optPos = pdfToScreenCoords(position, scale);
@@ -334,6 +337,17 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
               fontSize: `${Math.max(8, Math.min(optPos.height * 0.8, 24))}px`,
               ...interactiveStyle,
             }}
+            // Decorative: the field box's accessible name already names every
+            // selected option by its label (accessibleNameFor), so an
+            // unlabelled "X" per mark would just repeat it -- and a bare "X"
+            // with no context is worse than silence. The field box carries the
+            // role and the meaning; these are extra hit targets for the SAME
+            // editor. Pre-existing on dev (filed as bd polyglot-pdf-jlwr6);
+            // folded in here because it is one attribute on the element this
+            // diff's own naming work made redundant, and the mark div is its
+            // own flex container with a bare text child, so there is no
+            // layout dependency to break.
+            aria-hidden="true"
             data-testid={`pdf-option-mark-${field.id}-${value}`}
             {...(clickable
               ? // An option mark is an extra hit target for the SAME
