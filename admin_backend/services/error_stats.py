@@ -141,7 +141,12 @@ def _access_token() -> str:
 def _fetch_group_stats(project: str, token: str, service: str) -> dict:
     """The raw groupStats.list JSON response for one Cloud Run service. THE
     ONE SEAM a test monkeypatches -- see module docstring."""
-    import requests
+    try:
+        import requests
+    except ImportError as exc:  # pragma: no cover -- pinned dependency
+        raise ErrorReportingUnavailable(
+            "requests is not importable: {}".format(exc)
+        ) from exc
 
     url = "{}/projects/{}/groupStats".format(_ERROR_REPORTING_BASE, project)
     params = {

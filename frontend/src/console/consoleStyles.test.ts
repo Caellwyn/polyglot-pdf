@@ -22,13 +22,24 @@ import { resolve } from 'node:path';
 const ROOT = resolve(process.cwd(), 'src/console');
 const CSS = readFileSync(resolve(ROOT, 'styles/console.css'), 'utf-8');
 
-/** Every page component in src/console/ -- every top-level *.tsx that is not
- * itself a test file. Test files (*.test.tsx) never emit production
- * className markup and would only add noise (or false failures) here. */
-function consolePageFiles(): string[] {
+/** Every top-level *.tsx in src/console/ that is not itself a test file.
+ * Test files (*.test.tsx) never emit production className markup and would
+ * only add noise (or false failures) here. Used by the "defines every class
+ * it emits" check below, which is a correct rule for ANY component. */
+function consoleComponentFiles(): string[] {
   return readdirSync(ROOT)
     .filter((name) => name.endsWith('.tsx') && !name.endsWith('.test.tsx'))
     .sort();
+}
+
+/** Page components only -- *Page.tsx, excluding test files. The stylesheet-
+ * import rule below is a PAGE rule: a page mounted elsewhere must not
+ * silently pull console.css in without importing it itself. A presentational
+ * sub-component (e.g. FirmAlertsBanner.tsx, rendered only from inside a
+ * page) legitimately should NOT import the stylesheet on its own, so it must
+ * not be swept into this set. */
+function consolePageFiles(): string[] {
+  return consoleComponentFiles().filter((name) => name.endsWith('Page.tsx'));
 }
 
 /** Class names a PAGE actually emits, from its className attributes. */
@@ -54,7 +65,14 @@ function definedClasses(css: string): Set<string> {
 }
 
 describe('console styles', () => {
+  const componentFiles = consoleComponentFiles();
   const pageFiles = consolePageFiles();
+
+  it('guards more than zero components', () => {
+    // Guard the guard: if the directory listing or filter breaks, every
+    // per-component check below passes vacuously over an empty set.
+    expect(componentFiles.length).toBeGreaterThan(0);
+  });
 
   it('guards more than zero pages', () => {
     // Guard the guard: if the directory listing or filter breaks, every
@@ -62,7 +80,7 @@ describe('console styles', () => {
     expect(pageFiles.length).toBeGreaterThan(0);
   });
 
-  it.each(pageFiles)('%s: defines every class it emits', (fileName) => {
+  it.each(componentFiles)('%s: defines every class it emits', (fileName) => {
     const source = readFileSync(resolve(ROOT, fileName), 'utf-8');
     const emitted = emittedClasses(source);
     // Guard the guard: if the extractor stops finding classes, the assertion
@@ -78,7 +96,9 @@ describe('console styles', () => {
     const source = readFileSync(resolve(ROOT, fileName), 'utf-8');
     // Imported IN THE PAGE, not at an entry point: a page mounted elsewhere
     // must not silently pull this CSS in without also importing it (the
-    // shape of the original bug).
+    // shape of the original bug). Presentational sub-components (not
+    // *Page.tsx) are excluded from pageFiles and so are not held to this
+    // rule -- see consolePageFiles()'s docstring.
     expect(source).toMatch(/import\s+['"]\.\/styles\/console\.css['"]/);
   });
 });
