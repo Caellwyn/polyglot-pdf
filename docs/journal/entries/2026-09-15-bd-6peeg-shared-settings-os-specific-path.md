@@ -69,6 +69,28 @@ hardcoded username), guard on the file existing (inert elsewhere), join with
 bd polyglot-pdf-enot7 (hardcoded username) has nothing left to fix; the new
 guard bans that shape too.
 
+**Assess outcome.** Exit criterion 1 PASS. Fresh-eyes returned
+`GAPS-FOUND (2)`, both correct:
+
+- **The guard's own scope was too narrow** -- and in exactly the way this repo
+  keeps getting caught by. `SHARED_SETTINGS` was HAND-LISTED
+  (`settings.json` + `settings.local.json`) and silently omitted the third
+  tracked config, `.claude/launch.json`. Now derived by GLOB over
+  `.claude/*.json`, so a new tracked config is covered the day it appears.
+- **The machine-path patterns were a blacklist and were already defeated.**
+  Three hand-written "looks machine-specific" regexes missed
+  `%APPDATA%\npm\...` (a Windows env-var reference) and `/opt/homebrew/bin` (a
+  POSIX absolute path with no `Users`/`home` segment) -- both verified slipping
+  past. Replaced with a single pattern expressing the positive property (a
+  value must not name an absolute location on somebody's disk), plus
+  parametrized cases pinning every known evasion BY NAME and a companion set
+  asserting portable values are still accepted, so tightening the pattern into
+  uselessness also fails.
+
+Deferred: `polyglot-pdf-prskq` (nothing in the repo documents the manual user
+PATH step this fix relies on, so a fresh Windows clone gets no native `bd.exe`
+and rdftu's cascade could quietly return there).
+
 ## Lessons
 
 **"Tracked or not?" is the first question about any config fix, not a
@@ -91,6 +113,23 @@ asserts mechanically that BOTH choices corrupt one platform, so the question
 is answered by a test rather than by prose that can drift -- and if the
 premise ever changes, that test fails and invites revisiting the ban.
 
+**A hand-listed scope is the bug, every time.** The first draft of the guard
+enumerated two settings files by name and missed the third tracked config in
+the same directory -- while the file's own docstring claimed to cover "any
+tracked settings file." That is scar tissue #8 reproduced inside a test
+written to enforce scar tissue #8. Deriving the list by glob is both shorter
+and correct; hand-listing is what needs justifying, not the reverse.
+
+**A blacklist of "bad-looking" values is one spelling from defeat, and the
+first draft proved it.** Three patterns matching drive letters, MSYS paths and
+`Users`/`home` segments looked thorough and missed two ordinary shapes
+(`%APPDATA%\...`, `/opt/homebrew/bin`). The fix was to stop enumerating what is
+wrong and state what is RIGHT -- a portable value never names an absolute
+location on a disk -- then pin the known evasions by name so the pattern
+cannot silently narrow. Same lesson as
+`pin-message-tests-with-allowlists`: assert the sanctioned shape, then assert
+no residue.
+
 ## Doc freshness
 
 No tier-1/tier-2 doc documents the `.claude/settings.json` env block, so none
@@ -104,7 +143,9 @@ the in-process case and needed no change -- this bead did not alter that path.
 ## Files touched
 
 - `.claude/settings.json` -- `env` block removed (3 lines).
-- `tests/test_claude_settings_env.py` -- NEW. Bans `env.PATH` in any tracked
-  settings file; bans machine-specific absolute paths (drive-letter, MSYS
-  `/c/`, hardcoded home dir) under ANY env key; and pins the reasoning with a
-  parametrized separator test.
+- `tests/test_claude_settings_env.py` -- NEW. Scope derived by GLOB over every
+  tracked `.claude/*.json`. Bans `env.PATH` (any casing) in any of them; bans
+  values naming an absolute machine location under ANY env key, via a single
+  allowlist-shaped pattern rather than a blacklist of bad spellings; pins every
+  known evasion by name AND asserts portable values still pass; and pins the
+  reasoning with a parametrized separator test.
