@@ -1,6 +1,33 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/identity_labels.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+
+*Last updated: 2026-09-15 (bd `polyglot-pdf-cpsi0`: maintainer feedback after
+the first live mint on staging -- the firm overview's ledger showed `actor`
+as a raw Firebase uid, "not really useful as is." NEW `admin_backend/
+services/identity_labels.py::labels_for_uids(uids)` resolves a batch of
+uids to human-readable labels in ONE `firebase_admin.auth.get_users()` call
+per request (TTL-cached per uid, fail-soft to the uid itself on an unknown
+account or a store failure), and `label_for_actor(actor, actor_email,
+labels)` is the one place the precedence between a row's own stored email,
+the batch-resolved map, and the raw uid is decided. `GET /admin/firms/
+{firm_id}` (Surface contract 18) and `GET /admin/firms/{firm_id}/links`
+(Surface contract 22) each resolve their page's distinct uids through ONE
+such call and add `actor_label` / `employee_label` to their response rows
+-- the uid itself stays on the row unchanged. The WRITE-side half (`credit_
+ledger.append_entry`'s new `actor_email` kwarg, `links_store.
+build_mint_record`'s new `employee_email`, and the two admin-service
+writers -- grant/adjust via `credit_routes.py`'s `_run_append_entry` --
+that now pass the operator's verified-token email alongside the uid) lives
+in `backend/services/`, not this service, but is the write side of the
+SAME feature; see Surface contract 34 in `docs/technical_guide.md` for the
+full write+read shape. Console: `FirmDetailPage.tsx`'s ledger and links
+tables render the label with the uid as a `title` tooltip, prettifying a
+`"system:<origin>"` label into `"system: <origin>"` client-side; `frontend/
+src/console/LinkHistoryPage.tsx` (Surface contract 27) gains a manager-only
+Employee column doing the same. No new route, IAM grant, or env var --
+`admin-backend-sa` already holds `roles/firebaseauth.admin` from bd
+polyglot-pdf-dmjl5's staff-account work, which is what `get_users()` needs.)*
 
 *Last updated: 2026-09-15 (bd `polyglot-pdf-hnlj3`: maintainer decision
 2026-09-15, "credits roll over -- no real reason not to."
