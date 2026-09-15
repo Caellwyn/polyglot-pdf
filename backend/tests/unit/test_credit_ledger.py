@@ -636,6 +636,35 @@ def test_an_adjustment_REQUIRES_a_non_blank_reason(fake_db, entry_type, reason):
     assert fake_db.ledger_rows("acme") == []
 
 
+def test_reason_over_the_bound_is_refused_before_any_write(fake_db):
+    """bd polyglot-pdf-uaxt5, Opus cross-surface review finding (bd bnkuv):
+    append_entry() itself must bound `reason`, not just
+    admin_backend/routes/credit_routes.py's Pydantic model -- scripts/
+    grant_credits.py's `adjust` subcommand calls append_entry() directly
+    with an operator-supplied --reason that had NO length check before this
+    bound, a second, unbounded door into the same ledger.
+
+    Mutation: drop the REASON_MAX_LENGTH check from credit_ledger._validate
+    -- this goes red, since the oversized reason would then be accepted and
+    written."""
+    too_long = "x" * (credit_ledger.REASON_MAX_LENGTH + 1)
+    with pytest.raises(credit_ledger.LedgerError):
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type=credit_ledger.TYPE_ADJUSTMENT,
+            amount=-5, actor="uid-ops", reason=too_long)
+    assert fake_db.ledger_rows("acme") == []
+
+
+def test_reason_at_the_bound_is_accepted(fake_db):
+    """Pin both directions (scar #9): the bound must not also refuse a
+    reason exactly at the limit."""
+    at_bound = "x" * credit_ledger.REASON_MAX_LENGTH
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type=credit_ledger.TYPE_ADJUSTMENT,
+        amount=-5, actor="uid-ops", reason=at_bound)
+    assert result["reason"] == at_bound
+
+
 @pytest.mark.parametrize("actor", [None, "", "   ", 7])
 def test_actor_is_REQUIRED_and_never_blank(fake_db, actor):
     """The plan's word: actor is a uid or system:<origin>, never blank. An
