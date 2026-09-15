@@ -86,6 +86,43 @@ const BACKGROUNDS: Record<FillState, string> = {
 
 const DIMMED_BORDER = '1px dashed rgba(148, 163, 184, 0.6)';
 
+/**
+ * What each fill state ADDS to the overlay's accessible name.
+ *
+ * The state used to live only in an inline colour and a data- attribute,
+ * neither of which assistive tech reads -- so a screen-reader user got "Edit
+ * <field>" at best, and on a read-only surface nothing at all (bd
+ * polyglot-pdf-sagh6). Colour was carrying the whole meaning, including
+ * "skipped", which means a required question was deliberately left unanswered
+ * and a human must follow up.
+ *
+ * `Record<FillState, string>` on purpose, exactly like BORDERS/BACKGROUNDS: a
+ * sixth state cannot be added without deciding what it announces, because tsc
+ * refuses the incomplete map.
+ *
+ * 'empty' is deliberately SILENT. An unfilled field has nothing to report, and
+ * a phrase on every blank box would bury the states that do.
+ *
+ * The wording avoids "needs follow-up" even though that is the form view's
+ * phrase for the same state: it is how tests and screen readers locate the
+ * form-view NOTE, and repeating it made getByText match two elements and throw
+ * during bd polyglot-pdf-c9dfo. "set aside to answer later" matches the Preview
+ * legend instead, so the surface says one thing consistently.
+ */
+export const STATE_PHRASES: Record<FillState, string> = {
+  empty: '',
+  filled: 'answered, not yet confirmed',
+  confirmed: 'confirmed',
+  current: 'being asked now',
+  skipped: 'set aside to answer later',
+};
+
+/** The overlay's accessible name: the field, plus its state when it has one. */
+export function accessibleNameFor(fieldName: string, fillState: FillState): string {
+  const phrase = STATE_PHRASES[fillState];
+  return phrase ? `${fieldName}: ${phrase}` : fieldName;
+}
+
 export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   field,
   rawValue,
@@ -124,11 +161,15 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // contradict it.
   const clickable = !!onClick && !isDimmed;
   const activate = clickable ? () => onClick(field.id) : undefined;
+  // The accessible name carries the STATE in both modes, because the colour
+  // does not reach assistive tech at all (bd polyglot-pdf-sagh6).
+  const accessibleName = accessibleNameFor(field.name, fillState);
+
   const interactiveProps = clickable
     ? {
         role: 'button' as const,
         tabIndex: 0,
-        'aria-label': `Edit ${field.name}`,
+        'aria-label': `Edit ${accessibleName}`,
         onClick: activate,
         onKeyDown: (e: React.KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -138,7 +179,19 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
         },
         style: { pointerEvents: 'auto' as const, cursor: 'pointer' },
       }
-    : { style: {} };
+    : {
+        // A NON-clickable overlay had no role and no name whatsoever, so a
+        // read-only or dimmed field was entirely absent from the accessibility
+        // tree -- not merely missing its state (measured before fixing).
+        //
+        // role="img" rather than a bare labelled div: an aria-label on a div
+        // with no role is not reliably announced, because such a node is not
+        // nameable. "img" is also honest about what this is -- a graphic whose
+        // colour stands for a state.
+        role: 'img' as const,
+        'aria-label': accessibleName,
+        style: {},
+      };
 
   const pos = pdfToScreenCoords(field.pdf_position, scale);
 

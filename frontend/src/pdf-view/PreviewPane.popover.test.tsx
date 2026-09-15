@@ -90,7 +90,10 @@ describe('PreviewPane click-to-edit state (bd polyglot-pdf-7esr)', () => {
     renderPane(); // has_apt unset -> apt is dimmed
     const dimmedBox = screen.getByTestId('pdf-field-overlay-apt');
     expect(dimmedBox.getAttribute('data-dimmed')).toBe('true');
-    expect(dimmedBox.getAttribute('role')).toBeNull();
+    // Not a BUTTON. A non-clickable overlay is now named for assistive tech
+    // (role="img" + the state), which it was not before (bd
+    // polyglot-pdf-sagh6); being named is not being interactive.
+    expect(dimmedBox.getAttribute('role')).not.toBe('button');
     fireEvent.click(dimmedBox);
     expect(screen.queryByTestId('pdf-field-edit-popover-apt')).toBeNull();
   });
@@ -100,7 +103,7 @@ describe('PreviewPane click-to-edit state (bd polyglot-pdf-7esr)', () => {
       <PreviewPane pdfUrl="/fake.pdf" schema={schema} fieldValues={{}} currentFieldId={null} />
     );
     const box = screen.getByTestId('pdf-field-overlay-name');
-    expect(box.getAttribute('role')).toBeNull();
+    expect(box.getAttribute('role')).not.toBe('button');
     fireEvent.click(box);
     expect(screen.queryByTestId('pdf-field-edit-popover-name')).toBeNull();
   });
