@@ -735,3 +735,22 @@ def test_resume_form_parse_returns_promptly_when_under_the_timeout(client, monke
     }
     resp = tc.post("/api/resume-form", json=body)
     assert resp.status_code != 408
+
+
+@pytest.mark.asyncio
+async def test_starlette_request_replays_a_cached_body():
+    """Pin the private Starlette contract _BodyCapRoute relies on: bytes placed
+    on `request._body` are what `await request.body()` AND `request.stream()`
+    hand back, so the normal parse replays the capped read instead of finding
+    an exhausted stream. A Starlette upgrade that renames the cache attribute
+    turns this red before it turns the cap into a silent parse failure."""
+    from starlette.requests import Request
+
+    async def receive():  # pragma: no cover -- must never be consulted
+        raise AssertionError("the cached body must be replayed, not re-read")
+
+    request = Request({"type": "http", "method": "POST", "headers": []}, receive)
+    request._body = b"cached-by-the-cap"  # noqa: SLF001 -- the contract under test
+    assert await request.body() == b"cached-by-the-cap"
+    chunks = [chunk async for chunk in request.stream()]
+    assert b"".join(chunks) == b"cached-by-the-cap"

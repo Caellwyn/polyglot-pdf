@@ -3,15 +3,19 @@
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-6088m, sprint 23 C4: `/api/fill-pdf`
-and `/api/resume-form` now refuse an over-cap body via Content-Length before
-FastAPI finishes parsing it -- `/fill-pdf` against `MAX_UPLOAD_MB`, `/resume-form`
-against its own larger `_MAX_RESUME_BODY_BYTES` (base64 inflates the JSON
-envelope past MAX_UPLOAD_MB for a legitimate few-MB saved form). `/resume-form`
-also checks the base64 STRING LENGTH before decoding -- `b64decode` used to run
-first, so an attacker paid nothing extra to force a large decode -- and its
-`fitz.open` + structural-comparison parse now runs in a thread bounded by
-`RESUME_FORM_PARSE_TIMEOUT_S` (default 8s), returning 408 on timeout rather than
-blocking the request indefinitely.)*
+and `/api/resume-form` refuse an over-cap body BYTE-ACCURATELY before FastAPI
+parses it -- the router's `_BodyCapRoute` wrapper consumes `request.stream()`
+counting bytes, answers 413 the instant the total exceeds the route's cap
+(`MAX_UPLOAD_MB` for `/fill-pdf`, read at call time; `_MAX_RESUME_BODY_BYTES` for
+`/resume-form`, since base64 inflates a legitimate few-MB saved form past
+MAX_UPLOAD_MB), and caches the accepted bytes where Starlette's `body()` looks
+for them so the normal parse replays them; a Content-Length header is only a
+fast pre-check, never the guard, because it is caller-controlled and optional.
+`/resume-form` also checks the base64 STRING LENGTH before decoding, and its
+`fitz.open` + structural-comparison parse runs in a small dedicated thread pool
+bounded by `RESUME_FORM_PARSE_TIMEOUT_S` (default 8s), returning 408 on timeout.
+Pinned by `backend/tests/unit/test_upload_caps.py`, which drives the app through
+`httpx.ASGITransport` because `TestClient` buffers a streaming body.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
