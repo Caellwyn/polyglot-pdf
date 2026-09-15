@@ -73,6 +73,17 @@ import sys
 import time
 from pathlib import Path
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 # Force UTF-8 on the hook's streams so a stray non-ASCII byte in stdin/echo never
 # crashes on Windows' cp1252 default (the same guard bd_prime.py uses). Guarded
 # because reconfigure() can be absent or raise on a detached stream.
@@ -98,6 +109,7 @@ def _runtime_dir() -> Path:
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=10,
+            creationflags=windowless_creationflags(),
         )
         if proc.returncode == 0 and (proc.stdout or "").strip():
             # parent of .../.git is the main repo root

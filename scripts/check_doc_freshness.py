@@ -122,6 +122,20 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Suppress the child console window every git.exe spawn opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). This mirrors
+# swarm_config.windowless_creationflags(); it is duplicated rather than
+# imported because importing swarm_config has a PATH side effect and this
+# script runs from a git hook where an import failure must never be fatal.
+# getattr guards a surprise Python build: degrade to 0 (windows reappear)
+# rather than crash.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
 DOC_DIRS = ["docs/components", "docs/standards", "docs/doctrine"]
 # Freshness ACKS -- the cheap "I reviewed this doc; it is still accurate"
 # record (bd polyglot-pdf-fytzi).
@@ -247,20 +261,108 @@ ACTIVE_PLAN_ROW_RE = re.compile(
 PLAN_HREF_RE = re.compile(r"\]\(([^)]*)\)")
 
 
-def git_commit_time(path: Path) -> int | None:
-    """Return the unix timestamp of the file's last commit, or None if untracked."""
+# Last-commit times for EVERY path in history, resolved in ONE git invocation.
+# None until the first git_commit_time() call populates it (see _commit_times).
+_COMMIT_TIME_CACHE: dict[str, int] | None = None
+
+
+def _commit_times() -> dict[str, int]:
+    """Map repo-relative posix path -> unix time of the commit that last touched it.
+
+    ONE `git log` walk for the whole repo, not one `git log -1` per file. The
+    per-file shape was quadratic in practice -- this script checks N docs and
+    each doc tracks M files, so a real run spawned 263 git.exe processes and
+    took 48.7s. On Windows every one of those is a visible console window, and
+    under that load they start failing with "Not enough memory resources are
+    available"; that is the terminal cascade of bd polyglot-pdf-rdftu (same
+    shape as the bd/dolt conjoin in bd polyglot-pdf-5k32). The single walk is
+    0.6s for this repo's full history.
+
+    `git log --name-only` lists commits newest-first, so the FIRST time a path
+    appears is its last-commit time -- hence setdefault, never overwrite.
+
+    A path missing from the map has no commit touching it (untracked, or new in
+    the working tree); callers treat that as None exactly as before.
+    """
+    global _COMMIT_TIME_CACHE
+    if _COMMIT_TIME_CACHE is not None:
+        return _COMMIT_TIME_CACHE
+    times: dict[str, int] = {}
     try:
         result = subprocess.run(
-            ["git", "log", "-1", "--format=%ct", "--", str(path.relative_to(REPO_ROOT))],
+            ["git", "log", "--format=C%ct", "--name-only"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
+            creationflags=windowless_creationflags(),
         )
-        out = result.stdout.strip()
-        return int(out) if out else None
-    except (subprocess.CalledProcessError, ValueError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        # No git, or not a repo. Every lookup then reports "no commit time",
+        # which callers already handle (the doc falls back to its
+        # *Last updated:* stamp, or is reported as not-yet-committed).
+        _COMMIT_TIME_CACHE = times
+        return times
+    ct: int | None = None
+    for line in result.stdout.splitlines():
+        # Commit header lines are our own "C<digits>" sentinel. A PATH could
+        # theoretically look like that too, so require the whole line to match
+        # rather than just the prefix.
+        if line.startswith("C") and line[1:].isdigit():
+            ct = int(line[1:])
+            continue
+        name = line.strip()
+        if name and ct is not None:
+            times.setdefault(name, ct)
+    _COMMIT_TIME_CACHE = times
+    return times
+
+
+# Prefix-max over the commit-time map, memoized per directory. Kept separate
+# from _COMMIT_TIME_CACHE (exact paths) so a directory can never shadow a file.
+_DIR_TIME_CACHE: dict[str, int | None] = {}
+
+
+def _dir_commit_time(rel: str) -> int | None:
+    """Newest commit time of anything UNDER directory `rel`, or None if empty.
+
+    `git log -1 -- <dir>` reports the last commit touching anything in that
+    tree, and a **Tracks:** token is allowed to name a directory (expand_token
+    returns a non-glob path that merely exists, which includes directories).
+    The flat name->time map only holds FILES, so a directory token must be
+    answered by scanning for paths under it -- otherwise every directory token
+    silently resolved to "no commit time" and its doc stopped being flagged
+    stale. That is a SILENT under-report (the check passes when it should
+    warn), so it is the dangerous direction to get wrong.
+    """
+    if rel in _DIR_TIME_CACHE:
+        return _DIR_TIME_CACHE[rel]
+    prefix = rel.rstrip("/") + "/"
+    best: int | None = None
+    for path, ct in _commit_times().items():
+        if path.startswith(prefix) and (best is None or ct > best):
+            best = ct
+    _DIR_TIME_CACHE[rel] = best
+    return best
+
+
+def git_commit_time(path: Path) -> int | None:
+    """Return the unix timestamp of the file's last commit, or None if untracked."""
+    try:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
         return None
+    exact = _commit_times().get(rel)
+    if exact is not None:
+        return exact
+    # Not a known file path. It may be a DIRECTORY token, whose commit time is
+    # the newest commit under it (matching `git log -1 -- <dir>`). Guard on
+    # is_dir() so a plain untracked FILE still returns None as before.
+    if path.is_dir():
+        return _dir_commit_time(rel)
+    return None
 
 
 def ack_path(doc: Path) -> Path:
@@ -381,6 +483,7 @@ def git_head_sha() -> str | None:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            creationflags=windowless_creationflags(),
         )
         return result.stdout.strip() or None
     except subprocess.CalledProcessError:
@@ -396,6 +499,7 @@ def staged_files() -> set[Path]:
             capture_output=True,
             text=True,
             check=True,
+            creationflags=windowless_creationflags(),
         )
     except subprocess.CalledProcessError:
         return set()
@@ -805,6 +909,7 @@ def _tracked_files_by_basename(repo_root: Path = REPO_ROOT) -> dict[str, list[st
             capture_output=True,
             text=True,
             check=True,
+            creationflags=windowless_creationflags(),
         )
     except subprocess.CalledProcessError:
         return {}
@@ -1159,10 +1264,12 @@ def branch_ack_count(base: str = "origin/dev") -> int:
         merge_base = subprocess.run(
             ["git", "merge-base", base, "HEAD"],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            creationflags=windowless_creationflags(),
         ).stdout.strip()
         committed = subprocess.run(
             ["git", "diff", "--name-only", merge_base, "HEAD", "--", ACK_DIR],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            creationflags=windowless_creationflags(),
         ).stdout.split()
         # Uncommitted acks count too: the session made them, they just have
         # not landed yet.
@@ -1173,6 +1280,7 @@ def branch_ack_count(base: str = "origin/dev") -> int:
             # silent for exactly the case it exists to catch.
             ["git", "status", "--porcelain", "-z", "-uall", "--", ACK_DIR],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            creationflags=windowless_creationflags(),
         ).stdout
         names = {p for p in committed if p.endswith(ACK_SUFFIX)}
         names |= _porcelain_z_ack_paths(pending)

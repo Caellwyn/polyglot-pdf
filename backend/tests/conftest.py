@@ -4,6 +4,8 @@ import os
 
 import pytest
 
+from backend.tests.unit._no_real_firestore import install_no_real_firestore_guard
+
 # bd polyglot-pdf-5xhbb: strip K_SERVICE from the process environment as soon
 # as conftest.py is imported -- BEFORE pytest collects any test module. A
 # per-test autouse fixture (see _isolate_k_service below) runs too late for
@@ -57,6 +59,27 @@ def _isolate_k_service(monkeypatch):
     above, which runs before this fixture -- or any fixture -- ever could.
     """
     monkeypatch.delenv("K_SERVICE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_firestore(monkeypatch, request):
+    """Fail loudly on any unpatched real-Firestore reach (bd polyglot-pdf-21m1y).
+
+    2026-09-15: backend tests on a developer machine with gcloud ADC and a
+    quota project silently wrote 149+ real documents into the shared demo
+    project (see the bead body for the inventory) because the stores under
+    backend/services/ (alerts, usage_rollups, link_redemptions, links_store,
+    credit_ledger) lazily initialize firebase_admin with ADC and construct a
+    real google.cloud.firestore.Client the moment a test exercises them
+    without patching the store. See backend/tests/unit/_no_real_firestore.py
+    for exactly what is patched, why both targets are needed, and why every
+    EXISTING store test is untouched by this (they all patch above this
+    seam, at get_db()/_collection()/_get_db()).
+
+    OPT OUT: @pytest.mark.external, same marker that already gates the two
+    tests requiring the real Gemini Live API.
+    """
+    install_no_real_firestore_guard(monkeypatch, request)
 
 
 # bd polyglot-pdf-hn0jq: the editor moved from two shared tokens to per-user

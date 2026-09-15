@@ -2,9 +2,49 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-15 (bd `polyglot-pdf-hnlj3`: maintainer decision
+2026-09-15, "credits roll over -- no real reason not to."
+`backend/services/plans.py`'s `DEFAULT_PLAN.rollover` flips from False
+to True -- a firm created or backfilled today now ACCUMULATES its
+monthly credit allotment by default rather than being topped up TO a
+cap; the one existing firm, staging-mock, was switched to rollover by
+hand the same day, ahead of this code change. `rollover: False` is
+still a valid, settable value on the plan editor (`PATCH
+/admin/firms/{firm_id}/plan`) for a firm that should keep the
+use-it-or-lose-it cap behavior -- only the DEFAULT changed. The
+per-firm top-up logic inside `POST /admin/credits/monthly-topup`
+(`admin_backend/routes/credit_routes.py`) is factored out of its
+Scheduler-driven loop into its own function, `topup_firm(db, firm_id,
+firm, *, period, actor=None)`, with NO behavior change beyond the
+extraction -- this is what lets Epic 5's later Stripe webhook
+(invoice.paid / subscription renewal) call the same per-firm helper
+for one firm the moment its payment clears, instead of only running
+once a month; the route's own docstring now states the Cloud
+Scheduler trigger is INTERIM pending that webhook. Since rollover is
+now the default, `technical_guide.md`'s Surface contract 33 gains a
+note that "cap" describes only the non-default `rollover: False`
+case; the maintainer's own quoted 2026-09-14 words ("35 credits per
+month cap as a starting place") are left as a direct quotation, not
+edited.)*
+
 *Last updated: 2026-09-15. See [2026-09-15-bd-c92sa-admin-import-guards.md](../journal/entries/2026-09-15-bd-c92sa-admin-import-guards.md) for closeout details.*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-uaxt5: the credit-adjust `reason` is bounded to 500 characters and no longer logged -- the `admin_credits_adjusted` line carries ids and the amount only; every route that writes `admin_audit_log` now has an exact before/after key pin in `test_audit_log_shapes.py`; `scripts/audit/inventory_stores.py` is the read-only store inventory.)*
+
+*Last updated: 2026-09-15 (bd `polyglot-pdf-wxcj0`: maintainer feedback after
+first console sign-in -- "in config, true/false flags should be select
+fields, not text fields." `GET /admin/config/{channel}` gains a `schema`
+field, `{key: {type, default}}` for every `RUNTIME_CONFIG_KEYS` key, derived
+from a NEW `backend/services/runtime_config.py::KEY_TYPES` dict (the single
+place a key's type -- `bool`/`int`/`float` -- is spelled out, CLAUDE.md scar
+#8) via a new `config_schema()` helper; `default` is the SAME live
+`_legacy_env_default()` read a real fallback uses, not a frozen constant.
+`ConfigEditorPage.tsx` consumes `schema` to render a `<select>` for a bool
+key and a `step`-aware number input for an int/float key, sending the PUT a
+typed JSON value instead of the raw draft string; an unrecognized type keeps
+the original text input. No new route, IAM grant, or Firestore shape --
+`app_config/{channel}`'s stored values and `coerce_value`'s validation are
+unchanged.)*
 
 *Last updated: 2026-09-14 (bd `polyglot-pdf-362nk`: Epic 3 follow-up (b) to the maintainer's 2026-09-14 alerts decision -- FirmDetailPage.tsx gains an Alerts section over the SAME operator-wide `GET /admin/alerts?firm_id=<id>` route (bd `polyglot-pdf-mpebj`, E3.11a; NOT the separate firm-console route bd `polyglot-pdf-62o4d` added), listing this firm's alerts unacknowledged-first (a client-side stable sort -- the route's own ordering is newest-ts-first with no acknowledged-aware ordering) and Acknowledge (`PATCH /admin/alerts/{id}/acknowledge`, exactly once per click, re-reading on success only). Both this section and AlertsPage.tsx (E3.11b) now render through ONE new shared row component, `admin-console/src/components/AlertRow.tsx`, extracted byte-for-byte from AlertsPage.tsx's own inline row markup so the kind/level/plain-text rendering cannot drift into two copies; `showFirm` toggles the Firm column AlertsPage needs (cross-firm view) and FirmDetailPage does not (already scoped to one firm). A failed alerts fetch on FirmDetailPage sets its OWN isolated error state, never the page's shared `error`/`firm` state -- a fetch error there never blanks the profile/plan/ledger/links already rendered above it. No new route, IAM grant, or `adminApi.ts` function -- `listAlerts`/`acknowledgeAlert` already existed from E3.11b.)*
 
@@ -775,7 +815,18 @@ one.
   console's own build SHA), Audit log (`components/AuditLogPage.tsx` --
   lists/filters `GET /admin/audit`), Runtime config
   (`components/ConfigEditorPage.tsx` -- reads/writes `GET`/`PUT
-  /admin/config/{channel}`), Users (`pages/UsersPage.tsx`, bd
+  /admin/config/{channel}`; SCHEMA-DRIVEN controls, bd polyglot-pdf-wxcj0:
+  the GET response's `schema` map, `{key: {type, default}}` derived
+  server-side from `backend/services/runtime_config.py`'s new `KEY_TYPES`
+  dict via its `config_schema()` helper, is the ONLY thing this page
+  consults to pick a control -- never a key-name pattern or a second
+  hand-typed list (CLAUDE.md scar #8). A `bool` key renders a `<select>`
+  (true/false, plus an "unset -- use the fallback" placeholder option); an
+  `int`/`float` key renders a number input (`step="1"` or `step="any"`);
+  any other/unrecognized type falls back to the original text input. The PUT
+  body always sends a TYPED JSON value -- a real boolean or JS number, never
+  the string `"true"` -- so `runtime_config.coerce_value` on the server sees
+  the type it expects), Users (`pages/UsersPage.tsx`, bd
   polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
   `components/`: it drives four routes and two mutations with a re-read
   each, past the point a single-file "page" component was the more natural

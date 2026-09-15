@@ -242,6 +242,20 @@ def _resolve_exe(name: str) -> str:
     return shutil.which(name) or name
 
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+# Defined ABOVE its call site on purpose: a helper defined later raises
+# NameError from anything that runs at import time, and
+# backend/tests/unit/test_script_spawns_are_windowless.py pins that ordering.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 def _run(argv: list) -> "tuple[int, str, str]":
     """Run a subprocess, stdout/stderr captured SEPARATELY (never merged --
     a component-update nag on stderr must never corrupt a stdout parse)."""
@@ -250,6 +264,7 @@ def _run(argv: list) -> "tuple[int, str, str]":
         proc = subprocess.run(
             argv, capture_output=True, text=True, encoding="utf-8",
             errors="replace",
+            creationflags=windowless_creationflags(),
         )
     except OSError as exc:
         return 127, "", "{}: {}".format(type(exc).__name__, exc)

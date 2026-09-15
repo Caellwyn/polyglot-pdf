@@ -115,6 +115,25 @@ def test_a_second_refusal_for_the_SAME_jti_writes_no_new_doc(store):
     assert doc["context"]["spend_usd"] == pytest.approx(11.0)
 
 
+@pytest.mark.parametrize("jti", [None, "", 123], ids=["none", "empty", "int"])
+def test_record_link_exhausted_ignores_a_missing_or_non_string_jti(
+        store, jti):
+    """bd polyglot-pdf-6fs96. Without a guard, a falsy/non-string jti would
+    format into the doc id as "link_exhausted_None" (or similar) -- a stray
+    doc under a key no real jti will ever match, and a doc id built from
+    something other than str(jti) that no query can find later. Mirrors
+    websocket_routes.py's _mirror_budget_exhausted, which guards the SAME
+    jti value on the SAME teardown path (test_credit_refunds.py's
+    test_websocket_budget_exhausted_mirror_ignores_a_missing_jti).
+
+    Mutation: remove the isinstance/truthiness guard -- this test goes red
+    because store.docs gains a "link_exhausted_None" (or similar) entry.
+    """
+    alerts.record_link_exhausted(jti, firm_id="acme", spend_usd=10.0,
+                                  ceiling_usd=10.0)
+    assert store.docs == {}
+
+
 def test_a_DIFFERENT_jti_gets_its_OWN_doc(store):
     alerts.record_link_exhausted("jti-a", firm_id="acme", spend_usd=10.0,
                                   ceiling_usd=10.0)

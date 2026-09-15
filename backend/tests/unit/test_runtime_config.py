@@ -548,3 +548,49 @@ def test_no_explicit_channel_resolves_via_link_channel(monkeypatch):
     _patch_db(monkeypatch, db)
 
     assert runtime_config.link_firm_cap() == 99
+# ---------------------------------------------------------------------------
+# KEY_TYPES / config_schema() (bd polyglot-pdf-wxcj0 -- the console's
+# schema-driven form).
+# ---------------------------------------------------------------------------
+
+
+def test_key_types_covers_every_runtime_config_key():
+    """ENUMERATE THE SET (CLAUDE.md scar #8): KEY_TYPES must name EVERY key
+    in RUNTIME_CONFIG_KEYS, and nothing else -- a key present in one but not
+    the other would make config_schema() either KeyError or advertise a type
+    for a key runtime_config does not actually read."""
+    assert set(runtime_config.KEY_TYPES) == set(runtime_config.RUNTIME_CONFIG_KEYS)
+
+
+def test_key_types_matches_each_keys_documented_type():
+    """Pins the CONCRETE type mapping, not just set-equality -- a swap
+    between two keys' types would pass the coverage test above but still be
+    wrong."""
+    assert runtime_config.KEY_TYPES[runtime_config.KEY_LINK_MINTING_ENABLED] == "bool"
+    assert runtime_config.KEY_TYPES[runtime_config.KEY_LINK_COST_CEILING_USD] == "float"
+    assert runtime_config.KEY_TYPES[runtime_config.KEY_LINK_FIRM_CAP] == "int"
+    assert runtime_config.KEY_TYPES[runtime_config.KEY_CREDITS_ENFORCED] == "bool"
+    assert runtime_config.KEY_TYPES[runtime_config.KEY_CREDIT_LOW_THRESHOLD] == "int"
+
+
+def test_config_schema_returns_type_and_default_for_every_key():
+    """config_schema() is the ONE function the admin route's GET response
+    calls (admin_backend/routes/config_routes.py) -- pin its shape directly,
+    independent of the route's own test suite."""
+    schema = runtime_config.config_schema()
+    assert set(schema) == set(runtime_config.RUNTIME_CONFIG_KEYS)
+    for key in runtime_config.RUNTIME_CONFIG_KEYS:
+        assert schema[key]["type"] == runtime_config.KEY_TYPES[key]
+        assert schema[key]["default"] == runtime_config._legacy_env_default(key)
+
+
+def test_config_schema_default_reflects_a_live_env_override(monkeypatch):
+    """The schema's `default` is the SAME live os.getenv read a real
+    fallback uses (bd polyglot-pdf-bg313's `_legacy_env_default`) -- not a
+    compiled constant frozen at import time. Mutation: hardcode
+    config_schema() to read _ENV_DEFAULTS directly instead of calling
+    _legacy_env_default(), and this goes red because the env override below
+    would never show up."""
+    monkeypatch.setenv("LINK_FIRM_CAP", "77")
+    schema = runtime_config.config_schema()
+    assert schema[runtime_config.KEY_LINK_FIRM_CAP]["default"] == 77

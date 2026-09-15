@@ -41,7 +41,6 @@ from typing import Annotated, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from google.api_core.exceptions import FailedPrecondition, InvalidArgument
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
@@ -122,6 +121,13 @@ async def list_audit_rows(
     # backend/utils/confirmation_logger.py already makes for the same
     # reason).
     from google.cloud.firestore_v1.base_query import FieldFilter
+    # Lazy, matching every other google.* import in this route/service
+    # (this file's own FieldFilter above, get_db() below; sweep_routes.py,
+    # link_routes.py, credit_ledger.py, usage_rollups.py) -- admin_backend/
+    # main.py imports this module at module scope, so a module-scope
+    # google.* import here would take down all 13 routers on an ImportError
+    # instead of only this one route (bd polyglot-pdf-8uraj).
+    from google.api_core.exceptions import FailedPrecondition, InvalidArgument
 
     try:
         query = db.collection(audit_log.COLLECTION)

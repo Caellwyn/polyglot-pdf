@@ -150,6 +150,13 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: E402
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). This module already imports
+# swarm_config above, so use its helper rather than duplicating it -- the
+# PATH/config side effect of that import is already paid here.
+windowless_creationflags = swarm_config.windowless_creationflags
+
+
 
 def _setup_utf8_stdio() -> None:
     """Force stdout/stderr to UTF-8 so printing review text can't crash.
@@ -372,6 +379,7 @@ def _run_gh_api(path: str) -> object:
             encoding="utf-8",
             errors="replace",
             timeout=60,
+            creationflags=windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("gh api {} timed out after 60s".format(path))
@@ -1498,6 +1506,7 @@ def _close_beads_on_clean(beads: list[str]) -> int:
         ", ".join(beads), os.path.basename(finish)))
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
+            creationflags=windowless_creationflags(),
                               encoding="utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001 -- never die mid-close; report it
         _safe_print("CLOSE-FAILED: could not run {}: {!r}".format(finish, exc))

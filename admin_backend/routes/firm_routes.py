@@ -567,14 +567,17 @@ def _do_get_firm(*, firm_id: str, ledger_limit: int) -> dict:
 
     db = _db()
     doc = _get_firm_or_404(db, firm_id)
-    entries = credit_ledger.read_entries(db, firm_id, limit=None)
-    # Newest first for a console table; read_entries returns oldest-first
-    # (the replay-friendly order credit_ledger.py's own docstring names).
-    page = list(reversed(entries))[:ledger_limit]
+    # read_recent_entries reads at most ledger_limit + 1 docs regardless of
+    # how many entries this firm has ever accumulated (bd polyglot-pdf-y1t68)
+    # -- the firm's ledger has no TTL/pruning, so a full read_entries(limit=
+    # None) here would get slower and dearer for exactly the firms an
+    # operator looks at most.
+    page, truncated = credit_ledger.read_recent_entries(
+        db, firm_id, ledger_limit)
     return {
         **_public_firm_view(firm_id, doc),
         "ledger": page,
-        "ledger_truncated": len(entries) > len(page),
+        "ledger_truncated": truncated,
     }
 
 

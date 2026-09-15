@@ -234,8 +234,11 @@ def _do_list_alerts(
         rows.append((snap.id, doc))
 
     # Newest first (ts is a plain epoch float, alerts.py's own _write). A
-    # missing ts sorts last rather than crashing the comparison.
-    rows.sort(key=lambda r: (r[1].get("ts") is None, r[1].get("ts")),
+    # missing ts sorts last rather than crashing the comparison. `reverse=True`
+    # applies to the WHOLE tuple, so the has-a-ts flag must itself already be
+    # true-sorts-first (has_ts, not is_none) or reverse=True would put the
+    # missing-ts rows ahead of the newest real one (bd polyglot-pdf-xq3nb).
+    rows.sort(key=lambda r: (r[1].get("ts") is not None, r[1].get("ts") or 0),
              reverse=True)
     return [_public_alert_view(doc_id, doc) for doc_id, doc in
             rows[:_PAGE_LIMIT]]
@@ -323,7 +326,10 @@ def _do_list_firm_alerts(
                 continue
         rows.append((snap.id, doc))
 
-    rows.sort(key=lambda r: (r[1].get("ts") is None, r[1].get("ts")),
+    # Newest first, missing ts last -- see list_alerts's sibling sort above
+    # for why the key uses has_ts (not is_none) under reverse=True
+    # (bd polyglot-pdf-xq3nb).
+    rows.sort(key=lambda r: (r[1].get("ts") is not None, r[1].get("ts") or 0),
              reverse=True)
     return [_public_firm_alert_view(doc_id, doc) for doc_id, doc in
             rows[:_PAGE_LIMIT]]

@@ -191,6 +191,8 @@ def record_link_exhausted(jti: str, *, firm_id: Optional[str],
     NEVER RAISES: a failure here must not turn a bookkeeping write into a
     second reason to fail a session already being refused for spend.
     """
+    if not isinstance(jti, str) or not jti:
+        return
     _write(
         "link_exhausted_{}".format(jti),
         firm_id=firm_id,

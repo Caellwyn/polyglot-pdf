@@ -1,8 +1,12 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-o4f7c: `scripts/verify_service_reachable.py` resolves the gcloud binary through `shutil.which` and turns a spawn failure into the gate's warn-and-continue path instead of a traceback -- see "The reachability gate is ONE module". No env var, deploy step or config key changed.) (bd polyglot-pdf-p4ale, E4.5: `scripts/setup-cloud-build.sh` now provisions `polyglot-cloudbuild-sa` itself -- creates the SA, grants it `run.admin`/`firebasehosting.admin`/`firebaserules.admin`/`artifactregistry.writer`/`logging.logWriter`/`datastore.user` project-wide and `storage.objectAdmin` on the form-kits bucket only, then grants it resource-scoped actAs (`roles/iam.serviceAccountUser`) on BOTH `polyglot-backend-sa` and `admin-backend-sa`, and grants the Pub/Sub service agent `roles/iam.serviceAccountTokenCreator` for bead 4.3's future build-status webhook -- so every trigger's `--service-account` now names an identity this same script actually provisions and roles, pinned by the new `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` and `tests/test_setup_cloud_build_script.py`. `scripts/setup-admin-service.sh` gains the mirror-image grant -- `admin-backend-sa` actAs on `polyglot-cloudbuild-sa` ONLY, resource-scoped -- so the admin service's future trigger route can submit a build that runs as the build identity; `roles/run.admin` and `roles/firebasehosting.admin` are deleted (not deferred) from that script's DEFERRED_ROLES because the admin service never deploys anything itself.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-3bsyv: `frontend/vite.config.schema.ts`'s
+`base` is now `'/'` (absolute), not `'./'` -- see "Asset base MUST be
+absolute" under Frontend deploy below. No env var or deploy step changed.)*
+
+*Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -33,7 +37,10 @@ which bypasses the cache).
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
-  `EXTRACTOR_MAX_PDF_MB`.
+  `EXTRACTOR_MAX_PDF_MB`, `RESUME_FORM_PARSE_TIMEOUT_S` (default `8.0` --
+  wall-clock cap on `/api/resume-form`'s `fitz.open` + structural-comparison
+  parse, run in a thread so the cap can actually interrupt it; see
+  [pdf-filling.md](pdf-filling.md)).
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -596,6 +603,27 @@ the gate crying wolf. The counts are pinned per script.
   local dev build or a bare `vite build` never silently claims to be
   `staging`, and a typo'd value never mints a `channel` the admin service's
   own `KNOWN_CHANNELS` check would 404.
+- **Asset base MUST be absolute (`base: '/'`), never relative** (bd
+  `polyglot-pdf-3bsyv`). `frontend/vite.config.schema.ts` used to set
+  `base: './'`, so `index.html` referenced `./assets/...` — resolved by the
+  browser against the CURRENT PATH, not the site root. This app is always
+  served from a Hosting site ROOT (`app`/`app-staging` in the table above) or
+  from dev-local's root, never from a subdirectory, so the relative form was
+  never correct: a cold load at any path carrying a segment
+  (`/console/links`, `/console/employees`)
+  asked for `/console/assets/...`, which does not exist, and the `**` ->
+  `/index.html` catch-all rewrite (`firebase.json`, same file referenced
+  above) answered with HTML — the browser then refuses the module script
+  ("Expected a JavaScript-or-Wasm module script but the server responded
+  with a MIME type of text/html"). Only the site root ever worked on a cold
+  load; client-side navigation FROM the root hid the bug (no asset re-fetch),
+  which is why it shipped undetected. Pinned by
+  `frontend/src/shared/buildAbsoluteAssetBase.test.ts` (a static read of the
+  config's `base` value plus a real production build asserting the emitted
+  `index.html` references `/assets/` absolutely). `schema-editor/vite.config.ts`
+  and `admin-console/vite.config.ts` carry no `base` override at all, so both
+  already default to Vite's own absolute `/` — this bug was unique to this
+  app's config.
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
   **`deploy-demo.sh` wrapper**, not `deploy-all.sh`, runs
@@ -882,3 +910,28 @@ above for how both env vars are injected at deploy time, and Surface contract
 > is **no active prod**. The agent may run the demo deploy under a three-part gate
 > (local-test-first + per-instance permission + post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
+
+## Live infrastructure posture (read-only)
+
+`scripts/audit/infra_posture.sh --project <PROJECT_ID>` is the recurring,
+read-only runbook for verifying the LIVE deployed environment matches this
+doc and the repo's offline IAM pins (sprint 23 security-audit workstream D,
+bd `polyglot-pdf-m1dlv`). Under the operator's own `gcloud`/`bq` ADC — never
+a service-account key, and never a mutating call — it checks the
+project IAM policy, both runtime service accounts' roles against
+`backend/tests/unit/test_deployed_iam_envelope.py` and
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`, every Cloud Run
+service's env vars (no secret-shaped value, no dev/bypass flag, no verbosity
+knob) and secret bindings, the form-kits bucket's IAM and access-prevention
+settings, whether the deployed Firestore rules match the repo file (read via
+the Firebase Rules REST API directly, `curl` + the operator's own access
+token — the `firebase` CLI ships no subcommand for reading a ruleset's
+content), Cloud Logging retention/sinks/exclusions, BigQuery ACLs, Firebase
+Auth settings (read the same way, via the Identity Toolkit Admin REST API),
+Hosting response headers per site, container scan status, Cloud Build log
+content, and the Vertex/Cloud-TTS third-party-processor opt-out settings.
+Every check ends `PASS`, `FAIL`, or `N/A: <reason>` — never a silent skip —
+so a permission gap or a broken local tool (e.g. this operator's `bq` CLI)
+reports its own reason rather than aborting the run. `tests/test_infra_posture_script.py`
+pins the script's shipped check list the same way
+`tests/test_setup_monitoring_script.py` pins that script's metrics/policies.

@@ -55,6 +55,17 @@ import subprocess
 import sys
 from typing import Callable
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 Runner = Callable[[list], "tuple[int, str, str]"]
 
 
@@ -87,6 +98,7 @@ def _default_gcloud_runner(argv: list) -> "tuple[int, str, str]":
             text=True,
             encoding="utf-8",
             errors="replace",
+            creationflags=windowless_creationflags(),
         )
     except OSError as exc:
         return 127, "", "{}: {}".format(type(exc).__name__, exc)

@@ -20,7 +20,7 @@ export type PaintedValue =
   | { kind: 'text'; text: string };
 
 /** Resolve an option value (slug) to its human label. */
-function optionLabel(field: FormField, value: string): string {
+export function optionLabel(field: FormField, value: string): string {
   const opt = field.options?.find((o) => o.value === value);
   return opt?.label ?? value;
 }

@@ -78,8 +78,13 @@ def test_two_concurrent_cli_calls_in_one_pid_do_not_share_a_scratch_file(
     seen_paths = []
     barrier = threading.Barrier(2, timeout=10)
 
+    # **kwargs, not a fixed signature: this stands in for subprocess.run, so
+    # it must tolerate any keyword the caller legitimately passes. Pinning the
+    # exact set made this test fail the moment creationflags= was added for the
+    # Windows console-window fix (bd polyglot-pdf-rdftu) -- a stub breaking on
+    # a change that is correct for the code under test is a false alarm.
     def fake_run(cmd, input=None, capture_output=None, text=None,
-                 encoding=None, timeout=None):
+                 encoding=None, timeout=None, **kwargs):
         # The scratch path is the last line of the wrapped prompt's path line.
         path = input.split("to this exact file path:\n  ")[1].split("\n")[0]
         seen_paths.append(path)
