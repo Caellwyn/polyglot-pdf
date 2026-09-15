@@ -29,6 +29,10 @@ import os
 
 import pytest
 
+from backend.tests.unit._no_real_firestore import (
+    install_no_real_firestore_guard,
+)
+
 os.environ.pop("K_SERVICE", None)
 
 
@@ -43,3 +47,21 @@ def _isolate_k_service(monkeypatch):
     against) this delenv.
     """
     monkeypatch.delenv("K_SERVICE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_firestore(monkeypatch, request):
+    """Fail loudly on any unpatched real-Firestore reach (bd polyglot-pdf-21m1y).
+
+    Shares its implementation with backend/tests/conftest.py's fixture of the
+    same name -- see backend/tests/unit/_no_real_firestore.py for what is
+    patched and why. Imported rather than reimplemented because admin_backend
+    already imports backend.services.* for shared logic (this repo's own
+    architecture doc: admin_backend is a sibling package built ON backend, not
+    a duplicate of it) -- a second copy of this guard would be exactly the
+    kind of set CLAUDE.md scar #8 warns against fixing once and then finding
+    again piecemeal.
+
+    OPT OUT: @pytest.mark.external, same marker used across the whole repo.
+    """
+    install_no_real_firestore_guard(monkeypatch, request)
