@@ -9,12 +9,11 @@ None fails a test until an operator reads the page and fills it in.
 TEXT_GENERATION_PRICING was verified against ai.google.dev/gemini-api/docs/pricing
 on 2026-09-09 and is complete.
 
-TTS_PRICING_USD_PER_CHAR is NOT: cloud.google.com/text-to-speech/pricing could
-not be fetched on 2026-09-09 (the page truncates before its pricing table, and
-the /docs/pricing alias 301s to a host that 404s). The Chirp3-HD row is
-therefore None and test_tts_pricing_is_filled_in below FAILS ON PURPOSE. That
-failure is the TODO: it is the mechanism that stops this shipping half-done, and
-it is removed by filling the rate in, not by deleting the test.
+TTS_PRICING_USD_PER_CHAR is complete too: the Chirp 3 HD rate was read from
+cloud.google.com/text-to-speech/pricing by the maintainer on 2026-09-14 (the
+page would not load for an automated fetch on 2026-09-09) and is dated beside
+the row. test_tts_pricing_is_filled_in below is the gate that keeps every tier
+verified: a new tier added as None fails it until its rate is sourced.
 
 The Live table (GEMINI_PRICING_BY_FAMILY) is a separate product and is NOT
 covered here -- it prices the native-audio Live endpoint, not generate_content.
@@ -167,42 +166,25 @@ def test_tts_pricing_table_has_a_chirp3_hd_row():
     """The one tier this app synthesizes with is represented in the table."""
     assert "Chirp3-HD" in TTS_PRICING_USD_PER_CHAR, (
         "every voice this app can resolve is a Chirp3-HD voice; the table must "
-        "carry that tier even while its rate is unverified"
+        "carry that tier"
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Chirp3-HD rate is unverified: cloud.google.com/text-to-speech/pricing "
-        "was unfetchable on 2026-09-09. STRICT -- filling the rate in turns this "
-        "RED, which is the prompt to delete this marker."
-    ),
-)
 def test_tts_pricing_is_filled_in():
-    """The TODO gate: xfail(strict) until the Chirp3-HD rate is verified.
+    """Every TTS tier carries a verified, positive per-character rate.
 
-    This is the bead's explicit TODO gate, not an oversight. It is marked
-    xfail(strict=True) rather than left plainly failing because a
-    permanently-red test would leave the whole suite red for every unrelated
-    change, and a suite that is always red stops being read. The forcing
-    function is unchanged: the moment someone fills the rate in, this XPASSes
-    and pytest reports a FAILURE, demanding the marker come off.
-
-    To resolve it:
-    read the per-character (or per-1M-character) Chirp 3 HD price from
-    https://cloud.google.com/text-to-speech/pricing, put it in
-    TTS_PRICING_USD_PER_CHAR with a dated comment in the shape the Gemini table
-    uses, and this test goes green on its own. Do NOT delete the test, and do
-    not fill the rate in from memory -- an unsourced number here quietly
-    mis-bills every spell-back, notice and intro clip.
+    A tier whose rate is None is one nobody has verified against the live
+    pricing page yet, and a None row makes every clip on that tier bill as
+    cost_estimate_usd=None. This test refuses that state: add the rate with a
+    dated, sourced comment in the shape the Gemini table uses (never a number
+    from memory -- an unsourced rate quietly mis-bills every spell-back, notice
+    and intro clip), and the test goes green on its own.
     """
     unverified = [tier for tier, rate in TTS_PRICING_USD_PER_CHAR.items() if rate is None]
     assert not unverified, (
         "UNVERIFIED TTS rate(s): " + ", ".join(sorted(unverified)) + ". "
-        "cloud.google.com/text-to-speech/pricing was unfetchable on 2026-09-09; "
-        "an operator must read the live page and fill the rate in. This failure "
-        "is the TODO -- see the module docstring."
+        "read the live page (cloud.google.com/text-to-speech/pricing) and fill "
+        "the rate in with a dated, sourced comment -- see the module docstring."
     )
 
 

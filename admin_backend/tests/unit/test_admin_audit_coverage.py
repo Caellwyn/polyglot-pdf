@@ -93,8 +93,16 @@ MUTATION_KINDS = {
     ("PATCH", "/admin/firms/{firm_id}/status"): MUTATION_KIND_FIRESTORE,
     ("PATCH", "/admin/firms/{firm_id}/allowed_kits"): MUTATION_KIND_FIRESTORE,
     ("PATCH", "/admin/firms/{firm_id}/kind"): MUTATION_KIND_FIRESTORE,
+    # Firm plan (bd polyglot-pdf-0euzk). Opens its OWN transaction via
+    # _apply_firm_patch (mirrors the status/allowed_kits/kind routes right
+    # above it) -- there is no other writer's transaction to join.
+    ("PATCH", "/admin/firms/{firm_id}/plan"): MUTATION_KIND_FIRESTORE,
     ("POST", "/admin/firms/{firm_id}/credits/grant"): MUTATION_KIND_FIRESTORE,
     ("POST", "/admin/firms/{firm_id}/credits/adjust"): MUTATION_KIND_FIRESTORE,
+    # Monthly plan top-up (bd polyglot-pdf-0euzk). Same extra_writes-
+    # delegated shape as grant/adjust right above -- joins credit_ledger.
+    # append_entry's OWN transaction per firm via its extra_writes hook.
+    ("POST", "/admin/credits/monthly-topup"): MUTATION_KIND_FIRESTORE,
     # The sweep route joins bead A5's refund_expired_link transaction in
     # backend/services/credit_ledger.py via that function's extra_writes
     # seam (bd polyglot-pdf-8vgfh) -- the identical delegated-write shape

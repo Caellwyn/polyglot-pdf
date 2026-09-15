@@ -28,11 +28,13 @@ const FIRM_A = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: [],
   balance_credits: 120,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 const FIRM_B = {
   firm_id: 'firm-b', name: 'Beta Legal', contact_email: 'ops@beta.test',
   kind: 'mock' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 0,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 
 beforeEach(() => {

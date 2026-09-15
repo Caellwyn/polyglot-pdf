@@ -1,0 +1,104 @@
+{
+  "_why": "applyResume.test.ts tests section landing against the REAL shipped W-7 (an invented fixture cannot falsify an invented assumption), but no kit lives in git any more (PR #780). This is a mechanical projection of the real schema: exactly the keys applyResume.ts reads -- schema.sections[].id and schema.sections[].fields (field-id strings, the real shape). The test prefers a live form-kits/w7/schema.json when the checkout has one.",
+  "_source": {
+    "path": "gs://polyglot-demo-aa709-form-kits/form-kits/w7/schema.json",
+    "sha256": "3f41d35dcc66ed91fe79d19d94c031264a89acdb810da6e72f4e9a416ee5c6aa",
+    "copied": "2026-09-14",
+    "refresh": "gcloud storage cat gs://polyglot-demo-aa709-form-kits/form-kits/w7/schema.json | python scripts/freeze_w7_sections.py"
+  },
+  "sections": [
+    {
+      "id": "sec_page_1_top_p1",
+      "fields": [
+        "application_type",
+        "reason",
+        "relationship_to_us_person",
+        "us_person_name_ssn_itin",
+        "reason_h_details",
+        "treaty_country",
+        "treaty_article_number"
+      ]
+    },
+    {
+      "id": "sec_name_p1",
+      "fields": [
+        "name_1a_first",
+        "name_1a_middle",
+        "name_1a_last",
+        "name_1b_first",
+        "name_1b_middle",
+        "name_1b_last"
+      ]
+    },
+    {
+      "id": "sec_applicant_s_mailing_address_p1",
+      "fields": [
+        "mailing_street",
+        "mailing_city_state_country"
+      ]
+    },
+    {
+      "id": "sec_foreign_non_u_s_address_p1",
+      "fields": [
+        "foreign_street",
+        "foreign_city_state_country"
+      ]
+    },
+    {
+      "id": "sec_birth_information_p1",
+      "fields": [
+        "sex",
+        "date_of_birth",
+        "country_of_birth",
+        "city_state_of_birth"
+      ]
+    },
+    {
+      "id": "sec_other_information_p1",
+      "fields": [
+        "countries_of_citizenship",
+        "foreign_tax_id_number",
+        "us_visa_type_number_expiration",
+        "id_document_other_detail",
+        "id_document_type",
+        "id_document_issued_by",
+        "id_document_number",
+        "id_document_expiration_date",
+        "date_of_entry_us",
+        "previously_received_itin_or_irsn",
+        "itin_part1",
+        "itin_part2",
+        "itin_part3",
+        "irsn_part1",
+        "irsn_part2",
+        "irsn_part3",
+        "itin_issued_first_name",
+        "itin_issued_middle_name",
+        "itin_issued_last_name",
+        "college_or_company_name",
+        "college_city_and_state",
+        "length_of_stay"
+      ]
+    },
+    {
+      "id": "sec_sign_here_p1",
+      "fields": [
+        "phone_number",
+        "name_of_delegate",
+        "delegate_relationship"
+      ]
+    },
+    {
+      "id": "sec_acceptance_agent_s_use_only_p1",
+      "fields": [
+        "agent_phone",
+        "agent_fax",
+        "agent_ein",
+        "agent_ptin",
+        "agent_name_and_title",
+        "agent_company_name",
+        "agent_office_code"
+      ]
+    }
+  ]
+}

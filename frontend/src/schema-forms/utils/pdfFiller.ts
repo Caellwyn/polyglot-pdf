@@ -107,16 +107,10 @@ export async function fillPDF(
   const backendUrl = getBackendHttpUrl();
   console.log('[pdfFiller] Calling backend to fill PDF:', pdfUrl, 'kit:', kitId);
   console.log('[pdfFiller] Backend URL:', backendUrl);
-  console.log('[pdfFiller] Field values to fill:', Object.keys(fieldValues).length);
 
-  // DEBUG: Log radio/checkbox values specifically
-  console.log('[pdfFiller] === RADIO/CHECKBOX VALUES ===');
-  Object.entries(fieldValues).forEach(([key, value]) => {
-    if (key.includes('checkbox') || key.includes('male')) {
-      console.log(`  ${key} = ${JSON.stringify(value)}`);
-    }
-  });
-  console.log('[pdfFiller] === END RADIO/CHECKBOX VALUES ===');
+  // Field values are never logged here (bd polyglot-pdf-8v8i7): a shared
+  // law-office device's console must not carry client PII, including
+  // radio/checkbox answers.
 
   // Explicit manifest filename first; URL-split is the legacy fallback (it
   // breaks on backend-route paths -- see the pdfFile param note above).
@@ -135,11 +129,13 @@ export async function fillPDF(
     requestPayload.form_session_id = formSessionId;
   }
 
+  // Diagnostic counts only -- never the field VALUES (bd polyglot-pdf-8v8i7).
+  const fieldCount = Object.keys(fieldValues).length;
   console.log('[pdfFiller] Request URL:', `${backendUrl}/api/fill-pdf`);
   console.log('[pdfFiller] Request payload:', {
     kit_id: kitId,
     pdf_filename: pdfFilename,
-    field_count: Object.keys(fieldValues).length,
+    field_count: fieldCount,
     schema_fields: schema.fields?.length || 0,
   });
 

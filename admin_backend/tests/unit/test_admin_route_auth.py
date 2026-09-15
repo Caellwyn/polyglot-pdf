@@ -30,17 +30,26 @@ FOUR exist (bd polyglot-pdf-8vgfh landed the last one):
     push route will be its second.
 
 A FIFTH gate, ADDED SEPARATELY from the plan's own four (bd
-polyglot-pdf-scaig): require_app_admin_or_owning_manager_or_employee, the
-ONLY gate on GET /admin/firms/{firm_id}/links. An employee-role staff
-account has no seat in the plan's four-name vocabulary at all (an employee
-is neither an app admin nor a firm manager), so letting an employee reach
-their own link history needed a gate the plan's four never described,
-rather than silently widening require_app_admin_or_owning_manager (which
-would also widen the four /admin/users routes to accept an employee --
+polyglot-pdf-scaig): require_app_admin_or_owning_manager_or_employee,
+originally the ONLY gate on GET /admin/firms/{firm_id}/links, WIDENED (bd
+polyglot-pdf-62o4d) to two more routes -- GET /admin/firms/{firm_id}/alerts
+and PATCH /admin/alerts/{alert_id}/acknowledge -- so a firm manager or
+employee can read their own firm's alerts, and a manager can acknowledge
+one. An employee-role staff account has no seat in the plan's four-name
+vocabulary at all (an employee is neither an app admin nor a firm
+manager), so letting an employee reach their own link history (and now
+their own alerts) needed a gate the plan's four never described, rather
+than silently widening require_app_admin_or_owning_manager (which would
+also widen the four /admin/users routes to accept an employee --
 test_composite_gate.py pins that as a 403 through that name on purpose).
-Kept OUT of _OTHER_GATE_NAMES below and pinned instead on its one route
-directly (test_admin_link_routes.py), exactly as require_google_oidc's
-specific route is pinned beyond the generic four-gate set check.
+Acknowledge additionally refuses an employee INSIDE THE ROUTE BODY (see
+alert_routes.py's own docstring for why that refusal is not a sixth,
+narrower dependency) -- a distinction this file's dependency-only pins
+cannot see, so it is pinned instead in test_alert_routes.py. Kept OUT of
+_OTHER_GATE_NAMES below and pinned instead on its named routes directly
+(test_admin_link_routes.py; test_firm_scoped_alert_routes_carry_the_
+fifth_gate_specifically below), exactly as require_google_oidc's specific
+route is pinned beyond the generic four-gate set check.
 
 /health and /version are the deliberate exception (pinned separately in
 test_admin_health.py): the unauthenticated liveness/identity probe.
@@ -152,17 +161,23 @@ def test_every_business_route_carries_exactly_one_of_the_four_gates():
     )
 
 
-def test_only_the_link_listing_route_carries_the_fifth_gate():
+def test_only_the_named_routes_carry_the_fifth_gate():
     """The fifth gate (require_app_admin_or_owning_manager_or_employee, bd
-    polyglot-pdf-scaig) is scoped to ONE route on purpose -- see that
+    polyglot-pdf-scaig; widened to two more routes by bd polyglot-pdf-62o4d)
+    is scoped to a SMALL, NAMED set of routes on purpose -- see that
     function's own docstring for why an employee must not reach any other
-    composite route. Mutation: wire it onto a second route (e.g. revoke) --
-    red."""
-    carriers = [
+    composite route. Mutation: wire it onto a route outside this set (e.g.
+    revoke, which deliberately keeps the narrower
+    require_app_admin_or_owning_manager) -- red."""
+    carriers = {
         route.path for route in _business_routes()
         if _FIFTH_GATE_NAME in _dependency_names_for(route)
-    ]
-    assert carriers == ["/admin/firms/{firm_id}/links"]
+    }
+    assert carriers == {
+        "/admin/firms/{firm_id}/links",
+        "/admin/firms/{firm_id}/alerts",
+        "/admin/alerts/{alert_id}/acknowledge",
+    }
 
 
 def test_the_registered_route_set_is_pinned():
@@ -188,8 +203,10 @@ def test_the_registered_route_set_is_pinned():
         (("PATCH",), "/admin/firms/{firm_id}/status"),
         (("PATCH",), "/admin/firms/{firm_id}/allowed_kits"),
         (("PATCH",), "/admin/firms/{firm_id}/kind"),
+        (("PATCH",), "/admin/firms/{firm_id}/plan"),
         (("POST",), "/admin/firms/{firm_id}/credits/grant"),
         (("POST",), "/admin/firms/{firm_id}/credits/adjust"),
+        (("POST",), "/admin/credits/monthly-topup"),
         (("POST",), "/admin/links/sweep-expired"),
         (("GET",), "/admin/firms/{firm_id}/links"),
         (("POST",), "/admin/links/{jti}/revoke"),
@@ -201,6 +218,7 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/reports/cost"),
         (("GET",), "/admin/reports/income"),
         (("GET",), "/admin/alerts"),
+        (("GET",), "/admin/firms/{firm_id}/alerts"),
         (("PATCH",), "/admin/alerts/{alert_id}/acknowledge"),
         (("GET",), "/admin/errors"),
         (("GET",), "/admin/health"),
@@ -255,13 +273,31 @@ def test_kit_usage_and_report_and_alert_and_ops_routes_are_gated_by_require_app_
         "/admin/reports/cost",
         "/admin/reports/income",
         "/admin/alerts",
-        "/admin/alerts/{alert_id}/acknowledge",
         "/admin/errors",
         "/admin/health",
     )
-    for path in admin_only_paths:
+    for admin_path in admin_only_paths:
+        route = next(r for r in app.routes if r.path == admin_path)
+        assert _dependency_names_for(route) == {"require_app_admin"}, admin_path
+
+
+def test_firm_scoped_alert_routes_carry_the_fifth_gate_specifically():
+    """GET /admin/firms/{firm_id}/alerts and PATCH /admin/alerts/{alert_id}/
+    acknowledge (bd polyglot-pdf-62o4d) carry
+    require_app_admin_or_owning_manager_or_employee, NOT the plain
+    require_app_admin the OPERATOR-WIDE GET /admin/alerts still carries
+    (pinned separately above) -- a firm manager or employee must reach
+    their own firm's alerts and (for a manager) acknowledge them; an
+    employee's REFUSAL to acknowledge is enforced inside the route body,
+    not the dependency (see alert_routes.py's own docstring), so it is NOT
+    visible to this dependency-only pin. Mutation: swap either route's
+    dependency for require_app_admin -- red."""
+    for path in (
+        "/admin/firms/{firm_id}/alerts",
+        "/admin/alerts/{alert_id}/acknowledge",
+    ):
         route = next(r for r in app.routes if r.path == path)
-        assert _dependency_names_for(route) == {"require_app_admin"}, path
+        assert _dependency_names_for(route) == {_FIFTH_GATE_NAME}, path
 
 
 def test_deploy_routes_are_gated_by_require_app_admin_specifically():
@@ -299,6 +335,18 @@ def test_sweep_route_is_gated_by_require_google_oidc_specifically():
     "_dependency"), and so does the set pin above."""
     route = next(
         r for r in app.routes if r.path == "/admin/links/sweep-expired")
+    assert _dependency_names_for(route) == {"require_google_oidc"}
+
+
+def test_monthly_topup_route_is_gated_by_require_google_oidc_specifically():
+    """Pins WHICH gate the monthly plan top-up route carries (bd
+    polyglot-pdf-0euzk) -- the SAME shape as
+    test_sweep_route_is_gated_by_require_google_oidc_specifically above,
+    since both are Cloud Scheduler callers behind require_google_oidc's
+    factory-returned closure. Mutation: swap the dependency for
+    require_app_admin on this one route -- red."""
+    route = next(
+        r for r in app.routes if r.path == "/admin/credits/monthly-topup")
     assert _dependency_names_for(route) == {"require_google_oidc"}
 
 

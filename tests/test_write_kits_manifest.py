@@ -213,17 +213,48 @@ def test_cli_refuses_a_missing_form_kits_dir(tmp_path, capsys):
     )
 
 
-def test_cli_still_succeeds_on_an_existing_empty_directory(tmp_path):
-    """The missing-dir refusal above must not overreach: an EXISTING
-    directory with zero (or zero complete) kits is a legitimate state
-    (initial bring-up, or every kit still in draft) and must still produce
-    a valid, empty manifest -- exactly test_nonexistent_form_kits_dir's
-    library-level behavior, now proven to survive at the CLI layer too.
+def test_cli_refuses_an_existing_but_empty_directory_by_default(tmp_path, capsys):
+    """An EXISTING but empty directory is now REFUSED unless --allow-empty.
+
+    This reverses the earlier contract deliberately (bd polyglot-pdf-y0dzd).
+    That contract read "an empty directory is a legitimate state (initial
+    bring-up, or every kit still in draft), so emit a valid empty manifest" --
+    true when written, and DANGEROUS since 2026-09-11, when the last form kit
+    left git (bd polyglot-pdf-q3u5r). Every clean checkout now has an empty
+    form-kits/, so the legitimate-but-rare case became the DEFAULT one, and
+    uploading its empty manifest BLANKS the bucket catalogue while every kit
+    blob survives untouched (index.json is authoritative -- form_kits.py
+    refuses a convention fallback).
+
+    The missing-dir guard does not cover this: the directory exists, it is
+    simply empty.
     """
     empty_dir = tmp_path / "form-kits"
     empty_dir.mkdir()
     out = tmp_path / "index.json"
     rc = main(["--form-kits-dir", str(empty_dir), "--out", str(out), "--prefix", "form-kits"])
+    assert rc != 0, "an empty manifest was written without --allow-empty"
+    assert not out.exists(), (
+        "main() wrote an output file even though it refused the empty manifest "
+        "-- a leftover temp file is exactly what a deploy would then upload"
+    )
+    assert "ERROR" in capsys.readouterr().err
+
+
+def test_cli_allows_an_empty_directory_when_explicitly_asked(tmp_path):
+    """...and the legitimate case stays REACHABLE, just opt-in.
+
+    A genuinely empty bucket (initial bring-up) is still serviceable; it now
+    requires saying so, which is the difference between an intended empty
+    catalogue and one produced by running the deploy from the wrong checkout.
+    """
+    empty_dir = tmp_path / "form-kits"
+    empty_dir.mkdir()
+    out = tmp_path / "index.json"
+    rc = main([
+        "--form-kits-dir", str(empty_dir), "--out", str(out),
+        "--prefix", "form-kits", "--allow-empty",
+    ])
     assert rc == 0
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["forms"] == []

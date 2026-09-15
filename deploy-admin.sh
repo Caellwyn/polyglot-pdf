@@ -85,6 +85,14 @@ export POLYGLOT_PROJECT_NAME="$PROJECT"
 # gcloud lookup, mirroring SA_EMAIL immediately above.
 SWEEP_SCHEDULER_SA_EMAIL="admin-sweep-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
 
+# MONTHLY_TOPUP_SCHEDULER_SA_EMAIL (bd polyglot-pdf-0euzk, the firm-plan
+# monthly top-up route's OWN OIDC gate) -- the SAME "fully knowable ahead of
+# time" reasoning as SWEEP_SCHEDULER_SA_EMAIL immediately above, one fixed
+# literal (scripts/setup-admin-service.sh's MONTHLY_TOPUP_SCHEDULER_SA_NAME)
+# over. A SEPARATE scheduler identity from the sweep job's own, mirroring
+# that section's "never reuse a Scheduler caller identity across jobs" rule.
+MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="admin-monthly-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
+
 # ADMIN_SERVICE_URL is NOT knowable before the service's FIRST deploy (it is
 # assigned by Google at deploy time -- the same reason ADMIN_URL below is
 # read only AFTER deploy-all.sh runs). On every deploy AFTER the first,
@@ -101,6 +109,7 @@ ADMIN_SERVICE_URL=$(gcloud run services describe "$ADMIN_SERVICE_NAME" \
     --platform managed --region us-central1 --project "$PROJECT" \
     --format 'value(status.url)' 2>/dev/null || true)
 SWEEP_ENV="SWEEP_SCHEDULER_SA_EMAIL=$SWEEP_SCHEDULER_SA_EMAIL"
+SWEEP_ENV="$SWEEP_ENV,MONTHLY_TOPUP_SCHEDULER_SA_EMAIL=$MONTHLY_TOPUP_SCHEDULER_SA_EMAIL"
 [ -n "$ADMIN_SERVICE_URL" ] && SWEEP_ENV="$SWEEP_ENV,ADMIN_SERVICE_URL=$ADMIN_SERVICE_URL"
 
 # BACKEND_URLS_JSON (bd polyglot-pdf-mpebj, E3.11a's GET /admin/health fan-out

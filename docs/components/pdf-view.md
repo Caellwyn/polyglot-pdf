@@ -84,7 +84,7 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   current (orange) -- with the value painted inside (`valuePainting.ts`):
   fitted text, an X for single-box checkboxes. Radio/checkbox/checkbox_group
   selections whose options carry their own `pdf_position` (backfilled into
-  the git-tracked kits -- f1040, w7; bd 5f41) paint an X mark at each SELECTED option's printed
+  f1040 and w7; bd 5f41) paint an X mark at each SELECTED option's printed
   box (`selectedOptionRects`, bd lp5v): the marks render as sibling divs in
   the same page space while the field-level box stays as the `data-field-id`
   snap-to anchor and paints no duplicate label. Coverage is ALL-OR-NOTHING
@@ -178,8 +178,9 @@ approximation for feedback; this modal (and download) is the ground truth.
   font shrink); the FilledPreviewModal is the exact render.
 - Radio/checkbox-group selections paint marks at their own option boxes only
   where the schema carries per-option `pdf_position` (backfilled into the
-  git-tracked kits -- f1040 and w7, measured 2026-09-03; a bucket kit may or
-  may not carry it, so check the kit rather than assuming); a schema without
+  f1040 and w7, measured 2026-09-03 when both were tracked -- NO kit is tracked
+  now, and a bucket kit may or may not carry it, so check the kit rather than
+  assuming); a schema without
   option rects falls back
   to labels at the field-level rect (tiny for 10px option boxes).
 - Retired gap (bd `polyglot-pdf-ks1y`): 8 choice fields on the OLD i-90

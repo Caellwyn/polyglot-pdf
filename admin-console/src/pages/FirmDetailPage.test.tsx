@@ -5,6 +5,14 @@
  * re-reads; kind change requires two confirmations" (mocked API,
  * mutation-verified).
  *
+ * The "alerts" describe block below (bd polyglot-pdf-362nk) pins this
+ * page's own exit criteria: the alerts section renders through the SAME
+ * shared AlertRow component AlertsPage.test.tsx asserts (a separate test,
+ * `AlertRow.sharedImport.test.tsx`, checks BOTH pages import it), lists
+ * unacknowledged alerts before acknowledged ones, calls the acknowledge
+ * PATCH exactly once per click and re-reads on success only, and a fetch
+ * error there never blanks the rest of the already-loaded page.
+ *
  * Mirrors UsersPage.test.tsx's mocking approach: keep the real
  * AuthError/ForbiddenError classes (onAuthExpired branches on instanceof),
  * mock only the network calls.
@@ -14,8 +22,9 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { FirmDetailPage } from './FirmDetailPage';
 import {
   AuthError, ForbiddenError,
-  getFirm, setFirmAllowedKits, setFirmKind,
+  getFirm, setFirmAllowedKits, setFirmKind, setFirmPlan,
   grantCredits, adjustCredits, listFirmLinks, revokeLink,
+  listAlerts, acknowledgeAlert,
 } from '../utils/adminApi';
 
 vi.mock('../utils/adminApi', async (importOriginal) => {
@@ -25,10 +34,13 @@ vi.mock('../utils/adminApi', async (importOriginal) => {
     getFirm: vi.fn(),
     setFirmAllowedKits: vi.fn(),
     setFirmKind: vi.fn(),
+    setFirmPlan: vi.fn(),
     grantCredits: vi.fn(),
     adjustCredits: vi.fn(),
     listFirmLinks: vi.fn(),
     revokeLink: vi.fn(),
+    listAlerts: vi.fn(),
+    acknowledgeAlert: vi.fn(),
   };
 });
 
@@ -39,6 +51,7 @@ const FIRM_DETAIL = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 120,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
   // No doc_id: GET /admin/firms/{firm_id}'s ledger rows are the persisted
   // credit_ledger document verbatim (backend/services/credit_ledger.py's
   // read_entries()), which does NOT include doc_id -- unlike the grant/
@@ -62,18 +75,35 @@ const LINK_MINTED = {
   credit_cost: 1,
 };
 
+const ACK_ALERT = {
+  id: 'alert-ack', firm_id: 'firm-a', kind: 'credit_low' as const, level: 'warning' as const,
+  ts: 1_700_000_000, context: null, acknowledged_by: 'admin@example.com',
+  acknowledged_at: 1_700_000_100, emailed_at: null, expire_at: null,
+};
+
+const UNACK_ALERT = {
+  id: 'alert-unack', firm_id: 'firm-a', kind: 'link_exhausted' as const, level: 'critical' as const,
+  ts: 1_699_999_000, context: null, acknowledged_by: null, acknowledged_at: null,
+  emailed_at: null, expire_at: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getFirm).mockResolvedValue(FIRM_DETAIL);
   vi.mocked(listFirmLinks).mockResolvedValue({
     firm_id: 'firm-a', channel: 'demo', links: [LINK_MINTED],
   });
+  // The seeded order is ACK, then UNACK -- tests below assert the section
+  // reorders unacknowledged first rather than merely preserving the
+  // route's own newest-ts-first order.
+  vi.mocked(listAlerts).mockResolvedValue({ alerts: [ACK_ALERT, UNACK_ALERT] });
 });
 
 async function renderLoaded() {
   render(<FirmDetailPage firmId="firm-a" onAuthExpired={noAuthExpired} onBack={noBack} />);
   await screen.findByText('Acme LLP');
   await waitFor(() => expect(listFirmLinks).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(listAlerts).toHaveBeenCalledTimes(1));
 }
 
 describe('FirmDetailPage', () => {
@@ -357,6 +387,153 @@ describe('FirmDetailPage', () => {
       await waitFor(() => expect(setFirmAllowedKits).toHaveBeenCalledTimes(1));
       expect(setFirmAllowedKits).toHaveBeenCalledWith('firm-a', ['w7', 'i-90']);
       await waitFor(() => expect(getFirm).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('alerts (bd polyglot-pdf-362nk)', () => {
+    it('fetches this firm\'s alerts via GET /admin/alerts?firm_id=<id> on mount', async () => {
+      await renderLoaded();
+      expect(listAlerts).toHaveBeenCalledWith({ firmId: 'firm-a' });
+    });
+
+    it('renders unacknowledged alerts before acknowledged ones, regardless of fetch order', async () => {
+      await renderLoaded();
+      const table = screen.getByTestId('firm-alerts-table');
+      const rows = within(table).getAllByRole('row').slice(1); // drop the header row
+      // Fixture order is [ACK_ALERT, UNACK_ALERT] -- the rendered order
+      // must be the reverse: unacknowledged (link_exhausted) first.
+      expect(within(rows[0]).getByText('link_exhausted')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('credit_low')).toBeInTheDocument();
+    });
+
+    it('shows an explicit "no alerts" state when the firm has none', async () => {
+      vi.mocked(listAlerts).mockResolvedValue({ alerts: [] });
+      await renderLoaded();
+      expect(screen.getByText('No alerts for this firm.')).toBeInTheDocument();
+    });
+
+    it('a failed alerts fetch shows its own error and leaves the rest of the page intact', async () => {
+      vi.mocked(listAlerts).mockRejectedValueOnce(new Error('alerts store unavailable'));
+      await renderLoaded();
+
+      expect(screen.getByText('alerts store unavailable')).toBeInTheDocument();
+      // The rest of the page -- profile, balance, ledger -- is untouched.
+      expect(screen.getByText('Acme LLP')).toBeInTheDocument();
+      expect(screen.getByTestId('firm-balance')).toHaveTextContent('120 credits');
+      expect(within(screen.getByTestId('ledger-table')).getByText('subscription_grant')).toBeInTheDocument();
+    });
+
+    it('acknowledge calls the PATCH exactly once, then re-reads the firm alerts list', async () => {
+      vi.mocked(acknowledgeAlert).mockResolvedValue({
+        id: 'alert-unack', acknowledged_by: 'admin@example.com',
+        acknowledged_at: 1_700_000_200, request_id: 'req-8',
+      });
+      await renderLoaded();
+
+      const table = screen.getByTestId('firm-alerts-table');
+      const unackRow = within(table).getByText('link_exhausted').closest('tr')!;
+      fireEvent.click(within(unackRow).getByRole('button', { name: 'Acknowledge' }));
+
+      await waitFor(() => expect(acknowledgeAlert).toHaveBeenCalledTimes(1));
+      expect(acknowledgeAlert).toHaveBeenCalledWith('alert-unack');
+      // Initial load + the post-acknowledge re-read.
+      await waitFor(() => expect(listAlerts).toHaveBeenCalledTimes(2));
+    });
+
+    it('a failed acknowledge does not trigger a re-read', async () => {
+      vi.mocked(acknowledgeAlert).mockRejectedValueOnce(
+        new Error('alert alert-unack was already acknowledged by someone-else@example.com'),
+      );
+      await renderLoaded();
+
+      const table = screen.getByTestId('firm-alerts-table');
+      const unackRow = within(table).getByText('link_exhausted').closest('tr')!;
+      fireEvent.click(within(unackRow).getByRole('button', { name: 'Acknowledge' }));
+
+      expect(await screen.findByText(
+        'alert alert-unack was already acknowledged by someone-else@example.com',
+      )).toBeInTheDocument();
+      expect(listAlerts).toHaveBeenCalledTimes(1);
+    });
+
+    it('an already-acknowledged row disables its own Acknowledge button', async () => {
+      await renderLoaded();
+      const table = screen.getByTestId('firm-alerts-table');
+      const ackRow = within(table).getByText('credit_low').closest('tr')!;
+      expect(within(ackRow).getByRole('button', { name: 'Acknowledge' })).toBeDisabled();
+    });
+  });
+
+  describe('plan (bd polyglot-pdf-0euzk): one write per save, no confirm-twice', () => {
+    it('saves the plan form fields in one call, then re-reads', async () => {
+      vi.mocked(setFirmPlan).mockResolvedValue({
+        firm_id: 'firm-a',
+        plan: { tier: 'starter', monthly_credits: 50, rollover: true },
+        before_plan: { tier: 'starter', monthly_credits: 35, rollover: false },
+        request_id: 'req-plan-1',
+      });
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '50' },
+      });
+      fireEvent.click(screen.getByLabelText(/Rollover/));
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      await waitFor(() => expect(setFirmPlan).toHaveBeenCalledTimes(1));
+      expect(setFirmPlan).toHaveBeenCalledWith('firm-a', {
+        tier: 'starter', monthly_credits: 50, rollover: true,
+      });
+      await waitFor(() => expect(getFirm).toHaveBeenCalledTimes(2));
+    });
+
+    it('the form pre-fills from the loaded firm plan', async () => {
+      await renderLoaded();
+      expect(screen.getByLabelText('Monthly credits')).toHaveValue(35);
+      expect(screen.getByLabelText(/Rollover/)).not.toBeChecked();
+    });
+
+    it('a fractional monthly_credits refuses submit client-side via handleSavePlan\'s own check, and shows the error', async () => {
+      // No native min/step constraint on this input (unlike grant-amount) --
+      // the input's own Number.isInteger check inside handleSavePlan is
+      // what refuses this, so this test actually exercises that guard
+      // end-to-end, unlike the zero-value case above (which the native
+      // `required`+"0" combination cannot cleanly isolate from -- see that
+      // test's own comment).
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '35.7' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      expect(setFirmPlan).not.toHaveBeenCalled();
+      expect(await screen.findByText(/Monthly credits must be a positive whole number/)).toBeInTheDocument();
+    });
+
+    it('a zero monthly_credits also refuses via handleSavePlan\'s own check, and shows the error', async () => {
+      // With min= dropped, "0" now also reaches the JS handler directly
+      // (jsdom's `required` attribute only blocks a BLANK value, not "0"),
+      // so this proves the <= 0 half of the same guard end-to-end too.
+      await renderLoaded();
+
+      fireEvent.change(screen.getByLabelText('Monthly credits'), {
+        target: { value: '0' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      expect(setFirmPlan).not.toHaveBeenCalled();
+      expect(await screen.findByText(/Monthly credits must be a positive whole number/)).toBeInTheDocument();
+    });
+
+    it('a route-side 422 surfaces as an inline error, not a thrown exception', async () => {
+      vi.mocked(setFirmPlan).mockRejectedValueOnce(new Error('tier must be one of (starter,)'));
+      await renderLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+      await waitFor(() => expect(setFirmPlan).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText('tier must be one of (starter,)')).toBeInTheDocument();
     });
   });
 

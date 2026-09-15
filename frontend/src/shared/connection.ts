@@ -757,13 +757,9 @@ export function createConnectionManager(
 				console.log('[VFF Audio] backlog at form_updated ' + JSON.stringify(backlog))
 			}
 
-			// Log each update attempt for debugging
-			updates.forEach(update => {
-				const valuePreview = typeof update.value === 'string' && update.value.length > 50
-					? update.value.substring(0, 50) + '...'
-					: update.value
-				console.log(`[VFF Connection]   -> ${update.fieldId} = ${JSON.stringify(valuePreview)}`)
-			})
+			// Field VALUES are never logged here (bd polyglot-pdf-8v8i7): a shared
+			// law-office device's console must not carry client PII. Only the
+			// field id + update count above are diagnostic.
 
 			// Track tool calls in metrics and filter out hallucinations
 			const acceptedUpdates: typeof updates = []

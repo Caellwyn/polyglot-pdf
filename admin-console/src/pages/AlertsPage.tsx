@@ -1,22 +1,24 @@
 import React from 'react';
 import {
   listAlerts, acknowledgeAlert, ALERT_KINDS,
-  type AlertRow, type AlertKind,
+  type AlertRow as AlertRowData, type AlertKind,
 } from '../utils/adminApi';
+import { AlertRow } from '../components/AlertRow';
 
 interface AlertsPageProps {
   onAuthExpired: (err: unknown) => boolean;
-}
-
-function formatTs(ts: number | null): string {
-  if (ts === null) return '--';
-  return new Date(ts * 1000).toISOString();
 }
 
 /**
  * Alerts page (bd polyglot-pdf-i6dlb, E3.11b), driving
  * admin_backend/routes/alert_routes.py's GET /admin/alerts and
  * PATCH /admin/alerts/{id}/acknowledge.
+ *
+ * THE ROW MARKUP LIVES IN components/AlertRow.tsx (bd polyglot-pdf-362nk),
+ * extracted so FirmDetailPage's alerts section renders through the SAME
+ * component rather than a second copy of the kind/level/plain-text
+ * rendering -- this page owns only the table shell (headers, filter form,
+ * the empty-state row) and the alert/acknowledge state machine below.
  *
  * UNACKNOWLEDGED-ONLY IS THE DEFAULT VIEW (bead requirement) -- an operator
  * opening this page wants "what still needs attention" first; the
@@ -49,7 +51,7 @@ export const AlertsPage: React.FC<AlertsPageProps> = ({ onAuthExpired }) => {
   const [kindFilter, setKindFilter] = React.useState<AlertKind | ''>('');
   const [firmIdFilter, setFirmIdFilter] = React.useState('');
 
-  const [alerts, setAlerts] = React.useState<AlertRow[]>([]);
+  const [alerts, setAlerts] = React.useState<AlertRowData[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
@@ -90,7 +92,7 @@ export const AlertsPage: React.FC<AlertsPageProps> = ({ onAuthExpired }) => {
     void loadAlerts();
   }, [loadAlerts]);
 
-  const handleAcknowledge = React.useCallback(async (row: AlertRow) => {
+  const handleAcknowledge = React.useCallback(async (row: AlertRowData) => {
     setBusyId(row.id);
     setRowError(null);
     try {
@@ -169,39 +171,14 @@ export const AlertsPage: React.FC<AlertsPageProps> = ({ onAuthExpired }) => {
           </thead>
           <tbody>
             {alerts.map((row) => (
-              <tr key={row.id} className="border-b border-gray-100">
-                <td className="py-1 pr-4">{row.kind}</td>
-                <td className="py-1 pr-4">
-                  <span
-                    className={
-                      'inline-block rounded px-2 py-0.5 text-xs font-medium ' +
-                      (row.level === 'critical' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800')
-                    }
-                  >
-                    {row.level}
-                  </span>
-                </td>
-                <td className="py-1 pr-4">{row.firm_id ?? ''}</td>
-                <td className="py-1 pr-4">{formatTs(row.ts)}</td>
-                <td className="py-1 pr-4">
-                  {row.acknowledged_by
-                    ? 'Acknowledged by ' + row.acknowledged_by
-                    : 'Unacknowledged'}
-                </td>
-                <td className="py-1 pr-4">
-                  <button
-                    type="button"
-                    className="btn border border-gray-300"
-                    disabled={busyId === row.id || Boolean(row.acknowledged_by)}
-                    onClick={() => void handleAcknowledge(row)}
-                  >
-                    {busyId === row.id ? 'Acknowledging...' : 'Acknowledge'}
-                  </button>
-                  {rowError && rowError.id === row.id && (
-                    <p className="mt-1 text-xs text-red-600">{rowError.message}</p>
-                  )}
-                </td>
-              </tr>
+              <AlertRow
+                key={row.id}
+                alert={row}
+                busy={busyId === row.id}
+                rowError={rowError && rowError.id === row.id ? rowError.message : null}
+                onAcknowledge={(a) => void handleAcknowledge(a)}
+                showFirm
+              />
             ))}
             {alerts.length === 0 && !loading && (
               <tr>

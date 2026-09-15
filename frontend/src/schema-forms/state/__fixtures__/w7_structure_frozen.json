@@ -1,0 +1,704 @@
+{
+  "_why": "FROZEN structural W-7, captured 2026-09-11 from the last GIT-TRACKED copy (commit fcd7963a7~1), NOT the currently published one -- deliberately.\nThis pins that the completion denominator EXCLUDES fields the user cannot act on. It needs BOTH shapes to be non-empty: statically hidden fields, and show_if chains where filling one field reveals another.\nThe PUBLISHED W-7 no longer has any hidden field: the maintainer removed the acceptance-agent block (agent_phone, agent_fax, agent_ein, agent_ptin, agent_name_and_title, agent_company_name, agent_office_code) in the schema editor, and those were the 7. So this test's premise died when the FORM was fixed, not when the kit left git -- it would have broken on the next refresh either way. Freezing the older copy keeps the RULE under test while the form moves on, which is the whole point of a frozen specimen.\nSTRUCTURE ONLY: labels, help text and pdf geometry stripped -- counting never reads them. Do not hand-edit.",
+  "_source": "form-kits/w7/schema.json at commit fcd7963a7~1 (last tracked copy)",
+  "fields": [
+    {
+      "id": "application_type",
+      "type": "radio",
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false,
+      "options": [
+        {
+          "value": "apply_new_itin"
+        },
+        {
+          "value": "renew_existing_itin"
+        }
+      ],
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "reason",
+      "type": "checkbox_group",
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false,
+      "options": [
+        {
+          "value": "a_treaty_benefit"
+        },
+        {
+          "value": "b_nonresident_alien_return"
+        },
+        {
+          "value": "c_resident_alien_return"
+        },
+        {
+          "value": "d_dependent_of_us_person"
+        },
+        {
+          "value": "e_spouse_of_us_person"
+        },
+        {
+          "value": "f_student_professor_researcher"
+        },
+        {
+          "value": "g_dependent_spouse_of_visa_holder"
+        },
+        {
+          "value": "h_other"
+        }
+      ],
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "relationship_to_us_person",
+      "type": "text",
+      "show_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "d_dependent_of_us_person"
+      },
+      "require_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "d_dependent_of_us_person"
+      },
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false
+    },
+    {
+      "id": "us_person_name_ssn_itin",
+      "type": "text",
+      "show_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "d_dependent_of_us_person"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "e_spouse_of_us_person"
+          }
+        ]
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "d_dependent_of_us_person"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "e_spouse_of_us_person"
+          }
+        ]
+      },
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false
+    },
+    {
+      "id": "reason_h_details",
+      "type": "text",
+      "show_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "h_other"
+          }
+        ]
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "h_other"
+          }
+        ]
+      },
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false,
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "treaty_country",
+      "type": "text",
+      "show_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "f_student_professor_researcher"
+          }
+        ]
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "f_student_professor_researcher"
+          }
+        ]
+      },
+      "section_id": "sec_page_1_top_p1",
+      "read_only": false
+    },
+    {
+      "id": "treaty_article_number",
+      "type": "text",
+      "show_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "f_student_professor_researcher"
+          }
+        ]
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "a_treaty_benefit"
+          },
+          {
+            "field": "reason",
+            "operator": "includes",
+            "value": "f_student_professor_researcher"
+          }
+        ]
+      },
+      "section_id": "sec_page_1_top_p1"
+    },
+    {
+      "id": "name_1a_first",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "name_1a_middle",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "name_1a_last",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "name_1b_first",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "name_1b_middle",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "name_1b_last",
+      "type": "text",
+      "section_id": "sec_name_p1",
+      "read_only": false,
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "mailing_street",
+      "type": "text",
+      "section_id": "sec_applicant_s_mailing_address_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "mailing_city_state_country",
+      "type": "text",
+      "section_id": "sec_applicant_s_mailing_address_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "foreign_street",
+      "type": "text",
+      "section_id": "sec_foreign_non_u_s_address_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "foreign_city_state_country",
+      "type": "text",
+      "section_id": "sec_foreign_non_u_s_address_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "date_of_birth",
+      "type": "date",
+      "section_id": "sec_birth_information_p1",
+      "read_only": false,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "country_of_birth",
+      "type": "text",
+      "section_id": "sec_birth_information_p1",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "city_state_of_birth",
+      "type": "text",
+      "section_id": "sec_birth_information_p1",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "sex",
+      "type": "radio",
+      "hidden": false,
+      "section_id": "sec_birth_information_p1",
+      "options": [
+        {
+          "value": "male"
+        },
+        {
+          "value": "female"
+        }
+      ],
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "countries_of_citizenship",
+      "type": "text",
+      "section_id": "sec_other_information_p1",
+      "read_only": true,
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "foreign_tax_id_number",
+      "type": "text",
+      "section_id": "sec_other_information_p1",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "us_visa_type_number_expiration",
+      "type": "text",
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "id_document_type",
+      "type": "radio",
+      "section_id": "sec_other_information_p1",
+      "options": [
+        {
+          "value": "passport"
+        },
+        {
+          "value": "drivers_license_state_id"
+        },
+        {
+          "value": "uscis_documentation"
+        },
+        {
+          "value": "other"
+        }
+      ],
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "id_document_other_detail",
+      "type": "text",
+      "show_if": {
+        "field": "id_document_type",
+        "operator": "equals",
+        "value": "other"
+      },
+      "require_if": {
+        "field": "id_document_type",
+        "operator": "equals",
+        "value": "other"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "id_document_issued_by",
+      "type": "text",
+      "section_id": "sec_other_information_p1",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "id_document_number",
+      "type": "text",
+      "section_id": "sec_other_information_p1",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "id_document_expiration_date",
+      "type": "date",
+      "section_id": "sec_other_information_p1",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "date_of_entry_us",
+      "type": "text",
+      "section_id": "sec_other_information_p1",
+      "read_only": true,
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "previously_received_itin_or_irsn",
+      "type": "radio",
+      "section_id": "sec_other_information_p1",
+      "options": [
+        {
+          "value": "no_dont_know"
+        },
+        {
+          "value": "yes"
+        }
+      ],
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "itin_part1",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "itin_part2",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "itin_part3",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "irsn_part1",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "itin_part1",
+        "operator": "is_empty"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "irsn_part2",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "itin_part2",
+        "operator": "is_empty"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "irsn_part3",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "itin_part3",
+        "operator": "is_empty"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "itin_issued_first_name",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "itin_issued_middle_name",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "itin_issued_last_name",
+      "type": "text",
+      "show_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "require_if": {
+        "field": "previously_received_itin_or_irsn",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "section_id": "sec_other_information_p1",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "college_or_company_name",
+      "type": "text",
+      "hidden": false,
+      "show_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "require_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "college_city_and_state",
+      "type": "text",
+      "show_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "require_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "length_of_stay",
+      "type": "text",
+      "show_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "require_if": {
+        "field": "reason",
+        "operator": "includes",
+        "value": "f_student_professor_researcher"
+      },
+      "section_id": "sec_other_information_p1"
+    },
+    {
+      "id": "phone_number",
+      "type": "tel",
+      "section_id": "sec_sign_here_p1",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "name_of_delegate",
+      "type": "text",
+      "section_id": "sec_sign_here_p1"
+    },
+    {
+      "id": "agent_phone",
+      "type": "tel",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "delegate_relationship",
+      "type": "radio",
+      "show_if": {
+        "field": "name_of_delegate",
+        "operator": "is_not_empty"
+      },
+      "require_if": {
+        "field": "name_of_delegate",
+        "operator": "is_not_empty"
+      },
+      "section_id": "sec_sign_here_p1",
+      "options": [
+        {
+          "value": "parent"
+        },
+        {
+          "value": "power_of_attorney"
+        },
+        {
+          "value": "court_appointed_guardian"
+        }
+      ]
+    },
+    {
+      "id": "agent_fax",
+      "type": "tel",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "agent_ein",
+      "type": "number",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "agent_ptin",
+      "type": "number",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "agent_name_and_title",
+      "type": "text",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "agent_company_name",
+      "type": "text",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    },
+    {
+      "id": "agent_office_code",
+      "type": "text",
+      "hidden": true,
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
+      "read_only": true
+    }
+  ]
+}

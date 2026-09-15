@@ -3532,8 +3532,10 @@ export class WebFormConnection {
       return;
     }
 
-    // Log close details for debugging
-    console.log('[WebFormConnection] [plug] WebSocket closed', {
+    // Promoted to console.info (bd polyglot-pdf-8v8i7): staff read this
+    // diagnostic on staging, so it must survive the `pure: ['console.log',
+    // 'console.debug']` production build-time strip.
+    console.info('[WebFormConnection] [plug] WebSocket closed', {
       code: event?.code,
       reason: event?.reason,
       wasClean: event?.wasClean,
@@ -3831,10 +3833,15 @@ export class WebFormConnection {
    */
   send(message: any): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      // Redacted to {type, size} (bd polyglot-pdf-8v8i7): `message` can carry
+      // a field value or a client-link token, and this is a console.error --
+      // not stripped by the build-time `pure` backstop -- so it must never
+      // carry raw content.
       console.error('[WebFormConnection] send() called but WebSocket not open!', {
         hasWs: !!this.ws,
         readyState: this.ws?.readyState,
-        message: message
+        type: message?.type,
+        size: message instanceof ArrayBuffer ? message.byteLength : JSON.stringify(message ?? null).length,
       });
       return;
     }
@@ -3844,13 +3851,14 @@ export class WebFormConnection {
     } else {
       const jsonStr = JSON.stringify(message);
 
-      // DEBUG: Log full details if type is undefined (suspicious message)
+      // Redacted to {size} (bd polyglot-pdf-8v8i7): the message body can
+      // carry a field value or a client-link token, and this console.error is
+      // not stripped by the build-time `pure` backstop. No `type` field here
+      // -- the branch guard is `message.type === undefined`, so it is always
+      // undefined inside this block and would add nothing.
       if (message.type === undefined) {
         console.error('[WebFormConnection] [warn] SUSPICIOUS: Sending message without type!', {
           size: jsonStr.length,
-          keys: Object.keys(message),
-          preview: jsonStr.substring(0, 200),
-          stack: new Error().stack
         });
       } else {
         console.log('[WebFormConnection] Sending JSON message', {
@@ -4482,14 +4490,6 @@ export class WebFormConnection {
    */
   getCompletionPercentage(): number {
     return SchemaFormStateManager.getProgress(this.state);
-  }
-
-  /**
-   * Clear state and disconnect
-   */
-  reset(): void {
-    this.disconnect();
-    SchemaFormStateManager.clear();
   }
 
   /**

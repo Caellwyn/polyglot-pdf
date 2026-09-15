@@ -2,9 +2,12 @@
 
 Pins: the containment normalization spec (the zero-trust core of the details
 channel), the anti-restatement heuristic, and every new schema_lint guidance
-rule -- one synthetic violation fixture per rule, plus the exit-criterion
-check that the coverage rule fires on the REAL w7 kit (0/59 authored
-guidance today).
+rule -- one synthetic violation fixture per rule.
+
+The exit-criterion check that the coverage rule fires on the REAL w7 kit was
+deleted 2026-09-11 (bd polyglot-pdf-q3u5r): it asserted one FORM's guidance
+coverage, and no kit is tracked any more. The lint RULE itself is still pinned
+by the synthetic fixtures here.
 
 ASCII only (CLAUDE.md scar #6). Unicode punctuation in fixtures is
 chr()-composed.
@@ -12,7 +15,6 @@ chr()-composed.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from backend.services import guidance_contract as gc
@@ -338,33 +340,12 @@ def test_guidance_metrics_never_throws_on_malformed_values():
 
 # --- exit criterion: fires on the real w7 kit --------------------------------
 
-def test_w7_kit_coverage_matches_reality():
-    """The coverage rule must track the real w7 kit, not a frozen number.
-
-    Sprint-16 recon found 0/59 fields with authored guidance and this asserted
-    the gap was flagged. The maintainer's hand-verified gold pass (bd
-    polyglot-pdf-fjxe) authored guidance for every field, so the correct
-    assertion now is the SAME invariant read the other way: the aggregated
-    worklist finding fires if and only if a gap exists, and when it fires it
-    reports the true count."""
-    kit = REPO / "form-kits" / "w7" / "schema.json"
-    schema = json.loads(kit.read_text(encoding="utf-8"))
-    findings = lint_schema(schema)
-    missing = [f for f in findings if f.rule == "help-instructions-missing"]
-    uncovered = [f for f in schema["fields"]
-                 if not f.get("read_only") and f.get("type") != "signature"
-                 and not ((f.get("help") or {}).get("instructions") or "").strip()]
-
-    # w7's state today, asserted DIRECTLY rather than via a branch: the gold
-    # pass authored guidance for every field, so a regression that drops
-    # guidance fails here loudly instead of quietly taking the other branch.
-    assert uncovered == [], (
-        "w7 lost authored guidance for "
-        f"{[f['id'] for f in uncovered]} -- the kit was fully covered by the "
-        "hand-verified gold pass (bd polyglot-pdf-fjxe)")
-    # Fully covered means the rule must stay SILENT, not emit an empty worklist.
-    assert missing == []
-
+# test_w7_kit_coverage_matches_reality was DELETED 2026-09-11 (bd
+# polyglot-pdf-q3u5r). It read form-kits/w7/schema.json and asserted that
+# kit's guidance coverage -- a claim about one form's CONTENT, which is the
+# shape CLAUDE.md scar #10 says not to write. No kit is tracked now, so it
+# could only fail. The lint RULE it exercised (help-instructions-missing) is
+# covered by the synthetic tests in this file.
 
 # --- the formula tripwire (bd polyglot-pdf-cf6v) -----------------------------
 
