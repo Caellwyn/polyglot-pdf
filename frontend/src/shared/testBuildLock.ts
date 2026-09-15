@@ -12,15 +12,24 @@
  * mid-write). An in-memory mutex cannot be shared across processes; an
  * atomic `mkdirSync` on a directory under the OS temp dir can.
  *
+ * OWNERSHIP. The holder writes a random token into the lock directory and
+ * only releases a lock that still carries ITS token, so a waiter can never
+ * remove a live holder's lock. Stale-lock recovery (a killed run left a
+ * lock older than STALE_LOCK_MS) is an atomic `renameSync` of the stale
+ * directory to a unique name before removal: exactly one waiter wins the
+ * rename, the others see ENOENT and simply retry `mkdirSync`.
+ *
  * Only the build-running tests take this lock, so the rest of the suite
  * stays parallel. Any future test that runs a real build must wrap its
  * build call in `withBuildLock` too.
  */
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const LOCK_DIR = join(tmpdir(), "polyglot-frontend-build.lock");
+const OWNER_FILE = join(LOCK_DIR, "owner");
 /** A holder that died without releasing (a killed test run) must not block
  *  every later run forever: a lock older than this is treated as abandoned. */
 const STALE_LOCK_MS = 10 * 60 * 1000;
@@ -31,27 +40,52 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function tryAcquire(): boolean {
+function evictIfStale(): void {
+  let age: number;
   try {
-    mkdirSync(LOCK_DIR);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    try {
-      const age = Date.now() - statSync(LOCK_DIR).mtimeMs;
-      if (age > STALE_LOCK_MS) rmSync(LOCK_DIR, { recursive: true, force: true });
-    } catch {
-      // Raced with the holder releasing it; the next attempt sees the truth.
-    }
-    return false;
+    age = Date.now() - statSync(LOCK_DIR).mtimeMs;
+  } catch {
+    return; // released between our EEXIST and this stat; retry mkdir
   }
+  if (age <= STALE_LOCK_MS) return;
+  const graveyard = `${LOCK_DIR}.stale-${process.pid}-${randomBytes(4).toString("hex")}`;
+  try {
+    renameSync(LOCK_DIR, graveyard); // atomic: only one waiter wins
+  } catch {
+    return; // another waiter evicted it first (ENOENT); retry mkdir
+  }
+  rmSync(graveyard, { recursive: true, force: true });
 }
 
-/** Run `fn` while holding the build lock; released in `finally`. Throws if
- *  the lock cannot be acquired within WAIT_TIMEOUT_MS (a wedged holder). */
+function tryAcquire(token: string): boolean {
+  try {
+    mkdirSync(LOCK_DIR);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    evictIfStale();
+    return false;
+  }
+  writeFileSync(OWNER_FILE, token);
+  return true;
+}
+
+function releaseIfOwned(token: string): void {
+  let owner = "";
+  try {
+    owner = readFileSync(OWNER_FILE, "utf8");
+  } catch {
+    return; // evicted as stale by a waiter (or never ours); nothing to release
+  }
+  if (owner === token) rmSync(LOCK_DIR, { recursive: true, force: true });
+}
+
+/** Run `fn` while holding the build lock; released in `finally`, and only if
+ *  this process still owns it. Throws if the lock cannot be acquired within
+ *  WAIT_TIMEOUT_MS (a wedged holder). */
 export function withBuildLock<T>(fn: () => T): T {
+  const token = `${process.pid}-${randomBytes(8).toString("hex")}`;
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
-  while (!tryAcquire()) {
+  while (!tryAcquire(token)) {
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting for the frontend build lock at ${LOCK_DIR}`);
     }
@@ -60,6 +94,6 @@ export function withBuildLock<T>(fn: () => T): T {
   try {
     return fn();
   } finally {
-    rmSync(LOCK_DIR, { recursive: true, force: true });
+    releaseIfOwned(token);
   }
 }

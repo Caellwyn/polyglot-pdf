@@ -11,7 +11,7 @@
  * never correct: `index.html` referenced `./assets/vendor-react-*.js`, which
  * the browser resolves relative to the CURRENT PATH, not the site root. A
  * cold load at any path with a segment (`/console/links`,
- * `/console/employees`, a client magic link carrying a path, etc.) then
+ * `/console/employees`, `/console/links/history`) then
  * requested `/console/assets/...`, which does not exist, and
  * `firebase.json`'s catch-all `"**" -> /index.html` rewrite answered with
  * HTML instead of JS -- the browser then refuses the module script with
@@ -59,7 +59,9 @@ import { withBuildLock } from "./testBuildLock";
 
 const APP_ROOT = join(__dirname, "..", "..");
 const VITE_CONFIG_PATH = join(APP_ROOT, "vite.config.schema.ts");
-const BUILD_TIMEOUT_MS = 120_000;
+// Two build-running test files serialize on withBuildLock, so the waiting
+// file's budget must cover BOTH builds on a cold CI runner.
+const BUILD_TIMEOUT_MS = 300_000;
 const DIST_DIR = join(APP_ROOT, "dist");
 const DIST_INDEX_HTML = join(DIST_DIR, "index.html");
 const REQUIRED_FILE = join(APP_ROOT, ".env.demo");

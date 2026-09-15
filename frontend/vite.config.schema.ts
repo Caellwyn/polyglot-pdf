@@ -11,8 +11,8 @@ export default defineConfig({
 	// dev-local's root, never from a subdirectory, so a relative base ('./')
 	// is never correct here: it made index.html reference './assets/...',
 	// which resolves relative to the CURRENT PATH, not the site root. A cold
-	// load at any path with a segment (e.g. /console/links, or a client link
-	// with a path) then asked for /console/assets/... -- which does not
+	// load at any path with a segment (e.g. /console/links or
+	// /console/employees) then asked for /console/assets/... -- which does not
 	// exist -- and firebase.json's catch-all `**` -> /index.html rewrite
 	// answered with HTML instead of JS, so the browser refused the script
 	// with "Expected a JavaScript-or-Wasm module script but the server
