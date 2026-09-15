@@ -1,7 +1,4 @@
 {
-  "env": {
-    "PATH": "C:\\Users\\caell\\AppData\\Roaming\\npm\\node_modules\\@beads\\bd\\bin;${PATH}"
-  },
   "permissions": {
     "deny": [
       "Bash(git push --force:*)",
