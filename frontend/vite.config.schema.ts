@@ -9,6 +9,16 @@ export default defineConfig({
 	// Base public path
 	base: './',
 
+	// Strip console.log/console.debug from the production bundle (bd
+	// polyglot-pdf-8v8i7) -- NOT `drop: ['console']`, which would also remove
+	// console.warn/console.error that staff read on staging (e.g. the
+	// WebSocket-close diagnostic in webFormConnection.ts, promoted to
+	// console.info for exactly this reason). Pinned by
+	// frontend/src/shared/bundleNoConsoleLog.test.ts.
+	esbuild: {
+		pure: ['console.log', 'console.debug'],
+	},
+
 	// Build configuration
 	build: {
 		outDir: 'dist',

@@ -59,6 +59,13 @@ export default defineConfig({
       '@': '/src'
     }
   },
+  // Strip console.log/console.debug from the production bundle (bd
+  // polyglot-pdf-8v8i7) -- NOT `drop: ['console']`, which would also remove
+  // console.warn/console.error. Pinned by
+  // schema-editor/src/bundleNoConsoleLog.test.ts.
+  esbuild: {
+    pure: ['console.log', 'console.debug'],
+  },
   build: {
     // pdfjs-dist ships top-level await; the default esbuild target (es2020/
     // chrome87...) rejects it, failing `npm run build`. esnext permits it.

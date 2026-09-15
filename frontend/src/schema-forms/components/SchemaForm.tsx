@@ -25,6 +25,9 @@ import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue, readFieldEntryWithAlias } from "../utils/fieldValue";
 import { isBlankFieldValue } from "../utils/fieldValue";
 import { VerifyFieldModal } from "./VerifyFieldModal";
+import { StaffHeader } from "./StaffHeader";
+import { isFormComplete } from "../../navigation";
+import { hasClientLinkToken } from "../../shared/sessionCredential";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -52,6 +55,29 @@ export interface SchemaFormProps {
   onSectionChange?: (sectionId: string) => void;
   /** Pre-selected language from onboarding (skips language selection modal in VoiceOverlay) */
   initialLanguage?: string;
+}
+
+// How long the idle-wipe grace runs before clearing this device's stored
+// answers, once the WebSocket's own idle_timeout fires (bd polyglot-pdf-8v8i7,
+// Opus cross-surface round 5). `status === 'idle_timeout'` is the BACKEND's
+// 120-second no-inbound-traffic watchdog (backend/config.py's
+// WS_IDLE_TIMEOUT_SEC) -- it means the socket went quiet, not "the user left":
+// VoiceOverlay/VoiceOverlayMobile render a Reconnect button off this same
+// status, and VoiceOverlay's useSaveNudge treats it as `voiceEnding` and pops
+// a Save modal with a spoken notice. A short unconditional wipe would destroy
+// the client's only copy while the app is actively telling them to save it.
+// This constant is therefore a much longer, ACTIVITY-CANCELLABLE grace, not a
+// short unconditional countdown -- see the idle-timeout effect below for the
+// cancel conditions. A maintainer-tunable default; raise or lower it without
+// touching the cancellation logic.
+export const IDLE_WIPE_GRACE_MS = 10 * 60 * 1000;
+
+/** "MM:SS" for the idle-wipe grace countdown banner. */
+function formatMmSs(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
@@ -141,6 +167,23 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
+  // Idle-wipe grace state (bd polyglot-pdf-8v8i7, Opus cross-surface round 5).
+  // `status === 'idle_timeout'` arms a persistent, activity-cancellable
+  // countdown (IDLE_WIPE_GRACE_MS above) rather than an unconditional short
+  // wipe -- see the idle-timeout effect below for why.
+  const [showIdleClearWarning, setShowIdleClearWarning] = useState(false);
+  const [idleClearMsLeft, setIdleClearMsLeft] = useState(IDLE_WIPE_GRACE_MS);
+  const idleClearTimerRef = useRef<number | null>(null);
+  const idleClearIntervalRef = useRef<number | null>(null);
+  // Completion-clear grace state (bd polyglot-pdf-8v8i7). Set true the first
+  // time a CLIENT-LINK session downloads/prints an already-COMPLETE form
+  // (never on a STAFF session -- staff may need repeat copies and have the
+  // logout control + the Clear-form buttons instead). A second
+  // download/print during the grace does not restart the countdown.
+  const [showCompletionClearWarning, setShowCompletionClearWarning] = useState(false);
+  const [completionClearSecondsLeft, setCompletionClearSecondsLeft] = useState(60);
+  const completionClearTimerRef = useRef<number | null>(null);
+  const completionClearIntervalRef = useRef<number | null>(null);
   // Thinking indicator (bd polyglot-pdf-wpw.5): SchemaForm owns the ConnectionManager
   // (it is the shared manager the overlays use), so it must wire onThinkingChange and
   // pass `thinking` down -- the overlays skip their own manager when a shared one
@@ -339,6 +382,168 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     // the element is present now, scroll immediately.
     focusField();
   };
+
+  // Idle-wipe grace (bd polyglot-pdf-8v8i7, Opus cross-surface round 5).
+  //
+  // `status === 'idle_timeout'` is the BACKEND's 120-second no-inbound-
+  // traffic watchdog (backend/config.py's WS_IDLE_TIMEOUT_SEC) -- it means
+  // the WebSocket went quiet, NOT "the client walked away". Two untouched
+  // consumers react to the exact same status: VoiceOverlay/VoiceOverlayMobile
+  // render a Reconnect button off it (which rebuilds from sessionStorage),
+  // and VoiceOverlay's useSaveNudge treats it as `voiceEnding` -- popping a
+  // Save modal with a spoken TTS notice. A short unconditional wipe would
+  // destroy the client's only copy of their answers while the app is
+  // actively telling them to save it.
+  //
+  // So this is a LONG, ACTIVITY-CANCELLABLE grace (IDLE_WIPE_GRACE_MS, a
+  // maintainer-tunable default), not a short unconditional countdown. It
+  // applies to STAFF sessions too, not just client-link ones: a staff member
+  // has the logout control and the Clear-form buttons for an explicit wipe,
+  // but a staff tablet walked away from in a shared law office carries the
+  // exact same harm as a client one, and the backend's idle status makes no
+  // distinction between the two tiers.
+  //
+  // Cancelled by ANY of: a pointerdown/keydown/touchstart anywhere in the
+  // document (the activity listener below), the "Keep my answers" button,
+  // `status` leaving 'idle_timeout' (a Reconnect succeeded, or any other
+  // transition), or a save (the SaveNudge's Save button, which fires the
+  // `polyglot:save-form` event this component already listens for below).
+  // If `status` returns to 'idle_timeout' again later (a second idle drop),
+  // the grace re-arms from the full duration.
+  const cancelIdleClearGrace = useCallback(() => {
+    if (idleClearTimerRef.current !== null) {
+      window.clearTimeout(idleClearTimerRef.current);
+      idleClearTimerRef.current = null;
+    }
+    if (idleClearIntervalRef.current !== null) {
+      window.clearInterval(idleClearIntervalRef.current);
+      idleClearIntervalRef.current = null;
+    }
+    setShowIdleClearWarning(false);
+    setIdleClearMsLeft(IDLE_WIPE_GRACE_MS);
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'idle_timeout') {
+      cancelIdleClearGrace();
+      return;
+    }
+    setShowIdleClearWarning(true);
+    setIdleClearMsLeft(IDLE_WIPE_GRACE_MS);
+    const startedAt = Date.now();
+    idleClearIntervalRef.current = window.setInterval(() => {
+      setIdleClearMsLeft(Math.max(0, IDLE_WIPE_GRACE_MS - (Date.now() - startedAt)));
+    }, 1000);
+    idleClearTimerRef.current = window.setTimeout(() => {
+      SchemaFormStateManager.clearAllClientState();
+      // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+      // round 2): this component stays MOUNTED with its in-memory `state`
+      // otherwise, and the next keystroke's updateField -> save() would
+      // re-persist a fresh schema_form_state from that stale copy --
+      // resurrecting exactly what the wipe erased. Mirrors the pre-existing
+      // "Start Fresh" button in SchemaFormDemo.tsx, which reloads for the
+      // same reason. For a CLIENT-LINK session the reload lands on the app's
+      // entry with no token in the URL any more -- the intended "session
+      // ended" state, not a bug.
+      window.location.reload();
+    }, IDLE_WIPE_GRACE_MS);
+
+    return () => {
+      if (idleClearTimerRef.current !== null) {
+        window.clearTimeout(idleClearTimerRef.current);
+        idleClearTimerRef.current = null;
+      }
+      if (idleClearIntervalRef.current !== null) {
+        window.clearInterval(idleClearIntervalRef.current);
+        idleClearIntervalRef.current = null;
+      }
+    };
+  }, [status, cancelIdleClearGrace]);
+
+  // Any user activity cancels the running grace. Document-level so it fires
+  // regardless of which element the user interacts with -- the banner itself,
+  // a form field, or anywhere else on the page.
+  useEffect(() => {
+    if (!showIdleClearWarning) return;
+    const onActivity = () => cancelIdleClearGrace();
+    document.addEventListener('pointerdown', onActivity);
+    document.addEventListener('keydown', onActivity);
+    document.addEventListener('touchstart', onActivity);
+    return () => {
+      document.removeEventListener('pointerdown', onActivity);
+      document.removeEventListener('keydown', onActivity);
+      document.removeEventListener('touchstart', onActivity);
+    };
+  }, [showIdleClearWarning, cancelIdleClearGrace]);
+
+  // Unmount safety: a pending completion-clear timer/interval must not fire
+  // (or leak) after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (completionClearTimerRef.current !== null) {
+        window.clearTimeout(completionClearTimerRef.current);
+      }
+      if (completionClearIntervalRef.current !== null) {
+        window.clearInterval(completionClearIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Completion-clear grace (bd polyglot-pdf-8v8i7). Called after a
+  // download/print SUCCEEDS on an already-complete CLIENT-LINK form -- never
+  // from a catch block, and never for staff (a staff session has no
+  // automatic clear on download/print: staff routinely need both a download
+  // AND a print of the same form, and they have the logout control plus the
+  // Clear-form buttons for an explicit wipe instead). Idempotent: a second
+  // download/print while the grace is already running does not restart the
+  // countdown, so repeatedly clicking Print does not repeatedly push back
+  // the clear.
+  const startCompletionClearGrace = useCallback(() => {
+    if (completionClearTimerRef.current !== null) return;
+    setShowCompletionClearWarning(true);
+    setCompletionClearSecondsLeft(60);
+    completionClearIntervalRef.current = window.setInterval(() => {
+      setCompletionClearSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    completionClearTimerRef.current = window.setTimeout(() => {
+      SchemaFormStateManager.clearAllClientState();
+      // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+      // round 2) -- see the idle-timeout effect's comment for why: this
+      // component stays mounted otherwise, and the next field edit would
+      // re-persist a fresh schema_form_state from the stale in-memory copy.
+      // For a CLIENT-LINK session the reload lands on the app's entry with
+      // no token any more -- the intended "session ended" state.
+      window.location.reload();
+    }, 60000);
+  }, []);
+
+  const cancelCompletionClearGrace = useCallback(() => {
+    if (completionClearTimerRef.current !== null) {
+      window.clearTimeout(completionClearTimerRef.current);
+      completionClearTimerRef.current = null;
+    }
+    if (completionClearIntervalRef.current !== null) {
+      window.clearInterval(completionClearIntervalRef.current);
+      completionClearIntervalRef.current = null;
+    }
+    SchemaFormStateManager.clearAllClientState();
+    // Reload immediately after the wipe (bd polyglot-pdf-8v8i7, fresh-eyes
+    // round 2) -- same resurrection risk as the automatic triggers above:
+    // this component stays mounted otherwise, and the next field edit would
+    // re-persist a fresh schema_form_state from the stale in-memory copy.
+    window.location.reload();
+  }, []);
+
+  // The one gate for "does this download/print start the completion-clear
+  // grace": a client-link session (never staff) on a form that is fully
+  // confirmed at the moment the PDF fill actually succeeded (state may have
+  // moved on during the async fill, so this reads state fresh rather than
+  // trusting a value captured before the await).
+  const maybeStartCompletionClearGrace = useCallback(() => {
+    if (!hasClientLinkToken()) return;
+    if (!isFormComplete(state)) return;
+    startCompletionClearGrace();
+  }, [state, startCompletionClearGrace]);
 
   // Create connection manager once (only when stream becomes ready)
   useEffect(() => {
@@ -801,8 +1006,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   // telling the client they saved -- and it permanently silences both nudges,
   // so they never learn otherwise. The ending variant has no dismiss button,
   // making that dead button its only exit. Found in cross-surface review.
+  //
+  // This is also one of the idle-wipe grace's cancel paths (bd polyglot-pdf-
+  // 8v8i7, Opus cross-surface round 5): the ENDING nudge shows specifically
+  // when `status === 'idle_timeout'`, so its Save button firing this event
+  // routes through handleDownloadPDF() below and can itself start the
+  // completion-clear grace on an already-complete client-link form -- both
+  // graces are acceptable to have live at once (the banners are independent
+  // and the 60s completion grace is strictly shorter).
   useEffect(() => {
-    const onSaveRequested = () => { void handleDownloadPDF(); };
+    const onSaveRequested = () => {
+      cancelIdleClearGrace();
+      void handleDownloadPDF();
+    };
     window.addEventListener('polyglot:save-form', onSaveRequested);
     return () => window.removeEventListener('polyglot:save-form', onSaveRequested);
   });
@@ -816,17 +1032,13 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     setIsDownloadingPDF(true);
 
     try {
-      // Unwrap FieldValue objects to get raw values for PDF filling
+      // Unwrap FieldValue objects to get raw values for PDF filling. Field
+      // values are never logged here (bd polyglot-pdf-8v8i7): a shared
+      // law-office device's console must not carry client PII.
       const unwrappedFieldValues: Record<string, any> = {};
       for (const [fieldId, value] of Object.entries(state.fieldValues)) {
         unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
       }
-
-      console.log('[SchemaForm] Unwrapped field values for PDF filling:', {
-        original_count: Object.keys(state.fieldValues).length,
-        unwrapped_count: Object.keys(unwrappedFieldValues).length,
-        sample: Object.entries(unwrappedFieldValues).slice(0, 3),
-      });
 
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
@@ -841,6 +1053,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
       const filename = `${formNumber}-filled-${timestamp}.pdf`;
 
       downloadPDF(filledPDFBytes, filename);
+      // Only after the download actually succeeded (bd polyglot-pdf-8v8i7) --
+      // never from the catch block below, or a FAILED fill would still wipe
+      // the client's answers.
+      maybeStartCompletionClearGrace();
     } catch (error) {
       console.error('[SchemaForm] PDF download failed:', error);
       alert('Failed to download PDF. Check console for details.');
@@ -864,8 +1080,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
       }
 
-      console.log('[SchemaForm] Preparing PDF for printing with unwrapped values');
-
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
@@ -875,6 +1089,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       // Open print dialog
       printPDF(filledPDFBytes);
+      // Only after the print dialog actually opened (bd polyglot-pdf-8v8i7) --
+      // never from the catch block below, or a FAILED fill would still wipe
+      // the client's answers.
+      maybeStartCompletionClearGrace();
     } catch (error) {
       console.error('[SchemaForm] PDF print failed:', error);
       alert('Failed to print PDF. Check console for details.');
@@ -895,6 +1113,43 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
   return (
     <>
+      {/* Staff-only logout control (bd polyglot-pdf-8v8i7). Renders nothing
+          for a client-link session -- see StaffHeader's own doc. */}
+      <StaffHeader />
+
+      {showIdleClearWarning && (
+        <div className="schema-form__idle-clear-warning" role="alert">
+          You have been inactive. To protect your privacy, your answers will
+          be cleared from this device in {formatMmSs(idleClearMsLeft)} unless
+          you continue.{' '}
+          {hasClientLinkToken() && (
+            <>Afterward you can reopen your original link to start this form again; only a PDF you saved can bring your answers back.</>
+          )}
+          <button
+            type="button"
+            className="schema-form__idle-clear-keep-button"
+            onClick={cancelIdleClearGrace}
+          >
+            Keep my answers
+          </button>
+        </div>
+      )}
+
+      {showCompletionClearWarning && (
+        <div className="schema-form__completion-clear-warning" role="alert">
+          Your form is finished. Your answers will be cleared from this device
+          in {completionClearSecondsLeft} second{completionClearSecondsLeft === 1 ? '' : 's'} --
+          download or print again now if you need another copy.
+          <button
+            type="button"
+            className="schema-form__completion-clear-now-button"
+            onClick={cancelCompletionClearGrace}
+          >
+            Done -- clear now
+          </button>
+        </div>
+      )}
+
       {/* View-mode toggle (bd vxwj). The voice overlay + the ConnectionManager
           live OUTSIDE the switched container below, so toggling views never
           remounts them or disturbs the session. */}

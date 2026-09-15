@@ -207,10 +207,10 @@ export function SchemaFormDemo() {
     };
   }, [selectedForm]);
 
-  const handleSubmit = (fieldValues: Record<string, any>) => {
-    console.log("[SchemaFormDemo] Form submitted with values:", fieldValues);
-    alert("Form submitted! Check console for field values.");
-  };
+  // Field values are never logged or alerted here (bd polyglot-pdf-8v8i7): a
+  // shared law-office device's console must not carry client PII, and the
+  // demo has no downstream submission target for this handler to call.
+  const handleSubmit = (_fieldValues: Record<string, any>) => {};
 
   const handleSectionChange = (sectionId: string) => {
     // Section change handler (currently unused)
