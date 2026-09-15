@@ -35,9 +35,11 @@ function consoleComponentFiles(): string[] {
 /** Page components only -- *Page.tsx, excluding test files. The stylesheet-
  * import rule below is a PAGE rule: a page mounted elsewhere must not
  * silently pull console.css in without importing it itself. A presentational
- * sub-component (e.g. FirmAlertsBanner.tsx, rendered only from inside a
- * page) legitimately should NOT import the stylesheet on its own, so it must
- * not be swept into this set. */
+ * sub-component (e.g. FirmAlertsBanner.tsx, a real non-Page component in
+ * this directory) is NOT held to that rule -- it may or may not import the
+ * stylesheet itself depending on how its own styles are scoped, and either
+ * choice is legitimate for a component only ever rendered inside a page
+ * that already imports it -- so it must not be swept into this set. */
 function consolePageFiles(): string[] {
   return consoleComponentFiles().filter((name) => name.endsWith('Page.tsx'));
 }

@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-09-15 (bd polyglot-pdf-c9dfo: a FIFTH fill state, `skipped` -- purple dotted, checked before the empty test, and colour-preserved while dimmed, because a deliberately-skipped required field used to paint identically to an untouched blank.) See [the c9dfo journal entry](../journal/entries/2026-09-15-bd-c9dfo-skipped-overlay-state.md) for closeout details.*
+*Last updated: 2026-09-15 (bd polyglot-pdf-sagh6: the overlay's fill state and value now reach assistive tech through the accessible name -- colour alone reached nothing, and a read-only overlay had no name at all.) (bd polyglot-pdf-c9dfo: a FIFTH fill state, `skipped` -- purple dotted, checked before the empty test, and colour-preserved while dimmed, because a deliberately-skipped required field used to paint identically to an untouched blank.) See [the c9dfo journal entry](../journal/entries/2026-09-15-bd-c9dfo-skipped-overlay-state.md) for closeout details.*
 
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
@@ -96,7 +96,12 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   the field rect, never their label (a dropdown's options have no printed boxes
   of their own): the option's `pdf_on_value` -- the export code the filler
   writes (`resolve_select_fill_value`, bd `polyglot-pdf-g2fpr`) -- falling back
-  to the raw value for a legacy option that carries none. Both arms mirror the
+  to the raw value for a legacy option that carries none. SPEECH SPLITS FROM
+  PAINT HERE, and only here: the accessible name resolves the option LABEL
+  (`optionLabel`), because the clipping argument below is about PIXELS and a
+  screen reader hearing "AA" learns nothing (bd `polyglot-pdf-sagh6`; an
+  alphabetic code is not speakable as itself, bd `polyglot-pdf-jpjcv`). Do not
+  "fix" the divergence -- one test asserts both sides at once. Both arms mirror the
   filler, and a speakable label like "Armed Forces Americas (AA)" would
   clip in a 36pt state box (bd `polyglot-pdf-jpjcv`). A RADIO still paints its
   label, because its value is an internal slug that never prints.
@@ -141,6 +146,18 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   now-dimmed field). PreviewPane owns the editing state; without the edit
   handlers the surface is read-only. Overlays are keyboard-activatable
   (`role=button`, Enter/Space).
+- ACCESSIBLE NAME (`accessibleNameFor`, bd `polyglot-pdf-c9dfo` +
+  `polyglot-pdf-sagh6`): the overlay announces "Field: value (state)" -- the
+  fill state reaches assistive tech through the NAME, never through colour,
+  which no screen reader reads. A NON-clickable overlay takes `role="img"`
+  rather than no role at all: an aria-label on a roleless div is not reliably
+  announced, so a read-only or dimmed field used to be absent from the
+  accessibility tree entirely. `STATE_PHRASES` is a `Record<FillState, string>`,
+  so a new fill state cannot ship without deciding what it announces; `empty` is
+  deliberately silent. The painted glyphs carry `aria-hidden` -- the name
+  already says the value, and `role="img"` is an ARIA leaf whose name replaces
+  its subtree, so without this the value was either lost (read-only) or spoken
+  twice (the button path).
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
   checkbox_group must not paint as filled); `current` wins over all, then the
   `skipped` FLAG -- checked BEFORE the empty test, because `markFieldSkipped`

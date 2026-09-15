@@ -44,6 +44,17 @@ from typing import Optional
 
 import fitz  # PyMuPDF
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 
 # --------------------------------------------------------------------------- #
 # 1. annotate: numbered markers + legend
@@ -201,6 +212,7 @@ def ask_order(png_path: str, legend: list[dict], model: str,
     timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "600"))
     try:
         proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+            creationflags=windowless_creationflags(),
                               encoding="utf-8", timeout=timeout_s)
         if proc.returncode != 0:
             raise RuntimeError(f"claude CLI exited {proc.returncode}: "

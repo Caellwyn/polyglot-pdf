@@ -110,7 +110,11 @@ def _is_leak(match) -> bool:
     return not _SAFE_RHS.match(rhs)
 
 
-_LOG_CALL_START = re.compile(r"(?:self\.)?_log\.(?:info|warning|error|debug|critical)\s*\(")
+_LOG_CALL_START = re.compile(
+    r"(?:self\.)?_log\.(?:info|warning|error|debug|critical)\s*\("
+    r"|get_structured_logger\(\)\.(?:log_text_ai_usage|log_tts_usage|"
+    r"log_gemini_api_response)\s*\("
+)
 
 
 def _scan_leaks(text: str):

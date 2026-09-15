@@ -97,7 +97,13 @@ describe('PDFViewer show_if dimming', () => {
     // off with !important (P2.3 click-to-edit must not re-enable it); at the
     // component level nothing attaches a click handler or button role.
     expect(box.className).toContain('pdf-field-overlay--dimmed');
-    expect(box.getAttribute('role')).toBeNull();
+    // NOT-A-BUTTON, rather than no-role-at-all. A non-clickable overlay now
+    // carries role="img" and a state-bearing accessible name, because it
+    // previously had NEITHER and was absent from the accessibility tree
+    // entirely (bd polyglot-pdf-sagh6). Naming it does not make it
+    // interactive, and the two assertions that matter -- not a button, no
+    // click handler -- still hold.
+    expect(box.getAttribute('role')).not.toBe('button');
     expect(box.onclick).toBeNull();
   });
 });

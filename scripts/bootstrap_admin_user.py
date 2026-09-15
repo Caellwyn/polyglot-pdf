@@ -71,6 +71,15 @@ def _project_python() -> str:
         common = subprocess.run(
             ["git", "-C", here, "rev-parse", "--path-format=absolute",
              "--git-common-dir"],
+            # Inlined, NOT the module-level windowless_creationflags():
+            # this runs at IMPORT time (_require_project_python() below),
+            # before that helper is defined, and `subprocess` here is
+            # function-local. Calling the helper raised NameError, which
+            # the except-Exception below silently swallowed -- skipping the
+            # git resolution and reintroducing the exact worktree bug this
+            # function's docstring exists to describe (bd polyglot-pdf-rdftu).
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            if sys.platform == "win32" else 0,
             capture_output=True, text=True, timeout=10)
         if common.returncode == 0 and common.stdout.strip():
             root = os.path.dirname(common.stdout.strip())
@@ -111,6 +120,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 # The claim name is owned by the admin service's auth module -- importing it
 # keeps the writer and the reader from drifting apart.
 from admin_backend.services.admin_auth import APP_ADMIN_CLAIM  # noqa: E402
+
 
 # The former prod project is DEAD and unreachable (maintainer, 2026-08-14).
 # Refuse it outright so a stale muscle-memory invocation cannot hang or

@@ -351,6 +351,51 @@ def test_get_returns_the_raw_stored_values_and_flags_unknown_keys(
     assert set(body["known_keys"]) == set(runtime_config.RUNTIME_CONFIG_KEYS)
 
 
+def test_get_returns_a_schema_derived_from_runtime_config_key_types(
+        client, fake_db):
+    """EXIT CRITERION 1 (bd polyglot-pdf-wxcj0): the GET response's `schema`
+    map must be DERIVED from runtime_config.RUNTIME_CONFIG_KEYS/KEY_TYPES,
+    not a second hand-typed list living in this route (CLAUDE.md scar #8).
+
+    Mutation-verified by dropping a key from KEY_TYPES: pull one key out of
+    that dict (monkeypatch) and this test goes red because the schema no
+    longer matches RUNTIME_CONFIG_KEYS -- proving the assertion actually
+    exercises the derivation rather than a hardcoded expectation."""
+    resp = client.get("/admin/config/staging")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    schema = body["schema"]
+    assert set(schema) == set(runtime_config.RUNTIME_CONFIG_KEYS)
+    for key in runtime_config.RUNTIME_CONFIG_KEYS:
+        assert schema[key]["type"] == runtime_config.KEY_TYPES[key]
+        assert "default" in schema[key]
+
+    # Spot-check the concrete shape for a bool and a numeric key.
+    assert schema["LINK_MINTING_ENABLED"] == {"type": "bool", "default": False}
+    assert schema["LINK_FIRM_CAP"]["type"] == "int"
+    assert schema["LINK_COST_CEILING_USD"]["type"] == "float"
+
+
+def test_schema_omits_a_key_dropped_from_key_types(client, fake_db, monkeypatch):
+    """The mutation half of the derivation pin above: if KEY_TYPES were ever
+    edited to drop a key that RUNTIME_CONFIG_KEYS still names, the route's
+    schema must reflect that (config_schema() iterates RUNTIME_CONFIG_KEYS
+    and indexes KEY_TYPES, so a missing entry is a KeyError -- a 500, not a
+    silently incomplete schema). This directly demonstrates the mutation
+    test_get_returns_a_schema_derived_from_runtime_config_key_types's
+    docstring describes."""
+    truncated = dict(runtime_config.KEY_TYPES)
+    del truncated["LINK_FIRM_CAP"]
+    monkeypatch.setattr(runtime_config, "KEY_TYPES", truncated)
+
+    # TestClient re-raises an unhandled server-side exception rather than
+    # turning it into a 500 response -- so the loud failure this pins
+    # surfaces here as the KeyError itself, not a status code.
+    with pytest.raises(KeyError):
+        client.get("/admin/config/staging")
+
+
 def test_get_on_a_channel_with_no_doc_is_empty_not_an_error(client, fake_db):
     resp = client.get("/admin/config/demo")
     assert resp.status_code == 200
