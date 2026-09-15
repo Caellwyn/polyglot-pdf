@@ -1,8 +1,8 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
+**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-b6943: a FOURTH vitest suite, `admin-console/`, wired into `.github/workflows/ci.yml` the same way as `frontend`/`schema-editor` -- `npm ci` + `tsc --noEmit` + `vitest run`.) (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
+*Last updated: 2026-09-15 (bd polyglot-pdf-21m1y: the no-real-Firestore guard, autouse in both `backend/tests/conftest.py` and `admin_backend/tests/conftest.py`). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for the THIRD collected suite (`admin_backend/tests`)'s closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -117,6 +117,28 @@ The backend suite is organized **by directory**, not by marker:
   `backend/tests/conftest.py`'s fixtures. Tests that deliberately exercise the
   deployed path still work -- they set `K_SERVICE` themselves via
   `monkeypatch.setenv`, which wins over both guards.
+- **No real Firestore.** `backend/tests/conftest.py` and
+  `admin_backend/tests/conftest.py` both carry an autouse `_no_real_firestore`
+  fixture (bd polyglot-pdf-21m1y) that patches `firebase_admin.initialize_app`
+  and `google.cloud.firestore.Client.__init__` to raise a loud
+  `RealFirestoreReachedInTest` instead of touching anything real. This exists
+  because every store under `backend/services/` (`alerts.py`,
+  `usage_rollups.py`, `link_redemptions.py`, `links_store.py`,
+  `credit_ledger.py`) reaches Firestore through one seam --
+  `backend.services.auth.get_db()` -- which lazily initializes
+  `firebase_admin` with ADC and constructs a real client the moment an
+  unpatched test exercises it; on a developer machine with working gcloud
+  ADC this silently writes real documents into the shared project (see
+  `backend/tests/unit/_no_real_firestore.py`'s docstring for the 2026-09-15
+  incident this closed). The fix for a test the guard catches is the same
+  fix every existing store test already uses: patch `get_db()` (or the
+  module's own `_get_db`/`_collection`) with a fake, the way
+  `test_alerts_dedup.py` / `test_links_store.py` / `test_usage_rollups.py` /
+  `test_credit_ledger.py` do -- never disable the guard. The one sanctioned
+  opt-out is `@pytest.mark.external`, the same marker that already gates the
+  two real-Gemini tests. Cleanup for documents the incident already wrote:
+  `scripts/purge_test_artifacts.py --dry-run` / `--apply` (operator-run;
+  data deletion is the maintainer's).
 
 ### Running the backend suite (split-venv gotcha)
 
