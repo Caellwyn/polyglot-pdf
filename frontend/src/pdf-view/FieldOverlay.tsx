@@ -299,7 +299,23 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
         data-testid={`pdf-field-overlay-${field.id}`}
         {...interactiveRest}
       >
-        {content}
+        {/*
+          The painted value is DECORATIVE to assistive tech: the accessible
+          name already carries it (see accessibleNameFor). Hiding the subtree
+          keeps the two paths consistent and stops the value being announced
+          twice on the editable one.
+
+          Why it differs by path: the read-only overlay is role="img", an ARIA
+          LEAF, so its subtree is pruned automatically -- which is exactly what
+          made the value unreachable until the name started carrying it. A
+          BUTTON is not a leaf, so its child text stays exposed and a screen
+          reader can read the value once from the name and again from the
+          content (fresh-eyes round 2). aria-hidden gives the button the same
+          pruning the img gets, so one mechanism serves both.
+
+          Purely presentational: the glyphs remain on screen for sighted users.
+        */}
+        <span aria-hidden="true">{content}</span>
       </div>
       {optionRects.map(({ value, position }) => {
         const optPos = pdfToScreenCoords(position, scale);

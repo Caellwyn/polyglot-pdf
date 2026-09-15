@@ -260,3 +260,75 @@ describe('the ANSWER survives the img leaf rule (bd polyglot-pdf-sagh6)', () => 
     expect(name).toBe('USCIS Number');
   });
 });
+
+describe('the value is announced ONCE, on both paths (bd polyglot-pdf-sagh6)', () => {
+  // The mirror of the img-leaf finding, and fresh-eyes caught both.
+  //
+  // read-only is role="img" -- an ARIA LEAF, so its subtree is pruned
+  // automatically. That pruning is what made the painted value unreachable
+  // until the name started carrying it.
+  //
+  // editable is role="button", which is NOT a leaf: its child text stays
+  // exposed. So once the name carried the value, a screen reader could hear it
+  // twice -- once from the name, once from the content. aria-hidden on the
+  // painted subtree gives the button the same pruning the img gets, so one
+  // mechanism serves both paths.
+  //
+  // Round 1's value tests all rendered the READ-ONLY branch (no edit handlers),
+  // so nothing covered this until now.
+  const FILLED: FormField = {
+    id: 'uscis_number', name: 'USCIS Number', spoken_name: 'n', section_id: 's1',
+    type: 'text', validation: { required: true },
+    pdf_position: { page: 1, x: 10, y: 10, width: 100, height: 14 },
+  } as any;
+
+  function renderEditableFilled() {
+    render(
+      <PDFViewer
+        document={{} as any}
+        numPages={1}
+        scale={1}
+        fields={[FILLED]}
+        fieldValues={{ uscis_number: { value: 'A123456789', confirmed: true } }}
+        currentFieldId={null}
+        editingFieldId={null}
+        onOverlayClick={vi.fn()}
+        onCloseEditor={vi.fn()}
+        onFieldChange={vi.fn()}
+        onFieldBlur={vi.fn()}
+      />,
+    );
+    return screen.getByTestId(`pdf-field-overlay-${FILLED.id}`);
+  }
+
+  it('the editable overlay IS a button -- so its subtree is not auto-pruned', () => {
+    // Establishes the premise the next test depends on. If this ever stops
+    // being a button, the aria-hidden reasoning needs revisiting rather than
+    // silently still passing.
+    expect(renderEditableFilled().getAttribute('role')).toBe('button');
+  });
+
+  it('hides the painted value from AT, since the NAME already carries it', () => {
+    const box = renderEditableFilled();
+
+    expect(box.getAttribute('aria-label'), 'the name must carry the value')
+      .toContain('A123456789');
+
+    // The same text is still on screen -- and must be, for sighted users --
+    // but excluded from the accessibility tree so it is not read twice.
+    expect(box.textContent, 'the glyphs stay visible').toContain('A123456789');
+    const hidden = box.querySelector('[aria-hidden="true"]');
+    expect(hidden, 'the painted value must be hidden from assistive tech').toBeTruthy();
+    expect(hidden?.textContent).toContain('A123456789');
+  });
+
+  it('hides it on the READ-ONLY path too, so one rule covers both', () => {
+    render(
+      <PDFViewer document={{} as any} numPages={1} scale={1} fields={[FILLED]}
+        fieldValues={{ uscis_number: { value: 'A123456789', confirmed: true } }}
+        currentFieldId={null} />,
+    );
+    const box = screen.getByTestId(`pdf-field-overlay-${FILLED.id}`);
+    expect(box.querySelector('[aria-hidden="true"]')).toBeTruthy();
+  });
+});
