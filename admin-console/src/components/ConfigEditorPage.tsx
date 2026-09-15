@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  getChannelConfig, setChannelConfigKey, type ChannelConfig,
+  getChannelConfig, setChannelConfigKey, CONFIG_KEY_TYPES,
+  type ChannelConfig, type ConfigKeySchema, type ConfigKeyType,
 } from '../utils/adminApi';
 
 // Mirrors admin_backend/routes/config_routes.py's KNOWN_CHANNELS -- there is
@@ -9,6 +10,33 @@ import {
 // server 404s an unknown channel itself, so a stale copy here degrades to
 // "the tab 404s", not a silent wrong write.
 const KNOWN_CHANNELS = ['demo', 'staging'] as const;
+
+// Sentinel drafts value meaning "no value typed/selected yet -- use the
+// fallback". Distinct from any real value: 'true'/'false' are reserved for
+// an actual bool selection, and a numeric key's UNSET state must not be
+// confused with the empty string a cleared number input produces -- both
+// route to this same sentinel so Save always has a definite choice to make.
+// Never sent to the server: handleSave refuses to PUT while a draft is UNSET.
+const UNSET = '__unset__';
+
+/** True when `type` is one of CONFIG_KEY_TYPES -- the single source of
+ * truth for which type strings this console knows how to render a
+ * dedicated control for (adminApi.ts, itself derived from backend/services/
+ * runtime_config.py's KEY_TYPES; CLAUDE.md scar #8: never a second
+ * hand-typed list of key types). */
+function isKnownConfigKeyType(type: string): type is ConfigKeyType {
+  return (CONFIG_KEY_TYPES as readonly string[]).includes(type);
+}
+
+/** True when `schema[key]` names a type this page renders a dedicated
+ * control for. An unrecognized type (or a key GET never described in
+ * `schema` -- should not happen once the route is deployed, but a stale
+ * deploy skew is exactly the case a fallback exists for) renders as the
+ * original plain text input. */
+function controlKind(schema: ConfigKeySchema | undefined): 'bool' | 'number' | 'text' {
+  if (!schema || !isKnownConfigKeyType(schema.type)) return 'text';
+  return schema.type === 'bool' ? 'bool' : 'number';
+}
 
 interface ConfigEditorPageProps {
   /** Called first on every catch. Returns true when `err` was an
@@ -25,6 +53,18 @@ interface ConfigEditorPageProps {
  * app_config editor page, per channel (bd polyglot-pdf-b6943): the console's
  * first MUTATING page, driving admin_backend/routes/config_routes.py's
  * GET+PUT /admin/config/{channel}.
+ *
+ * SCHEMA-DRIVEN CONTROLS (bd polyglot-pdf-wxcj0): the GET response's
+ * `schema` map ({key: {type, default}}, derived server-side from
+ * runtime_config.KEY_TYPES) is the ONLY thing this page consults to decide
+ * how a key renders -- never a key name pattern or a second hand-typed list
+ * (CLAUDE.md scar #8). A `bool` key renders a <select> of true/false plus an
+ * "unset -- use the fallback" option; `int`/`float` render a number input
+ * (step="1" or step="any"); anything else falls back to the original text
+ * input. Whatever the control, the PUT body sends a TYPED JSON value --
+ * `true`/`false` for a bool, a JS number for int/float -- never the string
+ * "true" a naive text binding would produce, so runtime_config.coerce_value
+ * on the server sees exactly the type it expects.
  *
  * ONE KEY AT A TIME, matching the route's own contract
  * (ConfigPutRequest -- "a whole-doc PUT would make 'what changed' a diff the
@@ -63,7 +103,7 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
       const nextDrafts: Record<string, string> = {};
       for (const key of cfg.known_keys) {
         const raw = cfg.values[key];
-        nextDrafts[key] = raw === undefined ? '' : String(raw);
+        nextDrafts[key] = raw === undefined ? UNSET : String(raw);
       }
       setDrafts(nextDrafts);
     } catch (err) {
@@ -80,15 +120,52 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
   }, [channel]);
 
   const handleSave = React.useCallback(async (key: string) => {
+    const draft = drafts[key];
+    // UNSET means "the operator has not typed/selected a real value" --
+    // there is nothing to PUT. This is reachable for a bool select left on
+    // its placeholder option, or a number/text input cleared back to empty.
+    if (draft === undefined || draft === UNSET) return;
+
+    const schema = config?.schema?.[key];
+    const kind = controlKind(schema);
+    let value: unknown = draft;
+    if (kind === 'bool') {
+      value = draft === 'true';
+    } else if (kind === 'number') {
+      const parsed = Number(draft);
+      // An unparsable number never reaches the server as NaN -- surface the
+      // SAME "not a valid value" shape a server-side rejection would show,
+      // rather than letting JSON.stringify silently turn NaN into `null`
+      // and look like a deliberate clear.
+      if (Number.isNaN(parsed)) {
+        setError(`'${draft}' is not a valid value for ${key}`);
+        return;
+      }
+      // An 'int' key's `step="1"` is a validation HINT only (jsdom/browsers
+      // never block submission on stepMismatch outside a <form>'s own submit
+      // event, and Save is a plain button) -- so a decimal typed into an int
+      // control must be refused HERE, not left to reach the server. Without
+      // this, runtime_config.coerce_value's `int(2.5)` truncates it to `2`
+      // silently (and `int(0.9)` truncates CREDIT_LOW_THRESHOLD to `0`,
+      // which coerce_value treats as a legitimate value, not a rejection) --
+      // turning what was a loud 400 on origin/dev into a silent mis-write.
+      if (schema?.type === 'int' && !Number.isInteger(parsed)) {
+        setError(`'${draft}' is not a valid value for ${key}`);
+        return;
+      }
+      value = parsed;
+    }
+
     setSavingKey(key);
     setError(null);
     setSavedMessage(null);
     try {
-      // The raw draft string is sent as-is; the server's coerce_value is the
-      // single source of truth for what counts as a valid value for this
-      // key (config_routes.py's docstring) -- this page must not
-      // re-implement that judgment client-side and risk disagreeing with it.
-      await setChannelConfigKey(channel, key, drafts[key]);
+      // The typed value (boolean/number/string) is sent as-is; the server's
+      // coerce_value is the single source of truth for what counts as a
+      // valid value for this key (config_routes.py's docstring) -- this page
+      // must not re-implement that judgment client-side beyond turning the
+      // control's own input into the right JSON type.
+      await setChannelConfigKey(channel, key, value);
       setSavedMessage(`Saved ${key}.`);
       // Re-read the channel doc so the screen reflects the server's own
       // coercion of the value just written, not merely the form's draft --
@@ -101,7 +178,7 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
     } finally {
       setSavingKey(null);
     }
-  }, [channel, drafts, load, onAuthExpired]);
+  }, [channel, config, drafts, load, onAuthExpired]);
 
   return (
     <div data-testid="config-editor-page" className="max-w-2xl">
@@ -127,30 +204,69 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
 
       {config && (
         <div className="mt-4 space-y-3">
-          {config.known_keys.map((key) => (
-            <div key={key} className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="block text-sm text-gray-700" htmlFor={`config-key-${key}`}>
-                  {key}
-                </label>
-                <input
-                  id={`config-key-${key}`}
-                  className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                  value={drafts[key] ?? ''}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+          {config.known_keys.map((key) => {
+            // Optional chain guards an admin backend older than this console
+            // (deploy skew between deploy-admin-console.sh and deploy-admin.sh):
+            // GET /admin/config/{channel} with no `schema` key at all must
+            // degrade every row to a plain text input, not throw.
+            const schema = config.schema?.[key];
+            const kind = controlKind(schema);
+            const draft = drafts[key] ?? UNSET;
+            return (
+              <div key={key} className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-700" htmlFor={`config-key-${key}`}>
+                    {key}
+                  </label>
+                  {kind === 'bool' ? (
+                    <select
+                      id={`config-key-${key}`}
+                      className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                      value={draft}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+                      disabled={savingKey === key}
+                    >
+                      <option value={UNSET}>unset -- use the fallback</option>
+                      <option value="true">true</option>
+                      <option value="false">false</option>
+                    </select>
+                  ) : kind === 'number' ? (
+                    <input
+                      id={`config-key-${key}`}
+                      type="number"
+                      step={schema?.type === 'float' ? 'any' : '1'}
+                      className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                      value={draft === UNSET ? '' : draft}
+                      onChange={(e) => setDrafts((prev) => ({
+                        ...prev,
+                        [key]: e.target.value === '' ? UNSET : e.target.value,
+                      }))}
+                      disabled={savingKey === key}
+                    />
+                  ) : (
+                    <input
+                      id={`config-key-${key}`}
+                      className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                      value={draft === UNSET ? '' : draft}
+                      onChange={(e) => setDrafts((prev) => ({
+                        ...prev,
+                        [key]: e.target.value === '' ? UNSET : e.target.value,
+                      }))}
+                      disabled={savingKey === key}
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void handleSave(key)}
                   disabled={savingKey === key}
-                />
+                >
+                  {savingKey === key ? 'Saving...' : 'Save'}
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void handleSave(key)}
-                disabled={savingKey === key}
-              >
-                {savingKey === key ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          ))}
+            );
+          })}
 
           {config.unknown_keys.length > 0 && (
             <div className="mt-6">

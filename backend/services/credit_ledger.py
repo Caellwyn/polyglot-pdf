@@ -178,6 +178,20 @@ NEGATIVE_ONLY_TYPES = frozenset({TYPE_MINT_DEBIT})
 # mandatory or the ledger becomes unauditable exactly where it matters most.
 REASON_REQUIRED_TYPES = frozenset({TYPE_ADJUSTMENT})
 
+# THE ONE BOUND on `reason`, enforced HERE so every caller of append_entry()
+# is covered -- not just admin_backend/routes/credit_routes.py's HTTP path
+# (bd polyglot-pdf-uaxt5, PF-9, Opus cross-surface review finding: bd
+# bnkuv). scripts/grant_credits.py's `adjust` subcommand is a SECOND,
+# unbounded door into this SAME ledger -- it calls append_entry() directly
+# with an operator-supplied --reason that had no length check at all before
+# this bead, bypassing credit_routes.py's own Field(max_length=...) on
+# AdjustRequest.reason entirely. A bound at the write layer closes both
+# doors at once, the same way _validate's other checks (amount sign,
+# usd_amount presence) already do -- credit_routes.py's model constant
+# below imports THIS one so there is exactly one number, never two that can
+# drift.
+REASON_MAX_LENGTH = 500
+
 # Every field an entry carries. A frozenset rather than prose so a writer
 # that drops a field, or a reader that expects one nobody writes, is a set
 # difference a test catches (the audit_log.ROW_FIELDS precedent).
@@ -348,6 +362,15 @@ def _validate(
     if entry_type in REASON_REQUIRED_TYPES and not (
             isinstance(reason, str) and reason.strip()):
         raise LedgerError("{} requires a reason".format(entry_type))
+    # Bound on EVERY entry that carries a reason, not just the
+    # REASON_REQUIRED_TYPES -- a caller-supplied reason on ANY type must
+    # not exceed this length, since the ledger entry and the audit row are
+    # both stores this text reaches (see REASON_MAX_LENGTH's own comment).
+    if isinstance(reason, str) and len(reason) > REASON_MAX_LENGTH:
+        raise LedgerError(
+            "reason must be at most {} characters, got {}".format(
+                REASON_MAX_LENGTH, len(reason))
+        )
 
 
 def _apply_entry_writes(

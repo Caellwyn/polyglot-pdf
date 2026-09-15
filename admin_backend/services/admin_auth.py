@@ -55,7 +55,7 @@ from typing import Annotated, Optional
 
 import structlog
 from fastapi import Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 _log = structlog.get_logger().bind(module="admin_auth")
 
@@ -236,6 +236,35 @@ class CompositeActor(BaseModel):
     kind: str
     firm_id: Optional[str] = None
     employee_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _employee_id_matches_kind(self) -> "CompositeActor":
+        """Pins the invariant this class's own docstring only states in
+        prose: employee_id is set if and only if kind is
+        ACTOR_KIND_FIRM_EMPLOYEE (bd polyglot-pdf-wiju0).
+
+        Without this, a CompositeActor with kind=firm_employee and
+        employee_id=None (or empty) is constructible, and
+        list_firm_links's `if employee_id is not None` scoping filter
+        FAILS OPEN on it -- the employee actor silently widens to see the
+        WHOLE FIRM's links instead of none. Every production constructor
+        happens to pair these correctly today, so guarding it at the type
+        (rather than trusting every future constructor to keep pairing
+        them by hand) is what keeps a future caller from reintroducing the
+        data-exposure regression with no error and no failing test.
+        """
+        is_employee = self.kind == ACTOR_KIND_FIRM_EMPLOYEE
+        has_employee_id = bool(self.employee_id)
+        if is_employee and not has_employee_id:
+            raise ValueError(
+                "CompositeActor(kind=ACTOR_KIND_FIRM_EMPLOYEE) requires a "
+                "non-empty employee_id")
+        if not is_employee and has_employee_id:
+            raise ValueError(
+                "CompositeActor(kind={!r}) must not carry an employee_id "
+                "(employee_id is only meaningful for "
+                "ACTOR_KIND_FIRM_EMPLOYEE)".format(self.kind))
+        return self
 
     @property
     def is_app_admin(self) -> bool:

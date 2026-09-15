@@ -2,6 +2,14 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
+*Last updated: 2026-09-15 (bd polyglot-pdf-6088m, sprint 23 C4: the
+`backend/.env.DEV` marker-file gate (below) is only safe in production because
+`.dockerignore`'s `backend/.env.*` line keeps the marker out of the built
+container -- that line is now pinned by `tests/test_dockerignore_env_exclusion.py`,
+and `/dev/console-log` additionally fails closed on `K_SERVICE` as a backstop
+independent of the marker file. No env var, deploy step, or config key
+changed.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
 
 
@@ -33,7 +41,10 @@ which bypasses the cache).
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
-  `EXTRACTOR_MAX_PDF_MB`.
+  `EXTRACTOR_MAX_PDF_MB`, `RESUME_FORM_PARSE_TIMEOUT_S` (default `8.0` --
+  wall-clock cap on `/api/resume-form`'s `fitz.open` + structural-comparison
+  parse, run in a thread so the cap can actually interrupt it; see
+  [pdf-filling.md](pdf-filling.md)).
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs

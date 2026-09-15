@@ -125,6 +125,18 @@ class Settings(BaseModel):
 	AUDIO_IN_RATE: int = 16000
 	AUDIO_OUT_RATE: int = 24000
 	MAX_UPLOAD_MB: int = 5
+	# Wall-clock cap on the resume-form parse (fitz.open + the structural
+	# check) in backend/routes/pdf_fill_routes.py's /api/resume-form (bd
+	# polyglot-pdf-6088m, sprint 23 C4; PF-10). That parse runs on
+	# attacker-controlled bytes -- a client uploads a PDF straight off their
+	# own disk -- and PyMuPDF has no built-in wall-clock guard, so a crafted
+	# file that is slow to parse (deeply nested objects, a pathological
+	# content stream) could otherwise tie up a worker indefinitely. A few
+	# seconds is generous: the shipped kits are ~150KB-2MB and parse in low
+	# milliseconds.
+	RESUME_FORM_PARSE_TIMEOUT_S: float = float(
+		os.getenv("RESUME_FORM_PARSE_TIMEOUT_S", "8.0")
+	)
 	WS_CHUNK_MS: int = 20
 	# Backend audio-cadence gap-filling (bd polyglot-pdf-7f7m). Native-VAD mode
 	# requires a CONTINUOUS PCM stream to Gemini; a stutter/gap on the client can

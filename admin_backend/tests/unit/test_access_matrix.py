@@ -243,17 +243,46 @@ async def test_an_editor_shaped_token_cannot_reach_the_composite_gate_either(mon
     assert exc.value.status_code == 403
 
 
-def test_no_admin_route_accepts_a_client_link_shaped_token():
+def test_no_admin_route_accepts_a_client_link_shaped_token(monkeypatch):
     """The client-link credential (one dot, HMAC-signed, no Firebase claims
     at all) is not even a WELL-FORMED Firebase JWT -- every admin gate calls
     fb_auth.verify_id_token directly (never the public backend's shape
     dispatcher), so a link token fails Firebase verification outright as a
     malformed token, landing on the SAME 401 a garbage string would. This is
-    a real HTTP round trip (no fake Firebase) precisely to prove the negative
-    over the actual verifier, not a mock of it."""
-    resp = client.get("/admin/whoami",
-                      headers={"Authorization": "Bearer not.a.jwt"})
-    assert resp.status_code == 401, resp.text
+    a real HTTP round trip against the REAL fb_auth.verify_id_token (no fake
+    Firebase AUTH) precisely to prove the negative over the actual verifier,
+    not a mock of it.
+
+    bd polyglot-pdf-21m1y: verify_admin_token self-inits firebase_admin with
+    ADC when no app exists (admin_auth.py's own "OWN the init" comment), so
+    this test used to reach a real firebase_admin app -- harmlessly, since a
+    malformed token fails LOCAL parsing before any network call, but still a
+    real-Firestore-adjacent reach the no-real-Firestore guard now refuses on
+    principle. Pre-seed a REAL firebase_admin.App with a STUB credential
+    (never asked for a token: verify_id_token rejects the malformed JWT
+    during local parsing, before any credential is used) so the app exists
+    without touching ADC or the network, and verify_admin_token's own
+    self-init is skipped (it only fires when _apps is empty) -- the test
+    still exercises the real verify_id_token, just against a harmless app.
+    """
+    import firebase_admin as fb
+    from firebase_admin import credentials
+
+    class _StubCredential(credentials.Base):
+        def get_credential(self):  # pragma: no cover -- never reached
+            raise AssertionError(
+                "a malformed token must fail local parsing before any "
+                "credential is used"
+            )
+
+    app = fb.App("[DEFAULT]", _StubCredential(), {})
+    monkeypatch.setitem(fb._apps, "[DEFAULT]", app)
+    try:
+        resp = client.get("/admin/whoami",
+                          headers={"Authorization": "Bearer not.a.jwt"})
+        assert resp.status_code == 401, resp.text
+    finally:
+        fb._apps.pop("[DEFAULT]", None)
 
 
 # ===========================================================================

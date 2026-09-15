@@ -9,12 +9,16 @@ from backend.services import plans
 
 
 def test_default_plan_is_the_maintainers_starting_numbers():
-    """The 2026-09-14 pricing decision, verbatim: starter tier, 35
-    credits/month, no rollover.
+    """The 2026-09-14 pricing decision's starter tier and 35 credits/month
+    are unchanged; rollover flips to True (bd polyglot-pdf-hnlj3, maintainer
+    decision 2026-09-15: "credits roll over -- no real reason not to") --
+    was False at this module's original 2026-09-14 launch.
 
-    Mutation: change any one of the three values -- red."""
+    Mutation: change any one of the three values -- red. Mutation 2 (bd
+    hnlj3): flip the expected rollover back to False -- red now that
+    DEFAULT_PLAN's rollover is True; verified 2026-09-15."""
     assert plans.DEFAULT_PLAN == {
-        "tier": "starter", "monthly_credits": 35, "rollover": False,
+        "tier": "starter", "monthly_credits": 35, "rollover": True,
     }
 
 

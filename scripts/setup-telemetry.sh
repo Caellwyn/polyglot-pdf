@@ -70,7 +70,11 @@
 # Pinned by tests/test_setup_telemetry_script.py, which reads this script's
 # actual shipped text (gcloud is never invoked in CI).
 #
-# Usage: ./scripts/setup-telemetry.sh <PROJECT_ID>
+# Usage: ./scripts/setup-telemetry.sh <PROJECT_ID> [BILLING_EXPORT_TABLE]
+#   BILLING_EXPORT_TABLE is optional but not cosmetic: omitting it skips
+#   creating every one of the script's cost-reporting views (see the
+#   BILLING_EXPORT_TABLE block below), so most of what this script exists to
+#   set up silently does not happen without it.
 #
 # Idempotent throughout, including the sink step (bd polyglot-pdf-f7f0h):
 # `gcloud logging sinks describe` decides whether to `sinks create` (sink
@@ -88,7 +92,7 @@ NC='\033[0m'
 
 PROJECT_ID=$1
 if [ -z "$PROJECT_ID" ]; then
-    echo -e "${RED}[ERROR]${NC} Usage: $0 <PROJECT_ID>"
+    echo -e "${RED}[ERROR]${NC} Usage: $0 <PROJECT_ID> [BILLING_EXPORT_TABLE]"
     exit 1
 fi
 
@@ -259,13 +263,15 @@ bq add-iam-policy-binding \
 # BILLING_EXPORT_TABLE: the detailed Cloud Billing export table. Enabling
 # that export is a MAINTAINER console step (plan: Epic 3 bead 7, NOT this
 # bead) and requires knowing the destination project/dataset chosen there,
-# so it is a REQUIRED second argument rather than guessed.
+# so it is an OPTIONAL second argument rather than guessed -- omitting it
+# skips view creation below (this script's sink/dataset/IAM setup still runs
+# either way).
 BILLING_EXPORT_TABLE=$2
 if [ -z "$BILLING_EXPORT_TABLE" ]; then
     echo -e "${YELLOW}[NOTE]${NC} No BILLING_EXPORT_TABLE argument given -- skipping view creation."
     echo -e "${YELLOW}[NOTE]${NC} Re-run once the Cloud Billing export is enabled (Epic 3 bead 7):"
     echo -e "${YELLOW}[NOTE]${NC}   ./scripts/setup-telemetry.sh $PROJECT_ID <BILLING_PROJECT.BILLING_DATASET.gcp_billing_export_resource_v1_XXXXXX>"
-    echo -e "${GREEN}[INFO]${NC} Telemetry sink + dataset + IAM setup complete for $PROJECT_ID!"
+    echo -e "${GREEN}[INFO]${NC} Telemetry sink + dataset + IAM setup complete for $PROJECT_ID -- NO VIEWS CREATED (no BILLING_EXPORT_TABLE given)."
     exit 0
 fi
 

@@ -40,8 +40,10 @@ WHAT GETS WRITTEN, PER FIRM:
     fires for docs older than that).
   - `plan` (bd polyglot-pdf-0euzk): set ONLY when the firm doc has no `plan`
     key yet, to backend/services/plans.py's DEFAULT_PLAN ({tier: "starter",
-    monthly_credits: 35, rollover: False} -- the maintainer's 2026-09-14
-    starting numbers). Independent of the kind/balance backfill above: a
+    monthly_credits: 35, rollover: True} -- the maintainer's 2026-09-14
+    starting numbers, rollover flipped True by bd polyglot-pdf-hnlj3,
+    2026-09-15: "credits roll over -- no real reason not to"). Independent
+    of the kind/balance backfill above: a
     firm created AFTER admin_backend/routes/firm_routes.py's create route
     started writing a default plan already has one and is skipped for this
     step alone, while an OLDER firm predating that route gets caught up

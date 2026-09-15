@@ -16,19 +16,30 @@ its own copy.
 Doc shape (a sub-object on `firms/{firm_id}.plan`):
     tier: str              one of PLAN_TIERS (closed list; today: "starter")
     monthly_credits: int   positive; the monthly top-up target/increment
-    rollover: bool         False (default): the top-up brings the balance up
-                            TO monthly_credits (a "use it or lose it" cap).
-                            True: the top-up ADDS monthly_credits on top of
-                            whatever is left (an accumulating allotment).
+    rollover: bool         True (default, bd polyglot-pdf-hnlj3, maintainer
+                            decision 2026-09-15: "credits roll over -- no
+                            real reason not to"): the top-up ADDS
+                            monthly_credits on top of whatever is left (an
+                            accumulating allotment). False: the top-up
+                            brings the balance up TO monthly_credits (a
+                            "use it or lose it" cap) -- still a valid,
+                            settable value (PATCH /admin/firms/{id}/plan),
+                            just no longer what a NEW or backfilled firm
+                            gets by default.
 
 DEFAULT_PLAN is the shape scripts/backfill_firm_kind.py's plan backfill and
 admin_backend/routes/firm_routes.py's create route both apply to a firm with
-no stored `plan` -- {tier: "starter", monthly_credits: 35, rollover: False},
-the maintainer's own starting numbers. It is a plain dict literal (not a
-function) so every caller sees the IDENTICAL default object shape; callers
-that mutate it must copy first (`dict(DEFAULT_PLAN)`), since a shared mutable
-default is exactly the aliasing bug this module's simplicity should not
-invite.
+no stored `plan` -- {tier: "starter", monthly_credits: 35, rollover: True},
+the maintainer's own starting numbers (rollover flipped True by bd
+polyglot-pdf-hnlj3, 2026-09-15 -- see that bead for the "35 credits per
+month cap" wording correction this implies: with rollover the default,
+"cap" is the wrong word for what monthly_credits now normally means. The
+one existing firm (staging-mock) was switched to rollover by hand the same
+day, ahead of this code change, so DEFAULT_PLAN and live data agree). It is
+a plain dict literal (not a function) so every caller sees the IDENTICAL
+default object shape; callers that mutate it must copy first
+(`dict(DEFAULT_PLAN)`), since a shared mutable default is exactly the
+aliasing bug this module's simplicity should not invite.
 
 PLAN_TIERS IS CLOSED, ON PURPOSE. A firm's tier gates NOTHING behavioral
 today (there is only one tier) -- it exists so a second tier is a one-line
@@ -56,15 +67,17 @@ from typing import Any
 # list (validate_plan below, and any console picker built later).
 PLAN_TIERS = ("starter",)
 
-# The maintainer's 2026-09-14 starting numbers, applied by
-# scripts/backfill_firm_kind.py (only when a firm has no stored `plan`) and
-# by admin_backend/routes/firm_routes.py's create route (every new firm).
-# A plain dict literal: copy it (dict(DEFAULT_PLAN)) before mutating, never
-# mutate this module-level object in place.
+# The maintainer's 2026-09-14 starting numbers (rollover flipped to True by
+# bd polyglot-pdf-hnlj3, 2026-09-15: "credits roll over -- no real reason
+# not to"), applied by scripts/backfill_firm_kind.py (only when a firm has
+# no stored `plan`) and by admin_backend/routes/firm_routes.py's create
+# route (every new firm). A plain dict literal: copy it
+# (dict(DEFAULT_PLAN)) before mutating, never mutate this module-level
+# object in place.
 DEFAULT_PLAN: dict[str, Any] = {
     "tier": "starter",
     "monthly_credits": 35,
-    "rollover": False,
+    "rollover": True,
 }
 
 

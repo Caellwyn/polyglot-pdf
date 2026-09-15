@@ -75,6 +75,20 @@ credit_ledger.py's subscription_grant from always-requiring usd_amount to
 USD_OPTIONAL_TYPES (validated when given, never required) -- see that
 module's own comment on the split.
 
+THE CLOUD SCHEDULER TRIGGER IS INTERIM (bd polyglot-pdf-hnlj3, 2026-09-15).
+Epic 5's Stripe integration will call the SAME per-firm helper,
+topup_firm() (below), from a payment webhook (invoice.paid / subscription
+renewal) instead of waiting for the monthly cron pass -- topping up the
+one firm the webhook event names the moment its payment actually clears,
+rather than on a fixed calendar date that may run before or after the
+firm's own billing cycle lands. This is WHY the per-firm top-up logic is
+its own function (topup_firm) rather than inlined in the loop below: the
+loop (run_monthly_topup / _run_monthly_topup) is the Scheduler-specific
+caller, and topup_firm is the reusable core the webhook route will call
+directly, once, for its one firm -- no change to topup_firm's own contract
+expected when that lands. Until Epic 5 ships, the Scheduler route below
+remains the ONLY way a firm's monthly credits are actually granted.
+
 IDEMPOTENT BY MONTH, ON THE LEDGER ITSELF, NOT ON A SEPARATE MARKER DOC,
 AND SAFE UNDER CONCURRENT INVOCATION. Every entry this route writes carries
 `period: "YYYY-MM"` (credit_ledger.py's nullable `period` field, bd
@@ -124,7 +138,7 @@ from typing import Annotated, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import (
@@ -177,12 +191,40 @@ class GrantRequest(BaseModel):
     kit_id: Optional[str] = None
 
 
+# The operator's free-text `reason` is the one unbounded string this route
+# accepts. Sprint 23 bead uaxt5 (PF-9): an unbounded reason was stored
+# verbatim in THREE stores at once -- firms/*/ledger (the entry itself,
+# where a text-length field is a legitimate audit need), admin_audit_log.after
+# (a second, evidence-adjacent copy), AND logged to Cloud Logging (a THIRD
+# copy with no retention control of its own) -- so an operator pasting a
+# client's intake notes into this box would land them in three places with no
+# bound. Bounding the field at the Pydantic model refuses the request BEFORE
+# any store is touched (a 422, not a truncation after the fact); the log-line
+# drop below (see admin_credits_adjusted) removes the THIRD copy entirely,
+# since a log line has no legitimate need for the free-text content at all
+# (an id is enough to look the entry up). The ledger and audit-log copies
+# remain -- an operator's stated reason for a balance change is exactly what
+# those two stores exist to record -- but bounded, never arbitrary-length.
+#
+# IMPORTED FROM credit_ledger, not redeclared here (Opus cross-surface
+# review finding, bd bnkuv): scripts/grant_credits.py's `adjust` subcommand
+# is a SECOND, unbounded door into the SAME ledger -- it calls
+# append_entry() directly, bypassing this Pydantic model entirely. The bound
+# now lives at credit_ledger._validate() (append_entry's own gate), which
+# covers both doors; this alias keeps existing references to
+# credit_routes._REASON_MAX_LENGTH working, but there is only ONE number,
+# defined once, so the two callers cannot silently drift apart.
+_REASON_MAX_LENGTH = credit_ledger.REASON_MAX_LENGTH
+
+
 class AdjustRequest(BaseModel):
     """The signed operator escape hatch. `reason` is required (plan:
-    "reason required"), matching credit_ledger.REASON_REQUIRED_TYPES."""
+    "reason required"), matching credit_ledger.REASON_REQUIRED_TYPES, and
+    bounded (bd polyglot-pdf-uaxt5, PF-9) so a free-text paste cannot carry
+    unbounded content into the ledger entry or the audit row."""
 
     amount: int
-    reason: str
+    reason: str = Field(max_length=_REASON_MAX_LENGTH)
 
 
 def _validated_firm_id(firm_id: str) -> str:
@@ -327,8 +369,14 @@ async def adjust_credits(
         _target="firms/{}/ledger#adjust".format(firm_id),
         _after={"amount": body.amount, "reason": body.reason},
     )
+    # bd polyglot-pdf-uaxt5 (PF-9): reason is DELIBERATELY absent from this
+    # line -- an operator's free-text content has no legitimate reason to
+    # reach Cloud Logging (a third copy, with no retention control of its
+    # own) when the ledger entry and the audit row already carry it, bounded,
+    # in stores that DO have access control. request_id is enough to look
+    # the full entry up in either of those.
     _log.info("admin_credits_adjusted", firm_id=firm_id, amount=body.amount,
-              reason=body.reason, actor_uid=actor.uid, request_id=request_id)
+              actor_uid=actor.uid, request_id=request_id)
     return {**result, "request_id": request_id}
 
 
@@ -388,7 +436,7 @@ def _already_topped_up_this_period(db, firm_id: str, period: str) -> bool:
     pre-check is check-then-act, and two overlapping calls could both pass
     it before either commits. The RACE-SAFE half is
     credit_ledger.append_entry()'s own in-transaction re-check (raises
-    DuplicatePeriodEntry), which _topup_one_firm below also treats as
+    DuplicatePeriodEntry), which topup_firm below also treats as
     skipped_already_run. Both halves call the SAME
     credit_ledger.query_period_entries() so they can never disagree about
     what "already topped up" means.
@@ -397,11 +445,27 @@ def _already_topped_up_this_period(db, firm_id: str, period: str) -> bool:
         db, firm_id, credit_ledger.TYPE_SUBSCRIPTION_GRANT, period)) > 0
 
 
-def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
+def topup_firm(db, firm_id: str, firm: dict, *, period: str,
+               actor: str = None) -> str:
     """Top up ONE firm's balance per its stored plan. Returns one of
     "topped_up", "skipped_at_cap", "skipped_already_run", or
     "skipped_no_plan" -- a per-firm outcome the route sums into its
     response, mirroring sweep_routes.py's refunded/skipped counts.
+
+    FACTORED OUT (bd polyglot-pdf-hnlj3) so a single-firm caller can reuse
+    it without going through the whole-firm-collection loop below --
+    Epic 5's Stripe webhook (invoice.paid / subscription renewal) is the
+    named future caller, topping up the ONE firm the webhook event names
+    the moment its payment clears, rather than waiting for the monthly
+    Scheduler pass. `actor` defaults to MONTHLY_TOPUP_ACTOR (the Scheduler
+    route's own actor string, unchanged) so run_monthly_topup below needs
+    no call-site change; a future webhook caller passes its OWN actor
+    string (e.g. "system:stripe_webhook") so a ledger_export reader can
+    still tell which trigger produced a given entry, exactly the same
+    distinction MONTHLY_TOPUP_ACTOR's own "system:" prefix convention
+    exists to preserve (see that constant's comment). NO BEHAVIOUR CHANGE
+    beyond the extraction and the new (defaulted) parameter -- every
+    existing test in test_monthly_topup.py pins this unchanged.
 
     "skipped_already_run" comes back via TWO different paths: the fast
     _already_topped_up_this_period check below (the common case -- a re-run
@@ -419,6 +483,9 @@ def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
     counts it as a failure, exactly like reconcile_expired_for_firm's own
     per-link tolerance.
     """
+    if actor is None:
+        actor = MONTHLY_TOPUP_ACTOR
+
     plan = firm.get("plan")
     if not isinstance(plan, dict):
         return "skipped_no_plan"
@@ -457,7 +524,7 @@ def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
         audit_log.record_in_transaction(
             tx,
             db,
-            actor_uid=MONTHLY_TOPUP_ACTOR,
+            actor_uid=actor,
             actor_email=None,
             action=ACTION_CREDITS_MONTHLY_TOPUP,
             target="firms/{}/ledger#monthly_topup".format(firm_id),
@@ -470,7 +537,7 @@ def _topup_one_firm(db, firm_id: str, firm: dict, *, period: str) -> str:
     try:
         credit_ledger.append_entry(
             db, firm_id, entry_type=credit_ledger.TYPE_SUBSCRIPTION_GRANT,
-            amount=amount, actor=MONTHLY_TOPUP_ACTOR, usd_amount=None,
+            amount=amount, actor=actor, usd_amount=None,
             channel=None, reason="monthly top-up {}".format(period),
             period=period, extra_writes=_audit,
         )
@@ -493,7 +560,9 @@ def _run_monthly_topup(*, period: str) -> dict:
     Iterates EVERY active firm (backend/services/firms.py's
     FIRM_STATUS_ACTIVE -- a suspended firm is not topped up, matching the
     intuition that suspending a firm pauses its subscription too) and calls
-    _topup_one_firm for each. A per-firm exception is caught, logged, and
+    topup_firm() for each (bd polyglot-pdf-hnlj3: factored out of this loop
+    so a future single-firm caller, e.g. Epic 5's Stripe webhook, can reuse
+    it without this loop). A per-firm exception is caught, logged, and
     counted as a failure -- one bad firm's doc must never abort the whole
     monthly pass and leave every other firm un-topped-up.
     """
@@ -515,7 +584,7 @@ def _run_monthly_topup(*, period: str) -> dict:
         if firm.get("status") != FIRM_STATUS_ACTIVE:
             continue
         try:
-            outcome = _topup_one_firm(db, firm_id, firm, period=period)
+            outcome = topup_firm(db, firm_id, firm, period=period)
             outcomes[outcome].append(firm_id)
         except Exception as exc:  # noqa: BLE001 -- one bad firm must not
             # abort the whole monthly pass.

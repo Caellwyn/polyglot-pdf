@@ -4,17 +4,20 @@ PDF Filling Routes - Backend endpoint for filling PDFs with form data
 Uses PyMuPDF to fill PDF forms (supports XFA and AcroForm).
 Stateless: receives data -> fills PDF -> returns bytes (no storage).
 """
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional
+import concurrent.futures
 import os
 import re
 import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
 import structlog
 
+from backend.config import get_settings
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.pdf_structure import (
 	StructureMismatch,
@@ -42,6 +45,167 @@ _log = structlog.get_logger().bind(module="pdf_fill_routes")
 # far below a size that would hurt to decode. Anything larger is not a saved
 # form, and handing it to a PDF parser is a cheap denial vector.
 _MAX_RESUME_UPLOAD_BYTES = 25 * 1024 * 1024
+
+# A dedicated pool for wall-clock-bounded PDF parses (bd polyglot-pdf-6088m,
+# sprint 23 C4; PF-10). /api/resume-form runs fitz.open + the structural
+# comparison on attacker-controlled bytes -- a client uploads a PDF straight
+# off their own disk -- and PyMuPDF has no built-in wall-clock guard. A
+# thread (not the running event loop) is what makes future.result(timeout=)
+# meaningful: a pure asyncio.wait_for around a synchronous, CPU-bound call
+# would not actually interrupt it, since nothing yields control back to the
+# loop while fitz is parsing. A dedicated pool (rather than the default
+# asyncio.to_thread executor) keeps a hung parse from starving unrelated
+# to_thread work elsewhere in the process.
+_RESUME_PARSE_POOL = concurrent.futures.ThreadPoolExecutor(
+	max_workers=4, thread_name_prefix="resume-form-parse"
+)
+
+
+async def _enforce_body_cap(request: Request, cap_bytes: int, detail: str) -> None:
+	"""Refuse a body over cap_bytes BYTE-ACCURATELY, before it is parsed
+	(bd polyglot-pdf-6088m, sprint 23 C4; PF-10).
+
+	MUST run before FastAPI's own body read, which is why this is NOT a
+	FastAPI dependency (fresh-eyes, BLOCKER 1): `fastapi.routing.
+	get_request_handler` calls `await request.body()` to build the Pydantic
+	body model BEFORE it resolves any `Depends(...)`, so a `Depends()`-based
+	guard always runs AFTER the body is already fully read into memory --
+	the earlier version of this guard shipped exactly that shape, and a
+	caller sending an unbounded body with no Content-Length reached the
+	handler every time. `_BodyCapRoute` below calls this from
+	`get_route_handler()`, which wraps the handler at the ASGI-adjacent
+	`Callable[[Request], Response]` layer, ahead of FastAPI's own body read.
+
+	TWO LAYERS, in order:
+	1. Content-Length header check -- cheap, and enough for an HONEST client:
+	   refuse before reading a single byte of body. NOT sufficient alone: a
+	   caller can omit the header (chunked transfer) or lie about it, and
+	   Starlette's own request handling does not itself verify the header
+	   against the bytes actually received (a lying header does not truncate
+	   or reject the real body -- see the class docstring).
+	2. STREAMING byte count -- reads the body chunk-by-chunk via
+	   `request.stream()`, stopping and raising 413 the moment the running
+	   total exceeds the cap: no chunk past the one that pushed the total
+	   over cap is ever requested, so an unbounded stream is never fully
+	   read into memory.
+
+	`detail` is the FULL 413 message, not a bare size label (fresh-eyes NIT):
+	resume-form's byte cap (`_MAX_RESUME_BODY_BYTES`, ~33.9MB) is the base64-
+	inflated ENVELOPE size, which is not the number meaningful to whoever
+	reads the error -- so its detail string names the DECODED file limit
+	(25MB) instead, worded as its own sentence rather than filled into a
+	generic "exceeds the {label} upload limit" template that would otherwise
+	silently misdescribe the actual enforced number.
+
+	On the ACCEPT path this consumes `request.stream()` itself, so it caches
+	the joined bytes onto `request._body` -- the same private attribute
+	Starlette's own `Request.body()`/`stream()` check via
+	`hasattr(self, "_body")` (starlette/requests.py) -- so FastAPI's later
+	body parse for the route's Pydantic model finds a cached body and reuses
+	it, rather than finding an already-exhausted ASGI receive channel. This
+	relies on that exact attribute name; if a starlette upgrade renames it,
+	this guard must be updated to match (there is no public API for
+	"pre-read and cache the body").
+	"""
+	content_length = request.headers.get("content-length")
+	if content_length is not None:
+		try:
+			declared = int(content_length)
+		except ValueError:
+			declared = None
+		if declared is not None and declared > cap_bytes:
+			raise HTTPException(status_code=413, detail=detail)
+
+	total = 0
+	chunks: list[bytes] = []
+	async for chunk in request.stream():
+		if not chunk:
+			continue
+		total += len(chunk)
+		if total > cap_bytes:
+			raise HTTPException(status_code=413, detail=detail)
+		chunks.append(chunk)
+	# Cache onto the private attribute Starlette's Request.body()/stream()
+	# look for, so the route's Pydantic body model (parsed by FastAPI AFTER
+	# this guard runs) reads the bytes already collected here instead of an
+	# exhausted stream.
+	request._body = b"".join(chunks)  # noqa: SLF001 -- see docstring above
+
+
+def _fill_pdf_cap() -> tuple[int, str]:
+	"""Resolved FRESH on every request (bd polyglot-pdf-6088m, BLOCKER 2,
+	fresh-eyes): calling get_settings() here, rather than binding
+	`settings=Depends(get_settings)` at decoration time, is what lets a test
+	override actually take effect. A bound Depends(get_settings) captures the
+	ORIGINAL callable once, at route-registration time; reassigning the
+	module attribute later (a test's monkeypatch, or an unrelated
+	app.dependency_overrides entry) never reaches a dependency graph that
+	already resolved to the old callable. A bare call to the module-level
+	name is looked up fresh through this module's own global namespace on
+	every invocation, so `monkeypatch.setattr(pdf_fill_routes, "get_settings", ...)`
+	(or reassigning `backend.config.get_settings` before this module's own
+	binding is read) actually changes what the next request sees.
+	"""
+	settings = get_settings()
+	cap_bytes = int(settings.MAX_UPLOAD_MB * 1024 * 1024)
+	return cap_bytes, f"Request body exceeds the {settings.MAX_UPLOAD_MB}MB upload limit"
+
+
+# base64 inflates 3 bytes to 4, plus the small JSON envelope around it
+# (kit_id, pdf_filename) -- rounded up generously so the Content-Length
+# pre-check never rejects a legitimate resume upload the byte-length check
+# below would accept. This is the BODY cap (the whole base64-JSON envelope,
+# ~33.9MB) -- fresh-eyes NIT: the error text names the DECODED file limit
+# (25MB) instead, because that is the number meaningful to whoever reads it,
+# and is phrased as its own sentence so it is never mistaken for describing
+# the (much larger, and internal) inflated envelope cap actually enforced.
+_MAX_RESUME_BODY_BYTES = (_MAX_RESUME_UPLOAD_BYTES * 4 // 3) + (64 * 1024)
+_RESUME_BODY_DETAIL = (
+	f"The saved file is larger than {_MAX_RESUME_UPLOAD_BYTES // (1024 * 1024)}MB"
+)
+
+
+def _resume_form_cap() -> tuple[int, str]:
+	return _MAX_RESUME_BODY_BYTES, _RESUME_BODY_DETAIL
+
+
+# Per-endpoint cap resolver, keyed by the endpoint FUNCTION object (set right
+# after each route is declared, below). _BodyCapRoute looks itself up here by
+# `self.endpoint` at request-handling time -- a route with no entry here (any
+# OTHER route registered on this same APIRouter in the future) gets no cap
+# check, so a route joining this module without an entry here is a silent
+# gap, not a crash; this is a router-local convenience, not a security
+# boundary in itself (the boundary is each entry actually being present).
+_BODY_CAP_BY_ENDPOINT: Dict[Callable[..., Any], Callable[[], tuple[int, str]]] = {}
+
+
+class _BodyCapRoute(APIRoute):
+	"""APIRoute subclass that runs the byte-accurate cap check BEFORE
+	FastAPI's own body read (bd polyglot-pdf-6088m, sprint 23 C4; PF-10).
+
+	`get_route_handler()` returns the `Callable[[Request], Coroutine[...,
+	Response]]` that `starlette.routing.request_response` calls with the
+	SAME `Request` instance FastAPI's inner handler later calls
+	`await request.body()` on (both are closures over one `request` built
+	once in `request_response.app`). Wrapping at THIS layer -- rather than as
+	a `Depends(...)` -- is what lets the cap check run first: FastAPI's own
+	`get_request_handler.app(request)` unconditionally reads the whole body
+	before it resolves any dependency, so nothing declared as a dependency
+	can ever intercept the read (fresh-eyes, BLOCKER 1).
+	"""
+
+	def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Any]]:
+		original_handler = super().get_route_handler()
+		cap_fn = _BODY_CAP_BY_ENDPOINT.get(self.endpoint)
+		if cap_fn is None:
+			return original_handler
+
+		async def _capped_handler(request: Request):
+			cap_bytes, detail = cap_fn()
+			await _enforce_body_cap(request, cap_bytes, detail)
+			return await original_handler(request)
+
+		return _capped_handler
 
 
 def _safe_pdf_filename(pdf_filename: str) -> str:
@@ -162,7 +326,7 @@ def resolve_select_resume_value(options, pdf_value: str) -> Optional[str]:
 # escaping, so the filler refuses it (bd h76m.17).
 _PDF_NAME_UNSAFE = re.compile(r"[\s/#()<>\[\]{}%]")
 
-router = APIRouter(prefix="/api", tags=["pdf"])
+router = APIRouter(prefix="/api", tags=["pdf"], route_class=_BodyCapRoute)
 
 
 class PDFFillRequest(BaseModel):
@@ -187,7 +351,10 @@ class PDFFillRequest(BaseModel):
 
 
 @router.post("/fill-pdf")
-async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) -> Response:
+async def fill_pdf(
+	request: PDFFillRequest,
+	user: dict = Depends(require_auth),
+) -> Response:
 	"""Fill a PDF form with provided values using PyMuPDF.
 
 	Auth-gated (bd polyglot-pdf-z2is): the request body carries user-entered
@@ -201,6 +368,9 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 	kit_id and empty field_values returned the private kit's blank template
 	to any authed user, defeating the invisibility the three form_kit_routes
 	reads enforce. Same gates, same 404 denial (existence is the secret).
+
+	MAX_UPLOAD_MB-capped (bd polyglot-pdf-6088m, sprint 23 C4): field_values +
+	form_schema are caller-controlled JSON with no other size bound.
 	"""
 
 	kit_id = _safe_kit_id(request.kit_id)
@@ -955,6 +1125,11 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 			os.remove(temp_path)
 
 
+# Registered by FUNCTION OBJECT (bd polyglot-pdf-6088m; see _BodyCapRoute):
+# _BodyCapRoute looks itself up by self.endpoint, which IS this function.
+_BODY_CAP_BY_ENDPOINT[fill_pdf] = _fill_pdf_cap
+
+
 class ResumeUploadRequest(BaseModel):
 	"""A client re-opening the PDF they saved earlier (bd polyglot-pdf-dft1)."""
 
@@ -965,7 +1140,8 @@ class ResumeUploadRequest(BaseModel):
 
 @router.post("/resume-form")
 async def resume_form(
-	request: ResumeUploadRequest, user: dict = Depends(require_auth)
+	request: ResumeUploadRequest,
+	user: dict = Depends(require_auth),
 ) -> Dict[str, Any]:
 	"""Verify a client's saved PDF and hand back the answers inside it.
 
@@ -990,14 +1166,33 @@ async def resume_form(
 	pdf_filename = _safe_pdf_filename(request.pdf_filename)
 	store = get_form_kit_store()
 
+	# Check the base64 STRING LENGTH before decoding (bd polyglot-pdf-6088m,
+	# sprint 23 C4; PF-10). b64decode materializes the full decoded buffer in
+	# one call, so a caller could previously force an allocation up to
+	# 3/4 of whatever body size the server would accept before the byte-length
+	# check below ever ran. Base64 encodes 3 bytes as 4 characters, so a
+	# decoded size of _MAX_RESUME_UPLOAD_BYTES corresponds to an encoded
+	# length of _MAX_RESUME_UPLOAD_BYTES * 4/3; refusing anything longer means
+	# the decode call itself never runs on an over-cap payload.
+	_max_b64_len = _MAX_RESUME_UPLOAD_BYTES * 4 // 3
+	if len(request.pdf_base64) > _max_b64_len:
+		_log.warning(
+			"resume_upload_too_large",
+			kit=kit_id,
+			b64_length=len(request.pdf_base64),
+		)
+		raise HTTPException(status_code=413, detail="File too large")
+
 	try:
 		uploaded = base64.b64decode(request.pdf_base64, validate=True)
 	except Exception as exc:  # noqa: BLE001
 		_log.info("resume_upload_undecodable", kit=kit_id)
 		raise HTTPException(status_code=400, detail="Unreadable file") from exc
 
-	# Bound the upload. These forms are ~150KB-2MB; anything far larger is not
-	# a saved form, and decoding it into a PDF parser is a cheap denial vector.
+	# Bound the DECODED upload too. These forms are ~150KB-2MB; anything far
+	# larger is not a saved form. This is a belt-and-suspenders check: base64
+	# padding/whitespace mean the encoded-length check above is not exact, so
+	# this is what actually enforces the byte cap.
 	if len(uploaded) > _MAX_RESUME_UPLOAD_BYTES:
 		_log.warning("resume_upload_too_large", kit=kit_id, size=len(uploaded))
 		raise HTTPException(status_code=413, detail="File too large")
@@ -1018,8 +1213,33 @@ async def resume_form(
 			status_code=502, detail="Unable to load the form for this kit"
 		) from exc
 
+	# WALL-CLOCK BOUNDED (bd polyglot-pdf-6088m, sprint 23 C4; PF-10).
+	# assert_matches_reference runs fitz.open on attacker-controlled bytes
+	# (via pdf_structure.digest_of_bytes) plus the structural comparison --
+	# both are synchronous, CPU-bound, and PyMuPDF has no built-in wall-clock
+	# guard, so a crafted file that is pathologically slow to parse could
+	# otherwise tie up a worker indefinitely. Run it in a thread so
+	# future.result(timeout=) can actually bound it -- a synchronous call
+	# awaited directly on this coroutine would give asyncio.wait_for nothing
+	# to interrupt, since nothing yields control back to the loop while fitz
+	# is parsing.
+	settings = get_settings()
+	future = _RESUME_PARSE_POOL.submit(assert_matches_reference, uploaded, reference)
 	try:
-		assert_matches_reference(uploaded, reference)
+		future.result(timeout=settings.RESUME_FORM_PARSE_TIMEOUT_S)
+	except concurrent.futures.TimeoutError:
+		# The worker thread is NOT cancelled (Python threads cannot be force-
+		# killed) -- it keeps running in the background and is abandoned, a
+		# known limitation of thread-based timeouts. That is an acceptable
+		# trade here: the alternative (no timeout at all) blocks the request
+		# indefinitely, and the pool is sized so a handful of abandoned
+		# parses cannot starve the whole process. Never log the file itself
+		# -- PII/PHI, and irrelevant to the timeout.
+		_log.warning("resume_upload_parse_timeout", kit=kit_id)
+		raise HTTPException(
+			status_code=408,
+			detail="That file took too long to process.",
+		) from None
 	except StructureMismatch as exc:
 		# ONE refusal for every structural failure -- wrong form, tampered
 		# form, unreadable form. Distinguishing them would tell an attacker
@@ -1241,3 +1461,8 @@ async def resume_form(
 		"form_session_id": (stamp or {}).get("fsid"),
 		"link_jtis": (stamp or {}).get("jtis", []),
 	}
+
+
+# Registered by FUNCTION OBJECT (bd polyglot-pdf-6088m; see _BodyCapRoute):
+# _BodyCapRoute looks itself up by self.endpoint, which IS this function.
+_BODY_CAP_BY_ENDPOINT[resume_form] = _resume_form_cap

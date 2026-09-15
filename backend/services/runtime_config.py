@@ -101,6 +101,22 @@ RUNTIME_CONFIG_KEYS = frozenset({
     KEY_CREDIT_LOW_THRESHOLD,
 })
 
+# Each key's TYPE NAME, for the console's schema-driven form (bd
+# polyglot-pdf-wxcj0): "bool" | "int" | "float". This is the ONE place a
+# key's type is spelled out (CLAUDE.md scar #8) -- admin_backend/routes/
+# config_routes.py's GET response derives its `schema` map from THIS dict,
+# never from a second hand-written list, so a key added here automatically
+# gets the right console control with no second edit required. Every key in
+# RUNTIME_CONFIG_KEYS must appear here exactly once -- pinned by
+# test_runtime_config.py::test_key_types_covers_every_runtime_config_key.
+KEY_TYPES: dict[str, str] = {
+    KEY_LINK_MINTING_ENABLED: "bool",
+    KEY_LINK_COST_CEILING_USD: "float",
+    KEY_LINK_FIRM_CAP: "int",
+    KEY_CREDITS_ENFORCED: "bool",
+    KEY_CREDIT_LOW_THRESHOLD: "int",
+}
+
 # Compiled fallback constants -- used ONLY when a key has never been
 # successfully read from Firestore on this process AND (for the three legacy
 # keys) the environment variable of the same name is unset or unparsable.
@@ -236,6 +252,26 @@ def coerce_value(key: str, raw: Any) -> Optional[Any]:
     malformed on the next read.
     """
     return _coerce(key, raw)
+
+
+def config_schema() -> dict[str, dict[str, Any]]:
+    """The console's schema map: {key: {type, default}} for every key in
+    RUNTIME_CONFIG_KEYS (bd polyglot-pdf-wxcj0).
+
+    DERIVED, never hand-typed a second time (CLAUDE.md scar #8) -- `type`
+    comes straight from KEY_TYPES and `default` from the SAME
+    _legacy_env_default() a real read falls back to, so the console's "unset
+    -- use the fallback" value can never drift from what a read would
+    actually return for a channel with no stored value and no
+    last-known-good yet. Iterates RUNTIME_CONFIG_KEYS (not KEY_TYPES) so a
+    key present in one dict but not the other is a KeyError here rather than
+    a silently incomplete schema -- pinned by
+    test_runtime_config.py::test_key_types_covers_every_runtime_config_key.
+    """
+    return {
+        key: {"type": KEY_TYPES[key], "default": _legacy_env_default(key)}
+        for key in RUNTIME_CONFIG_KEYS
+    }
 
 
 def _read_channel_doc(channel: str) -> dict[str, Any]:

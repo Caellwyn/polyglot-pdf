@@ -166,6 +166,20 @@ export async function listAuditRows(filters: AuditFilters = {}): Promise<AuditPa
   return (await res.json()) as AuditPage;
 }
 
+/** One runtime-config key's type + fallback default, from GET
+ * /admin/config/{channel}'s `schema` map (admin_backend/routes/
+ * config_routes.py, derived from backend/services/runtime_config.py's
+ * KEY_TYPES -- bd polyglot-pdf-wxcj0). `type` is one of these three; any
+ * other string (there is none today, but a future runtime_config key type
+ * this console does not yet know) falls back to a text input. */
+export const CONFIG_KEY_TYPES = ['bool', 'int', 'float'] as const;
+export type ConfigKeyType = (typeof CONFIG_KEY_TYPES)[number];
+
+export interface ConfigKeySchema {
+  type: string;
+  default: unknown;
+}
+
 /** GET /admin/config/{channel}'s response shape (admin_backend/routes/
  * config_routes.py). */
 export interface ChannelConfig {
@@ -173,6 +187,11 @@ export interface ChannelConfig {
   values: Record<string, unknown>;
   known_keys: string[];
   unknown_keys: string[];
+  /** {key: {type, default}} for every known key -- the ONE source this
+   * console uses to decide whether a key renders as a bool select, a
+   * number input, or (unknown type) a text input. Never hand-list a key's
+   * type in the console itself (CLAUDE.md scar #8). */
+  schema: Record<string, ConfigKeySchema>;
 }
 
 /** The channel's stored runtime-config doc, raw (not coerced). */
@@ -472,9 +491,14 @@ export interface FirmPlan {
 /** The maintainer's 2026-09-14 starting numbers
  * (backend/services/plans.py::DEFAULT_PLAN) -- what GET /admin/firms/
  * {firm_id} and GET /admin/firms both return for a firm with no plan of
- * its own yet (firm_routes.py's _public_firm_view fallback). */
+ * its own yet (firm_routes.py's _public_firm_view fallback). rollover
+ * flipped True by bd polyglot-pdf-hnlj3, 2026-09-15 (maintainer decision:
+ * "credits roll over -- no real reason not to") -- was false at this
+ * constant's original 2026-09-14 launch; kept byte-identical to the Python
+ * DEFAULT_PLAN it mirrors so a console fallback can never disagree with
+ * what the backend actually defaults a new/backfilled firm to. */
 export const DEFAULT_PLAN: FirmPlan = {
-  tier: "starter", monthly_credits: 35, rollover: false,
+  tier: "starter", monthly_credits: 35, rollover: true,
 };
 
 /** The two firm statuses (backend/services/firms.py's FIRM_STATUS_ACTIVE /
