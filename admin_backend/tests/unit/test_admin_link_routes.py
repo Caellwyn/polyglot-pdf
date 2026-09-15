@@ -206,6 +206,13 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
                         raising=False)
     monkeypatch.setattr("backend.services.auth.get_db", lambda: db)
+    # bd polyglot-pdf-cpsi0: identity_labels.labels_for_uids caches by uid
+    # across the WHOLE process, and this file's fixture uids (emp-1, emp-b,
+    # emp-2) are shared across many tests -- clear before each so no test's
+    # fail-soft "uid as its own label" outcome (the only outcome this file's
+    # unmocked Auth path can ever produce) leaks into another.
+    import admin_backend.services.identity_labels as identity_labels
+    identity_labels.clear_cache()
     return db
 
 
@@ -412,6 +419,12 @@ def test_link_listing_response_is_allowlisted(admin_client, fake_db):
     assert set(row.keys()) == set(link_routes._ALLOWLISTED_KEYS)
     assert row == {
         "jti": "jti-1", "kit_id": "w7", "employee_id": "emp-1",
+        # No employee_email is stored on this fixture's mint record (it
+        # predates bd polyglot-pdf-cpsi0), and the fake Firestore this file
+        # uses is not a real Auth client -- identity_labels.labels_for_uids
+        # fails soft and falls back to the uid itself. See
+        # test_admin_link_routes_labels.py for the resolved-label cases.
+        "employee_label": "emp-1",
         "status": links_store.STATUS_MINTED, "minted_at": 1,
         "open_deadline": 500, "opened_at": 10, "completed_at": None,
         "spend_usd": 0.5, "turns": 3, "cap_usd": 5.0, "credit_cost": 2,

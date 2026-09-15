@@ -121,7 +121,7 @@ from typing import Annotated, Any, Optional
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from admin_backend.services import audit_log
+from admin_backend.services import audit_log, identity_labels
 from admin_backend.services.admin_auth import (
     ACTOR_KIND_FIRM_EMPLOYEE,
     CompositeActor,
@@ -156,10 +156,14 @@ ACTION_LINK_REVOKE = "link.revoke"
 
 # THE RESPONSE ALLOWLIST (exit criterion 1). Every key the bead names, and
 # NO others -- see the module docstring's "why by-hand, not **doc" note.
+# employee_label (bd polyglot-pdf-cpsi0) joins this allowlist the same
+# by-hand way every other key did: _public_link_view sets it explicitly,
+# never via **doc, so a future key added to links[_<channel>] cannot leak
+# here by omission.
 _ALLOWLISTED_KEYS = (
-    "jti", "kit_id", "employee_id", "status", "minted_at", "open_deadline",
-    "opened_at", "completed_at", "spend_usd", "turns", "cap_usd",
-    "credit_cost",
+    "jti", "kit_id", "employee_id", "employee_label", "status", "minted_at",
+    "open_deadline", "opened_at", "completed_at", "spend_usd", "turns",
+    "cap_usd", "credit_cost",
 )
 
 
@@ -206,11 +210,20 @@ def _redemptions_collection(db, channel: str):
     return db.collection(link_redemptions._collection_name(channel))
 
 
-def _public_link_view(link_doc: dict, redemption_doc: Optional[dict]) -> dict:
+def _public_link_view(
+    link_doc: dict, redemption_doc: Optional[dict], employee_label: Optional[str],
+) -> dict:
     """The allowlisted join of a links[_<channel>] mint record with its
     (possibly nonexistent, if never opened) link_redemptions[_<channel>]
     record -- built by hand from named fields, one key at a time, never by
     spreading either stored dict (see module docstring).
+
+    employee_label (bd polyglot-pdf-cpsi0) is resolved by the CALLER (
+    _do_list_links, via ONE batched identity_labels.labels_for_uids call
+    plus identity_labels.label_for_actor's precedence rule) and passed in
+    rather than looked up per-row here -- a per-row Auth call would turn an
+    N-row page into N Auth calls, exactly what labels_for_uids's own
+    docstring says not to do.
     """
     redemption_doc = redemption_doc or {}
     row = {key: None for key in _ALLOWLISTED_KEYS}
@@ -218,6 +231,7 @@ def _public_link_view(link_doc: dict, redemption_doc: Optional[dict]) -> dict:
         "jti": link_doc.get("jti"),
         "kit_id": link_doc.get("kit_id"),
         "employee_id": link_doc.get("employee_id"),
+        "employee_label": employee_label,
         "status": link_doc.get("status"),
         "minted_at": link_doc.get("minted_at"),
         "open_deadline": link_doc.get("open_deadline"),
@@ -288,10 +302,26 @@ def _do_list_links(
         raise HTTPException(status_code=503,
                             detail="link store unavailable") from exc
 
+    link_docs = [snap.to_dict() or {} for snap in link_snaps]
+
+    # ONE batched Auth lookup for every DISTINCT employee_id this page's
+    # rows need a fallback label for (bd polyglot-pdf-cpsi0) -- mirrors
+    # firm_routes.py's identical shape over the ledger's `actor` field. A
+    # row minted after this bead already carries employee_email and needs
+    # no lookup at all (label_for_actor prefers it); only a legacy row
+    # (employee_email is None) costs anything here, and a firm's own staff
+    # repeats across many links, so this is one Auth call per page, not one
+    # per row.
+    uids_needing_lookup = {
+        doc.get("employee_id") for doc in link_docs
+        if isinstance(doc.get("employee_id"), str) and doc.get("employee_id")
+        and not doc.get("employee_email")
+    }
+    labels = identity_labels.labels_for_uids(uids_needing_lookup)
+
     redemptions = _redemptions_collection(db, channel)
     rows = []
-    for snap in link_snaps:
-        link_doc = snap.to_dict() or {}
+    for snap, link_doc in zip(link_snaps, link_docs):
         jti = snap.id
         try:
             r_snap = redemptions.document(jti).get()
@@ -302,7 +332,10 @@ def _do_list_links(
             _log.error("admin_link_redemption_read_failed", jti=jti,
                        channel=channel, error=str(exc))
             redemption_doc = None
-        rows.append(_public_link_view(link_doc, redemption_doc))
+        employee_label = identity_labels.label_for_actor(
+            link_doc.get("employee_id"), link_doc.get("employee_email"),
+            labels)
+        rows.append(_public_link_view(link_doc, redemption_doc, employee_label))
 
     rows.sort(key=lambda r: (r["minted_at"] is None, r["minted_at"]),
               reverse=True)

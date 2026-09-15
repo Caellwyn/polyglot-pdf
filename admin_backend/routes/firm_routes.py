@@ -76,6 +76,21 @@ exist under either channel's collection, and skipping one would leave that
 channel's expired links unrefunded on every admin console visit until the
 sweep endpoint ships.
 
+EACH LEDGER ROW GAINS actor_label (bd polyglot-pdf-cpsi0). credit_ledger.py
+now optionally stamps `actor_email` on a NEW entry, but a row written before
+that landed carries only the uid in `actor`. Rather than leave old rows
+showing a raw uid forever, _do_get_firm resolves every DISTINCT actor uid on
+the returned page through ONE batched call, identity_labels.labels_for_uids
+-- a firm's ledger page repeats the same few staff uids across many rows, so
+this is one Auth lookup per page view, not one per row. identity_labels.
+label_for_actor is the ONE place precedence is decided: a row's own stored
+actor_email wins when present (no lookup needed), the batch-resolved map is
+the fallback for a legacy row, and the raw uid is the last resort (an
+unresolvable uid, or a None actor). The uid itself is UNCHANGED on the row
+(`actor` still carries it) -- actor_label is an ADDITIONAL field, never a
+replacement, so a console that has not been updated yet still works exactly
+as before.
+
 LIST IS DELIBERATELY UNFILTERED. The bead's wording ("list with kind,
 balance, status") is a describe-the-columns request, not a describe-the-
 filters one -- unlike GET /admin/audit (bd polyglot-pdf-li9x0), which
@@ -105,7 +120,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from admin_backend.services import audit_log
+from admin_backend.services import audit_log, identity_labels
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from backend.services import credit_ledger, firms, plans
 
@@ -574,9 +589,27 @@ def _do_get_firm(*, firm_id: str, ledger_limit: int) -> dict:
     # operator looks at most.
     page, truncated = credit_ledger.read_recent_entries(
         db, firm_id, ledger_limit)
+
+    # ONE batched Auth lookup for every DISTINCT uid this page's rows need a
+    # fallback label for (bd polyglot-pdf-cpsi0) -- a row with its own
+    # stored actor_email needs no lookup at all (label_for_actor prefers it),
+    # so only legacy rows (actor_email is None) actually cost anything here,
+    # and a page repeating the same few staff uids across many rows still
+    # costs exactly one Auth call, not one per row.
+    uids_needing_lookup = {
+        row.get("actor") for row in page
+        if isinstance(row.get("actor"), str) and row.get("actor")
+        and not row.get("actor_email")
+    }
+    labels = identity_labels.labels_for_uids(uids_needing_lookup)
+    page_with_labels = [
+        {**row, "actor_label": identity_labels.label_for_actor(
+            row.get("actor"), row.get("actor_email"), labels)}
+        for row in page
+    ]
     return {
         **_public_firm_view(firm_id, doc),
-        "ledger": page,
+        "ledger": page_with_labels,
         "ledger_truncated": truncated,
     }
 
