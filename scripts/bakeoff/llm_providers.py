@@ -30,9 +30,21 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 from typing import Any, Callable, Dict, Optional, Protocol
+
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
 
 # bd polyglot-pdf-xlvba: how old an orphaned _cli_*.json scratch file must be
 # before a sweep reclaims it. The normal lifetime of one of these files is
@@ -209,6 +221,7 @@ class ClaudeCliProvider:
             proc = subprocess.run(
                 cmd, input=wrapped, capture_output=True, text=True,
                 encoding="utf-8", timeout=timeout_s,
+                creationflags=windowless_creationflags(),
             )
             if proc.returncode != 0:
                 raise RuntimeError(f"claude CLI exited {proc.returncode}: "
@@ -378,6 +391,7 @@ def run_json_claude_cli(prompt: str, model: str) -> tuple[dict, dict]:
         proc = subprocess.run(
             cmd, input=wrapped, capture_output=True, text=True,
             encoding="utf-8", timeout=timeout_s,
+            creationflags=windowless_creationflags(),
         )
         if proc.returncode != 0:
             raise RuntimeError(f"claude CLI exited {proc.returncode}: "
