@@ -705,6 +705,36 @@ def read_entries(db, firm_id: str, limit: Optional[int] = None) -> list[dict]:
     return [snap.to_dict() or {} for snap in query.stream()]
 
 
+def read_recent_entries(db, firm_id: str, limit: int) -> tuple[list[dict], bool]:
+    """This firm's `limit` NEWEST ledger entries, plus whether more exist.
+
+    The console-table shape read_entries' own docstring anticipates: unlike
+    read_entries (oldest-first, unbounded, the replay-check shape),
+    this orders DESCENDING and reads only `limit + 1` documents regardless of
+    how many entries the firm has ever accumulated -- the same limit+1 trick
+    audit_routes.py uses to compute a next-page flag without a second round
+    trip or a full-collection read (bd polyglot-pdf-y1t68). A firm's ledger
+    has no TTL/pruning (scripts/setup-firestore-ttl.sh's TTL_COLLECTIONS
+    deliberately excludes it), so reading unboundedly here would make every
+    console visit to an active firm's detail page slower and dearer over the
+    firm's whole lifetime -- exactly the cost shape the audit log's own
+    module docstring already reasons about avoiding.
+
+    Returns (entries, truncated): entries is newest-first, at most `limit`
+    long; truncated is True iff the firm has more than `limit` entries.
+    """
+    query = (
+        db.collection(FIRMS_COLLECTION)
+        .document(firm_id)
+        .collection(LEDGER_SUBCOLLECTION)
+        .order_by("ts", direction="DESCENDING")
+        .limit(limit + 1)
+    )
+    docs = [snap.to_dict() or {} for snap in query.stream()]
+    truncated = len(docs) > limit
+    return docs[:limit], truncated
+
+
 # ================================================================
 # EXPIRY REFUND (Epic 2 bead A5, plan: "Refund on unopened expiry")
 # ================================================================
