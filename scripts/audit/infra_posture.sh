@@ -405,12 +405,20 @@ else:
 
     # Also check the bucket does NOT grant this project-wide instead (the
     # inverse mistake test_the_bucket_roles_are_granted_on_the_bucket_not_the_project
-    # pins offline).
+    # pins offline). Reads $_last_status BEFORE trusting an empty
+    # $_last_output as "no project-wide binding" -- a FAILED
+    # get-iam-policy call (auth expiry, a transient 503, a missing
+    # getIamPolicy permission) also produces empty output, and treating
+    # that as a clean PASS would report the scope guard as satisfied
+    # PRECISELY BECAUSE the read that would have caught a real widening
+    # never happened (cross-surface review round 2, gap 2).
     run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
         --flatten="bindings[].members" \
         --filter="bindings.members:serviceAccount:admin-backend-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/storage.objectAdmin" \
         --format="value(bindings.role)"
-    if [ -n "$_last_output" ]; then
+    if [ $_last_status -ne 0 ]; then
+        record "admin_sa_bucket_role_not_project_wide" "N/A" "operator lacks resourcemanager.projects.getIamPolicy or the call failed"
+    elif [ -n "$_last_output" ]; then
         record "admin_sa_bucket_role_not_project_wide" "FAIL" "admin-backend-sa holds roles/storage.objectAdmin at the PROJECT level -- should be bucket-scoped only"
     else
         record "admin_sa_bucket_role_not_project_wide" "PASS" "admin-backend-sa's storage.objectAdmin is not project-wide"
@@ -484,11 +492,16 @@ else:
         record "cloudbuild_sa_bucket_role" "N/A" "polyglot-cloudbuild-sa is missing roles/storage.objectAdmin on gs://${FORM_KITS_BUCKET}, or the SA does not exist yet -- see cloudbuild_sa_roles above"
     fi
 
+    # Reads $_last_status before trusting an empty $_last_output -- see
+    # admin_sa_bucket_role_not_project_wide's comment above for why a
+    # FAILED read must not be read as a clean PASS.
     run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
         --flatten="bindings[].members" \
         --filter="bindings.members:serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/storage.objectAdmin" \
         --format="value(bindings.role)"
-    if [ -n "$_last_output" ]; then
+    if [ $_last_status -ne 0 ]; then
+        record "cloudbuild_sa_bucket_role_not_project_wide" "N/A" "operator lacks resourcemanager.projects.getIamPolicy or the call failed"
+    elif [ -n "$_last_output" ]; then
         record "cloudbuild_sa_bucket_role_not_project_wide" "FAIL" "polyglot-cloudbuild-sa holds roles/storage.objectAdmin at the PROJECT level -- should be bucket-scoped only"
     else
         record "cloudbuild_sa_bucket_role_not_project_wide" "PASS" "polyglot-cloudbuild-sa's storage.objectAdmin is not project-wide"
@@ -503,8 +516,16 @@ fi
 # project. Checked by reading the TARGET SA's own IAM policy (the resource
 # the binding lives on) and looking for polyglot-cloudbuild-sa as a member
 # with this role, mirroring admin_sa_actas_cloud_build's own shape but from
-# the build SA's side. Also checked NOT to be a project-wide grant, the same
-# inverse-mistake shape as the bucket check above.
+# the build SA's side.
+#
+# CHECK: cloudbuild_sa_actas_not_project_wide -- run ONCE, outside the loop.
+# Both targets' "is this project-wide" question is the SAME fact (one
+# project-level IAM query for polyglot-cloudbuild-sa's own
+# iam.serviceAccountUser bindings), so running it once per target issued an
+# identical query twice and printed two identically-worded verdicts for one
+# underlying condition (cross-surface review round 2 nit). The per-target
+# resource-scoped presence checks above stay in the loop -- only the
+# project-wide SCOPE guard, which does not vary by target, moved out.
 CLOUD_BUILD_ACTAS_TARGETS="polyglot-backend-sa admin-backend-sa"
 for target_sa_name in $CLOUD_BUILD_ACTAS_TARGETS; do
     run_capture gcloud iam service-accounts get-iam-policy \
@@ -529,17 +550,19 @@ else:
     else
         record "cloudbuild_sa_actas_${target_sa_name}" "N/A" "polyglot-cloudbuild-sa is missing the actAs grant on ${target_sa_name}, or the build SA does not exist yet -- see cloudbuild_sa_roles above"
     fi
-
-    run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
-        --flatten="bindings[].members" \
-        --filter="bindings.members:serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/iam.serviceAccountUser" \
-        --format="value(bindings.role)"
-    if [ -n "$_last_output" ]; then
-        record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide" "FAIL" "polyglot-cloudbuild-sa holds roles/iam.serviceAccountUser at the PROJECT level -- this would let it impersonate every service account in the project, not just its deploy targets"
-    else
-        record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide" "PASS" "polyglot-cloudbuild-sa's iam.serviceAccountUser is not project-wide"
-    fi
 done
+
+run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
+    --flatten="bindings[].members" \
+    --filter="bindings.members:serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/iam.serviceAccountUser" \
+    --format="value(bindings.role)"
+if [ $_last_status -ne 0 ]; then
+    record "cloudbuild_sa_actas_not_project_wide" "N/A" "operator lacks resourcemanager.projects.getIamPolicy or the call failed"
+elif [ -n "$_last_output" ]; then
+    record "cloudbuild_sa_actas_not_project_wide" "FAIL" "polyglot-cloudbuild-sa holds roles/iam.serviceAccountUser at the PROJECT level -- this would let it impersonate every service account in the project, not just its deploy targets"
+else
+    record "cloudbuild_sa_actas_not_project_wide" "PASS" "polyglot-cloudbuild-sa's iam.serviceAccountUser is not project-wide"
+fi
 
 # CHECK: cloudbuild_pubsub_token_creator
 # The Pub/Sub service agent (a THIRD, Google-managed identity, distinct from

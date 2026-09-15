@@ -276,6 +276,7 @@ LITERAL_CHECKS = (
     "admin_sa_actas_cloud_build",
     "cloudbuild_sa_bucket_role",
     "cloudbuild_sa_bucket_role_not_project_wide",
+    "cloudbuild_sa_actas_not_project_wide",
     "cloudbuild_pubsub_token_creator",
     "cloud_run_services_list",
     "cloud_run_unexpected_service",
@@ -376,10 +377,10 @@ def test_no_undeclared_sa_role_check_prefixes():
 
 def test_cloudbuild_actas_check_templates_are_present():
     """Each runtime SA the build identity must hold actAs on gets its own
-    PASS/N-A check plus a "not project-wide" sibling -- both TEMPLATED on
-    the loop variable (record "cloudbuild_sa_actas_${target_sa_name}" ...),
-    matching this script's other per-item loop checks
-    (cloud_run_${service}_..., secret_manager_${secret}_iam).
+    per-target PASS/N-A presence check, TEMPLATED on the loop variable
+    (record "cloudbuild_sa_actas_${target_sa_name}" ...), matching this
+    script's other per-item loop checks (cloud_run_${service}_...,
+    secret_manager_${secret}_iam).
 
     Before this fix, check_sa_roles("cloudbuild_sa", ...) checked ONLY the
     PROJECT-level role set (EXPECTED_BUILD_SA_PROJECT_ROLES); the two
@@ -393,10 +394,113 @@ def test_cloudbuild_actas_check_templates_are_present():
     text = _script_text()
     assert 'record "cloudbuild_sa_actas_${target_sa_name}"' in text, (
         "no templated cloudbuild_sa_actas_${target_sa_name} check")
-    assert 'record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide"' in text, (
-        "no templated cloudbuild_sa_actas_${target_sa_name}_not_project_wide "
-        "check -- the SCOPE of the actAs grant (not just its presence) must "
-        "be verified")
+
+
+def test_cloudbuild_actas_not_project_wide_check_runs_once_not_per_target():
+    """The SCOPE guard (is iam.serviceAccountUser project-wide?) is ONE
+    fact about polyglot-cloudbuild-sa, not one fact per target SA -- an
+    earlier draft ran the identical project-level IAM query inside the
+    per-target loop and printed two identically-worded verdicts for the
+    same underlying condition (cross-surface review round 2 nit). It now
+    runs once, as a single LITERAL check name, outside the loop.
+
+    This also closes gap 1 from that same round: the per-target presence
+    check's failure branch does `continue`, which -- back when the "not
+    project-wide" check lived inside the loop, keyed on the loop
+    variable -- skipped recording that check's sibling entirely for
+    whichever target failed first. Moving the check outside the loop
+    means the `continue` cannot reach it at all; it is unconditionally
+    reached exactly once, after the loop finishes.
+    """
+    text = _script_text()
+    assert 'record "cloudbuild_sa_actas_not_project_wide"' in text, (
+        "no single, literal cloudbuild_sa_actas_not_project_wide check -- "
+        "the SCOPE of the actAs grant (not just its per-target presence) "
+        "must be verified exactly once")
+    assert 'record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide"' not in text, (
+        "a templated per-target 'not project wide' check remains -- it "
+        "should have been deduplicated into the single "
+        "cloudbuild_sa_actas_not_project_wide check")
+
+
+def test_cloudbuild_actas_loops_continue_cannot_skip_a_sibling_check():
+    """The per-target loop's ONLY early-exit (`continue`, on a failed
+    policy read for one target) must not be able to skip recording any
+    OTHER check for that same iteration -- the exact silent-drop shape
+    record_service_na (check_service_env's own equivalent guard) was
+    built to prevent, and the header's "never a silent skip" promise
+    covers.
+
+    After the dedup above, the loop records exactly ONE check per
+    iteration (cloudbuild_sa_actas_${target_sa_name}) -- the project-wide
+    scope guard moved outside the loop entirely, so there is no sibling
+    left INSIDE the loop for a `continue` to skip. This test pins that
+    invariant structurally: the loop body between `for target_sa_name` and
+    `done` contains exactly one `record "cloudbuild_sa_actas_...` call
+    site pattern (the N/A-and-continue branch and the PASS/N-A branch
+    both target the SAME check name), so a future edit that adds a second
+    per-target check back inside the loop is caught here rather than
+    silently reintroducing gap 1's shape.
+    """
+    text = _script_text()
+    loop_match = re.search(
+        r'for target_sa_name in \$CLOUD_BUILD_ACTAS_TARGETS; do(.*?)^done',
+        text, re.MULTILINE | re.DOTALL)
+    assert loop_match, "the CLOUD_BUILD_ACTAS_TARGETS loop is missing or restructured"
+    loop_body = loop_match.group(1)
+    check_names_in_loop = set(re.findall(r'record "([a-zA-Z0-9_${}]+)"', loop_body))
+    assert check_names_in_loop == {"cloudbuild_sa_actas_${target_sa_name}"}, (
+        "the actAs loop records {} -- expected exactly one check name per "
+        "iteration; a second check inside the loop can be silently "
+        "skipped by the loop's own `continue`".format(
+            sorted(check_names_in_loop)))
+
+
+@pytest.mark.parametrize("check_name", [
+    "admin_sa_bucket_role_not_project_wide",
+    "cloudbuild_sa_bucket_role_not_project_wide",
+    "cloudbuild_sa_actas_not_project_wide",
+])
+def test_not_project_wide_checks_gate_on_last_status_before_trusting_empty_output(check_name):
+    """Each of the three '...not_project_wide' scope guards must check
+    $_last_status BEFORE reading an empty $_last_output as "no
+    project-wide binding exists".
+
+    A FAILED `gcloud projects get-iam-policy` call (auth expiry, a
+    transient 503, a missing getIamPolicy permission) also produces EMPTY
+    output -- indistinguishable, by content alone, from "the query
+    succeeded and found nothing". Before this fix, all three blocks
+    branched on `[ -n "$_last_output" ]` alone, so a failed read reported
+    a clean PASS on the exact guard whose entire job is to catch a
+    dangerous project-wide widening -- passing PRECISELY BECAUSE the read
+    that would have caught it never happened (cross-surface review round
+    2, gap 2). cloudbuild_pubsub_token_creator already had the correct
+    shape (it reads $_last_status on this same call pattern); this
+    extends it to all three "not project wide" siblings.
+
+    Located by finding the specific `record "<check_name>"` PASS line and
+    confirming an `if [ $_last_status -ne 0 ]` guard appears in the ~6
+    lines immediately before it -- close enough to be the SAME
+    run_capture's result, not a leftover check from a different call
+    earlier in the file.
+    """
+    text = _script_text()
+    lines = text.splitlines()
+    pass_line_idx = None
+    for i, line in enumerate(lines):
+        if 'record "{}" "PASS"'.format(check_name) in line:
+            pass_line_idx = i
+            break
+    assert pass_line_idx is not None, (
+        "no PASS line found for {} -- has the check been renamed or "
+        "removed?".format(check_name))
+
+    preceding_window = "\n".join(lines[max(0, pass_line_idx - 6):pass_line_idx])
+    assert re.search(r'if \[ \$_last_status -ne 0 \]', preceding_window), (
+        "{}'s PASS branch is not guarded by a $_last_status check in the "
+        "few lines immediately before it -- a failed gcloud call (which "
+        "also produces empty output) would be misread as a clean "
+        "PASS".format(check_name))
 
 
 def test_cloudbuild_actas_targets_set_is_pinned():
