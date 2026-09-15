@@ -3087,3 +3087,115 @@ row/writer later, never a new code path today.
   trip every other mutation on this page uses. `adminApi.ts` gains
   `FirmPlan`, `PLAN_TIERS`, `DEFAULT_PLAN`, `setFirmPlan`, and `plan:
   FirmPlan` on both `FirmRow` and `FirmDetail`.
+
+### 34. Deploy trigger + build-status webhook: the console-side writers of `deployments/{id}` (Epic 4 bead E4.3, bd polyglot-pdf-tb3kp)
+
+Contract 31a already covers `deployments/{id}` as the BUILD's own success
+record (`scripts/record_deployment.py`, written by the last step of every
+staging target and unconditionally by `admin-service`). This bead adds the
+CONSOLE side: a route that creates a row before a build even starts, and a
+webhook that keeps every row's status current as Cloud Build's own state
+changes -- for BOTH console-triggered and bash-triggered builds.
+
+- **Producers:**
+  - `POST /admin/deploys` (`admin_backend/routes/deploy_routes.py`) writes
+    `deployments/{id}` FIRST (status `queued`, no `build_id` yet), before
+    calling Cloud Build, so a build that fails to even start still leaves a
+    row (corrected to `status: failure`, still no `build_id`) rather than
+    silently vanishing.
+  - `POST /api/deploys/webhook` (`admin_backend/routes/deploy_webhook.py`)
+    is Cloud Build's own Pub/Sub push subscription target. It upserts BY
+    `build_id` (never by document id, since a webhook message never carries
+    the console's auto-generated id) inside one `@firestore.transactional`
+    body: a console-triggered row updates in place, and a bash-triggered
+    build with no pre-existing row gets one created with `triggered_by:
+    "external"` and `target`/`channel` read from the build's own
+    `substitutions` (`_TARGET`, `_CHANNEL`). This is the SAME collection
+    `record_deployment.py` writes to for a staging success -- the webhook is
+    a second, independent writer of the same document once a `build_id`
+    exists, never a competing schema.
+  - Full document shape (superset of 31a's): `{target, target_family,
+    channel, sha, ref, triggered_by, build_id, status, log_url, ts,
+    finished_at}`. `triggered_by` is `"external"` for a bash-triggered build
+    the webhook created, the actor's uid for a console-triggered one, and
+    `"build"` for 31a's own staging-success writer.
+  - `admin_backend/services/cloud_build.py::run_target()` is what
+    `POST /admin/deploys` calls to actually start the build (`CloudBuildClient
+    .run_build_trigger` against the `polyglot-<target>` trigger, `RepoSource
+    (commit_sha=sha)` only -- no `repo_name`, matching the proven `gcloud
+    builds triggers run --sha=` CLI shape for a 2nd-generation connected
+    repo). Returns `{build_id, log_url}` read off the operation's metadata,
+    never waiting on the build itself to finish.
+- **Consumers:**
+  - `admin_backend/services/promotion_gate.py::staging_verified()` (31c) --
+    `POST /admin/deploys`' own early, friendly 409 for a `GATED_TARGETS`
+    entry (`backend-demo`, `frontend-demo`, `admin-service`) queries
+    `deployments` for a staging success matching the same target family and
+    sha, refusing BEFORE Cloud Build is ever called. The build's own
+    in-build gate (31c, `scripts/promotion_gate.py`) repeats the identical
+    check, so a bash-triggered build cannot bypass what the console route
+    already refused.
+  - `GET /admin/deploys` / `GET /admin/deploys/{id}` -- the console's read
+    path (bead E4.7, bd polyglot-pdf-ryx86, not yet built): newest-first,
+    client-side filtered on `channel`/`target`, an explicit response-key
+    allowlist (`DEPLOYMENT_VIEW_FIELDS`) so an internal field can never leak
+    without a deliberate addition.
+- **`target` validation: `deploy/targets.py`.** The ONE closed `TARGETS`
+  tuple both `POST /admin/deploys` and (per contract 30/31's own target
+  list) `scripts/setup-cloud-build.sh`'s trigger provisioning agree on --
+  replacing what would otherwise be a second hand-typed copy of the target
+  list. Also carries `CHANNEL_BY_TARGET` (which `deploy/channels/<channel>
+  .env` a target's build steps read), `target_family()` (mirrors
+  `scripts/record_deployment.py`'s own helper of the same name -- kept as
+  an independent copy, not a shared import, since one is a route-time
+  constant module and the other a build-time script; pinned equal by
+  `tests/test_cloudbuild_yaml.py`), and `GATED_TARGETS` (the hand-listed
+  three-target subset the promotion gate actually applies to -- deliberately
+  NOT every "demo channel" target, since `form-kits`, `firestore-rules` and
+  `editor` have no staging counterpart to gate against). "landing" is
+  absent from `TARGETS` on purpose: it is a maintainer call Epic 4's own
+  plan section leaves open.
+- **Audit:** `POST /admin/deploys` audits pending-then-committed (Surface
+  contract 15's EXTERNAL form -- the mutation is a Cloud Build API call, not
+  a Firestore write); the webhook's `_upsert_deployment` audits IN THE SAME
+  transaction as the Firestore write (contract 15's FIRESTORE form, actor
+  `system:cloud_build_webhook`).
+- **Gates:** `POST`/`GET /admin/deploys*` carry the plain `require_app_admin`
+  gate (deploying code has no firm-manager counterpart). `POST
+  /api/deploys/webhook` carries `require_google_oidc`, its SECOND consumer
+  after the sweep route (contract 15's neighbor) -- audience pinned to this
+  route's own URL, caller email pinned to a NEW `PUBSUB_PUSH_SA_EMAIL` env
+  var naming the Pub/Sub push subscription's own dedicated service account
+  (`admin-pubsub-push-sa`, a THIRD identity distinct from both
+  `admin-backend-sa` and `polyglot-cloudbuild-sa` -- see
+  `scripts/setup-admin-service.sh`'s own comment for why reusing either
+  would collapse the two-factor OIDC check).
+- **IAM:** `admin-backend-sa` gains `roles/cloudbuild.builds.editor` (moved
+  out of `DEFERRED_ROLES`, now empty, into `EXPECTED_ADMIN_SA_ROLES` in the
+  same commit as its first real caller, `cloud_build.py::run_target()`).
+  `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` (actAs,
+  needed to submit a build that runs as that identity) was already granted
+  by bead E4.5 (bd polyglot-pdf-p4ale).
+- **Firestore rules:** `deployments` already carries a full client deny
+  block from contract 31a; unchanged by this bead.
+- **Pinned by:** `admin_backend/tests/unit/test_deploy_routes.py` (the
+  queued-row + pending-then-committed audit pair; a Cloud Build failure
+  marks the audit row failed and leaves no queued row claiming a build id,
+  mutation-verified; the early 409 for a gated target with and without a
+  staging success; unknown target and malformed sha 422s; list filtering
+  and single-row reads); `admin_backend/tests/unit/test_deploy_webhook.py`
+  (a real Pub/Sub push envelope upserts by `build_id` for both a
+  console-triggered and a bash-triggered build; every Cloud Build status
+  maps; idempotent on a repeated message; wrong caller email is 403, no
+  token is 401, wrong audience is 401; a malformed message is 400 not 500;
+  one audit row per status update, mutation-verified); `admin_backend/tests
+  /unit/test_admin_route_auth.py` (all four routes registered with their
+  correct, specific gate); `admin_backend/tests/unit/test_admin_audit_
+  coverage.py` (the trigger route's EXTERNAL mutation kind, the webhook's
+  FIRESTORE kind); `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+  (`cloudbuild.builds.editor` in `EXPECTED_ADMIN_SA_ROLES`, `DEFERRED_ROLES`
+  now empty); `tests/test_setup_admin_service_pubsub.py` (the Pub/Sub API
+  enable, the `cloud-builds` topic creation is idempotent, the dedicated
+  push-caller service account is neither runtime identity, the printed
+  subscription-create NOTE names the right topic/path and carries both
+  `--push-auth-*` flags and is a printed NOTE, not an executed command).
