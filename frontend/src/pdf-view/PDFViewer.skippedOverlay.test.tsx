@@ -171,11 +171,32 @@ describe("the legend names the state without stealing the note's phrase", () => 
     // Scoped to the BANNER text, not the whole file: the file legitimately
     // mentions the phrase in comments, and a whole-file grep would fail on
     // those -- the evidence region has to match the claim.
-    const banner = bannerSource.slice(
-      bannerSource.indexOf('Preview mode: your answers'),
-      bannerSource.indexOf('Filled PDF" below'),
-    );
-    expect(banner.length, 'banner text not found -- retarget this test').toBeGreaterThan(40);
+    const start = bannerSource.indexOf('Preview mode: your answers');
+    const end = bannerSource.indexOf('Filled PDF" below');
+
+    // ASSERT THE ANCHORS WERE FOUND, before slicing with them.
+    //
+    // `slice(start, -1)` does NOT yield an empty string -- it widens to
+    // (end of file - 1). So if only the END anchor drifted, the old
+    // `length > 40` floor passed while the "banner" was nearly the whole file,
+    // and the phrase check then held only because that phrase happens not to
+    // recur later in the source. A floor that cannot fail is not a floor;
+    // fresh-eyes mutation-verified exactly that by renaming the trailing text.
+    expect(start, 'banner START anchor not found -- retarget this test').not.toBe(-1);
+    expect(end, 'banner END anchor not found -- retarget this test').not.toBe(-1);
+    expect(end, 'anchors out of order -- retarget this test').toBeGreaterThan(start);
+
+    const banner = bannerSource.slice(start, end);
+
+    // Bounded on BOTH sides: the banner is one known short sentence, so a
+    // region this big can only mean the slice escaped its intended text.
+    expect(banner.length, 'banner text too short -- retarget this test').toBeGreaterThan(40);
+    expect(
+      banner.length,
+      'the sliced region is far larger than the banner sentence, so this test ' +
+        'is no longer reading the banner',
+    ).toBeLessThan(400);
+
     expect(
       banner,
       'the legend must not repeat "needs follow-up": that phrase is how tests ' +
