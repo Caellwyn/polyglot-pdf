@@ -12,11 +12,30 @@ enforced it -- a knob nothing can turn on is a trap for the next caller
      test, not slip through by omission (scar #8: pin the SET, not the
      instance).
   2. /api/fill-pdf and /api/resume-form refuse an over-cap body via
-     Content-Length BEFORE FastAPI finishes parsing it.
+     Content-Length BEFORE FastAPI finishes parsing it, AND byte-accurately
+     even with no (or a lying) Content-Length header -- the fresh-eyes
+     BLOCKER 1 fix. A FastAPI `Depends(...)` guard runs AFTER
+     `fastapi.routing.get_request_handler` has already read the whole body
+     (`await request.body()`), so the cap is enforced by a custom `APIRoute`
+     (`pdf_fill_routes._BodyCapRoute`) that wraps `get_route_handler()`
+     instead -- see that class's docstring for why. These streaming tests use
+     `httpx.AsyncClient` + `httpx.ASGITransport` with an async body
+     generator, NOT `fastapi.testclient.TestClient`: TestClient's underlying
+     `httpx.Request.read()` fully buffers a streaming body into memory
+     BEFORE the ASGI app ever runs (`b"".join(self.stream)` in
+     httpx/_models.py), so it cannot demonstrate -- or accidentally hide a
+     regression in -- genuinely incremental delivery. ASGITransport instead
+     pulls the body one `__anext__()` at a time via the ASGI `receive`
+     callable, matching how a real deployed server (uvicorn) delivers a
+     request body.
   3. /api/resume-form refuses an over-length base64 string BEFORE decoding it.
   4. /api/resume-form's structural-comparison parse is wall-clock bounded --
      a parse that exceeds RESUME_FORM_PARSE_TIMEOUT_S fails closed (408)
      rather than hanging the request indefinitely.
+  5. BLOCKER 2 (fresh-eyes): the cap must be resolved via a fresh
+     get_settings() call inside the guard, not a `Depends(get_settings)`
+     bound at decoration time -- the latter never re-resolves the override a
+     test or a live runtime config change would try to make.
 
 All bodies here are fake/short; no test parses a real PDF (that requires a
 form-kits/w7 checkout this worktree does not carry -- see
@@ -26,10 +45,12 @@ PDF parse.
 """
 from __future__ import annotations
 
+import asyncio
 import ast
 import base64
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -115,7 +136,7 @@ def _discover_large_body_routes() -> set[tuple[str, str]]:
     file_shaped_field_names = {"pdf_base64", "file_base64", "content_base64"}
 
     def _is_unbounded_dict_annotation(ann: ast.AST | None) -> bool:
-        """True for `Dict[...]` / `dict` — an arbitrary-shape JSON object with
+        """True for `Dict[...]` / `dict` -- an arbitrary-shape JSON object with
         no length bound available (Field max_length applies to str/bytes/
         list, not dict)."""
         if ann is None:
@@ -333,6 +354,219 @@ def test_resume_form_content_length_cap_is_looser_than_fill_pdfs(client):
     assert fill_resp.status_code == 413, (
         "the same body size was accepted by /api/fill-pdf -- it must enforce "
         "the SMALLER MAX_UPLOAD_MB cap, not resume-form's looser one"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2b. BYTE-ACCURATE streaming cap: no/lying Content-Length, and the fix for
+#     fresh-eyes BLOCKER 1 (a Depends()-based guard runs too late) + BLOCKER 2
+#     (a bound Depends(get_settings) never sees an override).
+# ---------------------------------------------------------------------------
+
+
+async def _post_streaming(path: str, chunks: list[bytes], *, content_type="application/json"):
+    """POST `path` with a body delivered as genuinely separate ASGI receive
+    messages (one per list entry), and NO Content-Length header -- the shape
+    a chunked-transfer-encoded request has. Returns (status_code, text,
+    chunks_actually_yielded_before_the_app_stopped_reading).
+
+    Uses httpx.AsyncClient + httpx.ASGITransport, NOT TestClient: TestClient's
+    httpx.Request.read() joins the whole iterable into one bytes object
+    before the ASGI app is ever invoked (see the module docstring), so it
+    cannot exercise -- or catch a regression in -- genuinely incremental
+    body delivery. ASGITransport instead drives the ASGI `receive` callable
+    one `__anext__()` at a time.
+    """
+    yielded: list[int] = []
+
+    async def body_gen():
+        for chunk in chunks:
+            yielded.append(len(chunk))
+            yield chunk
+            await asyncio.sleep(0)  # actually yield control, like a real read
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post(
+            path,
+            content=body_gen(),
+            headers={"content-type": content_type},
+        )
+    return resp.status_code, resp.text, yielded
+
+
+@pytest.mark.asyncio
+async def test_fill_pdf_refuses_an_oversized_body_with_no_content_length_header(client, monkeypatch):
+    """BLOCKER 1 (fresh-eyes): reproduced exactly as reported -- a body posted
+    with NO Content-Length header (so the cheap header check cannot fire)
+    must still be refused once the actual bytes exceed the cap, and the
+    handler must NEVER be reached (proven by a spy replacing the module's
+    logger, since a reached handler logs pdf_fill_request before it ever
+    gets to the missing-kit 404)."""
+    tc, settings = client
+
+    handler_reached = {"value": False}
+
+    class _SpyLog:
+        def __getattr__(self, _name):
+            def _record(*args, **kwargs):
+                handler_reached["value"] = True
+            return _record
+
+    monkeypatch.setattr(pfr, "_log", _SpyLog())
+
+    cap_bytes = int(settings.MAX_UPLOAD_MB * 1024 * 1024)
+    oversized_chunks = [b"a" * (1024 * 1024) for _ in range((cap_bytes // (1024 * 1024)) + 5)]
+    status, _text, _yielded = await _post_streaming("/api/fill-pdf", oversized_chunks)
+    assert status == 413, (
+        "an oversized body with NO Content-Length header reached the "
+        "handler instead of being refused -- the streaming byte-count "
+        "layer is not running"
+    )
+    assert not handler_reached["value"], (
+        "the handler ran (logged something) despite the oversized body -- "
+        "the cap check did not run BEFORE the body was consumed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fill_pdf_accepts_a_small_body_with_no_content_length_header(client):
+    """The streaming cap must not break the normal (no-Content-Length,
+    chunked-transfer-shaped) case -- the cached body must still parse."""
+    body_json = (
+        b'{"kit_id": "nonexistent-kit-xyz", "pdf_filename": "form.pdf", '
+        b'"field_values": {}, "form_schema": {"fields": []}}'
+    )
+    # Split into a few chunks to genuinely exercise multi-message delivery.
+    mid = len(body_json) // 2
+    status, text, _yielded = await _post_streaming(
+        "/api/fill-pdf", [body_json[:mid], body_json[mid:]]
+    )
+    assert status != 413, f"a small legitimate body was rejected: {text}"
+    assert status == 404, f"expected the missing-kit 404, got {status}: {text}"
+
+
+@pytest.mark.asyncio
+async def test_resume_form_refuses_an_oversized_body_with_no_content_length_header(client):
+    """Same BLOCKER 1 fix, on the second route."""
+    cap_bytes = pfr._MAX_RESUME_BODY_BYTES
+    oversized_chunks = [b"a" * (1024 * 1024) for _ in range((cap_bytes // (1024 * 1024)) + 5)]
+    status, _text, _yielded = await _post_streaming("/api/resume-form", oversized_chunks)
+    assert status == 413, (
+        "an oversized /api/resume-form body with NO Content-Length header "
+        "reached the handler instead of being refused"
+    )
+
+
+def test_lying_content_length_does_not_bypass_the_byte_accurate_layer(client):
+    """(c) What TestClient/httpx actually does with a lying SMALL
+    Content-Length and a BIGGER real body: httpx does NOT enforce the header
+    against the real body it sends (no transport-level rejection for a
+    mismatch) -- confirmed empirically here, not assumed. So the
+    byte-accurate streaming layer, not the transport, is what has to catch
+    this case, and this test proves it does.
+    """
+    tc, settings = client
+    cap_bytes = int(settings.MAX_UPLOAD_MB * 1024 * 1024)
+    big_body = b"x" * (cap_bytes + 1000)
+
+    resp = tc.post(
+        "/api/fill-pdf",
+        content=big_body,
+        headers={"content-length": "10", "content-type": "application/json"},
+    )
+    # If a future httpx/uvicorn version started enforcing Content-Length
+    # against the real body (rejecting the mismatch at the transport layer
+    # BEFORE the app runs), that would also be an acceptable outcome -- some
+    # non-200/413 client-error status raised by the transport itself. Today
+    # it is 413 raised by OUR guard; assert that specifically so a silent
+    # regression (200 = the guard stopped running) is caught.
+    assert resp.status_code == 413, (
+        f"a lying small Content-Length with a bigger real body was not "
+        f"refused (got {resp.status_code}) -- the byte-accurate layer must "
+        f"catch what the header lied about"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_streaming_layer_stops_reading_well_short_of_the_full_body():
+    """(d) The byte counter must not slurp a stream far beyond the cap.
+
+    A 100MB body is offered in 1MB chunks with NO Content-Length header; the
+    generator records how many chunks it actually got asked to `yield`
+    before the connection was torn down. If the app read the whole thing,
+    `yielded` would show all ~100 chunks; if it stops promptly after
+    crossing the (5MB default) cap, it should show only a handful.
+    """
+    settings = Settings()
+    pfr_get_settings_backup = pfr.get_settings
+    pfr.get_settings = lambda: settings
+    app.dependency_overrides[require_auth] = lambda: {"uid": "test", "jti": None}
+    try:
+        cap_bytes = int(settings.MAX_UPLOAD_MB * 1024 * 1024)
+        one_mb = 1024 * 1024
+        total_claimed = 100 * one_mb
+        chunks = [b"a" * one_mb for _ in range(total_claimed // one_mb)]
+
+        status, _text, yielded = await _post_streaming("/api/fill-pdf", chunks)
+
+        assert status == 413
+        # However many chunks were actually pulled, it must be nowhere near
+        # the full 100 -- bounded by roughly cap_bytes worth of chunks, with
+        # a small allowance for the one chunk that pushes the total over.
+        max_expected_chunks = (cap_bytes // one_mb) + 2
+        assert len(yielded) <= max_expected_chunks, (
+            f"the generator was asked for {len(yielded)} chunks (of "
+            f"{len(chunks)} offered) -- expected at most "
+            f"{max_expected_chunks}, i.e. the stream was read far past the "
+            f"cap instead of stopping promptly"
+        )
+        assert sum(yielded) < total_claimed, (
+            "the full 100MB body was consumed -- the streaming cap did not "
+            "stop early"
+        )
+    finally:
+        pfr.get_settings = pfr_get_settings_backup
+        app.dependency_overrides.pop(require_auth, None)
+
+
+# ---------------------------------------------------------------------------
+# 2c. BLOCKER 2 (fresh-eyes): the cap must re-resolve get_settings() fresh,
+#     not via a Depends(get_settings) bound once at decoration time.
+# ---------------------------------------------------------------------------
+
+
+def test_a_huge_settings_override_actually_raises_the_cap(client):
+    """Proves the override TAKES EFFECT -- before the BLOCKER 2 fix, a bound
+    `Depends(get_settings)` meant this test passed only because the real
+    default (5MB) happened to also be under the tested body size; it did not
+    prove the override was read at all."""
+    tc, settings = client
+    settings.MAX_UPLOAD_MB = 999999  # mutate the SAME Settings instance the
+    # fixture already wired via pfr.get_settings -- this is the override.
+
+    six_mb_body = b"x" * (6 * 1024 * 1024)
+    resp = tc.post(
+        "/api/fill-pdf", content=six_mb_body, headers={"content-type": "application/json"}
+    )
+    assert resp.status_code != 413, (
+        "a 6MB body was rejected even after MAX_UPLOAD_MB was overridden to "
+        "999999 -- the cap is not re-reading settings per request"
+    )
+
+
+def test_a_tiny_settings_override_actually_lowers_the_cap(client):
+    """The other direction: a tiny override must ALSO take effect."""
+    tc, settings = client
+    settings.MAX_UPLOAD_MB = 0.0001  # ~104 bytes -- comfortably under the body below
+
+    one_kb_body = b"x" * 1024
+    resp = tc.post(
+        "/api/fill-pdf", content=one_kb_body, headers={"content-type": "application/json"}
+    )
+    assert resp.status_code == 413, (
+        "a 1KB body was accepted even after MAX_UPLOAD_MB was overridden to "
+        "~104 bytes -- the cap is not re-reading settings per request"
     )
 
 
