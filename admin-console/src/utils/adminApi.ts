@@ -166,6 +166,20 @@ export async function listAuditRows(filters: AuditFilters = {}): Promise<AuditPa
   return (await res.json()) as AuditPage;
 }
 
+/** One runtime-config key's type + fallback default, from GET
+ * /admin/config/{channel}'s `schema` map (admin_backend/routes/
+ * config_routes.py, derived from backend/services/runtime_config.py's
+ * KEY_TYPES -- bd polyglot-pdf-wxcj0). `type` is one of these three; any
+ * other string (there is none today, but a future runtime_config key type
+ * this console does not yet know) falls back to a text input. */
+export const CONFIG_KEY_TYPES = ['bool', 'int', 'float'] as const;
+export type ConfigKeyType = (typeof CONFIG_KEY_TYPES)[number];
+
+export interface ConfigKeySchema {
+  type: string;
+  default: unknown;
+}
+
 /** GET /admin/config/{channel}'s response shape (admin_backend/routes/
  * config_routes.py). */
 export interface ChannelConfig {
@@ -173,6 +187,11 @@ export interface ChannelConfig {
   values: Record<string, unknown>;
   known_keys: string[];
   unknown_keys: string[];
+  /** {key: {type, default}} for every known key -- the ONE source this
+   * console uses to decide whether a key renders as a bool select, a
+   * number input, or (unknown type) a text input. Never hand-list a key's
+   * type in the console itself (CLAUDE.md scar #8). */
+  schema: Record<string, ConfigKeySchema>;
 }
 
 /** The channel's stored runtime-config doc, raw (not coerced). */
