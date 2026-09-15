@@ -71,6 +71,7 @@ def _project_python() -> str:
         common = subprocess.run(
             ["git", "-C", here, "rev-parse", "--path-format=absolute",
              "--git-common-dir"],
+            creationflags=windowless_creationflags(),
             capture_output=True, text=True, timeout=10)
         if common.returncode == 0 and common.stdout.strip():
             root = os.path.dirname(common.stdout.strip())
@@ -111,6 +112,17 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 # The claim name is owned by the admin service's auth module -- importing it
 # keeps the writer and the reader from drifting apart.
 from admin_backend.services.admin_auth import APP_ADMIN_CLAIM  # noqa: E402
+
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
 
 # The former prod project is DEAD and unreachable (maintainer, 2026-08-14).
 # Refuse it outright so a stale muscle-memory invocation cannot hang or

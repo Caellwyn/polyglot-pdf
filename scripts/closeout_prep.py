@@ -69,6 +69,17 @@ import sys
 import time
 from pathlib import Path
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 # render_todo embeds bd orphans/stale output, which carries non-cp1252 glyphs
 # (checkmark U+2713, alarm-clock U+23F0). A cp1252 Windows console -- e.g. when
 # this runs inside a subshell that didn't inherit UTF-8 -- would crash on
@@ -105,6 +116,7 @@ def _git(args: list[str], cwd: str | None = None) -> subprocess.CompletedProcess
         errors="replace",
         cwd=cwd,
         timeout=60,
+        creationflags=windowless_creationflags(),
     )
 
 
@@ -124,6 +136,7 @@ def _git_stdin(args: list[str], stdin_text: str,
         errors="replace",
         cwd=cwd,
         timeout=60,
+        creationflags=windowless_creationflags(),
     )
 
 
@@ -353,6 +366,7 @@ def _run_check_script(py: Path, script: Path, cwd: Path,
         errors="replace",
         cwd=str(cwd),
         timeout=600,
+        creationflags=windowless_creationflags(),
     )
 
 
@@ -527,6 +541,7 @@ def check_tests(py: Path, WT: Path) -> dict:
             cwd=str(WT),
             env=_pytest_env(WT),
             timeout=_TESTS_TIMEOUT_S,
+            creationflags=windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         # Ordered BEFORE the SubprocessError arm below, which would otherwise

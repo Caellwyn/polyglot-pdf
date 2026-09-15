@@ -72,6 +72,17 @@ import re
 import subprocess
 import sys
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 # Changed-line threshold (insertions + deletions). A diff AT OR BELOW this many
 # changed lines routes to the cheap model; anything larger gets Sonnet. 80 is
 # the plan's "<= ~80 changed lines" figure -- a deliberately round, conservative
@@ -142,6 +153,7 @@ def get_shortstat(base: str) -> str:
             encoding="utf-8",
             errors="replace",
             timeout=30,
+            creationflags=windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("git diff --shortstat {}...HEAD timed out".format(base))
