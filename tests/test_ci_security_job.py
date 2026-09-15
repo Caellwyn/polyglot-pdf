@@ -21,6 +21,7 @@ SECURITY_TOOLS = (
     "npm audit --omit=dev",
     "detect-secrets-hook --baseline .secrets.baseline",
     "bandit -r backend admin_backend -ll",
+    "semgrep --config p/python --config p/typescript",
 )
 DEPENDABOT_ECOSYSTEMS = (
     ('"pip"', '"/backend"'),

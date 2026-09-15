@@ -36,7 +36,17 @@ the maintainer's desktop.
   five findings, all triaged as non-issues: two SHA-1 CONTENT hashes (kit
   schema identity, field identity -- not security), two parameterized
   BigQuery/lint strings built from constant column names, one f-string in a
-  lint message. npm audit runs in CI for the three apps.
+  lint message. npm audit (production deps) on the three apps: admin-console
+  clean; frontend had 2 critical + 1 high, all transitive (protobufjs,
+  websocket-driver, grpc-js) and fixed lockfile-only by `npm audit fix
+  --package-lock-only`, leaving 2 moderate (react-router-dom 6 -> 7 is a major
+  migration; filed as `polyglot-pdf-gdqmr`); schema-editor's 1 critical + 2
+  high all hung off the exact `pdfjs-dist` 4.0.379 pin through the Node-only
+  `canvas` optional dependency -- pinned to 4.10.38 (the version the frontend
+  already ships; no `canvas` in the tree any more), lockfile regenerated,
+  clean. The lockfiles were regenerated without installing (no lifecycle
+  scripts run on this machine); CI's `npm ci` + typecheck + vitest validate
+  them on Linux.
 - **Requirements split.** `backend/requirements-dev.txt` (`-r requirements.txt`
   + the three pytest pins); the image installs `requirements.txt` alone;
   every pytest runner (`ci.yml`, `cloudbuild.yaml`, the dev scripts, README)
@@ -51,7 +61,8 @@ the maintainer's desktop.
   line is untouched.
 - **CI.** An INFORMATIONAL `security` job in `ci.yml` (pip-audit on the
   runtime pins, npm audit x3 on production deps, detect-secrets-hook on the
-  PR's own changed files against the baseline, bandit medium+), every step
+  PR's own changed files against the baseline, bandit medium+, semgrep with
+  the Python and TypeScript rulesets -- Linux-only, so CI is its home), every step
   `continue-on-error` so one noisy scanner cannot hide the others; matches
   the workflow's non-blocking doctrine. Promoting it to required is G's
   maintainer ask. `.github/dependabot.yml`: pip + the three npm apps +
@@ -61,9 +72,10 @@ the maintainer's desktop.
 - **Pins.** `tests/test_ci_security_job.py` (the job, its tools, the three
   npm apps, the dev-requirements install in both runners, dependabot's
   ecosystems, the gitignore patterns, the requirements split, the
-  python-multipart floor) and three new cases in
-  `tests/test_dockerfile_app_module.py` (digest pin, USER after COPY + chown,
-  runtime requirements only).
+  python-multipart floor) and five new cases in
+  `tests/test_dockerfile_app_module.py` (digest pin, no literal backslash-n,
+  USER after COPY + chown, runtime requirements only, and the line-joiner
+  ignoring comments that end in a backslash).
 
 ## Verification
 
@@ -74,7 +86,7 @@ the maintainer's desktop.
   `sys.executable`, with every child forced to `CREATE_NO_WINDOW`). Targeted:
   `test_ci_security_job.py` + `test_dockerfile_app_module.py` +
   `test_cloudbuild_yaml.py`, 90 passed.
-- Scar #9: thirteen one-line mutations, each against the real file, each RED
+- Scar #9: fifteen one-line mutations, each against the real file, each RED
   (exit code 1, not merely non-zero -- the first driver had counted a
   missing test id as red) on exactly its pin then restored: `USER app`
   deleted; the `chown` dropped; the continuation turned into a literal
@@ -83,7 +95,10 @@ the maintainer's desktop.
   install pointed back at `requirements.txt`; the job renamed off
   "(informational)"; the actions ecosystem dropped from dependabot; `*.pem`
   dropped from `.gitignore`; `pytest` put back in the runtime pins;
-  `python-multipart` set back to 0.0.9; the parity collector's
+  `python-multipart` set back to 0.0.9; the semgrep step removed; the
+  line-joiner's comment skip removed (that one in its own process: a helper
+  inside an already-imported test module is invisible to a second
+  `pytest.main` in the same interpreter); the parity collector's
   `continue-on-error` skip removed (the two parity cases had ALSO been red
   before that skip existed, against the real `npm audit` steps).
 - Scanners (each once, single process): pip-audit `--no-deps` on the runtime
@@ -105,6 +120,12 @@ non-existent test id as "red". Both came from the same tool defect (a
 heredoc that halves backslashes); the block and the tests were rewritten
 from snippet files, a `no literal backslash-n` pin was added, and the driver
 now accepts only exit code 1 as red.
+
+Fresh-eyes round 2 found that the three npm audits had never actually been
+run (the job existed; the criterion asks for their result) and that the
+line-joiner would have swallowed a line after a comment ending in a
+backslash. Both fixed above; semgrep, named in the plan, was added to the
+job in the same round.
 
 ## Lessons
 

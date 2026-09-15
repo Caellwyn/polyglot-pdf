@@ -346,13 +346,18 @@ def test_the_cmd_disables_uvicorns_access_log():
         + chr(10) + "  " + cmd)
 
 
-def _logical_lines():
+def _logical_lines(text=None):
     """Dockerfile instructions with backslash-newline continuations joined,
-    so a multi-line RUN reads as one instruction."""
+    so a multi-line RUN reads as one instruction. Comment lines are dropped
+    first: Docker ignores them even inside a continuation, so a comment
+    that happens to end in a backslash must not swallow the next line."""
     joined = []
     buf = ""
-    for raw in DOCKERFILE.read_text(encoding="utf-8").splitlines():
+    source = DOCKERFILE.read_text(encoding="utf-8") if text is None else text
+    for raw in source.splitlines():
         line = raw.rstrip()
+        if line.lstrip().startswith("#"):
+            continue
         if line.endswith("\\"):
             buf += line[:-1] + " "
             continue
@@ -402,3 +407,10 @@ def test_the_image_installs_the_runtime_requirements_only():
     text = DOCKERFILE.read_text(encoding="utf-8")
     assert "COPY backend/requirements.txt ." in text
     assert "requirements-dev" not in text
+
+
+def test_logical_lines_ignores_a_comment_that_ends_in_a_backslash():
+    text = "FROM x\n# a comment that ends in a backslash \\\nRUN a \\\n    && b\nUSER app\n"
+    joined = [" ".join(line.split()) for line in _logical_lines(text)]
+    assert joined == ["FROM x", "RUN a && b", "USER app"]
+

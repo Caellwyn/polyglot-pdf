@@ -129,7 +129,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install scanners
-        run: pip install pip-audit bandit detect-secrets
+        run: pip install pip-audit bandit detect-secrets semgrep
       - name: pip-audit (runtime requirements only)
         continue-on-error: true
         run: pip-audit -r backend/requirements.txt --strict --desc
@@ -156,3 +156,8 @@ jobs:
       - name: bandit (medium+ severity, both backends)
         continue-on-error: true
         run: bandit -r backend admin_backend -ll -x backend/tests,admin_backend/tests
+      - name: semgrep (Python + TypeScript rulesets)
+        continue-on-error: true
+        # Linux-only tool (no Windows build), so it lives here rather than in
+        # the local pre-PR checks.
+        run: semgrep --config p/python --config p/typescript --error --quiet backend admin_backend frontend/src schema-editor/src admin-console/src
