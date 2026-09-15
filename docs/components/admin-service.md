@@ -31,6 +31,21 @@ edited.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-uaxt5: the credit-adjust `reason` is bounded to 500 characters and no longer logged -- the `admin_credits_adjusted` line carries ids and the amount only; every route that writes `admin_audit_log` now has an exact before/after key pin in `test_audit_log_shapes.py`; `scripts/audit/inventory_stores.py` is the read-only store inventory.)*
 
+*Last updated: 2026-09-15 (bd `polyglot-pdf-wxcj0`: maintainer feedback after
+first console sign-in -- "in config, true/false flags should be select
+fields, not text fields." `GET /admin/config/{channel}` gains a `schema`
+field, `{key: {type, default}}` for every `RUNTIME_CONFIG_KEYS` key, derived
+from a NEW `backend/services/runtime_config.py::KEY_TYPES` dict (the single
+place a key's type -- `bool`/`int`/`float` -- is spelled out, CLAUDE.md scar
+#8) via a new `config_schema()` helper; `default` is the SAME live
+`_legacy_env_default()` read a real fallback uses, not a frozen constant.
+`ConfigEditorPage.tsx` consumes `schema` to render a `<select>` for a bool
+key and a `step`-aware number input for an int/float key, sending the PUT a
+typed JSON value instead of the raw draft string; an unrecognized type keeps
+the original text input. No new route, IAM grant, or Firestore shape --
+`app_config/{channel}`'s stored values and `coerce_value`'s validation are
+unchanged.)*
+
 *Last updated: 2026-09-14 (bd `polyglot-pdf-362nk`: Epic 3 follow-up (b) to the maintainer's 2026-09-14 alerts decision -- FirmDetailPage.tsx gains an Alerts section over the SAME operator-wide `GET /admin/alerts?firm_id=<id>` route (bd `polyglot-pdf-mpebj`, E3.11a; NOT the separate firm-console route bd `polyglot-pdf-62o4d` added), listing this firm's alerts unacknowledged-first (a client-side stable sort -- the route's own ordering is newest-ts-first with no acknowledged-aware ordering) and Acknowledge (`PATCH /admin/alerts/{id}/acknowledge`, exactly once per click, re-reading on success only). Both this section and AlertsPage.tsx (E3.11b) now render through ONE new shared row component, `admin-console/src/components/AlertRow.tsx`, extracted byte-for-byte from AlertsPage.tsx's own inline row markup so the kind/level/plain-text rendering cannot drift into two copies; `showFirm` toggles the Firm column AlertsPage needs (cross-firm view) and FirmDetailPage does not (already scoped to one firm). A failed alerts fetch on FirmDetailPage sets its OWN isolated error state, never the page's shared `error`/`firm` state -- a fetch error there never blanks the profile/plan/ledger/links already rendered above it. No new route, IAM grant, or `adminApi.ts` function -- `listAlerts`/`acknowledgeAlert` already existed from E3.11b.)*
 
 *Last updated: 2026-09-14 (bd `polyglot-pdf-0euzk`: the firm-plan + monthly top-up follow-up to the maintainer's 2026-09-14 pricing decision -- new Surface contract 32. `firms/{firm_id}` gains `plan: {tier, monthly_credits, rollover}` (new `backend/services/plans.py`, a closed `PLAN_TIERS` list and `DEFAULT_PLAN` of `{tier: "starter", monthly_credits: 35, rollover: false}`), applied on firm create and backfilled by `scripts/backfill_firm_kind.py` for a pre-existing firm with none stored. NEW `PATCH /admin/firms/{firm_id}/plan` (`require_app_admin`, no confirm-twice -- a plan change is not a minting-eligibility change) and NEW `POST /admin/credits/monthly-topup` (`require_google_oidc`, its OWN Cloud Scheduler identity `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, separate from the sweep job's own -- cron `5 0 1 * *` UTC): for every active firm with a plan, writes ONE `subscription_grant` bringing the balance to (no rollover) or adding (rollover) `monthly_credits`, idempotent by a new nullable `period` field on the ledger entry (`credit_ledger.append_entry`). `credit_ledger.py`'s `subscription_grant` type moves from ALWAYS-requiring `usd_amount` to OPTIONAL-but-validated (`USD_OPTIONAL_TYPES`), since the automated top-up records no money moving while a human operator's manual grant still can -- `credit_routes.py`'s OWN grant-route 422 and `scripts/grant_credits.py`'s CLI check are both UNCHANGED and still require it. A reserved, writer-less `TYPE_OVERAGE_PURCHASE` constant is the seam Epic 5's Stripe pay-as-you-go work fills in later. Console: `FirmDetailPage.tsx` gains a one-write-per-save plan editor.)*
@@ -800,7 +815,18 @@ one.
   console's own build SHA), Audit log (`components/AuditLogPage.tsx` --
   lists/filters `GET /admin/audit`), Runtime config
   (`components/ConfigEditorPage.tsx` -- reads/writes `GET`/`PUT
-  /admin/config/{channel}`), Users (`pages/UsersPage.tsx`, bd
+  /admin/config/{channel}`; SCHEMA-DRIVEN controls, bd polyglot-pdf-wxcj0:
+  the GET response's `schema` map, `{key: {type, default}}` derived
+  server-side from `backend/services/runtime_config.py`'s new `KEY_TYPES`
+  dict via its `config_schema()` helper, is the ONLY thing this page
+  consults to pick a control -- never a key-name pattern or a second
+  hand-typed list (CLAUDE.md scar #8). A `bool` key renders a `<select>`
+  (true/false, plus an "unset -- use the fallback" placeholder option); an
+  `int`/`float` key renders a number input (`step="1"` or `step="any"`);
+  any other/unrecognized type falls back to the original text input. The PUT
+  body always sends a TYPED JSON value -- a real boolean or JS number, never
+  the string `"true"` -- so `runtime_config.coerce_value` on the server sees
+  the type it expects), Users (`pages/UsersPage.tsx`, bd
   polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
   `components/`: it drives four routes and two mutations with a re-read
   each, past the point a single-file "page" component was the more natural
