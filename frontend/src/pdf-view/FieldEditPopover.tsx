@@ -21,6 +21,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormField } from '../schema-forms/types/schema';
 import { FieldRenderer } from '../schema-forms/components/FieldRenderer';
+import { isBlankFieldValue, unwrapFieldValue } from '../schema-forms/utils/fieldValue';
+import { isFieldRequired } from '../schema-forms/utils/validation';
 import type { ScreenPosition } from './pdfCoordinates';
 
 export interface FieldEditPopoverProps {
@@ -29,10 +31,40 @@ export interface FieldEditPopoverProps {
   value: any;
   /** Wrapped FieldValue map (conditional logic; evaluators unwrap internally). */
   allFieldValues: Record<string, any>;
+  /**
+   * The WHOLE schema field list, passed on to isFieldRequired -- the same third
+   * argument SectionRenderer gives it in the form view, so the two surfaces
+   * call the predicate identically.
+   *
+   * HONEST NOTE ON WHAT THIS DOES TODAY: nothing observable. isFieldRequired
+   * forwards it to evaluateConditionGroup -> evaluateAtomicCondition, which
+   * ACCEPTS a `fields` parameter and never reads it -- the trigger value is
+   * looked up in `fieldValues`, not in `fields`. Verified by mutation: passing
+   * `[field]` here changes no test outcome, because it changes no behaviour.
+   *
+   * It is passed anyway because the alternative is worse: hard-coding `[field]`
+   * would bake in an assumption about an evaluator internal that is not part of
+   * its contract, and would break silently the day a conditional needs to look a
+   * field up by id. Do NOT add a test asserting this argument matters until it
+   * does -- such a test could only pass by coincidence.
+   */
+  allFields: FormField[];
   error?: string | null;
   onChange: (value: any) => void;
   onBlur: (fieldId: string) => void;
   onClose: () => void;
+  /**
+   * Mark this field intentionally unanswered. OPTIONAL: when absent the skip
+   * button is not rendered, exactly as SectionRenderer's `!!onFieldSkip` gate
+   * behaves in the form view.
+   *
+   * Preview mode shipped without this, so a user whose other exit was voice had
+   * no UI escape from a field they could not answer -- the doc's rule is that
+   * leaving a required field blank must be explicit, "said aloud, or via the
+   * skip control" (docs/components/schema-forms.md), and in Preview the control
+   * did not exist (bd polyglot-pdf-ykfx0).
+   */
+  onFieldSkip?: (fieldId: string) => void;
   /** The clicked overlay's SCREEN rect (page coords, already scaled). */
   anchor: ScreenPosition;
 }
@@ -47,10 +79,12 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
   field,
   value,
   allFieldValues,
+  allFields,
   error,
   onChange,
   onBlur,
   onClose,
+  onFieldSkip,
   anchor,
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -92,6 +126,23 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
   const flip = below + FLIP_THRESHOLD > pageHeight && anchor.y - GAP > FLIP_THRESHOLD / 2;
 
   const confirmed = value?.confirmed === true;
+  const skipped = value?.skipped === true;
+
+  // The SAME four conditions SectionRenderer gates its "Skip for now" button on
+  // (required + still empty + not already skipped + a handler exists), using the
+  // SAME shared predicates rather than a re-typed copy -- the two surfaces must
+  // agree about when skipping is offered, or a user sees the affordance in one
+  // view and not the other for the identical field. SectionRenderer additionally
+  // has a `disabled` prop; the popover has no disabled mode (a read-only field
+  // is handled separately below), so there is nothing to mirror for it.
+  //
+  // `empty` must use the shared isBlankFieldValue, not a bare === '': a
+  // space-filled required field has to remain skippable, which is the shape bd
+  // polyglot-pdf-xtj97 pinned on the voice side.
+  const required = isFieldRequired(field, allFieldValues, allFields);
+  const empty = isBlankFieldValue(unwrapFieldValue(value));
+  const canSkip = !!onFieldSkip && required && empty && !skipped;
+
   const isReadOnly =
     !!field.read_only &&
     field.conditional_behavior?.unlock_method !== 'flip_readonly_bit' &&
@@ -136,6 +187,40 @@ export const FieldEditPopover: React.FC<FieldEditPopoverProps> = ({
           allFieldValues={allFieldValues}
           confirmed={confirmed}
         />
+        {skipped && (
+          // The SAME markup and classes SectionRenderer uses, not a popover-
+          // specific variant: form-field__skipped is already styled (the amber
+          // badge treatment in schema-form.css -- imported by schema-forms/main.tsx,
+          // the EAGER entry that also renders this lazily-loaded pane, so the
+          // stylesheet is always present before the popover can mount; the risky
+          // direction is the reverse one), and
+          // role="status" announces the change -- which matters most here,
+          // because pressing Skip makes the button vanish on the same render, so
+          // a screen-reader user otherwise gets silence where the control was.
+          <p className="form-field__skipped" role="status">
+            <span className="form-field__skipped-badge">Skipped</span>
+            <span className="form-field__skipped-note">
+              marked as needs follow-up -- this required question was left
+              unanswered on purpose. Enter a value above to answer it.
+            </span>
+          </p>
+        )}
+        {canSkip && (
+          <button
+            type="button"
+            className="form-field__skip-button"
+            onClick={() => {
+              onFieldSkip!(field.id);
+              // Close after skipping: the field is resolved, so leaving the
+              // editor open over a question the user just set aside invites a
+              // second click on a button that has now vanished.
+              onClose();
+            }}
+            title="Mark this required question as intentionally unanswered (e.g. to ask a translator later). You can still answer it afterward."
+          >
+            Skip for now
+          </button>
+        )}
       </div>
     </div>
   );

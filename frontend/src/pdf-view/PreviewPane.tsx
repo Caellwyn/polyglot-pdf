@@ -44,6 +44,14 @@ export interface PreviewPaneProps {
   // view the overlay click IS the focus gesture -- it is what puts the cursor
   // in the field -- so it moves the next-field search origin, silently.
   onFieldFocus?: (fieldId: string) => void;
+  /**
+   * Mark a field intentionally unanswered -- the Preview counterpart of the
+   * "Skip for now" button SectionRenderer renders in the form view. Without it
+   * a user in Preview had no UI exit from a required field they could not
+   * answer (bd polyglot-pdf-ykfx0); the doc's rule is that leaving such a field
+   * blank must be explicit, "said aloud, or via the skip control".
+   */
+  onFieldSkip?: (fieldId: string) => void;
 }
 
 const MIN_SCALE = 0.5;
@@ -58,6 +66,7 @@ export default function PreviewPane({
   onFieldChange,
   onFieldBlur,
   onFieldFocus,
+  onFieldSkip,
 }: PreviewPaneProps) {
   const { document: pdfDoc, numPages, isLoading, error } = usePDFDocument(pdfUrl ?? null);
   const [scale, setScale] = useState(1.0);
@@ -187,6 +196,7 @@ export default function PreviewPane({
             validationErrors={validationErrors}
             onFieldChange={onFieldChange}
             onFieldBlur={onFieldBlur}
+            onFieldSkip={onFieldSkip}
           />
         )}
       </div>
