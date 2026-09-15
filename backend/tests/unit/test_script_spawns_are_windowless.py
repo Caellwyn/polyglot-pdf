@@ -103,3 +103,109 @@ def test_guard_actually_sees_the_spawn_sites():
         f"{len(found)} -- the scanner is probably broken, making the "
         f"creationflags guard vacuous"
     )
+
+
+def test_every_creationflags_expression_resolves_where_it_is_used():
+    """The flag must be RESOLVABLE at the call site, not merely present.
+
+    The guard above pins that `creationflags=` appears. It cannot tell a
+    working flag from one that raises at runtime -- and that gap shipped a
+    real regression (bd polyglot-pdf-rdftu, caught by the Opus cross-surface
+    review): three bootstrap scripts called a module-level
+    `windowless_creationflags()` from a function that runs at IMPORT time,
+    BEFORE the helper was defined, and whose `subprocess` was function-local.
+    Every one raised NameError, which an `except Exception` swallowed -- so
+    the spawn was skipped silently and the guard stayed green.
+
+    This checks the two things that make the expression actually work:
+      1. if the call site names a helper, that helper is DEFINED ABOVE it
+         (module-level def, or an import/alias) -- not merely somewhere in
+         the file;
+      2. any module-level helper that reads `subprocess` has a module-level
+         `import subprocess` to read it from.
+    Static, so it needs no import of the scripts (many pull in heavy deps).
+    """
+    offenders = []
+    # Group the spawn sites by file ONCE -- re-walking the whole tree inside
+    # the per-file loop made this test take minutes instead of seconds.
+    sites_by_file: dict[str, list[tuple[int, str, ast.Call]]] = {}
+    for _rel, lineno, func, node in _iter_spawn_calls():
+        sites_by_file.setdefault(_rel, []).append((lineno, func, node))
+
+    for path in sorted(SCRIPTS_DIR.rglob("*.py")):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        src = path.read_text(encoding="utf-8")
+        tree = ast.parse(src, filename=str(path))
+
+        # Module-level `import subprocess` (not a function-local one).
+        module_imports_subprocess = any(
+            isinstance(n, ast.Import)
+            and any(a.name == "subprocess" for a in n.names)
+            for n in tree.body
+        )
+        # Where each module-level name becomes usable.
+        defined_at: dict[str, int] = {}
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                defined_at.setdefault(n.name, n.lineno)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                for a in n.names:
+                    defined_at.setdefault(a.asname or a.name.split(".")[0], n.lineno)
+            elif isinstance(n, ast.Assign):
+                for t in n.targets:
+                    if isinstance(t, ast.Name):
+                        defined_at.setdefault(t.id, n.lineno)
+
+        # A function that reads `subprocess` must be able to SEE it: either the
+        # module imports it, or the function imports it itself. A function-local
+        # `import subprocess` is perfectly valid (several bootstrap scripts do
+        # it deliberately to keep module import cheap) -- only a function with
+        # NEITHER is broken.
+        for n in tree.body:
+            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            reads_subprocess = any(
+                isinstance(c, ast.Name) and c.id == "subprocess"
+                for c in ast.walk(n)
+            )
+            imports_it_locally = any(
+                isinstance(c, ast.Import)
+                and any(a.name == "subprocess" for a in c.names)
+                for c in ast.walk(n)
+            )
+            if reads_subprocess and not (
+                module_imports_subprocess or imports_it_locally
+            ):
+                offenders.append(
+                    f"{rel}:{n.lineno} {n.name}() reads `subprocess` but neither "
+                    f"the module nor the function imports it"
+                )
+
+        for lineno, func, node in sites_by_file.get(rel, ()):
+            for kw in node.keywords:
+                if kw.arg != "creationflags":
+                    continue
+                # Only a bare-name helper call needs the ordering check;
+                # an inline expression or attribute call carries its own scope.
+                if not (isinstance(kw.value, ast.Call)
+                        and isinstance(kw.value.func, ast.Name)):
+                    continue
+                name = kw.value.func.id
+                where = defined_at.get(name)
+                if where is None:
+                    offenders.append(
+                        f"{rel}:{lineno} (in {func}()) calls {name}(), which is "
+                        f"not defined at module level"
+                    )
+                elif where > lineno:
+                    offenders.append(
+                        f"{rel}:{lineno} (in {func}()) calls {name}(), defined "
+                        f"LATER at line {where} -- raises NameError if this runs "
+                        f"at import time"
+                    )
+
+    assert not offenders, (
+        "These creationflags expressions are present but cannot resolve where "
+        "they are used, so the spawn silently fails or loses the flag "
+        "(bd polyglot-pdf-rdftu):\n  " + "\n  ".join(offenders)
+    )
