@@ -396,3 +396,64 @@ def test_channel_suffixed_collections_match_KNOWN_CHANNELS():
             continue
         assert "links_{}".format(channel) in names
     assert len(names) == len(purge.KNOWN_CHANNELS)
+
+
+# ---------------------------------------- constants pinned against drift
+
+
+def test_collection_constants_match_service_constants():
+    """purge.py hand-duplicates these as literals rather than importing them
+    (see the module comment above ALERTS_COLLECTION -- importing
+    backend.services.auth transitively via backend.services.* triggers that
+    module's import-time initialize_app() before main() has pinned a
+    project). Import the four LEAF service modules directly instead: none
+    of alerts.py/link_redemptions.py/links_store.py/firms.py imports
+    backend.services.auth at module scope (confirmed: only backend.services.
+    auth itself calls firebase_admin.initialize_app() at import time), so
+    this import is safe and does not reach real Firestore -- it only reads
+    each module's own COLLECTION name constant.
+
+    Mutation: change any one of the four purge.py constants (e.g.
+    ALERTS_COLLECTION = "alertz") -- this goes red. Verified 2026-09-15."""
+    from backend.services import alerts, firms, link_redemptions, links_store
+
+    assert purge.ALERTS_COLLECTION == alerts.COLLECTION
+    assert purge.LINK_REDEMPTIONS_COLLECTION == link_redemptions.COLLECTION
+    assert purge.LINKS_COLLECTION == links_store.COLLECTION
+    assert purge.FIRMS_COLLECTION == firms._FIRMS_COLLECTION
+
+
+def test_known_channels_matches_every_admin_route_copy():
+    """admin_backend/routes/{config,firm,link}_routes.py each carry their own
+    literal KNOWN_CHANNELS = ("demo", "staging") tuple (a pre-existing
+    repo-wide duplication this diff does not introduce -- see
+    docs/standards/testing.md). purge.py's copy must match all three, or a
+    channel added in one place and not here silently stops being purged.
+
+    Read the route files' SOURCE TEXT rather than importing them: importing
+    admin_backend.routes.config_routes pulls in admin_backend.services.
+    admin_auth, which imports backend.services.auth and would trip its
+    import-time initialize_app() before main() pins a project -- the same
+    hazard purge.py's own module comment documents for its literals.
+
+    Mutation: change purge.KNOWN_CHANNELS to a different tuple -- this goes
+    red. Verified 2026-09-15."""
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    route_files = [
+        repo_root / "admin_backend" / "routes" / "config_routes.py",
+        repo_root / "admin_backend" / "routes" / "firm_routes.py",
+        repo_root / "admin_backend" / "routes" / "link_routes.py",
+    ]
+    pattern = re.compile(r'^KNOWN_CHANNELS\s*=\s*(\(.*\))\s*$', re.MULTILINE)
+    for route_file in route_files:
+        text = route_file.read_text(encoding="utf-8")
+        match = pattern.search(text)
+        assert match, "no KNOWN_CHANNELS literal found in {}".format(
+            route_file)
+        route_channels = eval(match.group(1))  # noqa: S307 -- literal tuple
+        assert route_channels == purge.KNOWN_CHANNELS, (
+            "{} KNOWN_CHANNELS {} != purge.py's {}".format(
+                route_file.name, route_channels, purge.KNOWN_CHANNELS))

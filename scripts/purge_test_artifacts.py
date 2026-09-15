@@ -72,17 +72,21 @@ DEAD_PROJECTS = {"polyglot-forms-919f2"}
 # reasoning bootstrap_firm.py and grant_credits.py document: any backend.*
 # import at module scope would run before main()'s
 # initialize_app(projectId=...) and could trip the bare initialize_app() in
-# backend/services/auth.py. Pinned against the real collection/channel
-# constants by test_purge_test_artifacts_cli.py's
-# test_*_matches_service_constants tests so drift fails CI rather than
-# silently missing a collection.
+# backend/services/auth.py. Pinned against the real collection constants by
+# test_purge_test_artifacts_cli.py's test_collection_constants_match_service_
+# constants (imports the four LEAF service modules directly, which is safe
+# -- see that test's docstring) so drift fails CI rather than silently
+# missing a collection.
 ALERTS_COLLECTION = "alerts"
 LINK_REDEMPTIONS_COLLECTION = "link_redemptions"
 LINKS_COLLECTION = "links"
 FIRMS_COLLECTION = "firms"
 
-# admin_backend's route files (config_routes.py, firm_routes.py, etc.) all
-# carry this same literal tuple -- the two channels this repo deploys today.
+# admin_backend's route files (config_routes.py, firm_routes.py,
+# link_routes.py) all carry this same literal tuple -- the two channels
+# this repo deploys today. Pinned against all three by
+# test_purge_test_artifacts_cli.py's
+# test_known_channels_matches_every_admin_route_copy.
 KNOWN_CHANNELS = ("demo", "staging")
 
 # The enumerated shapes (bd polyglot-pdf-21m1y bead body). Kept as named

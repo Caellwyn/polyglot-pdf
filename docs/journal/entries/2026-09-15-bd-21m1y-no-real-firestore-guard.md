@@ -123,18 +123,58 @@ miss, every time. When a guard patches "the thing that eventually touches
 the network," check for a cache between the public entry point and that
 thing; if one exists, the entry point itself is the seam to patch.
 
-Adopt/reject/defer breakdown for this round's reviewer findings:
-- **Adopted (blocker, fixed here):** finding 1, the warm-cache bypass of the
+Adopt/reject/defer breakdown for round 2's reviewer findings:
+- **Adopted (blocker, fixed then):** finding 1, the warm-cache bypass of the
   Firestore guard -- third patch target added, new mutation-verified test.
-- **Deferred (nit, already filed as its own bead by the reviewer):**
+- **Deferred then (nit, filed as its own bead by the reviewer):**
   finding 2 (`polyglot-pdf-bpzsr`, purge script's stale test-name comment),
   finding 3 (`polyglot-pdf-zqwem`, the third `tests/` testpath has no
   Firestore guard of its own), finding 4 (`polyglot-pdf-5qbjd`, the purge
   script cannot reach `kits/{kit_id}/usage` rollups). None reopened or
-  refuted here; verified all three beads exist with accurate bodies matching
+  refuted then; verified all three beads exist with accurate bodies matching
   the review report.
-- **Rejected:** none -- every classified finding was either fixed or was
-  already correctly filed rather than needing rebuttal.
+- **Rejected then:** none -- every classified finding was either fixed or
+  was already correctly filed rather than needing rebuttal.
+
+Adopt/reject/defer breakdown for round 3's reviewer findings (a fresh-eyes
+pass that independently re-raised two of round 2's already-filed nits,
+without visibility into the beads tracker):
+- **Adopted (fixed here):** the reviewer's two GAPS-FOUND findings, which
+  turned out to be the same two gaps as `polyglot-pdf-bpzsr` and half of
+  `polyglot-pdf-zqwem`:
+  - `admin_backend/tests/conftest.py`'s docstring wrongly claimed
+    `tests/conftest.py` "carries this same guard" -- corrected to state
+    accurately that `tests/` has the K_SERVICE-strip guard but NOT
+    `_no_real_firestore`, and why (no Firestore-store-exercising tests
+    under `tests/` today). This is the docstring-accuracy half of
+    `polyglot-pdf-zqwem`; that bead's actual exit criteria (installing the
+    guard in `tests/conftest.py` itself) remain open and unaddressed --
+    noted on the bead, left open.
+  - `scripts/purge_test_artifacts.py`'s comment claimed a
+    `test_*_matches_service_constants` pin that did not exist -- added
+    `test_collection_constants_match_service_constants` (pins the four
+    collection literals against `alerts.py`/`link_redemptions.py`/
+    `links_store.py`/`firms.py`'s real constants, importing those four leaf
+    modules directly since none of them imports `backend.services.auth` at
+    module scope) and `test_known_channels_matches_every_admin_route_copy`
+    (pins `KNOWN_CHANNELS` against all three `admin_backend/routes/*.py`
+    copies via source-text regex, avoiding an import of those route modules
+    which would transitively trip `backend.services.auth`'s import-time
+    `initialize_app()`); updated the comment to name the real tests. Both
+    mutation-verified (break each constant, watch the matching test go red,
+    restore). This fully met `polyglot-pdf-bpzsr`'s exit criteria, so that
+    bead is CLOSED (with the mutation evidence on the bead itself) rather
+    than left as a stale duplicate.
+  - Full three-root suite reconfirmed green after both fixes:
+    `backend/tests` 3753 passed / 195 skipped / 4 deselected,
+    `admin_backend/tests` 585 passed, root `tests/` 1666 passed / 92
+    skipped.
+- **Deferred (unchanged, not this round's scope):** `polyglot-pdf-zqwem`'s
+  remaining exit criteria (actually installing the guard in
+  `tests/conftest.py`) and `polyglot-pdf-5qbjd` (kit-rollup purge gap) --
+  neither raised again by round 3's reviewer, both correctly out of scope
+  for a docstring/comment-accuracy fix.
+- **Rejected:** none.
 
 ## Doc freshness
 
@@ -156,9 +196,13 @@ it catches; `admin_backend/tests/conftest.py` added to the Tracks line.
   `test_get_db_is_still_caught_when_the_client_is_already_cached`.
 - `admin_backend/tests/unit/test_access_matrix.py` -- fixed the one test
   the guard caught.
-- `scripts/purge_test_artifacts.py` -- new: the cleanup CLI.
+- `scripts/purge_test_artifacts.py` -- new: the cleanup CLI; round 3
+  corrected a comment falsely claiming a CI pin that did not yet exist.
 - `tests/test_purge_test_artifacts_cli.py` -- new: CLI contract tests
-  against a hand-rolled fake Firestore.
+  against a hand-rolled fake Firestore; round 3 added
+  `test_collection_constants_match_service_constants` and
+  `test_known_channels_matches_every_admin_route_copy`, making that
+  comment's claim true.
 - `docs/standards/testing.md` -- new bullet + Tracks line update.
 
 Review outcomes recorded in the closeout ping.

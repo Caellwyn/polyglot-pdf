@@ -1,7 +1,16 @@
 """Shared pytest setup for the admin service's suite (bd polyglot-pdf-pnoik).
 
-This is the THIRD of pytest.ini's three testpaths (backend/tests and tests/
-are the others, each with its own conftest.py carrying this same guard).
+This is one of pytest.ini's three testpaths (backend/tests and tests/ are
+the others). tests/conftest.py carries the K_SERVICE-strip guard (see "WHY
+THIS FILE EXISTS" below) but NOT the _no_real_firestore guard further down
+in this file -- tests/ has no Firestore-store-exercising tests today, only
+shell-script text-parsing tests, so it was not wired in when this guard was
+added (bd polyglot-pdf-21m1y; see docs/standards/testing.md's "No real
+Firestore" section, which correctly names only backend/tests/conftest.py
+and this file). A future test under tests/ that exercises a real store
+(alerts.py, links_store.py, etc.) unpatched would reach real Firestore with
+no guard catching it -- wire tests/conftest.py the same way this file's
+_no_real_firestore fixture does, below, if that ever changes.
 
 WHY THIS FILE EXISTS. admin_backend/main.py builds its CORS middleware at
 MODULE scope, which calls backend.config.get_settings(); backend/config.py
