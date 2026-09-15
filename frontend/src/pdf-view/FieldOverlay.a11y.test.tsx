@@ -117,11 +117,13 @@ describe('every fill state that should announce, does (bd polyglot-pdf-sagh6)', 
     state: FillState;
     entry: unknown;
     currentFieldId?: string | null;
+    /** The value the fixture paints, when it has one -- it rides in the name. */
+    spoken?: string;
     announces: boolean;
   }> = [
     { state: 'empty', entry: undefined, announces: false },
-    { state: 'filled', entry: { value: 'A123456789' }, announces: true },
-    { state: 'confirmed', entry: { value: 'A123456789', confirmed: true }, announces: true },
+    { state: 'filled', entry: { value: 'A123456789' }, spoken: 'A123456789', announces: true },
+    { state: 'confirmed', entry: { value: 'A123456789', confirmed: true }, spoken: 'A123456789', announces: true },
     { state: 'skipped', entry: SKIPPED, announces: true },
     { state: 'current', entry: { value: null }, currentFieldId: FIELD.id, announces: true },
   ];
@@ -138,7 +140,7 @@ describe('every fill state that should announce, does (bd polyglot-pdf-sagh6)', 
     ).toEqual(declared);
   });
 
-  for (const { state, entry, currentFieldId, announces } of CASES) {
+  for (const { state, entry, currentFieldId, spoken, announces } of CASES) {
     it(`${state}: ${announces ? 'adds a state phrase' : 'stays silent'}`, () => {
       const box = renderOverlay(entry, { currentFieldId });
       const label = box.getAttribute('aria-label') ?? '';
@@ -152,7 +154,10 @@ describe('every fill state that should announce, does (bd polyglot-pdf-sagh6)', 
           label,
           `'${state}' must add a state phrase to the accessible name`,
         ).not.toBe(`Edit ${FIELD.name}`);
-        expect(label).toContain(accessibleNameFor(FIELD.name, state));
+        // Built from the SAME inputs the component saw, including the value --
+        // a filled field announces "Field: value (state)", so an expectation
+        // omitting the value would check a string the code never emits.
+        expect(label).toContain(accessibleNameFor(FIELD.name, state, spoken));
       } else {
         // An unfilled field has nothing to report, and a phrase on every blank
         // box would bury the states that do.
@@ -179,5 +184,79 @@ describe('the wording does not collide with the form view (bd polyglot-pdf-sagh6
 
   it('matches the Preview legend, so one state has one name', () => {
     expect(accessibleNameFor('F', 'skipped')).toMatch(/set aside to answer later/i);
+  });
+});
+
+describe('the ANSWER survives the img leaf rule (bd polyglot-pdf-sagh6)', () => {
+  // Found by fresh-eyes, and it was a real regression in my first version.
+  //
+  // Under ARIA an `img` is a LEAF: its accessible name REPLACES its subtree. So
+  // the moment the read-only overlay gained role="img" (to be nameable at all),
+  // the value painted inside it stopped being reachable. Measured then: a
+  // confirmed field had textContent "A123456789" while announcing only
+  // "USCIS Number: confirmed" -- announcing a field's STATUS while hiding the
+  // user's actual ANSWER, which is a worse gap than the one being fixed.
+  //
+  // So the value rides in the NAME, from the same helpers that decide what to
+  // paint.
+  const TEXT_FIELD: FormField = {
+    id: 'uscis_number', name: 'USCIS Number', spoken_name: 'n', section_id: 's1',
+    type: 'text', validation: { required: true },
+    pdf_position: { page: 1, x: 10, y: 10, width: 100, height: 14 },
+  } as any;
+
+  const CHECKBOX: FormField = {
+    id: 'has_apt', name: 'Has apartment', spoken_name: 'n', section_id: 's1',
+    type: 'checkbox',
+    pdf_position: { page: 1, x: 10, y: 40, width: 100, height: 14 },
+  } as any;
+
+  /** Options carrying their OWN rects: marks paint there, the box paints nothing. */
+  const GROUP: FormField = {
+    id: 'race', name: 'Race', spoken_name: 'n', section_id: 's1',
+    type: 'checkbox_group',
+    options: [
+      { value: 'white', label: 'White', pdf_position: { page: 1, x: 10, y: 70, width: 20, height: 14 } },
+      { value: 'asian', label: 'Asian', pdf_position: { page: 1, x: 40, y: 70, width: 20, height: 14 } },
+    ],
+    pdf_position: { page: 1, x: 10, y: 70, width: 100, height: 14 },
+  } as any;
+
+  function nameOf(fields: FormField[], values: Record<string, unknown>, id: string): string {
+    render(
+      <PDFViewer document={{} as any} numPages={1} scale={1} fields={fields}
+        fieldValues={values} currentFieldId={null} />,
+    );
+    return screen.getByTestId(`pdf-field-overlay-${id}`).getAttribute('aria-label') ?? '';
+  }
+
+  it('a read-only filled field announces its VALUE, not just its state', () => {
+    const name = nameOf([TEXT_FIELD], { uscis_number: { value: 'A123456789', confirmed: true } }, 'uscis_number');
+    expect(
+      name,
+      'the answer is painted inside an img-rolled box, so it only reaches AT ' +
+        'through the accessible name',
+    ).toContain('A123456789');
+    expect(name).toContain('USCIS Number');
+    expect(name).toContain('confirmed');
+  });
+
+  it('a ticked checkbox says so -- an X glyph is not readable', () => {
+    const name = nameOf([CHECKBOX], { has_apt: { value: true, confirmed: true } }, 'has_apt');
+    expect(name).toMatch(/checked/i);
+  });
+
+  it("a group whose options paint at their OWN rects still names the selection", () => {
+    // The box paints NOTHING in this case (the marks carry the display), so
+    // without naming the selection the field would announce no answer at all.
+    const name = nameOf([GROUP], { race: { value: ['white'], confirmed: true } }, 'race');
+    expect(name, 'a selected option must be named, and by its LABEL not its slug')
+      .toContain('White');
+    expect(name, 'the slug must not leak into speech').not.toMatch(/\bwhite\b(?![A-Za-z])/);
+  });
+
+  it('an unanswered field names no value', () => {
+    const name = nameOf([TEXT_FIELD], {}, 'uscis_number');
+    expect(name).toBe('USCIS Number');
   });
 });

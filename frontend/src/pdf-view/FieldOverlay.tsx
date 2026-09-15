@@ -28,6 +28,7 @@ import {
   selectedOptionRects,
   fittedFontSize,
   type PaintedValue,
+  optionLabel,
 } from './valuePainting';
 
 /**
@@ -117,10 +118,33 @@ export const STATE_PHRASES: Record<FillState, string> = {
   skipped: 'set aside to answer later',
 };
 
-/** The overlay's accessible name: the field, plus its state when it has one. */
-export function accessibleNameFor(fieldName: string, fillState: FillState): string {
+/**
+ * The overlay's accessible name: the field, its VALUE, and its state.
+ *
+ * The value has to be in the NAME, not merely painted inside the box. Under
+ * ARIA an `img` is a LEAF -- its accessible name replaces its subtree -- so the
+ * moment the read-only overlay gained role="img" (to be nameable at all), the
+ * painted value text inside it stopped being reachable. Measured: a confirmed
+ * field rendered `textContent "A123456789"` while announcing only
+ * "USCIS Number: confirmed". Announcing a field's STATUS while hiding the
+ * user's actual ANSWER trades one accessibility gap for a worse one; found by
+ * fresh-eyes, and it was a real regression in my first version.
+ *
+ * `spokenValue` is the SAME text the box paints (from paintedValueFor), so a
+ * screen reader hears what a sighted user sees -- including an option's human
+ * label rather than its slug, which that helper already resolves.
+ */
+export function accessibleNameFor(
+  fieldName: string,
+  fillState: FillState,
+  spokenValue?: string,
+): string {
+  // "Field: value (state)" rather than colon-joining all three. A three-way
+  // colon chain reads badly aloud -- "Has apartment: checked: confirmed" --
+  // and the state is a parenthetical about the value, not a third peer.
   const phrase = STATE_PHRASES[fillState];
-  return phrase ? `${fieldName}: ${phrase}` : fieldName;
+  const head = spokenValue ? `${fieldName}: ${spokenValue}` : fieldName;
+  return phrase ? `${head} (${phrase})` : head;
 }
 
 export const FieldOverlay: React.FC<FieldOverlayProps> = ({
@@ -161,9 +185,30 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // contradict it.
   const clickable = !!onClick && !isDimmed;
   const activate = clickable ? () => onClick(field.id) : undefined;
-  // The accessible name carries the STATE in both modes, because the colour
-  // does not reach assistive tech at all (bd polyglot-pdf-sagh6).
-  const accessibleName = accessibleNameFor(field.name, fillState);
+  // The accessible name carries the VALUE and the STATE in both modes: the
+  // colour never reached assistive tech, and once the read-only overlay gained
+  // role="img" to be nameable, ARIA's leaf rule meant the painted value inside
+  // it stopped being reachable too (bd polyglot-pdf-sagh6).
+  //
+  // Computed from the SAME helpers that decide what to paint, so the
+  // announcement matches the box:
+  //   - the ordinary case paints text (or an X) at the field rect;
+  //   - when selected options carry their own printed rects, marks paint THERE
+  //     and the field box paints nothing -- so the name has to name the
+  //     selected options, or a radio/checkbox group would announce no answer at
+  //     all.
+  const optionRectsForName = selectedOptionRects(field, rawValue);
+  const spokenValue = ((): string | undefined => {
+    if (optionRectsForName.length > 0) {
+      const labels = optionRectsForName.map(o => optionLabel(field, o.value));
+      return labels.join(', ');
+    }
+    const painted = paintedValueFor(field, rawValue);
+    if (painted.kind === 'text') return painted.text;
+    if (painted.kind === 'check') return 'checked';
+    return undefined;
+  })();
+  const accessibleName = accessibleNameFor(field.name, fillState, spokenValue);
 
   const interactiveProps = clickable
     ? {
@@ -199,7 +244,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // rect, marks paint at those rects and the field-level box paints no text
   // (the mark placement IS the value display; a duplicate label at the field
   // rect would just clutter the form).
-  const optionRects = selectedOptionRects(field, rawValue);
+  const optionRects = optionRectsForName;
 
   let content: React.ReactNode = null;
   if (optionRects.length === 0) {
