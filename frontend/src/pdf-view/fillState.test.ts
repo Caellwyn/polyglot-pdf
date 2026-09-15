@@ -63,11 +63,20 @@ describe('fillStateFor', () => {
       expect(fillStateFor('f', { value: null, skipped: false }, null)).toBe('empty');
     });
 
-    it('still paints a skipped field that HOLDS a value by its value', () => {
-      // A field can be skipped and later answered (the badge copy says as
-      // much: "Enter a value above to answer it"). Once it has an answer the
-      // answer is what matters -- otherwise re-answering a skipped field would
-      // leave it looking unresolved forever.
+    it('the skipped FLAG outranks a stored value, and that is unreachable today', () => {
+      // NAME MATCHES THE ASSERTION. The first version of this test was called
+      // "still paints a skipped field that HOLDS a value by its value" and its
+      // comment argued the value should win -- while asserting the exact
+      // opposite. A reader would have trusted the prose and "fixed"
+      // fillStateFor to match a rule it never implemented (found by
+      // fresh-eyes).
+      //
+      // What actually holds: the flag wins. That combination cannot arise in
+      // the app -- schemaFormState.ts's updateField DROPS `skipped` on a fresh
+      // write, so answering a skipped field clears the flag and the field
+      // paints by its value through the ordinary path. This pins the
+      // precedence for the synthetic shape rather than claiming a behaviour
+      // the app can reach.
       expect(fillStateFor('f', { value: 'x', skipped: true }, 'x')).toBe('skipped');
     });
 

@@ -183,3 +183,76 @@ describe("the legend names the state without stealing the note's phrase", () => 
     ).not.toMatch(/needs follow-up/i);
   });
 });
+
+describe('a dimmed skipped field keeps its cue (bd polyglot-pdf-c9dfo)', () => {
+  // `dimmed` tracks show_if ALONE, so skipped-and-hidden is reachable in both
+  // orders: skip a field then have a later answer hide it, or hide it and then
+  // skip it. Dimming replaces border AND background wholesale, so before
+  // 'skipped' joined 'current' in the exemption this painted grey-dashed +
+  // transparent -- the untouched-blank look this bead exists to eliminate,
+  // reappearing under one extra condition.
+  //
+  // Found by the fresh-eyes reviewer, not by me: my distinctness matrix
+  // compared skipped against every real FillState and never against the
+  // `dimmed` OVERRIDE, which is not a FillState at all.
+  const HIDDEN_FIELD: FormField = {
+    id: 'apt_number',
+    name: 'Apt number',
+    spoken_name: 'apartment number',
+    section_id: 's1',
+    type: 'text',
+    validation: { required: true },
+    // Never satisfied in these fixtures -> shouldShowField false -> dimmed.
+    show_if: { field: 'has_apt', operator: 'is_checked' },
+    pdf_position: { page: 1, x: 100, y: 200, width: 120, height: 14 },
+  } as any;
+
+  function renderHidden(entry: unknown) {
+    render(
+      <PDFViewer
+        document={{} as any}
+        numPages={1}
+        scale={1}
+        fields={[HIDDEN_FIELD]}
+        fieldValues={entry === undefined ? {} : { [HIDDEN_FIELD.id]: entry }}
+        currentFieldId={null}
+      />,
+    );
+    return screen.getByTestId(`pdf-field-overlay-${HIDDEN_FIELD.id}`);
+  }
+
+  it('stays DIMMED and inert -- it is still conditionally hidden', () => {
+    // Only the COLOUR survives. My first attempt added 'skipped' to the
+    // isDimmed exemption, which also made the field clickable and dropped its
+    // 0.35 opacity -- breaking bd polyglot-pdf-lp5v's rule that a
+    // show_if-hidden field is "dimmed, never removed, and never clickable".
+    // This pins the narrower behaviour so that cannot be widened by accident.
+    const box = renderHidden(SKIPPED);
+    expect(
+      box.getAttribute('data-dimmed'),
+      'a hidden field must stay inert whatever its fill state',
+    ).toBe('true');
+    expect(box.className).toMatch(/pdf-field-overlay--dimmed/);
+  });
+
+  it('does NOT paint as a dimmed blank -- the defect, one condition deeper', () => {
+    const skipped = paintOf(renderHidden(SKIPPED));
+    cleanup();
+    const hiddenBlank = paintOf(renderHidden(undefined));
+
+    expect(
+      skipped.border,
+      'a hidden-but-skipped field must not share the dimmed blank border -- ' +
+        'the overlay is the only lasting record that it needs follow-up',
+    ).not.toBe(hiddenBlank.border);
+    expect(skipped.background).not.toBe(hiddenBlank.background);
+  });
+
+  it('an ordinary hidden blank field is still dimmed as before', () => {
+    // The negative half: the exemption must not have un-dimmed everything.
+    const box = renderHidden(undefined);
+    expect(box.getAttribute('data-dimmed')).toBe('true');
+    expect(box.style.border).toMatch(/dashed/);
+    expect(box.style.backgroundColor).toBe('transparent');
+  });
+});
