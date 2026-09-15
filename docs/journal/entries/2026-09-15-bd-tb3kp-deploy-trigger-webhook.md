@@ -148,6 +148,56 @@ Three admin routes and one webhook, all new surface on the admin service:
   confirm) -- filed to the same deferred-nits bead as round 1's items rather
   than opening a new one.
 
+**Fresh-eyes fix round 3 (outer cross-surface review, GAPS-FOUND(1)):**
+
+- ADOPT -- the round 2 entry above's "filed to the same deferred-nits bead
+  as round 1's items" claim was WRONG: bd polyglot-pdf-0ovpl's body (as
+  actually written) contains only the two round-1 nits (`trigger_id` shape,
+  promotion-gate query cap) -- the `finishTime`/`createTime` finding was
+  never added to it, dropped silently between rounds. The round-3 reviewer
+  independently re-derived the same finding, confirmed it against the
+  installed `google-cloud-build` SDK's own `Build` type (its
+  `create_time`/`finish_time` fields are `google.protobuf.Timestamp`, whose
+  JSON mapping is a documented RFC3339 string, never a bare number -- this
+  is a fact about protobuf's canonical JSON encoding, not merely a Cloud
+  Build API convention, so it needed no live network call to confirm), and
+  filed it as its own bead, bd polyglot-pdf-xqejk, since 0ovpl no longer
+  accurately represented "what round 1 deferred." Fixed inline rather than
+  re-deferring, since a round-3 reviewer surfacing the SAME finding a
+  second time is exactly CLAUDE.md scar #8's "the tell you are in this
+  trap" signal (a repeat finding differing only in whether it got tracked):
+  added `deploy_webhook.py::_to_epoch()`, a normalizer parsing an RFC3339
+  string (including Cloud Build's real up-to-9-fractional-digit
+  nanosecond precision, truncated to Python's 6-digit microsecond
+  resolution) or passing a bare number through unchanged, always returning
+  the same float-epoch type `deploy_routes.py`'s `time.time()` writes use
+  for `ts`. Applied at both webhook write sites (`finished_at` on the
+  update path, `ts` on the bash-triggered create path). Updated every
+  existing test that fed a synthetic int `finishTime`/`createTime` (the
+  actual gap the reviewer named: no test had ever driven the webhook with
+  a realistic RFC3339-string fixture) to use real RFC3339 strings instead,
+  added an explicit float-type assertion on the update path
+  (`test_a_console_triggered_build_going_terminal_writes_a_float_finished_at`,
+  the UPDATE-path case the CREATE-path test alone did not cover), and added
+  a dedicated `TestToEpoch` class pinning the parser's edge cases (bare
+  number passthrough, Z-suffix, millisecond and nanosecond fractions,
+  negative UTC offset, `None`, and an unparsable string both falling back
+  to `time.time()`). Mutation-verified: reverting both `_to_epoch()` call
+  sites back to `build.get(...) or time.time()` reddens four tests (the two
+  updated existing ones plus the new update-path test), each failing on the
+  stored value being the raw RFC3339 string instead of a float. Closes bd
+  polyglot-pdf-xqejk.
+- The round-3 reviewer's other findings were non-gaps it explicitly declined
+  to act on: the `deploy/targets.py` GATED_TARGETS / `target_family()`
+  suffix asymmetry (correct given `record_deployment.py`'s design, flagged
+  only as an easy future misreading, no bug); the new
+  `google-cloud-build==3.31.3` pin's unverified transitive-dependency
+  adjacency in `backend/requirements.txt` (no evidence of an actual
+  conflict, needs a `pip check` this offline review could not run); and the
+  pre-existing `admin-service.md` "accretive changelog" pattern (already
+  tracked by four open beads, not this diff's problem). None of these met
+  the bar for a new bead.
+
 Found this worktree with the implementation already substantially drafted
 (a prior session's work, interrupted before a checkpoint commit -- the
 bead's own PAUSED/UNPAUSED history suggests why). Verified it against the
@@ -201,6 +251,9 @@ bearing, not vacuous. No new generalizable lesson beyond what CLAUDE.md's
 - tests/test_deploy_targets.py (new, fresh-eyes fix round)
 - tests/test_cloudbuild_yaml.py (real drift-guard test added, fresh-eyes fix round)
 - admin_backend/routes/deploy_webhook.py (out-of-order-delivery guard added,
-  fresh-eyes fix round)
+  fresh-eyes fix round; `_to_epoch()` timestamp normalizer added, fresh-eyes
+  fix round 3)
+- admin_backend/tests/unit/test_deploy_webhook.py (RFC3339-string fixtures +
+  `TestToEpoch` unit coverage, fresh-eyes fix round 3)
 - docs/components/admin-service.md
 - docs/technical_guide.md

@@ -35,7 +35,12 @@ resource laid out flat): {"message": {"data": "<base64>", "attributes":
 {...}, "messageId": "..."}, "subscription": "..."}. `data` is the
 BASE64-ENCODED JSON of the Cloud Build Build resource itself (id, status,
 substitutions, logUrl, startTime/finishTime, ...) -- Cloud Build's own
-documented Pub/Sub notification shape.
+documented Pub/Sub notification shape. createTime/finishTime are
+google.protobuf.Timestamp fields, which arrive here as RFC3339 STRINGS
+(protobuf's JSON mapping), NOT numbers -- _to_epoch() normalizes both to
+the same float-epoch type deploy_routes.py's own time.time() writes use
+for "ts", so every row in the collection sorts and compares consistently
+regardless of which route wrote it.
 
 UPSERT BY build_id, NEVER BY DOCUMENT ID. A console-triggered build already
 has a deployments/{id} row (bd 4.3's own POST /admin/deploys writes it with
@@ -104,6 +109,7 @@ import binascii
 import json
 import os
 import time
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 import structlog
@@ -160,6 +166,50 @@ _TERMINAL_STATUSES = frozenset(
 
 def _mapped_status(raw_status: Optional[str]) -> str:
     return _BUILD_STATUS_MAP.get((raw_status or "").upper(), STATUS_FAILURE)
+
+
+def _to_epoch(value: object) -> float:
+    """Normalize a Cloud Build timestamp to a float Unix epoch, so every
+    row in the deployments collection carries the SAME type for "ts" and
+    "finished_at" as deploy_routes.py's own time.time() writes (fresh-eyes
+    round-3 finding, bd polyglot-pdf-tb3kp / filed continuation
+    polyglot-pdf-xqejk).
+
+    Cloud Build's real Pub/Sub payload carries createTime/finishTime as
+    google.protobuf.Timestamp fields, which the JSON mapping this webhook
+    actually receives renders as RFC3339 STRINGS (e.g.
+    "2026-09-15T12:34:56.789Z") -- never as a bare number. A test fixture
+    or a future Cloud Build revision handing back a number is also
+    accepted so this helper never raises on a well-formed value; anything
+    else (None, an unparsable string) falls back to time.time() rather
+    than storing a mixed-type or missing timestamp.
+    """
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            # datetime.fromisoformat needs "+00:00", not a bare "Z", and
+            # Cloud Build's fractional seconds can run to 9 digits (proto
+            # Timestamp nanoseconds) where Python's parser accepts at most
+            # 6 -- truncate the fraction before parsing rather than
+            # rejecting an otherwise-valid RFC3339 string.
+            normalized = value.replace("Z", "+00:00")
+            if "." in normalized:
+                head, _, rest = normalized.partition(".")
+                frac, _, tz = rest.partition("+")
+                tz = "+" + tz if tz else ""
+                if not tz and "-" in rest[1:]:
+                    idx = rest.index("-", 1)
+                    frac, tz = rest[:idx], rest[idx:]
+                normalized = "{}.{}{}".format(head, frac[:6], tz)
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        except ValueError:
+            _log.warning(
+                "admin_deploy_webhook_unparsable_timestamp", value=value)
+    return time.time()
 
 
 def _audience() -> str:
@@ -247,7 +297,7 @@ def _upsert_deployment(db, build: dict) -> None:
 
     finished_at = None
     if status in _TERMINAL_STATUSES:
-        finished_at = build.get("finishTime") or time.time()
+        finished_at = _to_epoch(build.get("finishTime"))
 
     collection = db.collection(COLLECTION)
     update_fields = {
@@ -323,7 +373,7 @@ def _upsert_deployment(db, build: dict) -> None:
             "sha": sha,
             "ref": None,
             "triggered_by": "external",
-            "ts": build.get("createTime") or time.time(),
+            "ts": _to_epoch(build.get("createTime")),
             **update_fields,
         }
         tx.set(ref, row)

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -242,8 +243,11 @@ def test_a_bash_triggered_build_with_no_existing_row_is_created_external(
     build = {
         "id": "build-bash-1", "status": "SUCCESS",
         "logUrl": "https://console.cloud.google.com/build-bash-1",
-        "createTime": 500,
-        "finishTime": 600,
+        # REAL Cloud Build shape: createTime/finishTime are RFC3339
+        # strings (protobuf Timestamp's JSON mapping), never bare numbers
+        # -- see deploy_webhook.py's _to_epoch() docstring.
+        "createTime": "2026-09-15T10:00:00.500Z",
+        "finishTime": "2026-09-15T10:10:00.600Z",
         "substitutions": {
             "_TARGET": "backend-staging", "_CHANNEL": "staging",
             "_SHA": "c" * 40,
@@ -264,7 +268,15 @@ def test_a_bash_triggered_build_with_no_existing_row_is_created_external(
     assert row["channel"] == "staging"
     assert row["sha"] == "c" * 40
     assert row["status"] == "success"
-    assert row["finished_at"] == 600
+    # ts/finished_at must be the SAME float-epoch type deploy_routes.py's
+    # own time.time() writes use -- an RFC3339 string stored verbatim
+    # would sort wrong against a float "ts" in the same collection.
+    assert isinstance(row["ts"], float)
+    assert isinstance(row["finished_at"], float)
+    assert row["ts"] == datetime(
+        2026, 9, 15, 10, 0, 0, 500000, tzinfo=timezone.utc).timestamp()
+    assert row["finished_at"] == datetime(
+        2026, 9, 15, 10, 10, 0, 600000, tzinfo=timezone.utc).timestamp()
 
 
 @pytest.mark.parametrize("raw_status,expected", [
@@ -322,7 +334,7 @@ def test_out_of_order_working_after_success_does_not_regress_status(
     success_build = {
         "id": "build-reorder-1", "status": "SUCCESS",
         "logUrl": "https://x/build-reorder-1",
-        "finishTime": 700,
+        "finishTime": "2026-09-15T11:00:00Z",
         "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
     }
     stale_working_build = {
@@ -345,7 +357,8 @@ def test_out_of_order_working_after_success_does_not_regress_status(
     row = rows[0]
     assert row["status"] == "success", (
         "a stale WORKING message regressed a terminal SUCCESS status")
-    assert row["finished_at"] == 700, (
+    assert row["finished_at"] == datetime(
+        2026, 9, 15, 11, 0, 0, tzinfo=timezone.utc).timestamp(), (
         "a stale WORKING message cleared finished_at on a terminal row")
 
 
@@ -364,7 +377,7 @@ def test_a_second_terminal_status_still_applies_over_the_first(
     success_build = {
         "id": "build-reorder-2", "status": "SUCCESS",
         "logUrl": "https://x/build-reorder-2",
-        "finishTime": 800,
+        "finishTime": "2026-09-15T11:20:00Z",
         "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
     }
     with TestClient(app) as client:
@@ -381,7 +394,8 @@ def test_a_second_terminal_status_still_applies_over_the_first(
     assert len(rows) == 1
     row = rows[0]
     assert row["status"] == "success"
-    assert row["finished_at"] == 800
+    assert row["finished_at"] == datetime(
+        2026, 9, 15, 11, 20, 0, tzinfo=timezone.utc).timestamp()
 
 
 def test_wrong_caller_email_is_403_no_token_is_401(
@@ -496,3 +510,87 @@ def test_a_forced_audit_failure_leaves_the_deployment_row_unchanged(
     assert row["status"] == "queued", (
         "a forced audit failure must leave the deployment row's status "
         "UNCHANGED -- the transaction must not have partially committed")
+
+
+def test_a_console_triggered_build_going_terminal_writes_a_float_finished_at(
+        fake_db, webhook_env, monkeypatch):
+    """The UPDATE path (an existing console-triggered row, not the CREATE
+    path test_a_bash_triggered_build_with_no_existing_row_is_created_external
+    already covers) must also normalize Cloud Build's real RFC3339
+    finishTime to the same float-epoch type deploy_routes.py's own
+    time.time() writes use for "ts" -- round-3 fresh-eyes finding, bd
+    polyglot-pdf-tb3kp / polyglot-pdf-xqejk. Mutation-verified: reverting
+    _to_epoch()'s call at the finished_at write site back to
+    `build.get("finishTime") or time.time()` makes this assertion fail
+    with a str, not a float."""
+    _authed(monkeypatch)
+    fake_db.docs[("deployments", "console-row-2")] = {
+        "target": "editor", "target_family": "editor", "channel": "demo",
+        "sha": "a" * 40, "triggered_by": "op-1", "build_id": "build-100",
+        "status": "queued", "log_url": None, "ts": 100.0,
+        "finished_at": None,
+    }
+    build = {
+        "id": "build-100", "status": "SUCCESS",
+        "logUrl": "https://x/build-100",
+        "finishTime": "2026-09-15T12:00:00.250Z",
+        "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    }
+    with TestClient(app) as client:
+        resp = client.post("/api/deploys/webhook", json=_push_envelope(build),
+                           headers={"Authorization": "Bearer tok"})
+    assert resp.status_code == 204, resp.text
+
+    row = fake_db.docs[("deployments", "console-row-2")]
+    assert isinstance(row["finished_at"], float), (
+        "finished_at must be a float epoch like deploy_routes.py's ts, "
+        "not the raw RFC3339 string Cloud Build sends")
+    assert row["finished_at"] == datetime(
+        2026, 9, 15, 12, 0, 0, 250000, tzinfo=timezone.utc).timestamp()
+
+
+class TestToEpoch:
+    """Direct unit coverage of deploy_webhook._to_epoch -- the helper the
+    two tests above exercise end-to-end. These pin the parsing edge cases
+    Cloud Build's real payload can hit that an end-to-end test would be
+    slow and awkward to enumerate through the HTTP route."""
+
+    def test_bare_number_passes_through_as_float(self):
+        assert deploy_webhook._to_epoch(600) == 600.0
+        assert deploy_webhook._to_epoch(600.5) == 600.5
+
+    def test_rfc3339_with_z_suffix(self):
+        got = deploy_webhook._to_epoch("2026-09-15T12:34:56Z")
+        want = datetime(
+            2026, 9, 15, 12, 34, 56, tzinfo=timezone.utc).timestamp()
+        assert got == want
+
+    def test_rfc3339_with_millisecond_fraction(self):
+        got = deploy_webhook._to_epoch("2026-09-15T12:34:56.789Z")
+        want = datetime(
+            2026, 9, 15, 12, 34, 56, 789000, tzinfo=timezone.utc).timestamp()
+        assert got == want
+
+    def test_rfc3339_with_nanosecond_fraction(self):
+        # Cloud Build's real protobuf Timestamp JSON mapping can carry up
+        # to 9 fractional digits (nanoseconds); Python's datetime only
+        # resolves to microseconds (6 digits), so this must truncate
+        # rather than raise.
+        got = deploy_webhook._to_epoch("2026-09-15T12:34:56.123456789Z")
+        want = datetime(
+            2026, 9, 15, 12, 34, 56, 123456, tzinfo=timezone.utc).timestamp()
+        assert got == want
+
+    def test_rfc3339_with_explicit_negative_offset(self):
+        got = deploy_webhook._to_epoch("2026-09-15T12:34:56-05:00")
+        want = datetime(
+            2026, 9, 15, 17, 34, 56, tzinfo=timezone.utc).timestamp()
+        assert got == want
+
+    def test_none_falls_back_to_wall_clock(self, monkeypatch):
+        monkeypatch.setattr(deploy_webhook.time, "time", lambda: 12345.0)
+        assert deploy_webhook._to_epoch(None) == 12345.0
+
+    def test_unparsable_string_falls_back_to_wall_clock(self, monkeypatch):
+        monkeypatch.setattr(deploy_webhook.time, "time", lambda: 54321.0)
+        assert deploy_webhook._to_epoch("not-a-timestamp") == 54321.0
