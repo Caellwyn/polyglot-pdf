@@ -129,6 +129,86 @@ def test_script_disables_interactive_prompts():
     assert "CLOUDSDK_CORE_DISABLE_PROMPTS=1" in text
 
 
+def test_script_computes_a_repo_root_and_uses_it_for_every_repo_file_read():
+    """Every read of a REPO file (firestore.rules, cloudbuild.yaml) must
+    resolve against the computed REPO_ROOT, never a bare relative path.
+
+    A bare relative read resolves against the SHELL'S CURRENT WORKING
+    DIRECTORY, not the repo -- so running this script from any cwd other
+    than the repo root makes firestore_rules_byte_equal silently compare
+    against an EMPTY string (a confident, wrong FAIL: "the deployed ruleset
+    differs", with no rules content actually behind the comparison) and
+    makes the cloudbuild.yaml logsBucket override invisible. Cross-surface
+    review round 3 caught this: REPO_ROOT was computed but only ever used
+    inside one unrelated helper (_python_candidates), never at either of
+    the two sites that actually read a repo file.
+
+    Mutation: revert REPO_ROOT usage at either site back to a bare
+    `firestore.rules` / `cloudbuild.yaml` -- this test goes red.
+    """
+    text = _script_text()
+
+    assert re.search(r'^REPO_ROOT="\$\(git rev-parse', text, re.MULTILINE), (
+        "no script-global REPO_ROOT is computed near the top of the file")
+
+    # The two known repo-file reads this bead's own review named. Listed
+    # explicitly (not just banned via the negative pattern below) so a
+    # THIRD repo-file read added later without a REPO_ROOT prefix is caught
+    # by the negative check, while these two are proven to use the prefix
+    # by name. firestore.rules is passed as a python ARGV path (the
+    # comparison runs entirely inside python -- see
+    # firestore_rules_byte_equal's own comment), not `cat`-ed in bash, but
+    # it still must resolve via REPO_ROOT wherever it is named.
+    assert '${REPO_ROOT}/firestore.rules' in text, (
+        "the Firestore rules comparison does not read firestore.rules via "
+        "${REPO_ROOT} -- see the docstring above")
+    assert '"${REPO_ROOT}/cloudbuild.yaml"' in text, (
+        "the Cloud Build logsBucket check does not read cloudbuild.yaml "
+        "via ${REPO_ROOT}")
+
+    # The NEGATIVE check: no ACTUAL READ CONSTRUCT (`cat X`, `[ -f X ]`, a
+    # bash argument token standing in for a file path) may name either
+    # repo-tracked config file without a REPO_ROOT/ prefix immediately
+    # before it. Deliberately narrow to read-shaped syntax rather than
+    # banning the bare word anywhere -- a log/error message that mentions
+    # "firestore.rules" or "cloudbuild.yaml" in plain English (e.g.
+    # `record ... "matches firestore.rules"`, a python
+    # `print("...firestore.rules...")` inside the heredoc) is not a file
+    # read and must not be flagged; only banning the READ SHAPES avoids
+    # both false negatives (an unprefixed `cat`) and false positives (a
+    # human-readable message mentioning the filename).
+    bare_read_patterns = [
+        # A bare `cat firestore.rules` / `cat "firestore.rules"`, not
+        # preceded by a REPO_ROOT}/ path segment.
+        r'(?<!ROOT}/)\bcat "?firestore\.rules"?(?!["\'])',
+        # `[ -f cloudbuild.yaml ]` / `[ -f "cloudbuild.yaml" ]` unprefixed.
+        r'\[ -f "?(?!\$\{REPO_ROOT\})[^"]*\bcloudbuild\.yaml"?\s',
+        # `grep ... cloudbuild.yaml` (unprefixed) as a positional file
+        # argument, the shape the logsBucket check's second read used.
+        r'grep\s+"[^"]*"\s+"?(?!\$\{REPO_ROOT\})[^"]*\bcloudbuild\.yaml"?(?:\s|$)',
+        # A bash argv slot naming firestore.rules directly (the python
+        # invocation's own file-path argument) without the REPO_ROOT
+        # prefix immediately before it.
+        r'(?<!\$\{REPO_ROOT\}/)"firestore\.rules"',
+    ]
+    # Bash `#`-comment lines are excluded before matching -- this file's own
+    # header comment explains the bug by NAMING the exact bare-read shapes
+    # ("a plain `cat firestore.rules`", "`[ -f cloudbuild.yaml ]`"), which
+    # would otherwise trip these same patterns despite being prose, not code.
+    code_lines = [
+        line for line in text.splitlines() if not line.strip().startswith("#")
+    ]
+    code_text = "\n".join(code_lines)
+
+    offenders = []
+    for pattern in bare_read_patterns:
+        if re.search(pattern, code_text):
+            offenders.append(pattern)
+    assert not offenders, (
+        "a bare (non-REPO_ROOT-prefixed) repo-file READ remains in "
+        "infra_posture.sh: {}".format(offenders))
+
+
 def test_script_never_lets_pipestatus_read_the_wrong_command():
     """run_capture must read $? directly off the captured command, never
     PIPESTATUS after the fact.
@@ -194,8 +274,12 @@ LITERAL_CHECKS = (
     "admin_sa_bucket_role",
     "admin_sa_bucket_role_not_project_wide",
     "admin_sa_actas_cloud_build",
+    "cloudbuild_sa_bucket_role",
+    "cloudbuild_sa_bucket_role_not_project_wide",
+    "cloudbuild_pubsub_token_creator",
     "cloud_run_services_list",
     "cloud_run_unexpected_service",
+    "cloud_run_missing_service",
     "secret_manager_list",
     "bucket_no_allusers",
     "bucket_public_access_prevention",
@@ -288,6 +372,75 @@ def test_no_undeclared_sa_role_check_prefixes():
         "the check_sa_roles call sites in infra_posture.sh ({}) are not the "
         "set this test pins ({})".format(
             sorted(called), sorted(SA_ROLE_CHECK_PREFIXES)))
+
+
+def test_cloudbuild_actas_check_templates_are_present():
+    """Each runtime SA the build identity must hold actAs on gets its own
+    PASS/N-A check plus a "not project-wide" sibling -- both TEMPLATED on
+    the loop variable (record "cloudbuild_sa_actas_${target_sa_name}" ...),
+    matching this script's other per-item loop checks
+    (cloud_run_${service}_..., secret_manager_${secret}_iam).
+
+    Before this fix, check_sa_roles("cloudbuild_sa", ...) checked ONLY the
+    PROJECT-level role set (EXPECTED_BUILD_SA_PROJECT_ROLES); the two
+    resource-scoped actAs bindings admin_backend/tests/unit/test_cloud_
+    build_sa_iam_envelope.py's EXPECTED_ACTAS_TARGETS also pins were not
+    checked at ALL, so a project-wide iam.serviceAccountUser widening on
+    polyglot-cloudbuild-sa -- exactly the CLAUDE.md scar #7 shape, letting
+    the build identity impersonate every service account in the project --
+    would have passed this script silently (cross-surface review round 2).
+    """
+    text = _script_text()
+    assert 'record "cloudbuild_sa_actas_${target_sa_name}"' in text, (
+        "no templated cloudbuild_sa_actas_${target_sa_name} check")
+    assert 'record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide"' in text, (
+        "no templated cloudbuild_sa_actas_${target_sa_name}_not_project_wide "
+        "check -- the SCOPE of the actAs grant (not just its presence) must "
+        "be verified")
+
+
+def test_cloudbuild_actas_targets_set_is_pinned():
+    """The SET of runtime SAs the build identity holds actAs on, pinned
+    against admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py's
+    own EXPECTED_ACTAS_TARGETS constant, so a target added or removed on
+    either side is a decision someone makes in the open.
+    """
+    from admin_backend.tests.unit import test_cloud_build_sa_iam_envelope as build_envelope
+
+    text = _script_text()
+    match = re.search(r'CLOUD_BUILD_ACTAS_TARGETS="([^"]+)"', text)
+    assert match, "CLOUD_BUILD_ACTAS_TARGETS is not declared as a literal string"
+    script_targets = set(match.group(1).split())
+    assert script_targets == build_envelope.EXPECTED_ACTAS_TARGETS, (
+        "infra_posture.sh's CLOUD_BUILD_ACTAS_TARGETS ({}) does not match "
+        "test_cloud_build_sa_iam_envelope.py's EXPECTED_ACTAS_TARGETS "
+        "({})".format(
+            sorted(script_targets),
+            sorted(build_envelope.EXPECTED_ACTAS_TARGETS)))
+
+
+def test_cloudbuild_sa_bucket_role_matches_the_envelope_constant():
+    """cloudbuild_sa_bucket_role must check the SAME role
+    test_cloud_build_sa_iam_envelope.py's EXPECTED_BUILD_SA_BUCKET_ROLES
+    pins for polyglot-cloudbuild-sa -- storage.objectAdmin on the form-kits
+    bucket, checked separately from the project-level role list for the
+    same scope-matters-more-than-name reason every other bucket-scoped
+    check in this script follows.
+    """
+    from admin_backend.tests.unit import test_cloud_build_sa_iam_envelope as build_envelope
+
+    text = _script_text()
+    assert 'record "cloudbuild_sa_bucket_role"' in text
+    for role in build_envelope.EXPECTED_BUILD_SA_BUCKET_ROLES:
+        assert "roles/storage.objectAdmin" == role, (
+            "test_cloud_build_sa_iam_envelope.py's EXPECTED_BUILD_SA_BUCKET_"
+            "ROLES no longer names only storage.objectAdmin ({}) -- "
+            "infra_posture.sh's cloudbuild_sa_bucket_role check needs "
+            "updating to match".format(sorted(
+                build_envelope.EXPECTED_BUILD_SA_BUCKET_ROLES)))
+        assert role in text, (
+            "infra_posture.sh's cloudbuild_sa_bucket_role check does not "
+            "reference {}".format(role))
 
 
 @pytest.mark.parametrize("suffix", PER_SERVICE_CHECK_SUFFIXES)

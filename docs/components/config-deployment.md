@@ -888,15 +888,18 @@ above for how both env vars are injected at deploy time, and Surface contract
 `scripts/audit/infra_posture.sh --project <PROJECT_ID>` is the recurring,
 read-only runbook for verifying the LIVE deployed environment matches this
 doc and the repo's offline IAM pins (sprint 23 security-audit workstream D,
-bd `polyglot-pdf-m1dlv`). Under the operator's own `gcloud`/`bq`/`firebase`
-ADC — never a service-account key, and never a mutating call — it checks the
+bd `polyglot-pdf-m1dlv`). Under the operator's own `gcloud`/`bq` ADC — never
+a service-account key, and never a mutating call — it checks the
 project IAM policy, both runtime service accounts' roles against
 `backend/tests/unit/test_deployed_iam_envelope.py` and
 `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`, every Cloud Run
 service's env vars (no secret-shaped value, no dev/bypass flag, no verbosity
 knob) and secret bindings, the form-kits bucket's IAM and access-prevention
-settings, whether the deployed Firestore rules match the repo file, Cloud
-Logging retention/sinks/exclusions, BigQuery ACLs, Firebase Auth settings,
+settings, whether the deployed Firestore rules match the repo file (read via
+the Firebase Rules REST API directly, `curl` + the operator's own access
+token — the `firebase` CLI ships no subcommand for reading a ruleset's
+content), Cloud Logging retention/sinks/exclusions, BigQuery ACLs, Firebase
+Auth settings (read the same way, via the Identity Toolkit Admin REST API),
 Hosting response headers per site, container scan status, Cloud Build log
 content, and the Vertex/Cloud-TTS third-party-processor opt-out settings.
 Every check ends `PASS`, `FAIL`, or `N/A: <reason>` — never a silent skip —

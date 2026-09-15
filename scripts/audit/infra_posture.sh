@@ -88,6 +88,22 @@ export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 REGION="us-central1"
 
+# THE repo root, computed ONCE and used for every repo-file read below (the
+# Firestore rules comparison, the cloudbuild.yaml logsBucket check, and
+# _python_candidates' own venv search). Falls back to the CURRENT directory
+# only if git itself is unavailable -- but the script is meant to be run
+# `bash scripts/audit/infra_posture.sh` from the repo root anyway, so this
+# is a defensive fallback, not the expected path. Every bare relative read
+# of a repo file (a plain `cat firestore.rules`, a plain
+# `[ -f cloudbuild.yaml ]`) is a real bug: it resolves against the SHELL'S
+# CURRENT WORKING DIRECTORY, not the repo, so running this script from any
+# other cwd makes the Firestore rules check silently compare against an
+# EMPTY string and report a confident "the deployed ruleset differs" FAIL
+# with no rules content behind it, and makes the cloudbuild.yaml logsBucket
+# override invisible. tests/test_infra_posture_script.py greps for exactly
+# this shape and fails if a future edit reintroduces it.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
 # Resolve a WORKING python interpreter, verified by actually invoking it
 # rather than trusting PATH or a file's presence -- on Windows, `python3` on
 # PATH commonly resolves to the Microsoft Store's execution-alias STUB, which
@@ -96,18 +112,17 @@ REGION="us-central1"
 # worktree (CLAUDE.md's own "run backend tests from the worktree, not main"
 # scar), so an -x/-f test on a worktree-relative venv path is not a reliable
 # signal either. Try, in order: an explicit override, the main repo's venv
-# (found via `git rev-parse --show-toplevel`'s PARENT when this worktree is
-# under <repo>/.claude/worktrees/<name>, else the sibling .venv next to this
-# checkout), then `python`, then `python3` -- verifying each candidate with a
+# (via $REPO_ROOT, which resolves to THIS worktree's own root -- a worktree
+# has no backend/.venv of its own, so this candidate simply misses there and
+# falls through, exactly like the bare "backend/.venv/..." candidates
+# below), then `python`, then `python3` -- verifying each candidate with a
 # real `-c "import sys"` call before committing to it.
 _python_candidates() {
     if [ -n "${INFRA_POSTURE_PYTHON:-}" ]; then
         printf '%s\n' "$INFRA_POSTURE_PYTHON"
     fi
-    local repo_root
-    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-    printf '%s\n' "${repo_root}/backend/.venv/Scripts/python.exe"
-    printf '%s\n' "${repo_root}/backend/.venv/bin/python"
+    printf '%s\n' "${REPO_ROOT}/backend/.venv/Scripts/python.exe"
+    printf '%s\n' "${REPO_ROOT}/backend/.venv/bin/python"
     printf '%s\n' "backend/.venv/Scripts/python.exe"
     printf '%s\n' "backend/.venv/bin/python"
     printf '%s\n' "python"
@@ -312,8 +327,6 @@ check_sa_roles() {
         return
     fi
 
-    local live_roles
-    live_roles=$(echo "$_last_output" | sort -u | tr '\n' ' ')
     local expected_sorted
     expected_sorted=$(echo "$expected" | tr ' ' '\n' | sort -u | tr '\n' ' ')
     local live_sorted
@@ -431,10 +444,130 @@ else:
 fi
 
 # CHECK: cloudbuild_sa_project_roles
-# polyglot-cloudbuild-sa's own envelope (bd polyglot-pdf-p4ale), per
-# admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py.
+# polyglot-cloudbuild-sa's own PROJECT-LEVEL envelope (bd polyglot-pdf-p4ale),
+# per admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py's
+# EXPECTED_BUILD_SA_PROJECT_ROLES. That test file ALSO pins three more
+# grants this build identity holds -- a bucket-scoped role, two
+# resource-scoped actAs bindings, and a grant on a THIRD, Google-managed
+# identity -- none of which a project-level-only check can see, so each
+# gets its own check below (a project-wide iam.serviceAccountUser widening,
+# for instance, would otherwise pass silently: it is not a project-level
+# ROLE at all, and this file's own check_sa_roles only ever queries
+# project-level bindings).
 CLOUD_BUILD_SA_EXPECTED_ROLES="roles/run.admin roles/firebasehosting.admin roles/firebaserules.admin roles/artifactregistry.writer roles/logging.logWriter roles/datastore.user"
 check_sa_roles "cloudbuild_sa" "polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com" "$CLOUD_BUILD_SA_EXPECTED_ROLES"
+
+# CHECK: cloudbuild_sa_bucket_role
+# storage.objectAdmin on the form-kits bucket ONLY -- test_cloud_build_sa_
+# iam_envelope.py's EXPECTED_BUILD_SA_BUCKET_ROLES, mirrored here against
+# the LIVE bucket policy, same shape as admin_sa_bucket_role above.
+run_capture gcloud storage buckets get-iam-policy "gs://${FORM_KITS_BUCKET}" --format=json
+if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
+    record "cloudbuild_sa_bucket_role" "N/A" "operator lacks storage.buckets.getIamPolicy on gs://${FORM_KITS_BUCKET} or the call failed: $(echo "$_last_output" | head -1)"
+    record "cloudbuild_sa_bucket_role_not_project_wide" "N/A" "depends on cloudbuild_sa_bucket_role, which failed above"
+else
+    CLOUDBUILD_BUCKET_JSON="$_last_output"
+    CLOUDBUILD_BUCKET_HAS_ADMIN=$(echo "$CLOUDBUILD_BUCKET_JSON" | "$PYTHON_BIN" -c "
+import json, sys
+data = json.load(sys.stdin)
+target = 'serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+for b in data.get('bindings', []):
+    if b.get('role') == 'roles/storage.objectAdmin' and target in b.get('members', []):
+        print('yes')
+        break
+else:
+    print('no')
+")
+    if [ "$CLOUDBUILD_BUCKET_HAS_ADMIN" = "yes" ]; then
+        record "cloudbuild_sa_bucket_role" "PASS" "polyglot-cloudbuild-sa holds roles/storage.objectAdmin on gs://${FORM_KITS_BUCKET}"
+    else
+        record "cloudbuild_sa_bucket_role" "N/A" "polyglot-cloudbuild-sa is missing roles/storage.objectAdmin on gs://${FORM_KITS_BUCKET}, or the SA does not exist yet -- see cloudbuild_sa_roles above"
+    fi
+
+    run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
+        --flatten="bindings[].members" \
+        --filter="bindings.members:serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/storage.objectAdmin" \
+        --format="value(bindings.role)"
+    if [ -n "$_last_output" ]; then
+        record "cloudbuild_sa_bucket_role_not_project_wide" "FAIL" "polyglot-cloudbuild-sa holds roles/storage.objectAdmin at the PROJECT level -- should be bucket-scoped only"
+    else
+        record "cloudbuild_sa_bucket_role_not_project_wide" "PASS" "polyglot-cloudbuild-sa's storage.objectAdmin is not project-wide"
+    fi
+fi
+
+# CHECK: cloudbuild_sa_actas_<target> (one per EXPECTED_ACTAS_TARGETS member)
+# roles/iam.serviceAccountUser, resource-scoped onto EACH runtime SA
+# individually (test_cloud_build_sa_iam_envelope.py's EXPECTED_ACTAS_TARGETS
+# -- polyglot-backend-sa AND admin-backend-sa) -- never project-wide, which
+# would let the build identity impersonate every service account in the
+# project. Checked by reading the TARGET SA's own IAM policy (the resource
+# the binding lives on) and looking for polyglot-cloudbuild-sa as a member
+# with this role, mirroring admin_sa_actas_cloud_build's own shape but from
+# the build SA's side. Also checked NOT to be a project-wide grant, the same
+# inverse-mistake shape as the bucket check above.
+CLOUD_BUILD_ACTAS_TARGETS="polyglot-backend-sa admin-backend-sa"
+for target_sa_name in $CLOUD_BUILD_ACTAS_TARGETS; do
+    run_capture gcloud iam service-accounts get-iam-policy \
+        "${target_sa_name}@${PROJECT_ID}.iam.gserviceaccount.com" --format=json
+    if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
+        record "cloudbuild_sa_actas_${target_sa_name}" "N/A" "operator lacks iam.serviceAccounts.getIamPolicy on ${target_sa_name} or the call failed: $(echo "$_last_output" | head -1)"
+        continue
+    fi
+    TARGET_HAS_ACTAS=$(echo "$_last_output" | "$PYTHON_BIN" -c "
+import json, sys
+data = json.load(sys.stdin)
+target = 'serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+for b in data.get('bindings', []):
+    if b.get('role') == 'roles/iam.serviceAccountUser' and target in b.get('members', []):
+        print('yes')
+        break
+else:
+    print('no')
+")
+    if [ "$TARGET_HAS_ACTAS" = "yes" ]; then
+        record "cloudbuild_sa_actas_${target_sa_name}" "PASS" "polyglot-cloudbuild-sa holds iam.serviceAccountUser on ${target_sa_name}"
+    else
+        record "cloudbuild_sa_actas_${target_sa_name}" "N/A" "polyglot-cloudbuild-sa is missing the actAs grant on ${target_sa_name}, or the build SA does not exist yet -- see cloudbuild_sa_roles above"
+    fi
+
+    run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
+        --flatten="bindings[].members" \
+        --filter="bindings.members:serviceAccount:polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com AND bindings.role:roles/iam.serviceAccountUser" \
+        --format="value(bindings.role)"
+    if [ -n "$_last_output" ]; then
+        record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide" "FAIL" "polyglot-cloudbuild-sa holds roles/iam.serviceAccountUser at the PROJECT level -- this would let it impersonate every service account in the project, not just its deploy targets"
+    else
+        record "cloudbuild_sa_actas_${target_sa_name}_not_project_wide" "PASS" "polyglot-cloudbuild-sa's iam.serviceAccountUser is not project-wide"
+    fi
+done
+
+# CHECK: cloudbuild_pubsub_token_creator
+# The Pub/Sub service agent (a THIRD, Google-managed identity, distinct from
+# both polyglot-cloudbuild-sa and the two runtime SAs) needs
+# roles/iam.serviceAccountTokenCreator on itself to mint the OIDC token the
+# build-status webhook's push subscription presents
+# (test_cloud_build_sa_iam_envelope.py's
+# test_pubsub_service_agent_gets_token_creator_for_the_build_webhook).
+# Without it every build-status push 403s before the route's own auth check
+# ever runs.
+run_capture gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)"
+if [ $_last_status -ne 0 ] || [ -z "$_last_output" ]; then
+    record "cloudbuild_pubsub_token_creator" "N/A" "operator lacks resourcemanager.projects.get or the call failed"
+else
+    PROJECT_NUMBER="$_last_output"
+    PUBSUB_SERVICE_AGENT="service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
+    run_capture gcloud projects get-iam-policy "$PROJECT_ID" \
+        --flatten="bindings[].members" \
+        --filter="bindings.members:serviceAccount:${PUBSUB_SERVICE_AGENT} AND bindings.role:roles/iam.serviceAccountTokenCreator" \
+        --format="value(bindings.role)"
+    if [ $_last_status -ne 0 ]; then
+        record "cloudbuild_pubsub_token_creator" "N/A" "operator lacks resourcemanager.projects.getIamPolicy or the call failed"
+    elif [ -n "$_last_output" ]; then
+        record "cloudbuild_pubsub_token_creator" "PASS" "the Pub/Sub service agent (${PUBSUB_SERVICE_AGENT}) holds roles/iam.serviceAccountTokenCreator"
+    else
+        record "cloudbuild_pubsub_token_creator" "N/A" "the Pub/Sub service agent is missing roles/iam.serviceAccountTokenCreator, or bead 4.3's webhook has not been provisioned yet"
+    fi
+fi
 
 echo ""
 echo "--- 3. Cloud Run services + latest revisions ---------------------------"
@@ -456,6 +589,34 @@ else
             *) record "cloud_run_unexpected_service" "FAIL" "$svc is not one of the three documented services ($KNOWN_SERVICES)" ;;
         esac
     done
+    # The CONVERSE of the check above: a documented service that has gone
+    # MISSING from the live listing (deleted, renamed, or never deployed on
+    # this project) is itself a finding, not a silent gap -- without this,
+    # a missing service degrades straight to each of its 9 per-service
+    # checks reading N/A ("not deployed") with no single line calling out
+    # that the absence itself is the anomaly worth flagging.
+    #
+    # LIVE_SERVICES is NEWLINE-separated (gcloud's --format="value(...)"
+    # emits one name per line), not space-separated -- so a
+    # `case " $LIVE_SERVICES " in *" $x "*)` glob match against the raw
+    # variable never matches anything (the embedded newlines are not the
+    # spaces the pattern looks for). Word-splitting it through a `for` loop
+    # into a space-joined string first is what the ANALOGOUS
+    # unexpected-service loop above gets right implicitly (it iterates
+    # `for svc in $LIVE_SERVICES`, which word-splits on the shell's IFS --
+    # newlines included by default); this converse direction needs the same
+    # normalization done explicitly since it checks membership the other
+    # way around.
+    LIVE_SERVICES_SPACED=""
+    for live_svc in $LIVE_SERVICES; do
+        LIVE_SERVICES_SPACED="$LIVE_SERVICES_SPACED $live_svc"
+    done
+    for expected_svc in $KNOWN_SERVICES; do
+        case " $LIVE_SERVICES_SPACED " in
+            *" $expected_svc "*) ;;
+            *) record "cloud_run_missing_service" "FAIL" "$expected_svc is one of the three documented services but is absent from the live listing (deleted, renamed, or never deployed on this project)" ;;
+        esac
+    done
 fi
 
 # check_service_env <service-name>
@@ -473,17 +634,41 @@ fi
 #   - ingress setting;
 #   - min/max instance counts;
 #   - runtime service account.
+# The 8 per-service checks OTHER than "describe" itself -- listed once so
+# both of check_service_env's early-return branches (a failed describe call,
+# a non-JSON response) can emit all 9 checks as N/A instead of silently
+# recording only "describe" and leaving the other 8 entirely absent from
+# the results table. A silent drop reads, from the output alone, as if
+# those 8 checks were simply never run for this service -- indistinguishable
+# from a scripting bug -- rather than as the documented consequence of the
+# service being undescribable.
+_PER_SERVICE_OTHER_SUFFIXES="no_secret_shaped_env no_forbidden_flags no_verbosity_knobs secret_bindings ingress scaling runtime_sa env_var_names"
+
+# record_service_na <service> <reason>
+#
+# Records the "describe" check plus all 8 dependent checks as N/A with the
+# same reason, so a missing/undescribable service still produces a full,
+# reviewable row set instead of one line and silence.
+record_service_na() {
+    local service="$1"
+    local reason="$2"
+    record "cloud_run_${service}_describe" "N/A" "$reason"
+    for suffix in $_PER_SERVICE_OTHER_SUFFIXES; do
+        record "cloud_run_${service}_${suffix}" "N/A" "depends on cloud_run_${service}_describe, which failed above"
+    done
+}
+
 check_service_env() {
     local service="$1"
     run_capture gcloud run services describe "$service" --platform=managed \
         --region="$REGION" --project="$PROJECT_ID" --format=json
     if [ $_last_status -ne 0 ]; then
-        record "cloud_run_${service}_describe" "N/A" "operator lacks run.services.get on $service or it is not deployed"
+        record_service_na "$service" "operator lacks run.services.get on $service or it is not deployed"
         return
     fi
 
     if ! is_valid_json "$_last_output"; then
-        record "cloud_run_${service}_describe" "N/A" "run.services.get on $service returned non-JSON output: $(echo "$_last_output" | head -1)"
+        record_service_na "$service" "run.services.get on $service returned non-JSON output: $(echo "$_last_output" | head -1)"
         return
     fi
 
@@ -700,25 +885,56 @@ echo ""
 echo "--- 6. Firestore rules, TTL, backups -------------------------------------"
 
 # CHECK: firestore_rules_byte_equal
-# Fetches the DEPLOYED ruleset and compares it byte-for-byte against the
-# repo's firestore.rules -- test_firestore_rules_text.py pins the repo file's
+# Fetches the DEPLOYED ruleset and compares it against the repo's
+# firestore.rules -- test_firestore_rules_text.py pins the repo file's
 # CONTENT; this is what proves the deployed copy matches it.
 #
 # Neither the `firebase` CLI nor `gcloud` ships a subcommand for reading a
 # Firestore ruleset's CONTENT (gcloud's `firebase` group covers Test Lab
 # only; the firebase CLI has no `firestore:rules:get`). The only read path is
-# the Firebase Rules REST API directly: list releases for
-# cloud.firestore/(default), take the ruleset name off the active release,
-# fetch that ruleset, and extract its one source file's content. Uses the
-# operator's own ADC access token -- no separate credential.
+# the Firebase Rules REST API directly: list releases for the Firestore
+# release, take the ruleset name off it, fetch that ruleset, and extract its
+# one source file's content. Uses the operator's own ADC access token -- no
+# separate credential.
+#
+# TWO THINGS ABOUT THIS API THAT COST A ROUND OF REVIEW TO FIND:
+#   1. The release is named plain "cloud.firestore", NOT
+#      "cloud.firestore/(default)" -- the latter 400s. Verified against the
+#      live API (`GET .../releases` lists `cloud.firestore` by itself).
+#   2. Firebase Rules is a Firebase-branded API layered on a GCP project;
+#      called under a USER's own ADC (not a service account already
+#      associated with the project) it 403s SERVICE_DISABLED unless the
+#      request carries `x-goog-user-project: <project>` telling it which
+#      project's quota/billing to charge -- so a missing header reads
+#      exactly like a missing IAM permission when the real cause is a
+#      missing header. Without it, this check would misreport a real
+#      capability gap as "operator lacks firebaserules.releases.get", which
+#      sends whoever reads that N/A down the wrong path entirely.
+#
+# THE COMPARISON ITSELF RUNS ENTIRELY INSIDE PYTHON, not via a bash
+# `$(...)` round-trip: `firestore.rules` is CRLF in this repo (verified:
+# both the live JSON's escaped `\r\n` and the repo file's raw bytes carry
+# 176 CR/176 LF each -- the two are byte-identical at the SOURCE), but
+# printing that content through `print()` on WINDOWS TEXT-MODE stdout
+# rewrites every `\n` to `\r\n` a SECOND time, so a value that started at
+# 176 CRs comes back out through a bash command substitution with roughly
+# DOUBLE that -- comparing two already-mangled bash strings then reports a
+# confident, wrong FAIL on content that actually matches byte-for-byte.
+# Reading BOTH sides as bytes, normalizing (\r\n -> \n) on both before
+# comparing, and printing only a PASS/FAIL/N-A verdict plus both content's
+# hashes (never the compared strings themselves, which route through no
+# further bash text processing that could re-mangle them) avoids the
+# platform text-mode trap entirely.
 ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null)
 if [ -z "$ACCESS_TOKEN" ]; then
     record "firestore_rules_byte_equal" "N/A" "gcloud auth print-access-token failed -- operator has no active ADC session"
 else
-    run_capture curl -sf -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-        "https://firebaserules.googleapis.com/v1/projects/${PROJECT_ID}/releases/cloud.firestore%2F(default)"
+    run_capture curl -sf \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H "x-goog-user-project: ${PROJECT_ID}" \
+        "https://firebaserules.googleapis.com/v1/projects/${PROJECT_ID}/releases/cloud.firestore"
     if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
-        record "firestore_rules_byte_equal" "N/A" "operator lacks firebaserules.releases.get (or no release named cloud.firestore/(default) exists) on ${PROJECT_ID}: $(echo "$_last_output" | head -1)"
+        record "firestore_rules_byte_equal" "N/A" "operator lacks firebaserules.releases.get on ${PROJECT_ID} (or no release named cloud.firestore exists): $(echo "$_last_output" | head -1)"
     else
         RULESET_NAME=$(echo "$_last_output" | "$PYTHON_BIN" -c "
 import json, sys
@@ -728,22 +944,59 @@ print(data.get('rulesetName', ''))
         if [ -z "$RULESET_NAME" ]; then
             record "firestore_rules_byte_equal" "N/A" "release response carried no rulesetName -- unexpected API shape"
         else
-            run_capture curl -sf -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            run_capture curl -sf \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "x-goog-user-project: ${PROJECT_ID}" \
                 "https://firebaserules.googleapis.com/v1/${RULESET_NAME}"
             if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
                 record "firestore_rules_byte_equal" "N/A" "operator lacks firebaserules.rulesets.get on ${RULESET_NAME}: $(echo "$_last_output" | head -1)"
             else
-                LIVE_RULES=$(echo "$_last_output" | "$PYTHON_BIN" -c "
-import json, sys
-data = json.load(sys.stdin)
-files = data.get('source', {}).get('files', [])
-print(files[0].get('content', '') if files else '')
-" 2>/dev/null)
-                REPO_RULES=$(cat firestore.rules 2>/dev/null)
-                if [ "$LIVE_RULES" = "$REPO_RULES" ]; then
-                    record "firestore_rules_byte_equal" "PASS" "deployed ruleset (${RULESET_NAME}) matches firestore.rules byte-for-byte"
+                RULESET_TMP=$(mktemp)
+                printf '%s' "$_last_output" > "$RULESET_TMP"
+                RULES_VERDICT=$("$PYTHON_BIN" - "$RULESET_TMP" "${REPO_ROOT}/firestore.rules" <<'PYEOF4'
+import hashlib
+import json
+import sys
+
+ruleset_path, repo_path = sys.argv[1], sys.argv[2]
+
+with open(ruleset_path, encoding="utf-8") as f:
+    data = json.load(f)
+files = data.get("source", {}).get("files", [])
+live_content = files[0].get("content", "") if files else ""
+
+try:
+    with open(repo_path, "rb") as f:
+        repo_bytes = f.read()
+except OSError as e:
+    print("ERROR could not read repo firestore.rules: {}".format(e))
+    sys.exit(0)
+
+# Normalize line endings on BOTH sides before comparing -- this repo's
+# firestore.rules is CRLF, and the live API's JSON-escaped content
+# preserves whatever line ending was in force when it was last published,
+# so a real, meaningful divergence must not hide behind (or be manufactured
+# by) an line-ending convention difference alone.
+live_norm = live_content.replace("\r\n", "\n").encode("utf-8")
+repo_norm = repo_bytes.replace(b"\r\n", b"\n")
+
+live_hash = hashlib.sha256(live_norm).hexdigest()
+repo_hash = hashlib.sha256(repo_norm).hexdigest()
+
+if live_norm == repo_norm:
+    print("PASS live_sha256={} repo_sha256={}".format(live_hash, repo_hash))
+else:
+    print("FAIL live_sha256={} repo_sha256={} live_len={} repo_len={}".format(
+        live_hash, repo_hash, len(live_norm), len(repo_norm)))
+PYEOF4
+)
+                rm -f "$RULESET_TMP"
+                if [[ "$RULES_VERDICT" == PASS* ]]; then
+                    record "firestore_rules_byte_equal" "PASS" "deployed ruleset (${RULESET_NAME}) matches firestore.rules -- ${RULES_VERDICT#PASS }"
+                elif [[ "$RULES_VERDICT" == FAIL* ]]; then
+                    record "firestore_rules_byte_equal" "FAIL" "deployed ruleset (${RULESET_NAME}) differs from the repo's firestore.rules -- ${RULES_VERDICT#FAIL }"
                 else
-                    record "firestore_rules_byte_equal" "FAIL" "deployed ruleset (${RULESET_NAME}) differs from the repo's firestore.rules"
+                    record "firestore_rules_byte_equal" "N/A" "$RULES_VERDICT"
                 fi
             fi
         fi
@@ -1147,8 +1400,8 @@ fi
 # cloudbuild.yaml's `logsBucket` overrides it (grep the file live, not
 # hardcode the assumption).
 CLOUD_BUILD_LOGS_BUCKET="${PROJECT_ID}_cloudbuild"
-if [ -f "cloudbuild.yaml" ] && grep -q "^logsBucket:" cloudbuild.yaml; then
-    CLOUD_BUILD_LOGS_BUCKET=$(grep "^logsBucket:" cloudbuild.yaml | sed 's/^logsBucket:\s*//; s#gs://##')
+if [ -f "${REPO_ROOT}/cloudbuild.yaml" ] && grep -q "^logsBucket:" "${REPO_ROOT}/cloudbuild.yaml"; then
+    CLOUD_BUILD_LOGS_BUCKET=$(grep "^logsBucket:" "${REPO_ROOT}/cloudbuild.yaml" | sed 's/^logsBucket:\s*//; s#gs://##')
 fi
 run_capture gcloud storage buckets get-iam-policy "gs://${CLOUD_BUILD_LOGS_BUCKET}" --format=json
 if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
