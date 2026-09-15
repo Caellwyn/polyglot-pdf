@@ -25,9 +25,11 @@
 # the same plan.
 #
 # EVERY CHECK ENDS PASS, FAIL, OR N/A: <reason> -- NEVER A SILENT SKIP, and a
-# permission error on one check must not stop the rest. Achieved with
-# per-check subshells and `set -e` OFF (unlike setup-*.sh's operator scripts,
-# which intentionally abort on the first error because they are MUTATING;
+# permission error on one check must not stop the rest. Achieved with plain
+# functions (run_capture/record) that share the `_last_status`/`_last_output`
+# globals rather than subshells, plus `set -e` OFF (unlike setup-*.sh's
+# operator scripts, which intentionally abort on the first error because
+# they are MUTATING;
 # this script's whole job is to keep reading past a permission gap and name
 # it).
 #
@@ -153,12 +155,15 @@ record() {
     printf '%-9s %-55s %s\n' "$status" "$name" "$detail" | tee -a "$RESULTS_FILE"
 }
 
-# run_check <check-name> <command...>
+# run_capture <command...>
 #
-# Runs a read-only command, capturing stdout+stderr, WITHOUT letting a
-# non-zero exit kill the script (set -e is deliberately not used anywhere in
-# this file -- see the header). Echoes nothing itself; callers interpret the
-# captured output and call `record`.
+# Runs a read-only command, capturing stdout+stderr into `_last_output` and
+# its exit status into `_last_status`, WITHOUT letting a non-zero exit kill
+# the script (set -e is deliberately not used anywhere in this file -- see
+# the header). Takes no check-name argument itself -- that is `record`'s
+# job (see above), called separately by each check with the two globals
+# this function just set. Echoes nothing; callers interpret `_last_output`/
+# `_last_status` and call `record` themselves.
 #
 # Strips a trailing \r from every line: gcloud/bq on WINDOWS emit CRLF line
 # endings (verified against this operator's install), which is invisible in
@@ -605,7 +610,15 @@ echo ""
 echo "--- 4. Secret Manager ---------------------------------------------------"
 
 # CHECK: secret_manager_secrets_and_iam
-# Lists every secret and, for each, who can access it (secretAccessor).
+# Lists every secret and, for each, any RESOURCE-LEVEL accessor binding
+# (secretAccessor granted on the secret itself, e.g. a per-secret grant to
+# an unusual principal). A secret showing NO resource-level binding is the
+# NORMAL case in this repo: polyglot-backend-sa and admin-backend-sa both
+# read LINK_TOKEN_SECRET/GEMINI_API_KEY via the PROJECT-level
+# secretmanager.secretAccessor role each SA holds (see the SA role checks
+# above), not a per-secret grant -- so an empty accessors list here means
+# "no additional per-secret grant beyond the project role", never "nobody
+# can read this secret".
 run_capture gcloud secrets list --project="$PROJECT_ID" --format="value(name)"
 if [ $_last_status -ne 0 ]; then
     record "secret_manager_list" "N/A" "operator lacks secretmanager.secrets.list or the call failed"
@@ -617,8 +630,10 @@ else
             --format="value(bindings.members)"
         if [ $_last_status -ne 0 ]; then
             record "secret_manager_${secret}_iam" "N/A" "operator lacks secretmanager.secrets.getIamPolicy on $secret"
+        elif [ -z "$_last_output" ]; then
+            record "secret_manager_${secret}_iam" "PASS" "no resource-level bindings; access via project role (see the SA role checks above)"
         else
-            record "secret_manager_${secret}_iam" "PASS" "accessors: $(echo "$_last_output" | tr '\n' ' ')"
+            record "secret_manager_${secret}_iam" "PASS" "resource-level accessors: $(echo "$_last_output" | tr '\n' ' ')"
         fi
     done
 fi
@@ -842,9 +857,25 @@ echo "--- 8. BigQuery telemetry ------------------------------------------------
 
 TELEMETRY_DATASET="polyglot_telemetry"
 
+# The `bq` CLI shells out to its OWN bundled python, resolved via
+# CLOUDSDK_PYTHON if set, else whatever `python`/`python3` PATH lookup finds
+# -- a DIFFERENT resolution than this script's own $PYTHON_BIN (which is
+# verified working before use; see the top of this file). On at least one
+# operator machine a broken Chocolatey python3.14 shim sits on PATH ahead of
+# a real interpreter, so `bq` fails with "python3.14: command not found"
+# while every gcloud call succeeds -- a LOCAL TOOLING gap, not a permission
+# gap, fixed by exporting CLOUDSDK_PYTHON to a known-working interpreter
+# before running this script (e.g. the one $PYTHON_BIN itself resolved to,
+# printed at the top of this script's output).
 run_capture bq show --format=prettyjson "${PROJECT_ID}:${TELEMETRY_DATASET}"
 if [ $_last_status -ne 0 ] || ! is_valid_json "$_last_output"; then
-    record "bigquery_dataset_acl" "N/A" "operator lacks bigquery.datasets.get on ${TELEMETRY_DATASET}, the dataset does not exist, or the local bq CLI failed: $(echo "$_last_output" | head -1)"
+    BQ_ERROR_DETAIL="$(echo "$_last_output" | head -1)"
+    if echo "$BQ_ERROR_DETAIL" | grep -qi "command not found"; then
+        BQ_NA_REASON="the local bq CLI's own python interpreter is broken (${BQ_ERROR_DETAIL}) -- set CLOUDSDK_PYTHON to a working interpreter (e.g. CLOUDSDK_PYTHON=\"${PYTHON_BIN}\") and re-run this script"
+    else
+        BQ_NA_REASON="operator lacks bigquery.datasets.get on ${TELEMETRY_DATASET}, the dataset does not exist, or the local bq CLI failed: ${BQ_ERROR_DETAIL}"
+    fi
+    record "bigquery_dataset_acl" "N/A" "$BQ_NA_REASON"
     record "bigquery_table_expiration" "N/A" "depends on bigquery_dataset_acl, which failed above"
     record "admin_sa_bigquery_dataviewer_dataset_scoped" "N/A" "depends on bigquery_dataset_acl, which failed above"
 else
@@ -991,12 +1022,25 @@ REQUIRED_HEADERS="content-security-policy strict-transport-security x-frame-opti
 
 for site in $HOSTING_SITES; do
     url="https://${site}.web.app/"
-    run_capture curl -sI --max-time 10 "$url"
+    # -L follows redirects: without it, a site that 301/302s to a canonical
+    # host inspects only the REDIRECT response's headers (typically just
+    # Location + a couple of framework defaults), never the page the
+    # browser actually renders -- silently passing or failing on the wrong
+    # response. -sIL prints one header block PER HOP, oldest first; the
+    # FINAL block (after the last blank-line-separated section) is what a
+    # browser actually sees and enforces, so that is what gets checked.
+    run_capture curl -sIL --max-time 10 "$url"
     if [ $_last_status -ne 0 ]; then
         record "hosting_${site}_headers" "N/A" "curl failed against ${url} (network issue or site not deployed)"
         continue
     fi
-    HEADER_BLOB=$(echo "$_last_output" | tr 'A-Z' 'a-z')
+    # Header blocks are separated by a blank line between HTTP status
+    # lines; splitting on blank lines and taking the LAST non-empty block
+    # isolates the final response after every redirect.
+    FINAL_BLOCK=$(echo "$_last_output" | awk 'BEGIN{RS=""} {block=$0} END{print block}')
+    HOP_COUNT=$(echo "$_last_output" | grep -c '^HTTP/')
+    FINAL_STATUS=$(echo "$FINAL_BLOCK" | grep '^HTTP/' | tail -1 | tr -d '\r')
+    HEADER_BLOB=$(echo "$FINAL_BLOCK" | tr 'A-Z' 'a-z')
     MISSING=""
     for h in $REQUIRED_HEADERS; do
         if ! echo "$HEADER_BLOB" | grep -q "^$h:"; then
@@ -1004,9 +1048,9 @@ for site in $HOSTING_SITES; do
         fi
     done
     if [ -z "$MISSING" ]; then
-        record "hosting_${site}_headers" "PASS" "CSP/HSTS/X-Frame-Options/Referrer-Policy all present"
+        record "hosting_${site}_headers" "PASS" "CSP/HSTS/X-Frame-Options/Referrer-Policy all present on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s))"
     else
-        record "hosting_${site}_headers" "FAIL" "missing:${MISSING} (PF-4 -- firebase.json sets no response headers today)"
+        record "hosting_${site}_headers" "FAIL" "missing on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s)):${MISSING} (PF-4 -- firebase.json sets no response headers today)"
     fi
 done
 
@@ -1061,22 +1105,39 @@ echo "--- 12. Cloud Build log content + bucket ACL -----------------------------
 # Scans the MOST RECENT build's log for secret-shaped assignments and JWT
 # prefixes, printing COUNTS and the build id only -- never the matched text
 # (the plan's own redaction rule for this specific check).
+#
+# `gcloud builds log` (without --stream, which this never passes) prints a
+# COMPLETED build's log and exits -- it does not hang waiting for new lines.
+# But a large build's log can still take minutes to fetch and print in
+# full, with gcloud emitting NO progress output while it does, which reads
+# indistinguishably from a hang to an operator watching the terminal.
+# Printed a one-line notice before the call so that wait has an explanation,
+# and BOUNDED the amount of log text this check reads with `head -n 20000`
+# so one unusually large build cannot make every subsequent check wait on
+# it -- the detector only needs to have SEEN enough of the log to report a
+# representative count, not the entire thing.
 run_capture gcloud builds list --project="$PROJECT_ID" --limit=1 --format="value(id)"
 if [ $_last_status -ne 0 ] || [ -z "$_last_output" ]; then
     record "cloud_build_log_content" "N/A" "operator lacks cloudbuild.builds.list, or no builds have run yet"
 else
     BUILD_ID="$_last_output"
+    echo "    (fetching build log for ${BUILD_ID} -- a large build's log can take a while and gcloud shows no progress meanwhile)"
     run_capture gcloud builds log "$BUILD_ID" --project="$PROJECT_ID"
     if [ $_last_status -ne 0 ]; then
         record "cloud_build_log_content" "N/A" "operator lacks cloudbuild.builds.get on build ${BUILD_ID} or the call failed"
     else
-        LOG_TEXT="$_last_output"
+        LOG_TEXT=$(echo "$_last_output" | head -n 20000)
         SECRET_ASSIGN_COUNT=$(echo "$LOG_TEXT" | grep -Eic '\b[A-Z_]*(KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*\s*=' || true)
         JWT_COUNT=$(echo "$LOG_TEXT" | grep -Eoc 'eyJ[A-Za-z0-9_-]{10,}' || true)
+        SCANNED_LINES=$(echo "$LOG_TEXT" | wc -l)
+        SCAN_NOTE=""
+        if [ "$SCANNED_LINES" -ge 20000 ]; then
+            SCAN_NOTE=" (scanned first 20000 lines only)"
+        fi
         if [ "${SECRET_ASSIGN_COUNT:-0}" -gt 0 ] || [ "${JWT_COUNT:-0}" -gt 0 ]; then
-            record "cloud_build_log_content" "FAIL" "build ${BUILD_ID}: ${SECRET_ASSIGN_COUNT:-0} secret-shaped assignment(s), ${JWT_COUNT:-0} JWT-prefix match(es) -- counts only, never the matched text"
+            record "cloud_build_log_content" "FAIL" "build ${BUILD_ID}: ${SECRET_ASSIGN_COUNT:-0} secret-shaped assignment(s), ${JWT_COUNT:-0} JWT-prefix match(es) -- counts only, never the matched text${SCAN_NOTE}"
         else
-            record "cloud_build_log_content" "PASS" "build ${BUILD_ID}: 0 secret-shaped assignments, 0 JWT prefixes"
+            record "cloud_build_log_content" "PASS" "build ${BUILD_ID}: 0 secret-shaped assignments, 0 JWT prefixes${SCAN_NOTE}"
         fi
     fi
 fi

@@ -415,31 +415,59 @@ def test_backend_sa_expected_roles_match_the_offline_envelope_docstring():
     }
 
 
-def test_admin_sa_project_roles_exclude_dataset_scoped_dataviewer():
-    """bigquery.dataViewer is granted on the polyglot_telemetry DATASET, not
-    the project -- admin_backend/tests/unit/test_admin_sa_iam_envelope.py's
-    own TELEMETRY_GRANTED_ROLES / project-role split says so. Including it
-    in ADMIN_SA_EXPECTED_PROJECT_ROLES would manufacture a permanent FAIL
-    against a live project-level query that will never see it (this bead's
-    own dry run hit exactly that bug before the fix).
+def test_admin_sa_project_roles_match_the_offline_envelope_constant():
+    """ADMIN_SA_EXPECTED_PROJECT_ROLES must equal the REAL
+    admin_backend/tests/unit/test_admin_sa_iam_envelope.py's
+    EXPECTED_ADMIN_SA_ROLES constant, minus the two roles that are scoped
+    OFF the project level and checked separately in this same script:
+    `bigquery.dataViewer` (dataset-scoped -- see
+    admin_sa_bigquery_dataviewer_dataset_scoped) and
+    `iam.serviceAccountUser` (resource-scoped onto polyglot-cloudbuild-sa --
+    see admin_sa_actas_cloud_build).
+
+    Before this test, the pin here was a HAND-TYPED literal with no drift
+    guard at all -- the backend list is checked against the envelope
+    docstring's own prose (test_backend_sa_expected_roles_match_the_offline_
+    envelope_docstring above) and the cloudbuild list is regex-parsed out of
+    setup-cloud-build.sh (test_cloudbuild_sa_expected_roles_match_setup_
+    cloud_build_script below), but this was the one of the three role lists
+    with NO check against its source of truth: a role added to (or removed
+    from) EXPECTED_ADMIN_SA_ROLES without a matching edit here would drift
+    silently forever. IMPORTS the real constant (a plain Python set, unlike
+    setup-cloud-build.sh's bash array, which has no importable form and so
+    must be regex-parsed) rather than re-typing it a second time.
     """
+    # Imported here rather than at module scope: this is the ONE test in
+    # the file that needs admin_backend on sys.path, and importing a test
+    # MODULE (not a package __init__) from another suite is unusual enough
+    # to want that scoped rather than a standing top-of-file import that
+    # every other test in this file would carry for no reason.
+    from admin_backend.tests.unit import test_admin_sa_iam_envelope as envelope
+
     text = _script_text()
     match = re.search(r'ADMIN_SA_EXPECTED_PROJECT_ROLES="([^"]+)"', text)
     assert match, "ADMIN_SA_EXPECTED_PROJECT_ROLES is not declared as a literal string"
-    roles = set(match.group(1).split())
-    assert "roles/bigquery.dataViewer" not in roles, (
+    script_roles = set(match.group(1).split())
+
+    assert "roles/bigquery.dataViewer" not in script_roles, (
         "ADMIN_SA_EXPECTED_PROJECT_ROLES includes the dataset-scoped "
         "bigquery.dataViewer role, which a project-level IAM query will "
         "never see -- it belongs in the separate dataset-scoped check")
-    assert roles == {
-        "roles/firebaseauth.admin",
-        "roles/datastore.user",
-        "roles/logging.logWriter",
-        "roles/secretmanager.secretAccessor",
-        "roles/bigquery.jobUser",
-        "roles/errorreporting.viewer",
-        "roles/monitoring.viewer",
+    assert "roles/iam.serviceAccountUser" not in script_roles, (
+        "ADMIN_SA_EXPECTED_PROJECT_ROLES includes the resource-scoped "
+        "iam.serviceAccountUser actAs grant, which a project-level IAM "
+        "query will never see -- it belongs in the separate "
+        "admin_sa_actas_cloud_build check")
+
+    expected = envelope.EXPECTED_ADMIN_SA_ROLES - {
+        "roles/bigquery.dataViewer",
+        "roles/iam.serviceAccountUser",
     }
+    assert script_roles == expected, (
+        "infra_posture.sh's ADMIN_SA_EXPECTED_PROJECT_ROLES ({}) does not "
+        "match admin_backend/tests/unit/test_admin_sa_iam_envelope.py's "
+        "EXPECTED_ADMIN_SA_ROLES minus the dataset/resource-scoped roles "
+        "({})".format(sorted(script_roles), sorted(expected)))
 
 
 def test_cloudbuild_sa_expected_roles_match_setup_cloud_build_script():
