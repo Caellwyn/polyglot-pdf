@@ -4,11 +4,11 @@ Disclaimer Acceptance Logging Routes
 Provides endpoint for logging user acceptance of disclaimer modal.
 Creates audit trail for legal protection and compliance tracking.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import structlog
 
 # ALIASED deliberately: the route handler below is also called
@@ -24,6 +24,24 @@ from ..utils.confirmation_logger import (
 _log = structlog.get_logger().bind(module="disclaimer_routes")
 
 router = APIRouter(prefix="/api", tags=["disclaimer"])
+
+# Timestamp bounds (bd polyglot-pdf-q34sy, closed by sprint 23 C4). Unlike its
+# sibling fields (form_session_id, language, user_agent, script_version --
+# bounded by bd polyglot-pdf-g3kui), timestamp had no Field constraint at all:
+# zero, negative, or a far-future value was written verbatim into the durable
+# confirmation_events legal-evidence record. The record's core claim is WHEN
+# acceptance happened, so an absurd value here does more damage than an
+# oversized string field would.
+#
+# _MIN_TIMESTAMP_MS is not before this route existed (2025-11-01 UTC, ahead of
+# the route's actual add date so the bound never has to be revisited for
+# clock skew on old deploys); the buffer is generous on purpose -- the goal is
+# to catch zero/negative/obviously-wrong values, not to model exact clock
+# drift.
+_MIN_TIMESTAMP_MS = 1761955200000  # 2025-11-01T00:00:00Z
+# How far into the future a client clock is allowed to be. A few minutes
+# covers real client clock skew without admitting a fabricated future date.
+_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 
 
 class DisclaimerAcceptanceRequest(BaseModel):
@@ -52,6 +70,30 @@ class DisclaimerAcceptanceRequest(BaseModel):
 		description="Language user selected (e.g., 'Spanish', 'English')",
 	)
 	timestamp: int = Field(..., description="Unix timestamp (milliseconds) when user clicked 'I Agree'")
+
+	@field_validator("timestamp")
+	@classmethod
+	def _bound_timestamp(cls, v: int) -> int:
+		"""Reject an obviously-invalid acceptance time (bd polyglot-pdf-q34sy).
+
+		Zero, negative, and pre-route values are refused by the lower bound;
+		a value more than a few minutes in the future is refused by the upper
+		bound (real client clock skew, not a fabricated future date). Both
+		raise ValueError, which Pydantic turns into a 422 -- the caller never
+		reaches the handler, so an out-of-bound value never touches the
+		durable confirmation_events sink.
+		"""
+		if v < _MIN_TIMESTAMP_MS:
+			raise ValueError(
+				f"timestamp {v} is before this route existed "
+				f"(minimum {_MIN_TIMESTAMP_MS})"
+			)
+		now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+		if v > now_ms + _MAX_FUTURE_SKEW_MS:
+			raise ValueError(
+				f"timestamp {v} is more than {_MAX_FUTURE_SKEW_MS}ms in the future"
+			)
+		return v
 	user_agent: Optional[str] = Field(
 		None, max_length=512,
 		description="Browser user agent string",

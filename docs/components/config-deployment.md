@@ -2,7 +2,13 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-o4f7c: `scripts/verify_service_reachable.py` resolves the gcloud binary through `shutil.which` and turns a spawn failure into the gate's warn-and-continue path instead of a traceback -- see "The reachability gate is ONE module". No env var, deploy step or config key changed.) (bd polyglot-pdf-p4ale, E4.5: `scripts/setup-cloud-build.sh` now provisions `polyglot-cloudbuild-sa` itself -- creates the SA, grants it `run.admin`/`firebasehosting.admin`/`firebaserules.admin`/`artifactregistry.writer`/`logging.logWriter`/`datastore.user` project-wide and `storage.objectAdmin` on the form-kits bucket only, then grants it resource-scoped actAs (`roles/iam.serviceAccountUser`) on BOTH `polyglot-backend-sa` and `admin-backend-sa`, and grants the Pub/Sub service agent `roles/iam.serviceAccountTokenCreator` for bead 4.3's future build-status webhook -- so every trigger's `--service-account` now names an identity this same script actually provisions and roles, pinned by the new `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` and `tests/test_setup_cloud_build_script.py`. `scripts/setup-admin-service.sh` gains the mirror-image grant -- `admin-backend-sa` actAs on `polyglot-cloudbuild-sa` ONLY, resource-scoped -- so the admin service's future trigger route can submit a build that runs as the build identity; `roles/run.admin` and `roles/firebasehosting.admin` are deleted (not deferred) from that script's DEFERRED_ROLES because the admin service never deploys anything itself.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-6088m, sprint 23 C4: the
+`backend/.env.DEV` marker-file gate (below) is only safe in production because
+`.dockerignore`'s `backend/.env.*` line keeps the marker out of the built
+container -- that line is now pinned by `tests/test_dockerignore_env_exclusion.py`,
+and `/dev/console-log` additionally fails closed on `K_SERVICE` as a backstop
+independent of the marker file. No env var, deploy step, or config key
+changed.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -33,7 +39,10 @@ which bypasses the cache).
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
-  `EXTRACTOR_MAX_PDF_MB`.
+  `EXTRACTOR_MAX_PDF_MB`, `RESUME_FORM_PARSE_TIMEOUT_S` (default `8.0` --
+  wall-clock cap on `/api/resume-form`'s `fitz.open` + structural-comparison
+  parse, run in a thread so the cap can actually interrupt it; see
+  [pdf-filling.md](pdf-filling.md)).
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs

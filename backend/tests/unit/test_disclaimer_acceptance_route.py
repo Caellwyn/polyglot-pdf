@@ -8,6 +8,7 @@ a deliberate low-sensitivity retention pending counsel, bd polyglot-pdf-pol2).
 The log shape is pinned with an ALLOWLIST (exact kwarg set), never a blacklist:
 banning `client_ip` by name would be one rename away from defeat.
 """
+import time
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
@@ -19,10 +20,15 @@ from backend.main import app
 
 client = TestClient(app)
 
+# DYNAMIC, not a frozen literal (bd polyglot-pdf-q34sy): the route now bounds
+# timestamp to a window around "now" (see disclaimer_routes._bound_timestamp),
+# so a hardcoded historical value ages out of that window and every test using
+# it would eventually start failing on an unrelated bound, not the behavior
+# each test actually means to check.
 _BODY = {
     "form_session_id": "fss_disc_1",
     "language": "Spanish",
-    "timestamp": 1754200000000,
+    "timestamp": int(time.time() * 1000),
     "user_agent": "TestAgent/1.0",
 }
 
@@ -130,7 +136,7 @@ def test_the_route_reaches_the_REAL_durable_util(monkeypatch):
     resp = client.post("/api/disclaimer-acceptance", json={
         "form_session_id": "fss_real",
         "language": "Spanish",
-        "timestamp": 1755000000000,
+        "timestamp": int(time.time() * 1000),
         "script_version": "deadbeefcafe0001",
         "user_agent": "ua",
     })
@@ -176,7 +182,7 @@ def test_a_sink_outage_does_NOT_break_the_agree_click(monkeypatch):
         json={
             "form_session_id": "fss_outage",
             "language": "English",
-            "timestamp": 1755000000000,
+            "timestamp": int(time.time() * 1000),
         },
     )
     assert response.status_code == 200
@@ -201,7 +207,7 @@ def test_the_durable_write_actually_HAPPENS_on_the_happy_path(monkeypatch):
         json={
             "form_session_id": "fss_happy",
             "language": "Spanish",
-            "timestamp": 1755000000000,
+            "timestamp": int(time.time() * 1000),
             "script_version": "deadbeefcafe0001",
             "user_agent": "ua",
         },
@@ -299,3 +305,59 @@ def test_a_REALISTIC_body_still_passes():
     body["script_version"] = "deadbeefcafe0001"
     resp = client.post("/api/disclaimer-acceptance", json=body)
     assert resp.status_code == 200
+
+
+# --- timestamp bound (bd polyglot-pdf-q34sy, closed by sprint 23 C4) ------
+#
+# Unlike its sibling fields, timestamp had NO Field constraint at all: zero,
+# negative, or a far-future value was written verbatim into the durable
+# confirmation_events legal-evidence record. These tests pin that an
+# obviously-invalid value 422s BEFORE the durable sink is ever reached, and
+# that a legitimate near-now timestamp still returns 200.
+
+import time as _time
+
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("bad_timestamp", [
+    0,
+    -1,
+    1000,  # 1970-01-01, long before this route existed
+])
+def test_an_obviously_invalid_past_timestamp_is_REJECTED(monkeypatch, bad_timestamp):
+    seen = {}
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", lambda **kw: seen.update(kw))
+    body = dict(_BODY)
+    body["timestamp"] = bad_timestamp
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 422, (
+        f"timestamp={bad_timestamp} was accepted; the lower bound is not enforced"
+    )
+    assert not seen, "the durable sink was reached despite the invalid timestamp"
+
+
+def test_a_far_future_timestamp_is_REJECTED(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", lambda **kw: seen.update(kw))
+    body = dict(_BODY)
+    # Comfortably beyond any real client clock skew.
+    body["timestamp"] = int(_time.time() * 1000) + 60 * 60 * 1000  # +1 hour
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 422, (
+        "a timestamp an hour in the future was accepted; the upper bound is "
+        "not enforced"
+    )
+    assert not seen, "the durable sink was reached despite the invalid timestamp"
+
+
+def test_a_legitimate_near_now_timestamp_still_succeeds(monkeypatch):
+    """The bound must not reject a real acceptance -- a live client's clock is
+    always close to 'now' at the moment they click Agree."""
+    seen = {}
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", lambda **kw: seen.update(kw))
+    body = dict(_BODY)
+    body["timestamp"] = int(_time.time() * 1000)
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 200
+    assert seen, "the durable sink was never reached for a legitimate timestamp"
