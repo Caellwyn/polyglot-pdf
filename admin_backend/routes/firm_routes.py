@@ -602,9 +602,18 @@ def _do_get_firm(*, firm_id: str, ledger_limit: int) -> dict:
         and not row.get("actor_email")
     }
     labels = identity_labels.labels_for_uids(uids_needing_lookup)
+    # Allowlisted to credit_ledger.ENTRY_FIELDS, NOT a bare **row spread:
+    # row is read_recent_entries' unfiltered snap.to_dict(), and actor_email
+    # is a raw PII-shaped field this route must never put on the wire on its
+    # own -- actor_label (resolved above) is the ONLY actor-identifying
+    # field this response exposes, mirroring link_routes.py's
+    # _public_link_view hand-built allowlist for the identical employee_
+    # email/employee_label pair (bd polyglot-pdf-cpsi0 fresh-eyes finding).
     page_with_labels = [
-        {**row, "actor_label": identity_labels.label_for_actor(
-            row.get("actor"), row.get("actor_email"), labels)}
+        {**{k: row.get(k) for k in credit_ledger.ENTRY_FIELDS
+            if k != "actor_email"},
+         "actor_label": identity_labels.label_for_actor(
+             row.get("actor"), row.get("actor_email"), labels)}
         for row in page
     ]
     return {

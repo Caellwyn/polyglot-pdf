@@ -504,6 +504,32 @@ def test_get_firm_ledger_row_prefers_its_own_stored_actor_email(
     assert row["actor_label"] == "staffer@example.com"
 
 
+def test_get_firm_ledger_row_never_leaks_raw_actor_email(client, fake_db):
+    """bd polyglot-pdf-cpsi0 fresh-eyes finding: _do_get_firm's ledger rows
+    are built by allowlisting to credit_ledger.ENTRY_FIELDS (minus
+    actor_email) plus the resolved actor_label -- NOT a bare **row spread --
+    so the raw actor_email a row stores never itself rides onto the wire,
+    mirroring link_routes.py's hand-built _public_link_view allowlist for
+    the identical employee_email/employee_label pair. actor_label is the
+    ONLY actor-identifying field this response exposes.
+
+    Mutation: revert to `{**row, "actor_label": ...}` in _do_get_firm -- red
+    (actor_email would appear in the response verbatim)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "mint_debit", "amount": -1, "usd_amount": None,
+        "firm_kind": "live", "channel": "demo", "balance_after": 99,
+        "actor": "uid-staff-1", "actor_email": "staffer@example.com",
+        "reason": None, "link_jti": "jti-1", "kit_id": "w7", "ts": 1.0,
+    }
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert "actor_email" not in row
+    assert row["actor_label"] == "staffer@example.com"
+
+
 def test_get_firm_ledger_row_falls_back_to_the_batch_lookup(
         client, fake_db, monkeypatch):
     """EXIT CRITERION 2, the legacy-row half: a row written BEFORE this

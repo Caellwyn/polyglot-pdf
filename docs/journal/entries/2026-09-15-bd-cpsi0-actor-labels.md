@@ -54,7 +54,50 @@ resolve their page's distinct uids through one `labels_for_uids` call and
 add `actor_label` / `employee_label` to their response rows; the uid stays
 on the row, unchanged. `employee_label` joins the links route's
 by-hand-fields response allowlist the same way every other key already had
-to.
+to. `_do_get_firm`'s ledger rows are allowlisted to `credit_ledger.
+ENTRY_FIELDS` (minus `actor_email`) plus the resolved `actor_label`, NOT a
+bare `**row` spread -- so the raw `actor_email` a row stores never itself
+rides onto the wire (see the fresh-eyes round below).
+
+**Fresh-eyes review round (2026-09-15, GAPS-FOUND(2), fixed same-session).**
+The outer review found two substantive gaps in the read side above, both
+fixed directly in this bead's own worktree (no separate PR round):
+
+- **Adopted -- `actor_email` raw-field leak.** `_do_get_firm` built each
+  ledger row as `{**row, "actor_label": ...}`, where `row` is `read_recent_
+  entries`'s unfiltered `snap.to_dict()`. Since this bead adds `actor_email`
+  to `credit_ledger.ENTRY_FIELDS`, every new ledger row's raw `actor_email`
+  rode onto `GET /admin/firms/{firm_id}`'s response wire alongside the
+  intended `actor_label`, with no allowlist -- inconsistent with the
+  by-hand allowlist the SAME bead already uses for the link-listing route.
+  Not a privilege escalation (the route is `require_app_admin`-only), but a
+  new field crossing the wire unreviewed is exactly the shape CLAUDE.md
+  scar #8 (enumerate the set) warns about. Fixed by allowlisting the row to
+  `credit_ledger.ENTRY_FIELDS` minus `actor_email` before merging in
+  `actor_label`; pinned by a new test asserting `actor_email` is absent from
+  the response (mutation-verified: reverting to the bare `**row` spread
+  reddens it).
+- **Adopted -- untested link-listing label-precedence branches.** The
+  firm-ledger half of `label_for_actor`'s three-way precedence had full
+  test coverage (all three branches), but the links-listing half
+  (`admin_backend/routes/link_routes.py`'s `_do_list_links` ->
+  `_public_link_view` wiring) only exercised the "no email anywhere, fall
+  back to uid" branch -- neither "row already carries `employee_email`,
+  skip the lookup" nor "batch lookup resolves an email" was pinned, so a
+  swapped-argument bug in the `label_for_actor` call would have shipped
+  silently. Added `test_link_listing_prefers_its_own_stored_employee_email`
+  and `test_link_listing_falls_back_to_the_batch_lookup`, mirroring the
+  ledger side's two precedence tests exactly; mutation-verified by swapping
+  the `label_for_actor(employee_id, employee_email, ...)` argument order in
+  `_do_list_links` and confirming both go red. Also fixed the stale comment
+  in `test_admin_link_routes.py` that pointed at a
+  `test_admin_link_routes_labels.py` file which never existed.
+- **Deferred -- filed `polyglot-pdf-qp01w`.** Two low-severity nits the
+  reviewer flagged but did not classify as rubric-fails: (1)
+  `LinkHistoryPage.tsx`'s empty-state `colSpan` bump (7->8) has no
+  rendering test; (2) `identity_labels.labels_for_uids`'s dict comprehension
+  would silently misbehave if a future caller passed a one-shot generator
+  instead of a set (no live caller does today).
 
 **Console.** `FirmDetailPage.tsx`'s ledger and links tables render the
 label with the uid as a `title` tooltip; a `"system:<origin>"` label is
@@ -158,7 +201,8 @@ repeating their own label on every row adds nothing).
   it to both writers.
 - `admin_backend/services/identity_labels.py` -- new; batched uid->label
   resolution + `label_for_actor` precedence rule.
-- `admin_backend/routes/firm_routes.py` -- `actor_label` on ledger rows.
+- `admin_backend/routes/firm_routes.py` -- `actor_label` on ledger rows,
+  allowlisted (not `**row`) so raw `actor_email` never leaks onto the wire.
 - `admin_backend/routes/link_routes.py` -- `employee_label` on link rows,
   joins `_ALLOWLISTED_KEYS`.
 - `admin_backend/routes/credit_routes.py` -- passes `actor_email` to
@@ -176,7 +220,12 @@ repeating their own label on every row adds nothing).
 - `admin_backend/tests/unit/test_identity_labels.py` -- new module tests.
 - `admin_backend/tests/unit/test_firm_routes.py`,
   `test_admin_link_routes.py`, `test_credit_routes.py`,
-  `test_monthly_topup.py` -- updated/new tests.
+  `test_monthly_topup.py` -- updated/new tests. Fresh-eyes round added
+  `test_get_firm_ledger_row_never_leaks_raw_actor_email` (firm_routes) and
+  `test_link_listing_prefers_its_own_stored_employee_email` +
+  `test_link_listing_falls_back_to_the_batch_lookup` (admin_link_routes),
+  all mutation-verified; fixed a stale comment in admin_link_routes
+  referencing a nonexistent test file.
 - `scripts/audit/inventory_stores.py` -- allowlists updated for the two new
   fields.
 - `docs/technical_guide.md`, `docs/components/admin-service.md`,
