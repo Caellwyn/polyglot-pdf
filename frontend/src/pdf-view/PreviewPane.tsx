@@ -161,8 +161,9 @@ export default function PreviewPane({
       <div className="pdf-preview-pane__toolbar">
         <div className="pdf-preview-pane__banner">
           Preview mode: your answers appear on the real form as you go. Colors:
-          orange = current field, blue = filled, green = confirmed. For the
-          exact print output, use "Preview Filled PDF" below.
+          orange = current field, blue = filled, green = confirmed, purple =
+          skipped (needs follow-up). For the exact print output, use "Preview
+          Filled PDF" below.
         </div>
         <button
           type="button"
