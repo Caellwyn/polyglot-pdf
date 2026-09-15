@@ -1,6 +1,6 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-6088m, sprint 23 C4: the
 `backend/.env.DEV` marker-file gate (below) is only safe in production because
@@ -9,6 +9,8 @@ container -- that line is now pinned by `tests/test_dockerignore_env_exclusion.p
 and `/dev/console-log` additionally fails closed on `K_SERVICE` as a backstop
 independent of the marker file. No env var, deploy step, or config key
 changed.)*
+
+*Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -891,3 +893,28 @@ above for how both env vars are injected at deploy time, and Surface contract
 > is **no active prod**. The agent may run the demo deploy under a three-part gate
 > (local-test-first + per-instance permission + post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
+
+## Live infrastructure posture (read-only)
+
+`scripts/audit/infra_posture.sh --project <PROJECT_ID>` is the recurring,
+read-only runbook for verifying the LIVE deployed environment matches this
+doc and the repo's offline IAM pins (sprint 23 security-audit workstream D,
+bd `polyglot-pdf-m1dlv`). Under the operator's own `gcloud`/`bq` ADC — never
+a service-account key, and never a mutating call — it checks the
+project IAM policy, both runtime service accounts' roles against
+`backend/tests/unit/test_deployed_iam_envelope.py` and
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`, every Cloud Run
+service's env vars (no secret-shaped value, no dev/bypass flag, no verbosity
+knob) and secret bindings, the form-kits bucket's IAM and access-prevention
+settings, whether the deployed Firestore rules match the repo file (read via
+the Firebase Rules REST API directly, `curl` + the operator's own access
+token — the `firebase` CLI ships no subcommand for reading a ruleset's
+content), Cloud Logging retention/sinks/exclusions, BigQuery ACLs, Firebase
+Auth settings (read the same way, via the Identity Toolkit Admin REST API),
+Hosting response headers per site, container scan status, Cloud Build log
+content, and the Vertex/Cloud-TTS third-party-processor opt-out settings.
+Every check ends `PASS`, `FAIL`, or `N/A: <reason>` — never a silent skip —
+so a permission gap or a broken local tool (e.g. this operator's `bq` CLI)
+reports its own reason rather than aborting the run. `tests/test_infra_posture_script.py`
+pins the script's shipped check list the same way
+`tests/test_setup_monitoring_script.py` pins that script's metrics/policies.
