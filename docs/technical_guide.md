@@ -2963,20 +2963,32 @@ than an imperative ref API, matching the "bump a value, effect re-runs"
 idiom already used throughout this file for `firmId`/`isManager`.
 
 
-### 33. Firm plan + monthly credit top-up (bd polyglot-pdf-0euzk)
+### 33. Firm plan + monthly credit top-up (bd polyglot-pdf-0euzk; rollover
+default flipped True by bd polyglot-pdf-hnlj3, 2026-09-15)
 
 Maintainer pricing decision (2026-09-14): "35 credits per month cap as a
 starting place; leave room for tiered subscription levels with different
 allotments, and pay-as-you-go or overage later." Modeled as DATA on the
 firm plus ONE scheduled top-up route, so a second tier or overage is a new
-row/writer later, never a new code path today.
+row/writer later, never a new code path today. **"CAP" IS NO LONGER THE
+RIGHT WORD FOR monthly_credits** (bd polyglot-pdf-hnlj3, maintainer decision
+2026-09-15: "credits roll over -- no real reason not to"): with rollover
+now the DEFAULT for a new or backfilled firm, `monthly_credits` means "how
+much is added every month" for the common case, not "the most a firm can
+hold" -- `rollover: False` (still settable via the plan editor below) is
+what makes it a cap; the maintainer's original 35-credit NUMBER is
+unchanged, only which behavior it defaults to.
 
 - **`firms/{firm_id}` gains `plan: {tier, monthly_credits, rollover}`.**
   Producer, NEW module `backend/services/plans.py`: `PLAN_TIERS` (a closed
   tuple, today `("starter",)`), `DEFAULT_PLAN` (`{tier: "starter",
-  monthly_credits: 35, rollover: False}` -- the maintainer's own starting
-  numbers) and `validate_plan(plan)` (raises `ValueError` on an unknown
-  tier, a non-positive `monthly_credits`, or a non-bool `rollover`).
+  monthly_credits: 35, rollover: True}` -- the maintainer's own starting
+  numbers, `rollover` flipped True by bd polyglot-pdf-hnlj3 2026-09-15
+  (was False at this bead's own 2026-09-14 launch); the one existing firm
+  at the time, staging-mock, was switched to rollover by hand the same day,
+  ahead of the code change) and `validate_plan(plan)` (raises `ValueError`
+  on an unknown tier, a non-positive `monthly_credits`, or a non-bool
+  `rollover`).
   Consumers: `admin_backend/routes/firm_routes.py`'s `create_firm` (writes
   `dict(DEFAULT_PLAN)` on FIRST CREATE only, alongside the existing
   `balance_credits` 0-init), `_public_firm_view` (falls back to
@@ -3027,8 +3039,22 @@ row/writer later, never a new code path today.
   SEPARATE Cloud Scheduler caller identity
   (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, never the sweep job's own
   `SWEEP_SCHEDULER_SA_EMAIL`) and a SEPARATE audience (this route's own
-  path). For every `firms/{firm_id}` with `status == active` and a stored
-  `plan`, computes `period = "YYYY-MM"` (UTC, from the request time) and:
+  path). **THE CLOUD SCHEDULER TRIGGER IS INTERIM** (bd
+  polyglot-pdf-hnlj3, 2026-09-15): the per-firm grant logic is factored
+  into its own function, `topup_firm(db, firm_id, firm, *, period,
+  actor=None)`, precisely so Epic 5's Stripe webhook (invoice.paid /
+  subscription renewal) can call the SAME helper for the one firm a
+  payment event names, instead of waiting for the monthly cron pass --
+  `actor` defaults to this route's own `MONTHLY_TOPUP_ACTOR` so this
+  route's call site needed no change; a webhook caller will pass its own
+  actor string. This route (`run_monthly_topup` /
+  `_run_monthly_topup`) is now just the Scheduler-specific LOOP over
+  every active firm, calling `topup_firm` once per firm -- no behavior
+  change from the extraction itself, pinned by the existing
+  `test_monthly_topup.py` suite (unchanged in outcome) plus a new test
+  seeding `plans.DEFAULT_PLAN` directly. For every `firms/{firm_id}`
+  with `status == active` and a stored `plan`, `topup_firm` computes
+  `period = "YYYY-MM"` (UTC, from the request time) and:
   1. Queries `firms/{firm_id}/ledger` for an existing `subscription_grant`
      entry with THAT `period` -- if found, skips the firm entirely
      (`skipped_already_run`). This is the WHOLE idempotency mechanism: a
