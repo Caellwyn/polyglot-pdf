@@ -117,6 +117,20 @@ MUTATION_KINDS = {
     # since this route is the only writer of alerts/{id}.acknowledged_by /
     # .acknowledged_at.
     ("PATCH", "/admin/alerts/{alert_id}/acknowledge"): MUTATION_KIND_FIRESTORE,
+    # Deploy trigger (bd polyglot-pdf-tb3kp, E4.3). EXTERNAL: the actual
+    # mutation is a Cloud Build API call (admin_backend/services/
+    # cloud_build.py's run_target), not a Firestore write -- there is no
+    # transaction to join. Same shape as the user routes above:
+    # record_pending BEFORE the Cloud Build call, mark_committed with the
+    # real build id after, mark_failed on error.
+    ("POST", "/admin/deploys"): MUTATION_KIND_EXTERNAL,
+    # The Pub/Sub build-status webhook (bd polyglot-pdf-tb3kp, E4.3). This
+    # IS a Firestore mutation (an upsert of deployments/{id}) audited
+    # in-transaction (deploy_webhook.py's _upsert_deployment, its own
+    # @firestore.transactional body) -- mirrors firm_routes.py's
+    # _apply_firm_patch shape, with actor_uid "system:cloud_build_webhook"
+    # since the caller is Cloud Build via Pub/Sub, never an operator.
+    ("POST", "/api/deploys/webhook"): MUTATION_KIND_FIRESTORE,
 }
 
 # The helper names each form requires, by kind.

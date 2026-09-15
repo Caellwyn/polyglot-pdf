@@ -204,6 +204,10 @@ def test_the_registered_route_set_is_pinned():
         (("PATCH",), "/admin/alerts/{alert_id}/acknowledge"),
         (("GET",), "/admin/errors"),
         (("GET",), "/admin/health"),
+        (("POST",), "/admin/deploys"),
+        (("GET",), "/admin/deploys"),
+        (("GET",), "/admin/deploys/{deploy_id}"),
+        (("POST",), "/api/deploys/webhook"),
     }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
@@ -258,6 +262,26 @@ def test_kit_usage_and_report_and_alert_and_ops_routes_are_gated_by_require_app_
     for path in admin_only_paths:
         route = next(r for r in app.routes if r.path == path)
         assert _dependency_names_for(route) == {"require_app_admin"}, path
+
+
+def test_deploy_routes_are_gated_by_require_app_admin_specifically():
+    """bd polyglot-pdf-tb3kp (E4.3): all three /admin/deploys routes carry
+    the plain require_app_admin gate -- triggering and reading builds has
+    no firm-manager counterpart, same reasoning as the kit/report/alert/ops
+    routes above. Mutation: swap any one of these for a different gate --
+    red."""
+    for route in app.routes:
+        if route.path in ("/admin/deploys", "/admin/deploys/{deploy_id}"):
+            assert _dependency_names_for(route) == {"require_app_admin"}, (
+                route.path, tuple(sorted(getattr(route, "methods", []) or [])))
+
+
+def test_deploy_webhook_is_gated_by_require_google_oidc_specifically():
+    """bd polyglot-pdf-tb3kp (E4.3): the Pub/Sub push webhook is
+    require_google_oidc's SECOND consuming route (after the sweep route
+    below). Mutation: swap the dependency for require_app_admin -- red."""
+    route = next(r for r in app.routes if r.path == "/api/deploys/webhook")
+    assert _dependency_names_for(route) == {"require_google_oidc"}
 
 
 def test_sweep_route_is_gated_by_require_google_oidc_specifically():

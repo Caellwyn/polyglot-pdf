@@ -43,7 +43,15 @@ admin_backend/services/error_stats.py, and a per-channel public-backend
 health/version fan-out over the new BACKEND_URLS_JSON env var). All behind
 require_app_admin except the firm usage route, which reuses
 require_app_admin_or_owning_manager (a manager reads only their own firm's
-usage, 404 not 403 for another firm -- mirroring bead B4's rule).
+usage, 404 not 403 for another firm -- mirroring bead B4's rule). bd
+polyglot-pdf-tb3kp (E4.3) adds POST/GET /admin/deploys + GET
+/admin/deploys/{id} (admin_backend/routes/deploy_routes.py, behind
+require_app_admin -- triggers a Cloud Build via
+admin_backend/services/cloud_build.py and reads back the deployments/{id}
+rows it writes) and POST /api/deploys/webhook (admin_backend/routes/
+deploy_webhook.py, the Pub/Sub push endpoint for Cloud Build's build-status
+notifications, behind require_google_oidc -- this gate's SECOND consuming
+route after bead 8vgfh's sweep route).
 
 THE ADMIN SERVICE HAS NO CHANNEL. It serves BOTH staging's and the demo's
 data, so nothing here may derive a Firestore collection name from
@@ -82,9 +90,9 @@ from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
 from admin_backend.routes import (
-    alert_routes, audit_routes, config_routes, credit_routes, firm_routes,
-    kit_routes, link_routes, ops_routes, report_routes, sweep_routes,
-    usage_routes, user_routes,
+    alert_routes, audit_routes, config_routes, credit_routes, deploy_routes,
+    deploy_webhook, firm_routes, kit_routes, link_routes, ops_routes,
+    report_routes, sweep_routes, usage_routes, user_routes,
 )
 from admin_backend.routes import whoami as whoami_routes
 
@@ -186,3 +194,5 @@ app.include_router(usage_routes.router)
 app.include_router(report_routes.router)
 app.include_router(alert_routes.router)
 app.include_router(ops_routes.router)
+app.include_router(deploy_routes.router)
+app.include_router(deploy_webhook.router)

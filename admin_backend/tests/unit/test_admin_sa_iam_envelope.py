@@ -123,6 +123,14 @@ EXPECTED_ADMIN_SA_ROLES = {
     # account in the project, not just the one build identity it is allowed
     # to submit builds as.
     "roles/iam.serviceAccountUser",
+    # Submit/trigger a Cloud Build (bd polyglot-pdf-tb3kp, E4.3 --
+    # admin_backend/services/cloud_build.py's run_target(), the FIRST and
+    # ONLY caller of CloudBuildClient.run_build_trigger). Moved OUT of
+    # DEFERRED_ROLES in this same commit: this is the role's first real
+    # consumer, so granting it now (rather than leaving it deferred with no
+    # caller) is exactly what "an unused grant is its own risk" argues
+    # against continuing to defer.
+    "roles/cloudbuild.builds.editor",
 }
 
 # Roles granted on ONE RESOURCE rather than project-wide. Kept apart from the
@@ -190,11 +198,14 @@ CLOUD_BUILD_SA_GRANTED_ROLES = {
 #     scripts/setup-cloud-build.sh, which holds both). There is no future
 #     epic that grants either to admin-backend-sa, so leaving them deferred
 #     would keep a dead expectation this test could never satisfy.
-DEFERRED_ROLES = {
-    # Bead 4.3 (admin_backend/services/cloud_build.py, not yet built): the
-    # route that actually calls builds.create/triggers.run.
-    "roles/cloudbuild.builds.editor",
-}
+# EMPTY as of bd polyglot-pdf-tb3kp (E4.3): roles/cloudbuild.builds.editor
+# was the last deferred role, and it moved into EXPECTED_ADMIN_SA_ROLES
+# above the moment its first real caller (cloud_build.py's run_target)
+# shipped. Kept as an empty set, not deleted, so a FUTURE epic that defers
+# a new role has a home to add it to without re-inventing this pattern --
+# see test_admin_sa_holds_no_deferred_role_early below, which iterates
+# whatever this set holds.
+DEFERRED_ROLES = set()
 
 
 def _setup_script_text() -> str:

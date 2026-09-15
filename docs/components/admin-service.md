@@ -1,7 +1,65 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/routes/deploy_routes.py admin_backend/routes/deploy_webhook.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py admin_backend/services/cloud_build.py admin_backend/services/promotion_gate.py deploy/targets.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-14 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
+route, Pub/Sub build-status webhook, and the `deployments` collection.
+POST/GET `/admin/deploys` + GET `/admin/deploys/{deploy_id}`
+(`admin_backend/routes/deploy_routes.py`, `require_app_admin`) trigger a
+Cloud Build for `{target, sha}` via a new
+`admin_backend/services/cloud_build.py::run_target()` (`CloudBuildClient.
+run_build_trigger`, dispatched with `asyncio.to_thread` -- NOT `create_build`:
+`Build.build_trigger_id` is output-only, so `create_build` cannot address an
+existing trigger at all without respecifying its whole config, which is what
+`run_build_trigger`'s own existence avoids) and read back the `deployments/
+{id}` rows the trigger and the webhook below both write. `target` is
+validated against a new `deploy/targets.py::TARGETS` -- ONE constant module
+now shared by this route and `tests/test_cloudbuild_yaml.py`, replacing what
+was three independent copies of the target list (cloudbuild.yaml's own
+comment, `scripts/setup-cloud-build.sh`'s `TARGETS` array, and this test
+file). For a target in `deploy/targets.py::GATED_TARGETS` (`backend-demo`,
+`frontend-demo`, `admin-service` -- a hand-listed subset, deliberately NOT
+every "demo channel" target: `form-kits`/`firestore-rules`/`editor` have no
+staging counterpart to gate against), the route calls
+`admin_backend/services/promotion_gate.py::staging_verified()` -- this
+module's SECOND real caller after bead ywxoh/4.2's build-side CLI, and this
+docstring corrects that module's own earlier mis-labeling of bead 4.3 as
+"4.4" (the real 4.4 is bd polyglot-pdf-jub5f) -- for the SAME early, friendly
+409 the build's own in-build gate repeats. The trigger route audits
+pending-then-committed (EXTERNAL form: the mutation is a Cloud Build API
+call, not a Firestore write) -- a failure marks the audit row failed and
+corrects the deployment row's status to `failure` with no `build_id`, so it
+can never be mistaken for a build that is actually running.
+POST `/api/deploys/webhook` (`admin_backend/routes/deploy_webhook.py`) is
+`require_google_oidc`'s SECOND consuming route (after the sweep route),
+gated on a NEW `PUBSUB_PUSH_SA_EMAIL` env var and the existing
+`ADMIN_SERVICE_URL`. It decodes Cloud Build's own Pub/Sub push envelope
+(base64 `message.data`) and upserts `deployments/{id}` BY `build_id` (never
+by document id) inside ONE `@firestore.transactional` body with an
+in-transaction audit row -- actor `system:cloud_build_webhook`, matching
+`sweep_routes.SWEEP_ACTOR`'s "system:" convention for a machine caller
+nobody signed into the console. A console-triggered build's pre-existing row
+updates in place; a bash-triggered build with none gets one created with
+`triggered_by: "external"`, target/channel read from the build's own
+`substitutions`. Idempotent (the write is a plain field-value overwrite
+keyed by the message's own status, not an increment), and always 204 on a
+well-formed message so Pub/Sub's retry policy leaves it alone -- a message
+that cannot even be parsed is 400 instead. `scripts/setup-admin-service.sh`
+gains: `pubsub.googleapis.com` enabled, the `cloud-builds` topic created if
+absent (Cloud Build publishes to it automatically once it exists), and a
+NEW dedicated `admin-pubsub-push-sa` service account as the push
+subscription's own caller identity (a THIRD identity, distinct from both
+`admin-backend-sa` and `polyglot-cloudbuild-sa` -- reusing either would let
+one compromised credential both act as a service and trigger it, the same
+reasoning `admin-sweep-scheduler-sa` already established) -- the actual
+`gcloud pubsub subscriptions create` command is a printed NOTE, not
+executed, since it needs the admin service's own Cloud Run URL from its
+first deploy. `admin-backend-sa` gains `roles/cloudbuild.builds.editor`,
+moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES` in the same
+commit as `cloud_build.py`'s first real call to it (`DEFERRED_ROLES` is now
+EMPTY, kept as a set rather than deleted for the next epic that defers a
+role). See [technical_guide.md](../technical_guide.md)'s Admin service
+routes table for the full four-route wire contract.)*
 *Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: `admin-backend-sa` gains `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` ONLY (actAs, so the admin service's future trigger route can submit a build that runs as the build identity), granted by `scripts/setup-admin-service.sh`'s new `CLOUD_BUILD_SA_ROLES` array; `roles/run.admin` and `roles/firebasehosting.admin` are deleted -- not merely left deferred -- from `DEFERRED_ROLES`, since the admin service never deploys anything itself; only `roles/cloudbuild.builds.editor` still awaits bead 4.3. See [config-deployment.md](config-deployment.md) for the mirror-image grant on the Cloud Build SA's own side.) (bd polyglot-pdf-6rj0j: the shared image's CMD now passes `--no-access-log`; the quoted CMD line below matches it. No admin route, gate or env var changed.) (bd polyglot-pdf-i6dlb, E3.11b -- the five
 monitoring CONSOLE PAGES over bd polyglot-pdf-mpebj's read routes above:
 `pages/MonitoringPage.tsx` (one card per channel from `GET /admin/health`,
