@@ -26,6 +26,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { FormField } from '../schema-forms/types/schema';
 
 afterEach(() => cleanup());
@@ -140,5 +142,44 @@ describe('a skipped field does not paint as a blank (bd polyglot-pdf-c9dfo)', ()
   it('current still wins for a skipped field the assistant re-pins', () => {
     const box = renderWith(SKIPPED, FIELD.id);
     expect(box.getAttribute('data-fill-state')).toBe('current');
+  });
+});
+
+describe("the legend names the state without stealing the note's phrase", () => {
+  // The legend has to explain the purple box, or the colour is unexplained.
+  // But my first wording said "needs follow-up" -- the skipped NOTE's own
+  // phrase -- so getByText(/needs follow-up/i) matched two elements and threw,
+  // breaking a passing test in another file. A real failure, not a flake.
+  //
+  // Pinned from BOTH sides so neither half drifts back: the legend must still
+  // name the colour, and must not re-use the note's locator phrase. Read from
+  // source because the property is about the shipped string, and rendering
+  // PreviewPane here would need the whole pdf document + overlay chain.
+  const bannerSource = readFileSync(
+    resolve(__dirname, 'PreviewPane.tsx'),
+    'utf-8',
+  );
+
+  it('names the skipped colour', () => {
+    expect(
+      bannerSource,
+      'a purple box with nothing explaining it is worse than no colour',
+    ).toMatch(/purple\s*=/);
+  });
+
+  it('does not re-use the skipped note phrase "needs follow-up"', () => {
+    // Scoped to the BANNER text, not the whole file: the file legitimately
+    // mentions the phrase in comments, and a whole-file grep would fail on
+    // those -- the evidence region has to match the claim.
+    const banner = bannerSource.slice(
+      bannerSource.indexOf('Preview mode: your answers'),
+      bannerSource.indexOf('Filled PDF" below'),
+    );
+    expect(banner.length, 'banner text not found -- retarget this test').toBeGreaterThan(40);
+    expect(
+      banner,
+      'the legend must not repeat "needs follow-up": that phrase is how tests ' +
+        'and screen readers locate the skipped NOTE, and two matches throw',
+    ).not.toMatch(/needs follow-up/i);
   });
 });
