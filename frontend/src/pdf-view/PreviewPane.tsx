@@ -160,9 +160,17 @@ export default function PreviewPane({
     <div className="pdf-preview-pane">
       <div className="pdf-preview-pane__toolbar">
         <div className="pdf-preview-pane__banner">
+          {/*
+            Says "set aside", NOT the skipped note's own "needs follow-up"
+            phrasing. That phrase is how tests and screen readers locate the
+            NOTE (FieldEditPopover / SectionRenderer); repeating it here made
+            getByText(/needs follow-up/i) match two elements and throw, breaking
+            a passing test in another file. One rendered phrase, one meaning.
+          */}
           Preview mode: your answers appear on the real form as you go. Colors:
-          orange = current field, blue = filled, green = confirmed. For the
-          exact print output, use "Preview Filled PDF" below.
+          orange = current field, blue = filled, green = confirmed, purple =
+          set aside to answer later. For the exact print output, use "Preview
+          Filled PDF" below.
         </div>
         <button
           type="button"

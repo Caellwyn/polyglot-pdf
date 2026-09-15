@@ -30,7 +30,18 @@ import {
   type PaintedValue,
 } from './valuePainting';
 
-export type FillState = 'empty' | 'filled' | 'confirmed' | 'current';
+/**
+ * How a field paints on the PDF overlay.
+ *
+ * 'skipped' exists because a deliberately-skipped required field used to paint
+ * as 'empty' -- indistinguishable from one the user never touched (bd
+ * polyglot-pdf-c9dfo). markFieldSkipped stores {value: null, skipped: true},
+ * and fillStateFor's empty check fired on the null before anything could look
+ * at the flag. The form view has always shown a "Skipped / needs follow-up"
+ * badge for that state; the PDF surface silently did not, and
+ * schemaFormState.ts's own docstring says it must ("NOT a silent blank").
+ */
+export type FillState = 'empty' | 'filled' | 'confirmed' | 'current' | 'skipped';
 
 export interface FieldOverlayProps {
   field: FormField;
@@ -54,6 +65,12 @@ const BORDERS: Record<FillState, string> = {
   filled: '2px solid rgb(59, 130, 246)',
   confirmed: '2px solid rgb(34, 197, 94)',
   current: '3px solid rgb(245, 158, 11)',
+  // DOTTED purple, deliberately not the form view's amber badge colour: amber
+  // is already 'current' here, and a skipped field must not read as the one the
+  // assistant is asking about. Dashed is taken too (a dimmed show_if-hidden
+  // field), so skipped carries BOTH an unused hue and an unused stroke -- the
+  // point is that it cannot be mistaken for a blank.
+  skipped: '2px dotted rgb(147, 51, 234)',
 };
 
 const BACKGROUNDS: Record<FillState, string> = {
@@ -61,6 +78,10 @@ const BACKGROUNDS: Record<FillState, string> = {
   filled: 'rgba(59, 130, 246, 0.06)',
   confirmed: 'rgba(34, 197, 94, 0.06)',
   current: 'rgba(245, 158, 11, 0.14)',
+  // A tint, unlike 'empty''s transparent: on a printed form the border alone
+  // can be lost against a ruled box, and the whole defect was a skip reading as
+  // untouched.
+  skipped: 'rgba(147, 51, 234, 0.08)',
 };
 
 const DIMMED_BORDER = '1px dashed rgba(148, 163, 184, 0.6)';
@@ -80,6 +101,23 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // `current` always wins: the field the voice model is on is never dimmed
   // (the border/background/snap cues must stay visible).
   const isDimmed = dimmed && fillState !== 'current';
+
+  // A dimmed SKIPPED field keeps its own colours while staying dimmed.
+  //
+  // Dimming otherwise replaces border AND background wholesale with
+  // grey-dashed + transparent -- which for a skipped field reproduces exactly
+  // the untouched-blank look bd polyglot-pdf-c9dfo exists to eliminate, one
+  // condition deeper. Reachable because `dimmed` tracks show_if ALONE: a field
+  // can be skipped and then hidden by a later answer, or hidden and then
+  // skipped.
+  //
+  // This is deliberately NARROWER than adding 'skipped' to the isDimmed
+  // exemption above. That would also make the field CLICKABLE and drop its
+  // 0.35 opacity, breaking bd polyglot-pdf-lp5v's rule that a show_if-hidden
+  // field is "dimmed, never removed, and never clickable". A hidden field must
+  // stay inert whatever its fill state; only its COLOUR needs to survive, so
+  // the follow-up it needs is still legible through the dimming.
+  const keepsColourWhileDimmed = isDimmed && fillState === 'skipped';
 
   // Dimmed = visible-but-inert: the cue for "make this active" is the
   // controlling field, and editing an invisible-in-Simplified field could
@@ -151,8 +189,10 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
           top: `${pos.y}px`,
           width: `${pos.width}px`,
           height: `${pos.height}px`,
-          border: isDimmed ? DIMMED_BORDER : BORDERS[fillState],
-          backgroundColor: isDimmed ? 'transparent' : BACKGROUNDS[fillState],
+          border:
+            isDimmed && !keepsColourWhileDimmed ? DIMMED_BORDER : BORDERS[fillState],
+          backgroundColor:
+            isDimmed && !keepsColourWhileDimmed ? 'transparent' : BACKGROUNDS[fillState],
           ...interactiveStyle,
         }}
         data-field-id={field.id}
