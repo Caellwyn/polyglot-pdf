@@ -2736,8 +2736,10 @@ exactly one place instead of drifting per caller.
   `record_deployment.target_family()` stripping a trailing `-staging`/`-demo`
   suffix (`backend-staging` and `backend-demo` share the family `backend`;
   `admin-service` has no suffix and is its own family), `triggered_by` is
-  always `"build"` here (bead 4.3's Pub/Sub webhook is what will also carry
-  `"console"`/`"cli"` for an admin-triggered build). This is deliberately NOT
+  always `"build"` here (contract 34's own `deployments/{id}` producers --
+  bead 4.3's `POST /admin/deploys` and its Pub/Sub webhook -- carry the
+  actor's uid or `"external"` instead, for an admin-triggered or
+  bash-triggered build respectively). This is deliberately NOT
   the SAME record contract 30's `build_checks/{sha}` writes -- that answers
   "did this commit's suites pass"; this answers "did THIS TARGET deploy
   successfully on THIS channel".
@@ -2799,19 +2801,21 @@ build steps.**
   (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
   their target's mutating step).
 
-**31c. The staging-before-demo gate: build-side enforcement of a
-maintainer-approved rule bead 4.4 will also expose as an admin route.**
+**31c. The staging-before-demo gate: build-side enforcement of a rule
+bead 4.3's admin route also enforces.**
 
 - **The rule:** `admin_backend/services/promotion_gate.py::staging_verified(
   target_family, sha, deployments)` -- a demo build for `(family, sha)` is
   allowed only if `deployments` contains a record with `channel="staging"`,
   the SAME `target_family`, the SAME `sha`, `status="success"`. NO recency
   rule: an OLDER verified sha is not invalidated by a NEWER staging deploy of
-  a different sha -- that is the deliberate rollback case. This module is
-  explicitly a PLACEHOLDER bead 4.4 EXTENDS (adding the admin route that also
-  calls it, plus a richer test suite there) rather than a throwaway bead 4.2
-  will replace -- one function, two eventual callers (the build gate here, and
-  the future route), so neither can drift from the other.
+  a different sha -- that is the deliberate rollback case. This module now has
+  TWO real callers, neither able to drift from the other since both call the
+  SAME function: the build-side gate here (`scripts/promotion_gate.py`), and
+  bead 4.3's `POST /admin/deploys` (`admin_backend/routes/deploy_routes.py`,
+  contract 34's own early, friendly 409 for a `GATED_TARGETS` entry). Bead
+  4.4 (bd polyglot-pdf-jub5f) is expected to extend this module further (a
+  richer test suite), not replace it.
 - **Build-side caller:** `scripts/promotion_gate.py` -- a thin CLI that
   queries `deployments` filtered on `target_family`/`sha`, hands the rows to
   `staging_verified()` unchanged, and fails CLOSED (refuses the deploy) on any

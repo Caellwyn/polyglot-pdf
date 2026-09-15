@@ -114,6 +114,7 @@ from admin_backend.services.admin_auth import (
     GoogleServiceActor,
     require_google_oidc,
 )
+from deploy.targets import target_family
 
 _log = structlog.get_logger().bind(module="admin_deploy_webhook")
 
@@ -218,15 +219,6 @@ def _decode_build_message(body: dict) -> dict:
     return build
 
 
-def _target_family(target):
-    if not target:
-        return None
-    for suffix in ("-staging", "-demo"):
-        if target.endswith(suffix):
-            return target[: -len(suffix)]
-    return target
-
-
 def _upsert_deployment(db, build: dict) -> None:
     """Update-by-build_id, or create for a bash-triggered build with no
     pre-existing row. See module docstring's "UPSERT BY build_id" section.
@@ -326,7 +318,7 @@ def _upsert_deployment(db, build: dict) -> None:
         ref = collection.document()
         row = {
             "target": target,
-            "target_family": _target_family(target),
+            "target_family": target_family(target) if target else None,
             "channel": channel,
             "sha": sha,
             "ref": None,

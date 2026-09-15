@@ -114,6 +114,40 @@ Three admin routes and one webhook, all new surface on the admin service:
   unverifiable without a live deploy or are asymmetries the reviewer itself
   rated "very likely intentional."
 
+**Fresh-eyes fix round 2 (outer cross-surface review, GAPS-FOUND(2)):**
+
+- ADOPT -- `admin_backend/routes/deploy_webhook.py` carried a THIRD,
+  unimported, independent copy of the target-family suffix-strip logic
+  (`_target_family()`) that round 1's drift-guard fix did not enumerate or
+  cover -- exactly the CLAUDE.md scar #8 shape (round 1 already found and
+  fixed ONE instance of two independent `target_family` copies with no
+  cross-check; a third copy in the webhook's own module went uncaught).
+  Fixed by importing `deploy.targets.target_family` directly (matching
+  `deploy_routes.py`'s own existing import) and deleting the private
+  duplicate, eliminating the drift risk instead of adding a fourth
+  cross-check test. Mutation-verified: reverting the call site to return the
+  raw (unstripped) target reddens
+  `test_a_bash_triggered_build_with_no_existing_row_is_created_external`
+  (`target_family` assertion).
+- ADOPT -- `docs/technical_guide.md` Surface contract 31c still described
+  `promotion_gate.py` as a bead-4.4 PLACEHOLDER with only a future admin-
+  route caller, even though this same diff's corrected `promotion_gate.py`
+  docstring and new contract 34 both confirm bead 4.3's `POST /admin/deploys`
+  is the module's real second caller today. Rewrote 31c to state the current
+  two-caller reality and point at contract 34; also fixed an adjacent stale
+  future-tense claim in 31a ("bead 4.3's Pub/Sub webhook is what will also
+  carry `console`/`cli`") that named `triggered_by` values contract 34 does
+  not actually use, replacing it with a pointer to contract 34's real
+  producers. Docs-only; no code change.
+- REFUTE (not a finding) -- the reviewer's own report already classified the
+  webhook test file's pre-existing `sys.path.insert` pattern as consistent
+  with the file's established convention, not a new risk; no action needed.
+- Not independently re-litigated: the reviewer's PASS verdicts on exit
+  criteria 1-3, and the deferred `finishTime`/`createTime` type-consistency
+  nit (low-medium confidence, needs a live Cloud Build payload sample to
+  confirm) -- filed to the same deferred-nits bead as round 1's items rather
+  than opening a new one.
+
 Found this worktree with the implementation already substantially drafted
 (a prior session's work, interrupted before a checkpoint commit -- the
 bead's own PAUSED/UNPAUSED history suggests why). Verified it against the
