@@ -206,3 +206,9 @@ form-kits/*/
 # Stray zero-byte artifact from tooling, not produced by any repo script.
 # Swept into a commit twice during bd polyglot-pdf-96um6 by `git add -A`.
 tmpfile
+
+# Key material must never be committed (sprint 23, bd polyglot-pdf-ikdnd).
+*.pem
+*.key
+*service-account*.json
+*credentials*.json

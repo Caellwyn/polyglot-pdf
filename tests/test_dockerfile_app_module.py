@@ -344,3 +344,61 @@ def test_the_cmd_disables_uvicorns_access_log():
         "the Dockerfile CMD does not pass --no-access-log, so uvicorn prints "
         "every /ws/fill?token=... request line into Cloud Logging:"
         + chr(10) + "  " + cmd)
+
+
+def _logical_lines():
+    """Dockerfile instructions with backslash-newline continuations joined,
+    so a multi-line RUN reads as one instruction."""
+    joined = []
+    buf = ""
+    for raw in DOCKERFILE.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        if line.endswith("\\"):
+            buf += line[:-1] + " "
+            continue
+        joined.append((buf + line).strip())
+        buf = ""
+    if buf:
+        joined.append(buf.strip())
+    return joined
+
+
+def test_the_base_image_is_pinned_by_digest():
+    """A tag alone floats; the digest makes a rebuild reproducible and a base
+    bump a deliberate diff (sprint 23 F1, bd polyglot-pdf-ikdnd)."""
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    assert re.search(r"^FROM python:3\.12-slim@sha256:[0-9a-f]{64}$", text, re.M), (
+        "FROM line is not digest-pinned")
+
+
+def test_no_literal_backslash_n_in_any_instruction():
+    """A RUN written with the two characters backslash + n instead of a real
+    continuation reaches the shell as a stray `n` argument and the build
+    fails; the continuation must be backslash + newline."""
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    assert "\\n" not in text, "literal backslash-n in the Dockerfile"
+
+
+def test_the_container_runs_as_a_non_root_user_after_owning_its_log_dirs():
+    """USER must follow every COPY and the chown of the two directories the
+    runtime writes under /app; a writer whose mkdir fails on a root-owned
+    /app would crash the service on start."""
+    lines = _logical_lines()
+    user_idx = [i for i, l in enumerate(lines) if l == "USER app"]
+    assert len(user_idx) == 1, "expected exactly one 'USER app' instruction"
+    copy_idx = [i for i, l in enumerate(lines) if l.startswith("COPY ")]
+    assert copy_idx and max(copy_idx) < user_idx[0], "USER must follow every COPY"
+    run_idx = [i for i, l in enumerate(lines)
+               if l.startswith("RUN ") and "useradd --create-home --uid 10001" in l]
+    assert len(run_idx) == 1, "expected one RUN that creates the app user"
+    run = lines[run_idx[0]]
+    assert run_idx[0] < user_idx[0], "the user must be created before USER"
+    assert "mkdir -p /app/backend/logs /app/logs/confirmations" in run
+    assert "chown -R app:app /app" in run
+    assert run.index("mkdir") < run.index("chown")
+
+
+def test_the_image_installs_the_runtime_requirements_only():
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    assert "COPY backend/requirements.txt ." in text
+    assert "requirements-dev" not in text

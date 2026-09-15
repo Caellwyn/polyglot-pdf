@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-b6943: a FOURTH vitest suite, `admin-console/`, wired into `.github/workflows/ci.yml` the same way as `frontend`/`schema-editor` -- `npm ci` + `tsc --noEmit` + `vitest run`.) (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
+*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit), pinned by `tests/test_ci_security_job.py`.)*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -94,8 +94,9 @@ The backend suite is organized **by directory**, not by marker:
 
 - **Async tests** use `pytest-asyncio` with an **explicit** `@pytest.mark.asyncio`
   on each coroutine test (there is no `asyncio_mode = auto`; the marker is
-  required). Dep pins: `pytest==7.4.3`, `pytest-asyncio==0.21.1`, `httpx==0.28.1`
-  (`backend/requirements.txt`).
+  required). Dep pins: `pytest==7.4.3`, `pytest-asyncio==0.21.1` in
+  `backend/requirements-dev.txt` (test tooling only -- never installed into the
+  image) and `httpx==0.28.1` in `backend/requirements.txt`.
 - **The `external` marker** gates tests that hit the **real Gemini Live API** --
   currently `backend/tests/contract/test_live_ai_gemini_integration.py` and
   `test_tool_contracts.py` (both set a module-level
@@ -296,7 +297,11 @@ Coverage artifacts (`.coverage`, `coverage/`) are gitignored.
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
 backend pytest suite (`-m "not external"`) plus all three vitest suites --
 `frontend`, `schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each
-preceded by its own `tsc --noEmit` typecheck step, on every PR.
+preceded by its own `tsc --noEmit` typecheck step, on every PR. A fifth job,
+`security` (bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
+audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
+against `.secrets.baseline`, and bandit; every one of its steps is
+`continue-on-error`, so it reports and never gates either.
 It is **not** a required status check: the merge gate is the closeout merge
 decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
 merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge

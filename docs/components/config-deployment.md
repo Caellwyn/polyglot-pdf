@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-o4f7c: `scripts/verify_service_reachable.py` resolves the gcloud binary through `shutil.which` and turns a spawn failure into the gate's warn-and-continue path instead of a traceback -- see "The reachability gate is ONE module". No env var, deploy step or config key changed.) (bd polyglot-pdf-p4ale, E4.5: `scripts/setup-cloud-build.sh` now provisions `polyglot-cloudbuild-sa` itself -- creates the SA, grants it `run.admin`/`firebasehosting.admin`/`firebaserules.admin`/`artifactregistry.writer`/`logging.logWriter`/`datastore.user` project-wide and `storage.objectAdmin` on the form-kits bucket only, then grants it resource-scoped actAs (`roles/iam.serviceAccountUser`) on BOTH `polyglot-backend-sa` and `admin-backend-sa`, and grants the Pub/Sub service agent `roles/iam.serviceAccountTokenCreator` for bead 4.3's future build-status webhook -- so every trigger's `--service-account` now names an identity this same script actually provisions and roles, pinned by the new `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py` and `tests/test_setup_cloud_build_script.py`. `scripts/setup-admin-service.sh` gains the mirror-image grant -- `admin-backend-sa` actAs on `polyglot-cloudbuild-sa` ONLY, resource-scoped -- so the admin service's future trigger route can submit a build that runs as the build identity; `roles/run.admin` and `roles/firebasehosting.admin` are deleted (not deferred) from that script's DEFERRED_ROLES because the admin service never deploys anything itself.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -489,7 +489,8 @@ the gate crying wolf. The counts are pinned per script.
   **REPLACES the service's entire secret block** — gcloud's own help says "All
   existing secrets will be removed first" — so a channel must list every
   binding it wants to survive, not just the one it is adding. The
-  container (the ROOT `Dockerfile`, `python:3.12-slim`) runs
+  container (the ROOT `Dockerfile`: `python:3.12-slim` pinned by digest, runtime
+  requirements only, running as the non-root `app` user) runs
   `uvicorn ${APP_MODULE:-backend.main:app}` on `$PORT` (8080) -- see
   **One image, two services** below for why the module is a runtime variable.
   `--timeout=3600` (the Cloud Run maximum)
