@@ -126,7 +126,8 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
     // its placeholder option, or a number/text input cleared back to empty.
     if (draft === undefined || draft === UNSET) return;
 
-    const kind = controlKind(config?.schema[key]);
+    const schema = config?.schema?.[key];
+    const kind = controlKind(schema);
     let value: unknown = draft;
     if (kind === 'bool') {
       value = draft === 'true';
@@ -137,6 +138,18 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
       // rather than letting JSON.stringify silently turn NaN into `null`
       // and look like a deliberate clear.
       if (Number.isNaN(parsed)) {
+        setError(`'${draft}' is not a valid value for ${key}`);
+        return;
+      }
+      // An 'int' key's `step="1"` is a validation HINT only (jsdom/browsers
+      // never block submission on stepMismatch outside a <form>'s own submit
+      // event, and Save is a plain button) -- so a decimal typed into an int
+      // control must be refused HERE, not left to reach the server. Without
+      // this, runtime_config.coerce_value's `int(2.5)` truncates it to `2`
+      // silently (and `int(0.9)` truncates CREDIT_LOW_THRESHOLD to `0`,
+      // which coerce_value treats as a legitimate value, not a rejection) --
+      // turning what was a loud 400 on origin/dev into a silent mis-write.
+      if (schema?.type === 'int' && !Number.isInteger(parsed)) {
         setError(`'${draft}' is not a valid value for ${key}`);
         return;
       }
@@ -192,7 +205,11 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
       {config && (
         <div className="mt-4 space-y-3">
           {config.known_keys.map((key) => {
-            const schema = config.schema[key];
+            // Optional chain guards an admin backend older than this console
+            // (deploy skew between deploy-admin-console.sh and deploy-admin.sh):
+            // GET /admin/config/{channel} with no `schema` key at all must
+            // degrade every row to a plain text input, not throw.
+            const schema = config.schema?.[key];
             const kind = controlKind(schema);
             const draft = drafts[key] ?? UNSET;
             return (

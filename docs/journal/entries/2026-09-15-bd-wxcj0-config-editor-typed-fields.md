@@ -179,6 +179,64 @@ the tree from the fresh-eyes fix round above. Breakdown:
   the tree was already green (no behavior changed): unchanged from the
   fresh-eyes round's counts above.
 
+## Cross-surface review round 2 (2026-09-15)
+
+A third review pass (Opus cross-surface) came back GAPS-FOUND(2) against the
+tree from round 2 above. Breakdown:
+
+- **Adopted (blocker) -- `config.schema` indexed without an optional chain
+  white-screens the tab on a deploy-skewed admin backend.**
+  `ConfigEditorPage.tsx:129` (`controlKind(config?.schema[key])`) and `:195`
+  (`const schema = config.schema[key];`) both indexed `schema` directly;
+  against an admin backend still on `origin/dev` (no `schema` field in the
+  GET response at all), `config.schema` is `undefined` and indexing it
+  throws `TypeError`, killing the whole Runtime config tab instead of
+  degrading to text inputs the way `controlKind()`'s own fallback promises.
+  Reachable in practice because the console and the admin service ship from
+  two independent deploy scripts. Fixed both sites with `config?.schema?.[key]`
+  / `config.schema?.[key]`. Pinned by a new Vitest case ("degrades to text
+  inputs when the admin backend response has no schema field at all (deploy
+  skew)") using a fixture with no `schema` key; mutation-verified by
+  reverting to the un-guarded index and confirming the exact reported
+  `TypeError` reproduces, then restoring the fix.
+- **Adopted (blocker) -- typing a decimal into an int key silently truncated
+  server-side instead of being refused.** This is the SAME underlying defect
+  as `polyglot-pdf-w6kq1` (filed and deferred in round 1 above), but this
+  round's reviewer scored it a blocker rather than a deferral: `step="1"` on
+  the int number input is a validation HINT only (no `<form>`, Save is a
+  plain button, so `stepMismatch` is never consulted), so `2.5` reached
+  `setChannelConfigKey` as a JS number and `runtime_config.coerce_value`'s
+  `int(2.5)` truncated it to `2` silently -- `int(0.9)` on
+  `CREDIT_LOW_THRESHOLD` truncates to `0`, which `coerce_value` treats as a
+  legitimate value, silently disabling the low-balance warning. Fixed this
+  round instead of leaving it deferred: `handleSave`'s number branch now
+  rejects a non-integer `parsed` value for an int-typed key via the same
+  `setError` path as the existing NaN guard, before the PUT ever fires.
+  Pinned by a new Vitest case ("typing a decimal into an int key is refused
+  client-side, not silently truncated"); mutation-verified by removing the
+  new check and confirming `setChannelConfigKey` WAS called with `2.5` (test
+  reddens), then restoring. Bead `polyglot-pdf-w6kq1` closed as fixed by this
+  commit rather than left open, since its exit criterion (a fractional value
+  submitted for an int-typed key is rejected, not silently truncated) is now
+  met.
+- **Deferred (nit, filed as a bead) -- Save on an unset control still gives
+  no feedback.** Same UNSET-guard silent-no-op already recorded as a nit in
+  `polyglot-pdf-djnr3` (round 2 above). This round's reviewer independently
+  filed a second bead for the identical finding, `polyglot-pdf-mcark`
+  (same file, same lines, same suggested fix) -- left both open rather than
+  deduping, since resolving a bead-tracker duplicate is outside this fix
+  round's mandate.
+- **Deferred (nit, filed as a bead) -- `KEY_TYPES`' "ONE place" comment vs.
+  the module docstring's restated prose list.** Filed as
+  `polyglot-pdf-q1s8y` by the reviewer; not fixed here (both are correct
+  today, this is a wording/documentation nit).
+
+Re-ran the full backend and root suites after both blocker fixes: backend
+3752 passed / 195 skipped / 3 deselected (unchanged from rounds 1-2 --
+confirms no regression), root tests 1653 passed / 92 skipped. Admin-console
+vitest: 154 passed (13 in `ConfigEditorPage.test.tsx`, up from 11), `tsc
+--noEmit` clean.
+
 ## Files touched
 
 - `backend/services/runtime_config.py` -- `KEY_TYPES` dict + `config_schema()`.
@@ -186,7 +244,7 @@ the tree from the fresh-eyes fix round above. Breakdown:
 - `admin_backend/routes/config_routes.py` -- GET response gains `schema`.
 - `admin_backend/tests/unit/test_config_routes.py` -- schema-matches-RUNTIME_CONFIG_KEYS test + a KEY_TYPES-drops-a-key mutation test.
 - `admin-console/src/utils/adminApi.ts` -- `ConfigKeySchema` type, `ChannelConfig.schema` field.
-- `admin-console/src/components/ConfigEditorPage.tsx` -- schema-driven bool-select/number-input/text rendering, typed PUT values; fresh-eyes round adds `isKnownConfigKeyType()` wiring `controlKind()` to `CONFIG_KEY_TYPES`.
-- `admin-console/src/components/ConfigEditorPage.test.tsx` -- bool/int/float/unknown-type rendering tests, typed-value-sent tests, unset-select-does-not-save test.
+- `admin-console/src/components/ConfigEditorPage.tsx` -- schema-driven bool-select/number-input/text rendering, typed PUT values; fresh-eyes round adds `isKnownConfigKeyType()` wiring `controlKind()` to `CONFIG_KEY_TYPES`; round-2 cross-surface fix round adds optional-chained `schema` access (both read sites) and a client-side integer check on int-typed keys.
+- `admin-console/src/components/ConfigEditorPage.test.tsx` -- bool/int/float/unknown-type rendering tests, typed-value-sent tests, unset-select-does-not-save test; round-2 cross-surface fix round adds a missing-`schema`-field degrade test and a decimal-into-int-key rejection test.
 - `docs/components/admin-service.md` -- dated entry + Runtime config bullet update.
 - `docs/technical_guide.md` -- fresh-eyes round: Surface contract 17 producer-shape prose and the `/admin/config/{channel}` route-table row now name the `schema` field.

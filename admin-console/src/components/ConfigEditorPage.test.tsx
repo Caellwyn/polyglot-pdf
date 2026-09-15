@@ -273,6 +273,56 @@ describe('ConfigEditorPage', () => {
     expect(typeof sentValue).toBe('number');
   });
 
+  // Fresh-eyes finding on bd polyglot-pdf-wxcj0: an admin backend older than
+  // this console (deploy-admin.sh not yet redeployed, while deploy-admin-
+  // console.sh already shipped this page) returns GET /admin/config with NO
+  // `schema` key at all. The page must degrade every row to a plain text
+  // input, matching controlKind()'s own documented fallback -- not throw
+  // reading `undefined[key]` and white-screen the tab.
+  it('degrades to text inputs when the admin backend response has no schema field at all (deploy skew)', async () => {
+    const noSchemaConfig = {
+      channel: 'staging',
+      values: { LINK_MINTING_ENABLED: false, LINK_FIRM_CAP: 30 },
+      known_keys: ['LINK_MINTING_ENABLED', 'LINK_FIRM_CAP'],
+      unknown_keys: [],
+      // No `schema` key -- the shape GET /admin/config/{channel} had before
+      // this bead.
+    };
+    vi.mocked(getChannelConfig).mockResolvedValue(noSchemaConfig as unknown as Awaited<ReturnType<typeof getChannelConfig>>);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const boolControl = await screen.findByLabelText('LINK_MINTING_ENABLED');
+    expect(boolControl.tagName).toBe('INPUT');
+    expect(boolControl).not.toHaveAttribute('type', 'number');
+    expect(boolControl).toHaveValue('false');
+
+    const intControl = screen.getByLabelText('LINK_FIRM_CAP');
+    expect(intControl.tagName).toBe('INPUT');
+    expect(intControl).not.toHaveAttribute('type', 'number');
+    expect(intControl).toHaveValue('30');
+  });
+
+  // Fresh-eyes finding on bd polyglot-pdf-wxcj0: `step="1"` on an int-typed
+  // number input is a validation HINT only -- jsdom (and a real browser
+  // outside a <form>'s submit event) never blocks entry of a decimal, and
+  // Save is a plain button, not a submit. Without a client-side integer
+  // check, `2.5` reaches setChannelConfigKey as a JS number and the server's
+  // coerce_value (`int(2.5)`) truncates it to `2` SILENTLY -- turning what
+  // was a loud 400 refusal on origin/dev into a silent mis-write.
+  it('typing a decimal into an int key is refused client-side, not silently truncated', async () => {
+    vi.mocked(getChannelConfig).mockResolvedValue(TYPED_CONFIG);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const intControl = await screen.findByLabelText('LINK_FIRM_CAP');
+    fireEvent.change(intControl, { target: { value: '2.5' } });
+
+    const row = intControl.closest('div')!.parentElement!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText(/'2.5' is not a valid value for LINK_FIRM_CAP/)).toBeInTheDocument();
+    expect(setChannelConfigKey).not.toHaveBeenCalled();
+  });
+
   it('a bool select left on "unset -- use the fallback" does not PUT on Save', async () => {
     const unsetConfig = {
       channel: 'staging',
