@@ -142,6 +142,43 @@ both fixes: backend 3752 passed / 195 skipped / 3 deselected, admin_backend
 587 passed, root tests 1653 passed / 92 skipped, admin-console vitest 152
 passed (11 in `ConfigEditorPage.test.tsx`), `tsc --noEmit` clean.
 
+## Cross-surface review round (2026-09-15)
+
+A second review pass (Opus cross-surface) came back GAPS-FOUND(1) against
+the tree from the fresh-eyes fix round above. Breakdown:
+
+- **Deferred (filed as a bead, not fixed here) -- pre-existing int
+  truncation.** `runtime_config._coerce()`'s `int(raw)` silently truncates a
+  fractional value (e.g. `45.7` -> `45`) for an int-typed key instead of
+  rejecting it. The reviewer confirmed this line is byte-identical on
+  `origin/dev` -- this bead did not introduce the truncation, it only made
+  it easier to trigger by hand by replacing a plain text box with a number
+  spinner that invites fractional entry for an int field. Per the
+  pre-existing/out-of-scope routing rule, filed as its own bug bead,
+  `polyglot-pdf-w6kq1` (bug(runtime-config): int-typed config keys silently
+  truncate a fractional value instead of rejecting it), rather than treated
+  as a gap in this diff.
+- **Deferred (nit, filed as a bead, not fixed here) -- empty-draft-Save
+  silent no-op.** `handleSave`'s new UNSET guard
+  (`if (draft === undefined || draft === UNSET) return;`) silently no-ops
+  instead of surfacing any feedback when Save is clicked on an UNSET draft.
+  The reviewer classified this as a nit rather than a rubric-fail or
+  blocker: it is currently unreachable (all five `RUNTIME_CONFIG_KEYS` are
+  typed bool/int/float, so no live path clicks Save on a lingering UNSET
+  draft today), and it does not violate either of the bead's two exit
+  criteria. It IS inside this bead's own newly-touched `handleSave` code
+  (not a separate pre-existing defect), so it was recorded as in-scope
+  commentary but not filed as a standalone bead by the reviewer. Bundled
+  into a new nits bead, `polyglot-pdf-djnr3` (chore(nits): deferred review
+  nits from polyglot-pdf-wxcj0), filed during this fix round since the
+  reviewer had not filed one itself.
+- **No code changes this round.** Both findings route to beads rather than
+  an inline fix -- one because it is a pre-existing, out-of-scope defect,
+  the other because it is a nit with zero current reachability. Re-ran the
+  full backend and admin-console suites after filing both beads to confirm
+  the tree was already green (no behavior changed): unchanged from the
+  fresh-eyes round's counts above.
+
 ## Files touched
 
 - `backend/services/runtime_config.py` -- `KEY_TYPES` dict + `config_schema()`.
