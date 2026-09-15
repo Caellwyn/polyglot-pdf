@@ -11,9 +11,15 @@
  * mid-session AuthError/ForbiddenError routes to onAuthExpired instead of
  * this page's own generic error banner (fresh-eyes finding: the gate's
  * refused-screen machinery existed but nothing ever called it).
+ *
+ * SCHEMA-DRIVEN CONTROLS (bd polyglot-pdf-wxcj0): a `bool` key renders a
+ * <select> whose change sends a real boolean (not the string "true"); an
+ * `int`/`float` key renders a number input and sends a JS number; a key
+ * absent from `schema` (or of an unrecognized type) falls back to the
+ * original text input, unchanged from before this bead.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ConfigEditorPage } from './ConfigEditorPage';
 import { AuthError, ForbiddenError, getChannelConfig, setChannelConfigKey } from '../utils/adminApi';
 
@@ -23,11 +29,38 @@ vi.mock('../utils/adminApi', async (importOriginal) => {
   return { ...actual, getChannelConfig: vi.fn(), setChannelConfigKey: vi.fn() };
 });
 
+const STAGING_SCHEMA = {
+  LINK_MINTING_ENABLED: { type: 'bool', default: false },
+};
+
 const STAGING_CONFIG = {
   channel: 'staging',
   values: { LINK_MINTING_ENABLED: false, STALE_KEY: 'orphan' },
   known_keys: ['LINK_MINTING_ENABLED'],
   unknown_keys: ['STALE_KEY'],
+  schema: STAGING_SCHEMA,
+};
+
+// One key of each type the console knows how to render, plus one of an
+// unrecognized type -- feeds every branch of controlKind() in one fixture.
+const TYPED_CONFIG = {
+  channel: 'staging',
+  values: {
+    LINK_MINTING_ENABLED: true,
+    LINK_FIRM_CAP: 30,
+    LINK_COST_CEILING_USD: 4.5,
+    SOME_STRING_KEY: 'hello',
+  },
+  known_keys: [
+    'LINK_MINTING_ENABLED', 'LINK_FIRM_CAP', 'LINK_COST_CEILING_USD', 'SOME_STRING_KEY',
+  ],
+  unknown_keys: [],
+  schema: {
+    LINK_MINTING_ENABLED: { type: 'bool', default: false },
+    LINK_FIRM_CAP: { type: 'int', default: 30 },
+    LINK_COST_CEILING_USD: { type: 'float', default: 10.0 },
+    SOME_STRING_KEY: { type: 'mystery', default: null },
+  },
 };
 
 const noAuthExpired = () => false;
@@ -58,6 +91,7 @@ describe('ConfigEditorPage', () => {
       values: { LINK_MINTING_ENABLED: true },
       known_keys: ['LINK_MINTING_ENABLED'],
       unknown_keys: [],
+      schema: STAGING_SCHEMA,
     });
     fireEvent.change(screen.getByLabelText('Channel'), { target: { value: 'demo' } });
 
@@ -85,12 +119,15 @@ describe('ConfigEditorPage', () => {
       values: { LINK_MINTING_ENABLED: true, STALE_KEY: 'orphan' },
       known_keys: ['LINK_MINTING_ENABLED'],
       unknown_keys: ['STALE_KEY'],
+      schema: STAGING_SCHEMA,
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
+    // LINK_MINTING_ENABLED is a bool key -- the select's "true" option sends
+    // the real boolean `true`, never the string "true".
     await waitFor(() =>
-      expect(setChannelConfigKey).toHaveBeenCalledWith('staging', 'LINK_MINTING_ENABLED', 'true'));
+      expect(setChannelConfigKey).toHaveBeenCalledWith('staging', 'LINK_MINTING_ENABLED', true));
     // Exactly one PUT -- never a whole-doc write.
     expect(setChannelConfigKey).toHaveBeenCalledTimes(1);
 
@@ -105,7 +142,7 @@ describe('ConfigEditorPage', () => {
     render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
 
     const input = await screen.findByLabelText('LINK_MINTING_ENABLED');
-    fireEvent.change(input, { target: { value: 'nope' } });
+    fireEvent.change(input, { target: { value: 'false' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText(/not a valid value/)).toBeInTheDocument();
@@ -138,12 +175,122 @@ describe('ConfigEditorPage', () => {
     render(<ConfigEditorPage onAuthExpired={onAuthExpired} />);
 
     const input = await screen.findByLabelText('LINK_MINTING_ENABLED');
-    fireEvent.change(input, { target: { value: 'true' } });
+    fireEvent.change(input, { target: { value: 'false' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onAuthExpired).toHaveBeenCalledTimes(1));
     const [[passedErr]] = onAuthExpired.mock.calls;
     expect(passedErr).toBeInstanceOf(AuthError);
     expect(screen.queryByText(/Could not save/)).not.toBeInTheDocument();
+  });
+
+  // --------------------------------------------------------------------
+  // Schema-driven controls (bd polyglot-pdf-wxcj0).
+  // --------------------------------------------------------------------
+
+  it('renders a bool key as a select, an int/float key as a number input, and an unknown type as text', async () => {
+    vi.mocked(getChannelConfig).mockResolvedValue(TYPED_CONFIG);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const boolControl = await screen.findByLabelText('LINK_MINTING_ENABLED');
+    expect(boolControl.tagName).toBe('SELECT');
+    expect(boolControl).toHaveValue('true');
+
+    const intControl = screen.getByLabelText('LINK_FIRM_CAP');
+    expect(intControl.tagName).toBe('INPUT');
+    expect(intControl).toHaveAttribute('type', 'number');
+    expect(intControl).toHaveAttribute('step', '1');
+    expect(intControl).toHaveValue(30);
+
+    const floatControl = screen.getByLabelText('LINK_COST_CEILING_USD');
+    expect(floatControl.tagName).toBe('INPUT');
+    expect(floatControl).toHaveAttribute('type', 'number');
+    expect(floatControl).toHaveAttribute('step', 'any');
+    expect(floatControl).toHaveValue(4.5);
+
+    // A type this console doesn't recognize falls back to plain text --
+    // never a crash, never a number input coercing a non-numeric value.
+    const textControl = screen.getByLabelText('SOME_STRING_KEY');
+    expect(textControl.tagName).toBe('INPUT');
+    expect(textControl).not.toHaveAttribute('type', 'number');
+    expect(textControl).toHaveValue('hello');
+  });
+
+  it('a bool select change sends a real boolean, not the string "true"/"false"', async () => {
+    vi.mocked(getChannelConfig).mockResolvedValue(TYPED_CONFIG);
+    vi.mocked(setChannelConfigKey).mockResolvedValue({
+      channel: 'staging', key: 'LINK_MINTING_ENABLED', before: true, after: false, request_id: 'r1',
+    });
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const boolControl = await screen.findByLabelText('LINK_MINTING_ENABLED');
+    fireEvent.change(boolControl, { target: { value: 'false' } });
+
+    const row = boolControl.closest('div')!.parentElement!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(setChannelConfigKey).toHaveBeenCalledWith(
+      'staging', 'LINK_MINTING_ENABLED', false));
+    const [, , sentValue] = vi.mocked(setChannelConfigKey).mock.calls[0];
+    expect(typeof sentValue).toBe('boolean');
+  });
+
+  it('an int number-input change sends a JS number, not a string', async () => {
+    vi.mocked(getChannelConfig).mockResolvedValue(TYPED_CONFIG);
+    vi.mocked(setChannelConfigKey).mockResolvedValue({
+      channel: 'staging', key: 'LINK_FIRM_CAP', before: 30, after: 45, request_id: 'r2',
+    });
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const intControl = await screen.findByLabelText('LINK_FIRM_CAP');
+    fireEvent.change(intControl, { target: { value: '45' } });
+
+    const row = intControl.closest('div')!.parentElement!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(setChannelConfigKey).toHaveBeenCalledWith(
+      'staging', 'LINK_FIRM_CAP', 45));
+    const [, , sentValue] = vi.mocked(setChannelConfigKey).mock.calls[0];
+    expect(typeof sentValue).toBe('number');
+  });
+
+  it('a float number-input change sends a JS number', async () => {
+    vi.mocked(getChannelConfig).mockResolvedValue(TYPED_CONFIG);
+    vi.mocked(setChannelConfigKey).mockResolvedValue({
+      channel: 'staging', key: 'LINK_COST_CEILING_USD', before: 4.5, after: 7.25, request_id: 'r3',
+    });
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const floatControl = await screen.findByLabelText('LINK_COST_CEILING_USD');
+    fireEvent.change(floatControl, { target: { value: '7.25' } });
+
+    const row = floatControl.closest('div')!.parentElement!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(setChannelConfigKey).toHaveBeenCalledWith(
+      'staging', 'LINK_COST_CEILING_USD', 7.25));
+    const [, , sentValue] = vi.mocked(setChannelConfigKey).mock.calls[0];
+    expect(typeof sentValue).toBe('number');
+  });
+
+  it('a bool select left on "unset -- use the fallback" does not PUT on Save', async () => {
+    const unsetConfig = {
+      channel: 'staging',
+      values: {},
+      known_keys: ['LINK_MINTING_ENABLED'],
+      unknown_keys: [],
+      schema: STAGING_SCHEMA,
+    };
+    vi.mocked(getChannelConfig).mockResolvedValue(unsetConfig);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const boolControl = await screen.findByLabelText('LINK_MINTING_ENABLED');
+    expect(boolControl).toHaveValue('__unset__');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // No PUT happens: there is nothing to save while the draft is unset.
+    await waitFor(() => expect(getChannelConfig).toHaveBeenCalledTimes(1));
+    expect(setChannelConfigKey).not.toHaveBeenCalled();
   });
 });
