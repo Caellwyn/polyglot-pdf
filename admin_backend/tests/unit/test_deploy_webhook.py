@@ -312,6 +312,78 @@ def test_a_repeated_message_is_idempotent(fake_db, webhook_env, monkeypatch):
     assert rows[0]["status"] == "success"
 
 
+def test_out_of_order_working_after_success_does_not_regress_status(
+        fake_db, webhook_env, monkeypatch):
+    """Pub/Sub's push subscription carries no ordering key (fresh-eyes
+    review of bd polyglot-pdf-tb3kp) -- a SUCCESS message can be followed by
+    a stale WORKING message for the same build_id. The row must stay
+    "success" with its finished_at intact; only log_url may still move."""
+    _authed(monkeypatch)
+    success_build = {
+        "id": "build-reorder-1", "status": "SUCCESS",
+        "logUrl": "https://x/build-reorder-1",
+        "finishTime": 700,
+        "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    }
+    stale_working_build = {
+        "id": "build-reorder-1", "status": "WORKING",
+        "logUrl": "https://x/build-reorder-1",
+        "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    }
+    with TestClient(app) as client:
+        r1 = client.post(
+            "/api/deploys/webhook", json=_push_envelope(success_build),
+            headers={"Authorization": "Bearer tok"})
+        r2 = client.post(
+            "/api/deploys/webhook", json=_push_envelope(stale_working_build),
+            headers={"Authorization": "Bearer tok"})
+    assert r1.status_code == 204
+    assert r2.status_code == 204
+
+    rows = [v for k, v in fake_db.docs.items() if k[0] == "deployments"]
+    assert len(rows) == 1, "the stale message must update, not duplicate"
+    row = rows[0]
+    assert row["status"] == "success", (
+        "a stale WORKING message regressed a terminal SUCCESS status")
+    assert row["finished_at"] == 700, (
+        "a stale WORKING message cleared finished_at on a terminal row")
+
+
+def test_a_second_terminal_status_still_applies_over_the_first(
+        fake_db, webhook_env, monkeypatch):
+    """The regression guard is one-directional: it drops a NON-terminal
+    message arriving after a terminal one, but a second terminal message
+    (e.g. Cloud Build's own FAILURE after a redelivered SUCCESS is not a
+    real transition, but this pins that the guard does not ALSO block
+    terminal-to-terminal writes, which is not the guarded case)."""
+    _authed(monkeypatch)
+    working_build = {
+        "id": "build-reorder-2", "status": "WORKING",
+        "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    }
+    success_build = {
+        "id": "build-reorder-2", "status": "SUCCESS",
+        "logUrl": "https://x/build-reorder-2",
+        "finishTime": 800,
+        "substitutions": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    }
+    with TestClient(app) as client:
+        r1 = client.post(
+            "/api/deploys/webhook", json=_push_envelope(working_build),
+            headers={"Authorization": "Bearer tok"})
+        r2 = client.post(
+            "/api/deploys/webhook", json=_push_envelope(success_build),
+            headers={"Authorization": "Bearer tok"})
+    assert r1.status_code == 204
+    assert r2.status_code == 204
+
+    rows = [v for k, v in fake_db.docs.items() if k[0] == "deployments"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["status"] == "success"
+    assert row["finished_at"] == 800
+
+
 def test_wrong_caller_email_is_403_no_token_is_401(
         fake_db, webhook_env, monkeypatch):
     build = {"id": "b1", "status": "SUCCESS", "substitutions": {}}

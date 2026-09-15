@@ -80,6 +80,40 @@ Three admin routes and one webhook, all new surface on the admin service:
   module was already a working predicate from bead ywxoh, and this bead is
   its second real caller (the route's early, friendly 409), not its author.
 
+
+
+**Fresh-eyes fix round (cross-surface review, GAPS-FOUND(2)):**
+
+- ADOPT -- `deploy/targets.py`'s module docstring cited a drift-guard test
+  (`test_target_family_matches_record_deployment_helper`) against
+  `scripts/record_deployment.py`'s own `target_family()` copy that did not
+  exist -- the claimed safety net was fictional. Wrote the real cross-check
+  test in `tests/test_cloudbuild_yaml.py` (enumerates every `TARGETS` entry,
+  asserts both copies agree) plus a new dedicated `tests/test_deploy_targets.py`
+  covering the module's own invariants directly (every target has a channel,
+  no orphan `CHANNEL_BY_TARGET` keys, no duplicates, `GATED_TARGETS` is
+  exactly the three the plan names, `landing` stays excluded). Mutation-
+  verified all three shapes of drift (a suffix dropped, a `GATED_TARGETS`
+  entry dropped, a `CHANNEL_BY_TARGET` entry dropped) -- each goes red.
+- ADOPT -- `admin_backend/routes/deploy_webhook.py`'s upsert-by-`build_id`
+  had no defense against Pub/Sub's documented lack of delivery ORDER
+  guarantee (only against duplicate delivery): a stale `WORKING` message
+  arriving after a `SUCCESS` one would regress a terminal row back to
+  "still running" with `finished_at` cleared. Added a one-directional guard
+  (never overwrite `status`/`finished_at` on an existing TERMINAL row with a
+  NON-terminal incoming status; `log_url` still refreshes; a second terminal
+  message still applies) plus two new tests
+  (`test_out_of_order_working_after_success_does_not_regress_status`,
+  `test_a_second_terminal_status_still_applies_over_the_first`).
+  Mutation-verified: disabling the guard reddens the first test.
+- DEFER -- two low-confidence nits (whether `cloud_build.py::run_target`'s
+  `trigger_id` shape is the live SDK's expected type -- undetectable
+  offline; and the early promotion-gate Firestore query's lack of `.limit()`
+  next to the sibling list route's explicit cap) filed as bd
+  polyglot-pdf-0ovpl rather than fixed here, since both are genuinely
+  unverifiable without a live deploy or are asymmetries the reviewer itself
+  rated "very likely intentional."
+
 Found this worktree with the implementation already substantially drafted
 (a prior session's work, interrupted before a checkpoint commit -- the
 bead's own PAUSED/UNPAUSED history suggests why). Verified it against the
@@ -120,7 +154,8 @@ bearing, not vacuous. No new generalizable lesson beyond what CLAUDE.md's
 - admin_backend/services/promotion_gate.py (docstring correction only)
 - admin_backend/main.py (registers the two new routers)
 - admin_backend/tests/unit/test_deploy_routes.py (new)
-- admin_backend/tests/unit/test_deploy_webhook.py (new)
+- admin_backend/tests/unit/test_deploy_webhook.py (new; extended in the
+  fresh-eyes fix round with the out-of-order-delivery regression tests)
 - admin_backend/tests/unit/test_admin_route_auth.py (four new routes pinned)
 - admin_backend/tests/unit/test_admin_audit_coverage.py (two new mutation
   kinds pinned)
@@ -129,5 +164,9 @@ bearing, not vacuous. No new generalizable lesson beyond what CLAUDE.md's
 - backend/requirements.txt (google-cloud-build==3.31.3)
 - scripts/setup-admin-service.sh (Pub/Sub topic + push-caller SA)
 - tests/test_setup_admin_service_pubsub.py (new)
+- tests/test_deploy_targets.py (new, fresh-eyes fix round)
+- tests/test_cloudbuild_yaml.py (real drift-guard test added, fresh-eyes fix round)
+- admin_backend/routes/deploy_webhook.py (out-of-order-delivery guard added,
+  fresh-eyes fix round)
 - docs/components/admin-service.md
 - docs/technical_guide.md

@@ -1627,6 +1627,37 @@ def test_record_deployment_module_exists_and_derives_target_family():
     assert record_deployment.target_family("admin-service") == "admin-service"
 
 
+def test_target_family_matches_record_deployment_helper():
+    """deploy/targets.py::target_family() is a deliberate INDEPENDENT copy
+    of scripts/record_deployment.py::target_family() (bd polyglot-pdf-tb3kp
+    -- see deploy/targets.py's own module docstring for why the two are not
+    a shared import: one is a build-time script, the other a route-time
+    constant module). This test is the drift guard that docstring names --
+    it asserts the two never disagree, for every TARGETS entry, so a future
+    edit to either copy's suffix list or special-casing fails HERE instead
+    of silently diverging (CLAUDE.md scar #8: enumerate the set, then pin
+    the set)."""
+    import sys as _sys
+
+    _sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import record_deployment  # noqa: E402
+
+    from deploy.targets import TARGETS, target_family
+
+    for target in TARGETS:
+        assert target_family(target) == record_deployment.target_family(
+            target
+        ), (
+            "deploy/targets.py::target_family({0!r}) == {1!r} but "
+            "scripts/record_deployment.py::target_family({0!r}) == {2!r} "
+            "-- the two independent copies have diverged".format(
+                target,
+                target_family(target),
+                record_deployment.target_family(target),
+            )
+        )
+
+
 def test_frontend_build_exports_vite_app_channel(by_id):
     """(Not in the original handoff, caught by cross-surface review of bd
     polyglot-pdf-ywxoh.) frontend/src/shared/config.ts::getAppChannel()

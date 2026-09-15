@@ -59,6 +59,22 @@ which dedups because a refund is an INCREMENT of a balance -- this route
 never adds to anything, it only overwrites a row with the latest state THAT
 MESSAGE describes).
 
+NEVER REGRESS A TERMINAL STATUS. Pub/Sub's push subscription (scripts/
+setup-admin-service.sh) carries no ordering key, so "at least once" also
+means messages for the SAME build can arrive OUT OF ORDER -- a WORKING
+message processed after a SUCCESS one is a real possibility, not a
+hypothetical (fresh-eyes review of bd polyglot-pdf-tb3kp). Once an existing
+row's status is already terminal (success | failure | cancelled), a message
+carrying a NON-terminal status (queued | working) is dropped rather than
+applied: the row's status and finished_at are left as they are, only
+log_url is refreshed (harmless either way), and the drop is logged. A
+terminal message always applies regardless of the existing status (a
+SUCCESS overwriting a stale WORKING is exactly the update this route
+exists to make), and a terminal message overwriting a DIFFERENT terminal
+status also applies unconditionally -- Cloud Build does not itself emit a
+build's terminal status twice with two different values, so there is no
+"more terminal" ordering to adjudicate there.
+
 STATUS MAPPING. Cloud Build's Build.Status enum has more values than this
 collection's own five-way `status` field (queued | working | success |
 failure | cancelled, deploy_routes.py's own STATUS_* constants) needs --
@@ -262,21 +278,45 @@ def _upsert_deployment(db, build: dict) -> None:
         if existing:
             ref = existing[0].reference
             before = existing[0].to_dict() or {}
-            tx.update(ref, update_fields)
+            before_status = before.get("status")
+
+            # NEVER REGRESS A TERMINAL STATUS -- see module docstring. An
+            # out-of-order non-terminal message after a terminal one updates
+            # only log_url, leaving status/finished_at untouched.
+            applied_fields = dict(update_fields)
+            regressive = (
+                before_status in _TERMINAL_STATUSES
+                and status not in _TERMINAL_STATUSES
+            )
+            if regressive:
+                applied_fields.pop("status", None)
+                applied_fields.pop("finished_at", None)
+
+            tx.update(ref, applied_fields)
             audit_log.record_in_transaction(
                 tx, db,
                 actor_uid=WEBHOOK_ACTOR, actor_email=None,
                 action=ACTION_DEPLOY_STATUS_UPDATE,
                 target="{}/{}".format(COLLECTION, ref.id),
-                before={"status": before.get("status")},
-                after={"status": status, "build_id": build_id},
+                before={"status": before_status},
+                after={
+                    "status": before_status if regressive else status,
+                    "build_id": build_id,
+                },
                 channel=before.get("channel"),
                 request_id=request_id,
             )
-            _log.info(
-                "admin_deploy_webhook_updated", build_id=build_id,
-                status=status, raw_status=raw_status,
-            )
+            if regressive:
+                _log.warning(
+                    "admin_deploy_webhook_out_of_order_dropped",
+                    build_id=build_id, before_status=before_status,
+                    incoming_status=status, raw_status=raw_status,
+                )
+            else:
+                _log.info(
+                    "admin_deploy_webhook_updated", build_id=build_id,
+                    status=status, raw_status=raw_status,
+                )
             return
 
         # A BASH-TRIGGERED BUILD: no console row exists. Create one with
