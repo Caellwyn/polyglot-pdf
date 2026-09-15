@@ -2,6 +2,31 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-15 (bd `polyglot-pdf-hnlj3`: maintainer decision
+2026-09-15, "credits roll over -- no real reason not to."
+`backend/services/plans.py`'s `DEFAULT_PLAN.rollover` flips from False
+to True -- a firm created or backfilled today now ACCUMULATES its
+monthly credit allotment by default rather than being topped up TO a
+cap; the one existing firm, staging-mock, was switched to rollover by
+hand the same day, ahead of this code change. `rollover: False` is
+still a valid, settable value on the plan editor (`PATCH
+/admin/firms/{firm_id}/plan`) for a firm that should keep the
+use-it-or-lose-it cap behavior -- only the DEFAULT changed. The
+per-firm top-up logic inside `POST /admin/credits/monthly-topup`
+(`admin_backend/routes/credit_routes.py`) is factored out of its
+Scheduler-driven loop into its own function, `topup_firm(db, firm_id,
+firm, *, period, actor=None)`, with NO behavior change beyond the
+extraction -- this is what lets Epic 5's later Stripe webhook
+(invoice.paid / subscription renewal) call the same per-firm helper
+for one firm the moment its payment clears, instead of only running
+once a month; the route's own docstring now states the Cloud
+Scheduler trigger is INTERIM pending that webhook. Since rollover is
+now the default, `technical_guide.md`'s Surface contract 33 gains a
+note that "cap" describes only the non-default `rollover: False`
+case; the maintainer's own quoted 2026-09-14 words ("35 credits per
+month cap as a starting place") are left as a direct quotation, not
+edited.)*
+
 *Last updated: 2026-09-15. See [2026-09-15-bd-c92sa-admin-import-guards.md](../journal/entries/2026-09-15-bd-c92sa-admin-import-guards.md) for closeout details.*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-uaxt5: the credit-adjust `reason` is bounded to 500 characters and no longer logged -- the `admin_credits_adjusted` line carries ids and the amount only; every route that writes `admin_audit_log` now has an exact before/after key pin in `test_audit_log_shapes.py`; `scripts/audit/inventory_stores.py` is the read-only store inventory.)*

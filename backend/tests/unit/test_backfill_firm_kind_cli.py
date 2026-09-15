@@ -441,11 +441,15 @@ def test_existing_balance_never_gets_balance_updated_at_added(
 def test_firm_with_no_plan_gets_the_default_plan(
         firebase_stub, ledger_spy, monkeypatch):
     """A pre-0euzk firm doc (kind + balance already backfilled, but no
-    plan key at all) gets backend/services/plans.py's DEFAULT_PLAN.
+    plan key at all) gets backend/services/plans.py's DEFAULT_PLAN --
+    rollover=True (bd polyglot-pdf-hnlj3, maintainer decision 2026-09-15:
+    "credits roll over -- no real reason not to").
 
     Mutation: drop the `if not had_plan: payload["plan"] = ...` branch in
     main() -- this goes red (db.firms[...] would have no "plan" key at
-    all)."""
+    all). Mutation 2 (bd hnlj3): change the expected rollover value back to
+    False -- this goes red now that DEFAULT_PLAN's rollover default is
+    True; verified 2026-09-15."""
     firms = {"acme-legal": {"kind": "live", "balance_credits": 100}}
     db = _wire_db(monkeypatch, firms)
 
@@ -453,7 +457,7 @@ def test_firm_with_no_plan_gets_the_default_plan(
 
     assert rc == 0
     assert db.firms["acme-legal"]["plan"] == {
-        "tier": "starter", "monthly_credits": 35, "rollover": False}
+        "tier": "starter", "monthly_credits": 35, "rollover": True}
 
 
 def test_firm_with_existing_plan_is_never_overwritten(
@@ -497,7 +501,7 @@ def test_plan_backfill_is_independent_of_kind_and_balance_backfill(
     assert db.firms["acme-legal"]["kind"] == "live"  # untouched
     assert db.firms["acme-legal"]["balance_credits"] == 100  # untouched
     assert db.firms["acme-legal"]["plan"] == {
-        "tier": "starter", "monthly_credits": 35, "rollover": False}
+        "tier": "starter", "monthly_credits": 35, "rollover": True}
 
 
 def test_plan_backfill_copies_the_default_not_a_shared_reference(
