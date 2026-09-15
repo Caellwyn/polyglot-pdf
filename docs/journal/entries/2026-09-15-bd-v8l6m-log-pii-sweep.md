@@ -71,7 +71,7 @@ or a row) passes through `scrub()`, which merges overlapping detector spans
 (a JWT is also the head of a link-token shape), redacts each region and
 caps the length. Exit 0 ran, 2 refused, 3 a query could not complete.
 
-`tests/test_log_pii_sweep_detectors.py` (95 tests): a positive and a
+`tests/test_log_pii_sweep_detectors.py` (97 tests): a positive and a
 negative case per detector; the sentinel cannot reach the report through
 a Hit, a BigQuery hit, or either error channel; pagination, the 429 retry,
 the page ceiling, the connection-failure and token-refresh-failure paths

@@ -585,11 +585,13 @@ def _iso(dt: datetime) -> str:
 
 
 def _entry_json_string_fields(entry: dict) -> "dict[str, str]":
-    """Flatten jsonPayload's STRING leaves into {dotted.key: value}, skipping
-    insertId/labels/timestamp/receiveTimestamp (those live at the entry's
-    top level, not inside jsonPayload, so they are never included here --
-    this is what keeps dob_date from firing on a log entry's own
-    timestamp)."""
+    """Flatten jsonPayload's STRING leaves into {dotted.key: value}. The
+    entry's own insertId/labels/timestamp/receiveTimestamp live at the top
+    level and are never walked; the app's structured logger DOES put ISO
+    timestamps inside jsonPayload (`timestamp`, `message.timestamp`), and
+    those are walked -- dob_date stays quiet on them only because its
+    trailing boundary fails between the day and the `T` of an ISO
+    timestamp, which the detector tests pin."""
     out: "dict[str, str]" = {}
 
     def walk(prefix: str, node: Any) -> None:

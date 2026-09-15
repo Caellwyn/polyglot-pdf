@@ -1028,3 +1028,21 @@ def test_bq_query_rows_stops_one_past_the_ceiling(monkeypatch):
     rows = sweep._bq_query_rows("p", "SELECT `a` FROM `x`")
     assert len(rows) == 3  # the +1 is what lets the caller detect truncation
 
+
+def test_dob_date_stays_quiet_on_an_iso_timestamp_inside_jsonpayload():
+    """structured_logger writes ISO timestamps INSIDE jsonPayload; they are
+    walked like any string leaf and must not read as a date of birth."""
+    entry = {"jsonPayload": {"timestamp": "2026-09-15T22:06:00.123456+00:00",
+                             "message": {"timestamp": "2026-09-15T22:06:00+00:00"}}}
+    fields = sweep._entry_json_string_fields(entry)
+    assert len(fields) == 2
+    assert all(_matches("dob_date", v) == [] for v in fields.values())
+
+
+def test_a_truncated_table_with_hits_prints_both_the_hits_and_the_truncation():
+    r = sweep.BQTableResult(reachable=True, row_hits={("resource_name", "email"): 1},
+                            string_cols=["resource_name"], rows_seen=2, truncated=True)
+    report = sweep.format_report("p", sweep.SweepResult(), {"t": r})
+    assert "[t] column=resource_name detector=email count=1" in report
+    assert "[t] TRUNCATED after 2 rows" in report
+
