@@ -95,15 +95,6 @@ def _positive_float(raw: str, fallback: float) -> float:
     return value
 
 
-def _positive_int(raw: str, fallback: int) -> int:
-    """Parse a positive int, falling back on anything unusable. See above."""
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return fallback
-    return value if value > 0 else fallback
-
-
 def firm_link_cap() -> int:
     """How many links one firm may mint.
 
