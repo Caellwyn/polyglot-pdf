@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: click-to-edit stores the typed value UNVERIFIED -- it shares SchemaForm's handleFieldChange, so the PDF view gets the same rule as the schema form.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-c9dfo: a FIFTH fill state, `skipped` -- purple dotted, checked before the empty test, and colour-preserved while dimmed, because a deliberately-skipped required field used to paint identically to an untouched blank.) See [the c9dfo journal entry](../journal/entries/2026-09-15-bd-c9dfo-skipped-overlay-state.md) for closeout details.*
 
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
@@ -81,7 +81,8 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   render scale -- no Y-flip.
 - `FieldOverlay`: one absolutely-positioned div per positioned field, colored
   by FILL state -- empty (gray outline), filled (blue), confirmed (green),
-  current (orange) -- with the value painted inside (`valuePainting.ts`):
+  current (orange), skipped (purple, DOTTED) -- with the value painted inside
+  (`valuePainting.ts`):
   fitted text, an X for single-box checkboxes. Radio/checkbox/checkbox_group
   selections whose options carry their own `pdf_position` (backfilled into
   f1040 and w7; bd 5f41) paint an X mark at each SELECTED option's printed
@@ -141,7 +142,15 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   handlers the surface is read-only. Overlays are keyboard-activatable
   (`role=button`, Enter/Space).
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
-  checkbox_group must not paint as filled); `current` wins over all.
+  checkbox_group must not paint as filled); `current` wins over all, then the
+  `skipped` FLAG -- checked BEFORE the empty test, because `markFieldSkipped`
+  stores a null value and the empty test would otherwise claim it (bd
+  polyglot-pdf-c9dfo). A skipped field also keeps its colour while DIMMED,
+  where every other state falls back to grey-dashed + transparent: dimming it
+  to a blank is the very thing that defect was. It stays inert either way --
+  only the paint is exempt, not the `pointer-events: none` (bd
+  polyglot-pdf-lp5v). The skip affordance itself reads `FieldValue.skipped`
+  directly and is unaffected by fill state.
 - Live updates ride the existing `schemaFormStateChange` channel one level up:
   SchemaForm (already subscribed) passes fresh `fieldValues` props per change.
   The page CANVAS never re-renders per fill (its effect deps are stable);

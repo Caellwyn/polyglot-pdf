@@ -164,7 +164,12 @@ def _fetch_backend_probe(base_url: str) -> dict[str, Any]:
     surface. Each call is independently try/excepted so a slow or broken
     /version does not prevent /health's body from being shown at all.
     """
-    import requests
+    try:
+        import requests
+    except ImportError as exc:  # pragma: no cover -- pinned dependency
+        _log.warning("admin_health_fetch_failed", base_url=base_url,
+                     probe="import", error=str(exc))
+        return {"health": None, "version": None, "reachable": False}
 
     health_body = None
     version_body = None

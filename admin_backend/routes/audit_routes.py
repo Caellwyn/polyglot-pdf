@@ -41,6 +41,7 @@ from typing import Annotated, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
+from google.api_core.exceptions import FailedPrecondition, InvalidArgument
 
 from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
@@ -144,6 +145,19 @@ async def list_audit_rows(
         docs = list(query.limit(limit + 1).stream())
     except HTTPException:
         raise
+    except (FailedPrecondition, InvalidArgument) as exc:
+        # A CLIENT-DIAGNOSABLE query problem, not a store outage -- most
+        # often a missing composite index (FAILED_PRECONDITION, whose
+        # message carries a console URL that creates it in one click) or a
+        # malformed cursor (INVALID_ARGUMENT). Reporting this as the same
+        # 503 as a genuine Firestore outage tells the operator "wait" when
+        # the real answer is "click this link" or "the cursor is bad" --
+        # see the module docstring's own note on why an unindexed filter
+        # fails only at runtime. 400 (not 503): the caller can act on it.
+        _log.error("admin_audit_read_failed", error=str(exc))
+        raise HTTPException(
+            status_code=400,
+            detail="AUDIT_QUERY_ERROR: {}".format(exc))
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_audit_read_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="audit store unavailable")

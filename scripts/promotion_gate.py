@@ -98,10 +98,20 @@ def require_staging_verified(
         "first:".format(target_family, sha),
         file=sys.stderr,
     )
+    # admin-service has no separate "-staging" target (cloudbuild.yaml's
+    # admin-service-record-deployment: one service backs both channels, and
+    # its own tagged-candidate build records the staging row) -- printing
+    # "admin-service-staging" here would hand the operator a _TARGET
+    # cloudbuild.yaml does not case-match, which falls through to the
+    # `*) skip` arm and does nothing.
+    remedy_target = (
+        target_family if target_family == "admin-service"
+        else "{}-staging".format(target_family)
+    )
     print(
         "[promotion_gate]   gcloud builds submit --config=cloudbuild.yaml "
-        "--substitutions=_TARGET={}-staging,_CHANNEL=staging,_SHA={}".format(
-            target_family, sha
+        "--substitutions=_TARGET={},_CHANNEL=staging,_SHA={}".format(
+            remedy_target, sha
         ),
         file=sys.stderr,
     )

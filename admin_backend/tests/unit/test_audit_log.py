@@ -464,3 +464,40 @@ def test_the_page_size_is_bounded(audit_client, limit):
     unbounded limit turns one request into a full-collection read."""
     resp = audit_client.get("/admin/audit", params={"limit": limit})
     assert resp.status_code == 422, resp.text
+
+
+def test_a_missing_composite_index_is_distinguishable_from_a_real_outage(
+        audit_client, monkeypatch):
+    """bd polyglot-pdf-xdbqm. FAILED_PRECONDITION (most often a missing
+    composite index, whose message carries a console URL that creates it in
+    one click) must not collapse into the same 503 "store unavailable" a
+    genuine Firestore outage returns -- the two responses call for opposite
+    operator actions (click a link vs. wait). Mutation: remove the
+    FailedPrecondition/InvalidArgument except clause -- goes red (503
+    instead of 400)."""
+    from google.api_core.exceptions import FailedPrecondition
+
+    def _boom(self):
+        raise FailedPrecondition(
+            "index required, create it: https://console.example/create-index")
+
+    monkeypatch.setattr(
+        "admin_backend.tests.unit.test_audit_log._Query.stream", _boom)
+    resp = audit_client.get("/admin/audit")
+    assert resp.status_code == 400, resp.text
+    assert "AUDIT_QUERY_ERROR" in resp.json()["detail"]
+
+
+def test_a_genuine_firestore_outage_still_returns_503(audit_client,
+                                                       monkeypatch):
+    """Guard the guard: an ordinary Firestore failure (not FAILED_PRECONDITION
+    / INVALID_ARGUMENT) must still map to the original 503 -- this bead only
+    narrows the generic except, it does not remove it."""
+    def _boom(self):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(
+        "admin_backend.tests.unit.test_audit_log._Query.stream", _boom)
+    resp = audit_client.get("/admin/audit")
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["detail"] == "audit store unavailable"
