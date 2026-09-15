@@ -103,6 +103,45 @@ already working that surface.
 
 Review outcomes recorded in the closeout ping.
 
+## Fresh-eyes fix round (2026-09-15)
+
+The outer cross-surface review (Opus) came back GAPS-FOUND(1), with two
+findings; both were ADOPTED, no rejections or deferrals:
+
+- **Adopted -- Surface contract 17's producer-shape prose was stale.**
+  `docs/technical_guide.md`'s Surface contract 17 (admin console -> admin
+  service) documented `GET /admin/config/{channel}`'s response as
+  `{channel, values, known_keys, unknown_keys}` -- true on `origin/dev`,
+  but this bead's own `schema` addition (contract 1 above) made it
+  incomplete without a matching edit here. Unlike contract 14 (deliberately
+  left alone above, because it covers the write/consumer path this bead did
+  not touch), contract 17 IS the GET response's own producer-shape bullet,
+  so the gap was real and in-scope. Fixed both the contract-17 prose (line
+  ~1276) and the `/admin/config/{channel}` route-table row (line 166) to
+  name `schema` and point at `config_schema()`.
+- **Adopted -- `CONFIG_KEY_TYPES`/`ConfigKeyType` were dead exports.**
+  `adminApi.ts` defined `CONFIG_KEY_TYPES` specifically to be the console's
+  one source of truth for a key's type, but `ConfigEditorPage.tsx`'s
+  `controlKind()` re-hardcoded the literal strings `'bool'`/`'int'`/
+  `'float'` instead of consuming it -- the exact "second hand-typed list"
+  CLAUDE.md scar #8 exists to prevent, and it would have silently drifted
+  from `CONFIG_KEY_TYPES` if a fourth type were ever added there. Added
+  `isKnownConfigKeyType()`, a type guard built directly off
+  `CONFIG_KEY_TYPES`, and rewrote `controlKind()` to use it instead of the
+  literals. Mutation-verified: temporarily dropping `'float'` from
+  `CONFIG_KEY_TYPES` reddened the two float-control tests in
+  `ConfigEditorPage.test.tsx` (they were previously insensitive to the
+  constant's contents), confirming the wiring is real, then restored the
+  file byte-for-byte.
+
+Both fixes are non-behavioral for the app's runtime (same controls render,
+same values are sent) except that the second one now makes a future type
+added to `CONFIG_KEY_TYPES` alone insufficient on its own to add a control
+for it -- exactly the intended tightening. Re-ran the full suites after
+both fixes: backend 3752 passed / 195 skipped / 3 deselected, admin_backend
+587 passed, root tests 1653 passed / 92 skipped, admin-console vitest 152
+passed (11 in `ConfigEditorPage.test.tsx`), `tsc --noEmit` clean.
+
 ## Files touched
 
 - `backend/services/runtime_config.py` -- `KEY_TYPES` dict + `config_schema()`.
@@ -110,6 +149,7 @@ Review outcomes recorded in the closeout ping.
 - `admin_backend/routes/config_routes.py` -- GET response gains `schema`.
 - `admin_backend/tests/unit/test_config_routes.py` -- schema-matches-RUNTIME_CONFIG_KEYS test + a KEY_TYPES-drops-a-key mutation test.
 - `admin-console/src/utils/adminApi.ts` -- `ConfigKeySchema` type, `ChannelConfig.schema` field.
-- `admin-console/src/components/ConfigEditorPage.tsx` -- schema-driven bool-select/number-input/text rendering, typed PUT values.
+- `admin-console/src/components/ConfigEditorPage.tsx` -- schema-driven bool-select/number-input/text rendering, typed PUT values; fresh-eyes round adds `isKnownConfigKeyType()` wiring `controlKind()` to `CONFIG_KEY_TYPES`.
 - `admin-console/src/components/ConfigEditorPage.test.tsx` -- bool/int/float/unknown-type rendering tests, typed-value-sent tests, unset-select-does-not-save test.
 - `docs/components/admin-service.md` -- dated entry + Runtime config bullet update.
+- `docs/technical_guide.md` -- fresh-eyes round: Surface contract 17 producer-shape prose and the `/admin/config/{channel}` route-table row now name the `schema` field.

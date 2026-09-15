@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  getChannelConfig, setChannelConfigKey, type ChannelConfig, type ConfigKeySchema,
+  getChannelConfig, setChannelConfigKey, CONFIG_KEY_TYPES,
+  type ChannelConfig, type ConfigKeySchema, type ConfigKeyType,
 } from '../utils/adminApi';
 
 // Mirrors admin_backend/routes/config_routes.py's KNOWN_CHANNELS -- there is
@@ -18,16 +19,23 @@ const KNOWN_CHANNELS = ['demo', 'staging'] as const;
 // Never sent to the server: handleSave refuses to PUT while a draft is UNSET.
 const UNSET = '__unset__';
 
+/** True when `type` is one of CONFIG_KEY_TYPES -- the single source of
+ * truth for which type strings this console knows how to render a
+ * dedicated control for (adminApi.ts, itself derived from backend/services/
+ * runtime_config.py's KEY_TYPES; CLAUDE.md scar #8: never a second
+ * hand-typed list of key types). */
+function isKnownConfigKeyType(type: string): type is ConfigKeyType {
+  return (CONFIG_KEY_TYPES as readonly string[]).includes(type);
+}
+
 /** True when `schema[key]` names a type this page renders a dedicated
  * control for. An unrecognized type (or a key GET never described in
  * `schema` -- should not happen once the route is deployed, but a stale
  * deploy skew is exactly the case a fallback exists for) renders as the
  * original plain text input. */
 function controlKind(schema: ConfigKeySchema | undefined): 'bool' | 'number' | 'text' {
-  if (!schema) return 'text';
-  if (schema.type === 'bool') return 'bool';
-  if (schema.type === 'int' || schema.type === 'float') return 'number';
-  return 'text';
+  if (!schema || !isKnownConfigKeyType(schema.type)) return 'text';
+  return schema.type === 'bool' ? 'bool' : 'number';
 }
 
 interface ConfigEditorPageProps {
