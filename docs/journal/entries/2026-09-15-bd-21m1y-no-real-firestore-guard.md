@@ -61,6 +61,29 @@ the test still exercises the real verifier, without touching ADC or the
 network. Mutation-verified: reverting `verify_admin_token`'s exception
 handling to swallow the verification failure turns this test red.
 
+**Round 2 (cross-surface review gap fix).** The Opus cross-surface review
+found the two-target patch above was not actually sufficient: firebase_admin
+caches clients on the App object (`_FirestoreService._clients`) for the life
+of the process, so once ANYTHING in a process -- including
+`backend/services/auth.py`'s own import-time `initialize_app()` plus one
+real `get_db()` call -- has warmed that cache, every LATER call to
+`firebase_admin.firestore.client()` is a cache HIT that returns the cached
+real client without ever reaching the `google.cloud.firestore.Client`
+constructor the guard patched. The reviewer reproduced this three ways,
+including in-situ against this repo's own guard function, with no
+`@external` marker involved. Fixed by adding a THIRD patch target,
+`firebase_admin.firestore.client` itself -- the one function every consumer
+in this repo actually calls, sitting ahead of both the App-service cache
+lookup and the `_clients` dict lookup inside it, so a cache hit is caught
+exactly as reliably as a cache miss. Added
+`test_get_db_is_still_caught_when_the_client_is_already_cached`, which
+manufactures a warm `_FirestoreService` cache directly and proves `get_db()`
+still raises; mutation-verified by removing the new patch line and watching
+that test (and only that test) go red. Full three-root suite reconfirmed
+green after the fix: `backend/tests` 3753 passed / 195 skipped / 4
+deselected, `admin_backend/tests` 585 passed, root `tests/` 1664 passed / 92
+skipped.
+
 **The cleanup.** `scripts/purge_test_artifacts.py --project --dry-run`
 lists exactly the enumerated shapes from the incident (alerts by firm_id
 `{firm-a, acme}` or doc id `link_exhausted_jti-a`; `link_redemptions` and
@@ -90,6 +113,29 @@ misses the case where an earlier, unguarded call already completed that
 step. Guard the actual object that touches the network, not just its
 caller.
 
+Round 2 sharpened this further: a CACHE inside that chain is its own,
+separate hole from the initialization-order hole above. Patching the
+constructor a chain ends in is not the same as patching the FUNCTION that
+chain is entered through -- a cache sitting between the two means the
+constructor can go permanently unreached after the first real call, while
+the entry-point function is called by every single consumer, cache hit or
+miss, every time. When a guard patches "the thing that eventually touches
+the network," check for a cache between the public entry point and that
+thing; if one exists, the entry point itself is the seam to patch.
+
+Adopt/reject/defer breakdown for this round's reviewer findings:
+- **Adopted (blocker, fixed here):** finding 1, the warm-cache bypass of the
+  Firestore guard -- third patch target added, new mutation-verified test.
+- **Deferred (nit, already filed as its own bead by the reviewer):**
+  finding 2 (`polyglot-pdf-bpzsr`, purge script's stale test-name comment),
+  finding 3 (`polyglot-pdf-zqwem`, the third `tests/` testpath has no
+  Firestore guard of its own), finding 4 (`polyglot-pdf-5qbjd`, the purge
+  script cannot reach `kits/{kit_id}/usage` rollups). None reopened or
+  refuted here; verified all three beads exist with accurate bodies matching
+  the review report.
+- **Rejected:** none -- every classified finding was either fixed or was
+  already correctly filed rather than needing rebuttal.
+
 ## Doc freshness
 
 `docs/standards/testing.md` bumped (2026-09-15): new "No real Firestore"
@@ -101,11 +147,13 @@ it catches; `admin_backend/tests/conftest.py` added to the Tracks line.
 - `backend/tests/conftest.py` -- autouse `_no_real_firestore` fixture.
 - `admin_backend/tests/conftest.py` -- same fixture, imported from the
   shared module.
-- `backend/tests/unit/_no_real_firestore.py` -- new: the shared guard
+- `backend/tests/unit/_no_real_firestore.py` -- the shared guard
   implementation (`install_no_real_firestore_guard`,
-  `RealFirestoreReachedInTest`).
-- `backend/tests/unit/test_no_real_firestore_guard.py` -- new: pins the
-  guard itself, mutation-verified per patch target.
+  `RealFirestoreReachedInTest`); round 2 added the third patch target
+  (`firebase_admin.firestore.client`) closing the warm-cache gap.
+- `backend/tests/unit/test_no_real_firestore_guard.py` -- pins the guard
+  itself, mutation-verified per patch target; round 2 added
+  `test_get_db_is_still_caught_when_the_client_is_already_cached`.
 - `admin_backend/tests/unit/test_access_matrix.py` -- fixed the one test
   the guard caught.
 - `scripts/purge_test_artifacts.py` -- new: the cleanup CLI.

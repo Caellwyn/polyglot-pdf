@@ -150,3 +150,71 @@ def test_the_external_marker_leaves_initialize_app_UNPATCHED():
         "an external-marked test must not see the guard's patched "
         "initialize_app"
     )
+
+
+def test_get_db_is_still_caught_when_the_client_is_already_cached():
+    """THE ROUND-2 GAP (bd polyglot-pdf-21m1y): a WARM firebase_admin client
+    cache must be caught exactly like a cold one.
+
+    firebase_admin's _FirestoreService caches clients on the App object
+    (self._clients[database_id]) for the lifetime of the process. On a
+    cache HIT, _FirestoreService.get_client returns the cached client
+    WITHOUT ever calling google.cloud.firestore.Client(...) again -- so a
+    guard that only patches that constructor never fires for a second (or
+    later) call to firebase_admin.firestore.client() once anything, in this
+    process, has warmed the cache. This is exactly backend/services/auth
+    .py's own import-time initialize_app() + first get_db() call: the real
+    incident condition.
+
+    This test manufactures a warm cache directly (a real App plus a stub
+    _FirestoreService with a pre-populated _clients dict standing in for
+    "some earlier, unguarded call already built one") and proves get_db()
+    still raises under the guard -- i.e. that the guard's protection does
+    not depend on the constructor patch alone.
+
+    Mutation: remove the `fa_firestore.client` patch from
+    install_no_real_firestore_guard (keep the other two) -- this goes red:
+    get_db() returns the cached fake "real" client object instead of
+    raising, because _FirestoreService.get_client's cache-hit branch never
+    reaches google.cloud.firestore.Client(). Verified 2026-09-15."""
+    import firebase_admin as fb
+    import firebase_admin.firestore as fa_firestore
+    from firebase_admin import credentials
+
+    class _StubCredential(credentials.Base):
+        def get_credential(self):
+            return None
+
+    class _FakeCachedClient:
+        """Stands in for a real google.cloud.firestore.Client that some
+        earlier, unguarded call in this process already constructed and
+        firebase_admin cached. If get_db() ever returns this object, the
+        guard has been defeated by a warm cache -- the exact 2026-09-15
+        failure mode."""
+
+    class _WarmFirestoreService:
+        def __init__(self, app):
+            self._app = app
+            self._clients = {"(default)": _FakeCachedClient()}
+
+        def get_client(self, database_id):
+            database_id = database_id or "(default)"
+            return self._clients[database_id]
+
+    app = fb.App(
+        "[DEFAULT]", _StubCredential(), {"projectId": "polyglot-demo-aa709"}
+    )
+    fb._apps["[DEFAULT]"] = app
+    # Pre-seed the App's service cache with a warm _FirestoreService, the
+    # way a real process would have after any earlier get_db() call --
+    # app._services stores instances keyed by the attribute name firestore
+    # uses internally (fa_firestore._FIRESTORE_ATTRIBUTE).
+    app._services[fa_firestore._FIRESTORE_ATTRIBUTE] = _WarmFirestoreService(app)
+    try:
+        from backend.services.auth import get_db
+
+        with pytest.raises(RealFirestoreReachedInTest):
+            db = get_db()
+            assert not isinstance(db, _FakeCachedClient)
+    finally:
+        fb._apps.pop("[DEFAULT]", None)

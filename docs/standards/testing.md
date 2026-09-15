@@ -119,24 +119,34 @@ The backend suite is organized **by directory**, not by marker:
   `monkeypatch.setenv`, which wins over both guards.
 - **No real Firestore.** `backend/tests/conftest.py` and
   `admin_backend/tests/conftest.py` both carry an autouse `_no_real_firestore`
-  fixture (bd polyglot-pdf-21m1y) that patches `firebase_admin.initialize_app`
-  and `google.cloud.firestore.Client.__init__` to raise a loud
-  `RealFirestoreReachedInTest` instead of touching anything real. This exists
-  because every store under `backend/services/` (`alerts.py`,
-  `usage_rollups.py`, `link_redemptions.py`, `links_store.py`,
-  `credit_ledger.py`) reaches Firestore through one seam --
-  `backend.services.auth.get_db()` -- which lazily initializes
-  `firebase_admin` with ADC and constructs a real client the moment an
-  unpatched test exercises it; on a developer machine with working gcloud
-  ADC this silently writes real documents into the shared project (see
-  `backend/tests/unit/_no_real_firestore.py`'s docstring for the 2026-09-15
-  incident this closed). The fix for a test the guard catches is the same
-  fix every existing store test already uses: patch `get_db()` (or the
-  module's own `_get_db`/`_collection`) with a fake, the way
-  `test_alerts_dedup.py` / `test_links_store.py` / `test_usage_rollups.py` /
-  `test_credit_ledger.py` do -- never disable the guard. The one sanctioned
-  opt-out is `@pytest.mark.external`, the same marker that already gates the
-  two real-Gemini tests. Cleanup for documents the incident already wrote:
+  fixture (bd polyglot-pdf-21m1y) that patches THREE targets to raise a loud
+  `RealFirestoreReachedInTest` instead of touching anything real:
+  `firebase_admin.initialize_app`, `google.cloud.firestore.Client.__init__`,
+  and `firebase_admin.firestore.client` itself. The third target exists
+  because the first two are not sufficient on their own: firebase_admin
+  caches clients on the App object for the life of the process, so once any
+  earlier call (including `backend/services/auth.py`'s own import-time
+  `initialize_app()` plus a first real `get_db()` call) has warmed that
+  cache, every later call to `firebase_admin.firestore.client()` is a cache
+  hit that returns the cached real client WITHOUT reconstructing it -- the
+  constructor patch alone never fires for it. Patching `client()`, the one
+  function every consumer in this repo actually calls, catches a cache hit
+  exactly as reliably as a cache miss. This exists because every store under
+  `backend/services/` (`alerts.py`, `usage_rollups.py`,
+  `link_redemptions.py`, `links_store.py`, `credit_ledger.py`) reaches
+  Firestore through one seam -- `backend.services.auth.get_db()` -- which
+  lazily initializes `firebase_admin` with ADC and constructs a real client
+  the moment an unpatched test exercises it; on a developer machine with
+  working gcloud ADC this silently writes real documents into the shared
+  project (see `backend/tests/unit/_no_real_firestore.py`'s docstring for
+  the 2026-09-15 incident this closed, and the warm-cache gap fix that
+  followed). The fix for a test the guard catches is the same fix every
+  existing store test already uses: patch `get_db()` (or the module's own
+  `_get_db`/`_collection`) with a fake, the way `test_alerts_dedup.py` /
+  `test_links_store.py` / `test_usage_rollups.py` / `test_credit_ledger.py`
+  do -- never disable the guard. The one sanctioned opt-out is
+  `@pytest.mark.external`, the same marker that already gates the two
+  real-Gemini tests. Cleanup for documents the incident already wrote:
   `scripts/purge_test_artifacts.py --dry-run` / `--apply` (operator-run;
   data deletion is the maintainer's).
 
