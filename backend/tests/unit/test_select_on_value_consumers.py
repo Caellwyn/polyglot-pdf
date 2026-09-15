@@ -83,6 +83,16 @@ REVIEWED: dict[str, str] = {
         "_claimed_widgets reads EVERY option's pdf_on_value type-agnostically, so since g2fpr.2 a select option enters the claimed set keyed (name, code) instead of (name, None); harmless because unclaimed_button_widgets filters candidates to _BUTTON_TYPES (comboboxes excluded) -- cross-surface, g2fpr.2",
     "frontend/src/pdf-view/valuePainting.ts":
         "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+    "frontend/src/pdf-view/FieldOverlay.tsx":
+        "the SPEECH counterpart of valuePainting, and deliberately NOT a "
+        "pdf_on_value reader: the overlay's accessible name resolves a select "
+        "through optionLabel (the human label) while the BOX keeps painting the "
+        "code. Paint reads the channel because the code is what prints and a "
+        "label clips in a 36px state box; that is a pixel constraint, and read "
+        "aloud the code says nothing (bd polyglot-pdf-sagh6; an alphabetic code "
+        "is not speakable as itself, bd polyglot-pdf-jpjcv). The file names the "
+        "channel only in the comment explaining that split -- do not make it a "
+        "reader without re-reading that comment",
     "frontend/src/schema-forms/state/schemaFormState.ts":
         "READER (session restore): reconcileSelectValues maps a stored select value that matches no fresh option through the option whose pdf_on_value it equals (claimant = non-empty string value, the /resume-form predicate) or clears it; the stale-session guard, bd polyglot-pdf-f2a8k (g2fpr PR 3c)",
     "frontend/src/schema-forms/types/schema.ts":
