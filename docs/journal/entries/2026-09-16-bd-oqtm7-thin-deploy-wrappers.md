@@ -190,7 +190,8 @@ settled without a real (paid, deploying) trigger run, and
 `admin_backend/services/cloud_build.py` already committed to the same
 assumption in bd `tb3kp`, so it is pre-existing rather than introduced here.
 The first staging run confirms it by reading one line: the streamed log's first
-line must be `Building target <X> at <sha>`, not `verify`. Finding 5's three
+line must be `Building target <X> at <sha>`, not `verify` -- filed as bd
+`polyglot-pdf-4wk0b` so the check is not lost. Finding 5's three
 non-blocking items were filed by the reviewer as bd `polyglot-pdf-q97d8`
 (`DEPLOYMENT.md`/`README.md` still document the deleted bash engine), bd
 `polyglot-pdf-vnniz` (~14 source comments naming a `deploy-*.sh` stage as an
