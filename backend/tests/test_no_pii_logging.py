@@ -535,7 +535,11 @@ def _reason_expression(call: ast.Call, enclosing: ast.AST) -> ast.AST | None:
             # Resolve the last assignment to that name before the call, inside
             # the enclosing function.
             assigned = None
-            for n in ast.walk(enclosing):
+            # Same function only: a nested def/lambda is its own scope.
+            nodes = [n for n in ast.walk(enclosing)
+                     if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+                     or n is enclosing]
+            for n in nodes:
                 if (isinstance(n, ast.Assign) and n.lineno < call.lineno
                         and any(isinstance(t, ast.Name) and t.id == kw.value.id for t in n.targets)):
                     if assigned is None or n.lineno > assigned.lineno:

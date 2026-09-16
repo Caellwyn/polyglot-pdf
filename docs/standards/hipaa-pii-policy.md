@@ -49,8 +49,9 @@ so the discipline is "don't pass values to a logger." Backstopping that
 discipline, `backend/tests/test_no_pii_logging.py` is a source-level AST/grep guard
 that scans the `GUARDED_FILES` (`pdf_fill_routes.py`, `live_ai_gemini.py`,
 `callback_handler.py`, `request_coordinator.py`, `form_filling_service.py`,
-`websocket_routes.py`, and the text-model call sites `text_ai_gemini.py` +
-`secretary_context.py`) for two leak shapes and fails the build on a regression:
+`websocket_routes.py`, and the text-model adapter `text_ai_gemini.py`;
+`secretary_context.py` has no log call and sits under the deny-by-default sweep
+below) for two leak shapes and fails the build on a regression:
 (1) sensitive **log kwargs** (`value`, `values`, `selected_value`, `text`,
 `text_preview`, `transcript`, `sample`, `system_instruction`, …) carrying a
 non-metadata value in a `_log.*(...)` call; and (2) a sensitive variable

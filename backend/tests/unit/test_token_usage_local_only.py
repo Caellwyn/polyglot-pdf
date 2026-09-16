@@ -105,3 +105,16 @@ def test_the_usage_banner_is_a_structured_line_not_a_print():
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "print":
             text = ast.unparse(n)
             assert "prompt_tokens" not in text and "total_cost" not in text, text
+
+
+def test_deployed_instance_constructs_without_touching_the_disk(tmp_path, monkeypatch):
+    """Defence in depth: constructing the logger on a deployed instance must
+    not create the directory or the file either -- the guarantee belongs to
+    the writer, not to its caller's gate. Mutation-verified by removing the
+    K_SERVICE return from __init__."""
+    import backend.utils.token_file_logger as tfl
+    monkeypatch.setenv("K_SERVICE", "polyglot-backend")
+    monkeypatch.setattr(tfl.Path, "mkdir", lambda self, *a, **k: (_ for _ in ()).throw(AssertionError("mkdir on a deployed instance")))
+    logger = tfl.TokenFileLogger(log_dir=str(tmp_path / "logs"))
+    assert not logger.log_file.exists()
+

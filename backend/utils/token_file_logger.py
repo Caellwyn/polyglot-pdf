@@ -29,6 +29,12 @@ class TokenFileLogger:
         project_root = Path(__file__).parent.parent.parent
         self.log_file = project_root / log_dir / "token_usage.jsonl"
 
+        # Never touch the container's disk on a deployed instance (K_SERVICE is
+        # set by Cloud Run): the writer below is a no-op there too, so nothing
+        # about this logger depends on its caller's own gate.
+        if os.getenv("K_SERVICE"):
+            return
+
         # Create logs directory if it doesn't exist
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
