@@ -1294,7 +1294,10 @@ echo ""
 echo "--- 10. Hosting response headers (per site) -------------------------------"
 
 HOSTING_SITES="polyglot-demo-aa709 polyglot-app-staging polyglot-editor-demo polyglot-admin-demo polyglot-admin-candidate"
-REQUIRED_HEADERS="content-security-policy strict-transport-security x-frame-options referrer-policy"
+# No x-frame-options: the app site also serves Firebase Auth's reserved
+# /__/auth/iframe, which our own pages frame, and XFO cannot carve out a
+# path -- framing is governed by the CSP's frame-ancestors (sprint 23 E2).
+REQUIRED_HEADERS="content-security-policy strict-transport-security referrer-policy"
 
 for site in $HOSTING_SITES; do
     url="https://${site}.web.app/"
@@ -1334,7 +1337,7 @@ for site in $HOSTING_SITES; do
         MISSING="$MISSING $h"
     done
     if [ -z "$MISSING" ]; then
-        record "hosting_${site}_headers" "PASS" "CSP (${CSP_MODE})/HSTS/X-Frame-Options/Referrer-Policy all present on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s))"
+        record "hosting_${site}_headers" "PASS" "CSP (${CSP_MODE})/HSTS/Referrer-Policy all present on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s))"
     else
         record "hosting_${site}_headers" "FAIL" "missing on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s)):${MISSING} (PF-4 -- every Hosting target in firebase.json carries the headers since sprint 23 E2)"
     fi

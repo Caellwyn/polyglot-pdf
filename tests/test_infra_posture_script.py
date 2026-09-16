@@ -635,10 +635,12 @@ def test_required_hosting_headers_set_is_pinned():
     match = re.search(r'REQUIRED_HEADERS="([^"]+)"', text)
     assert match, "REQUIRED_HEADERS is not declared as a literal string"
     headers = set(match.group(1).split())
+    # No x-frame-options: it was removed from every Hosting target by
+    # sprint 23 E2 (the app site serves the Firebase Auth iframe our own
+    # pages frame); frame-ancestors inside the CSP governs framing.
     assert headers == {
         "content-security-policy",
         "strict-transport-security",
-        "x-frame-options",
         "referrer-policy",
     }
 

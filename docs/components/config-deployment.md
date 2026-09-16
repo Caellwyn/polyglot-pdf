@@ -854,14 +854,20 @@ console; the staging test-drive reads it, and renaming the header to
 `Content-Security-Policy` is a separate, reviewed change; the live posture
 runbook (`scripts/audit/infra_posture.sh`, check 10) reads the report-only
 header as PASS with the mode named, so the soak does not read as a missing
-header. The policy's
+header, and no longer requires `X-Frame-Options`. The policy's
 `connect-src` is built from what the apps actually contact: the three Cloud Run
 services (demo backend, staging backend, admin; https + wss, project-hashed
 hostnames), Firebase Auth (`identitytoolkit`, `securetoken`,
-`www.googleapis.com` is NOT listed -- the shipped SDK never contacts it) and
-Firestore (https + wss). `script-src` is `'self'` plus `https://apis.google.com`,
-the gapi loader the Firebase Auth SDK injects as a `<script>` before it can
-open the sign-in popup; `style-src` allows inline (React style attributes);
+`www.googleapis.com` is NOT listed -- the shipped SDK never contacts it),
+Firestore (https + wss), and `https://cdn.jsdelivr.net`: the voice overlay's
+speech detector (`@ricky0123/vad-web`, `frontend/src/demo/useDemoVAD.ts`)
+fetches its model and audio worklet from there and `onnxruntime-web` its WASM
+runtime. `script-src` is `'self'` plus `https://apis.google.com` (the gapi
+loader the Firebase Auth SDK injects as a `<script>` before it can open the
+sign-in popup), the same CDN (the worklet is script) and `'wasm-unsafe-eval'`
+(the ONNX runtime). Executable code from a third-party CDN is the largest
+remaining browser egress; self-hosting those assets is filed as the
+prerequisite for switching the CSP to enforcing; `style-src` allows inline (React style attributes);
 `worker-src` and `media-src` allow `blob:` (pdf.js, spellback audio);
 `frame-src` names the auth domain and Google's account chooser;
 `frame-ancestors 'none'`. **There is deliberately NO `X-Frame-Options`:** the

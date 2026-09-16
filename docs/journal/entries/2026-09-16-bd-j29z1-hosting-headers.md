@@ -37,7 +37,16 @@ process.
   project-hashed hostname form; the admin's short form too), Firebase Auth
   (`identitytoolkit`, `securetoken`) and Firestore over https and its
   websocket transport (the installations endpoint and `www.googleapis.com`
-  were dropped: the shipped SDK bundles never contact them);
+  were dropped: the shipped SDK bundles never contact them), and
+  `https://cdn.jsdelivr.net` -- the outer review found that the voice
+  overlay's speech detector (`useDemoVAD.ts`) fetches its ONNX model and
+  audio worklet from there and `onnxruntime-web` its WASM runtime, on both
+  overlays, at mount; the CDN is therefore in `connect-src` and `script-src`
+  (a worklet is script) with `'wasm-unsafe-eval'`, so the soak stays
+  readable and the policy stays honest. Executable code from a third-party
+  CDN is the largest remaining browser egress and a supply-chain exposure;
+  self-hosting those assets is filed (`polyglot-pdf-18o7c`) as the prerequisite
+  for the enforcement flip;
   `frame-src` for the auth popup on the project's auth domain and Google's
   account chooser; `worker-src 'self' blob:` (pdf.js); `media-src 'self'
   blob: data:` (spellback and intro audio); `object-src 'none'`; `base-uri
@@ -69,14 +78,18 @@ process.
   infra_posture.sh`'s Hosting check (D's check 10) matched only the enforcing
   header name and would have reported every site FAIL during report-only;
   it now accepts `Content-Security-Policy-Report-Only` as PASS with the mode
-  named in the detail, pinned in `tests/test_infra_posture_script.py`.
+  named in the detail, and no longer requires `X-Frame-Options` (the second
+  outer round caught that the runbook, its pin and the plan's criterion 4
+  all still named XFO after this bead removed it -- the scar #8 shape, one
+  rule in three places); pinned in `tests/test_infra_posture_script.py`.
 - **`tests/test_hosting_headers.py`**, derived from `firebase.json`: every
   target carries every header and no `X-Frame-Options`; the `/__/auth/**`
   ancestor list is exactly the five sites; `/fonts/**` is cached; every
   `a.run.app` host the three apps' env files name is in `connect-src` (the
   Cloud Run hash has drifted before, bd `emm7`); the CSP carries every required directive,
   every origin the apps need, never `'unsafe-eval'`, `http:` or a wildcard
-  host, and `script-src` is exactly `'self'`; all five targets share one
+  host, and `script-src` is exactly our origin, the gapi loader, the VAD
+  CDN and WASM; all five targets share one
   policy; the voice app's `index.html` names no third-party font host; every
   `url()` in `fonts.css` is local and its file exists. Red before the change
   (12 of 13 cases), green after.
@@ -88,7 +101,8 @@ process.
   `firebase.json` (`test_deploy_channel_isolation`, `test_deploy_admin_url_injection`,
   `test_infra_posture_script`, `test_form_kit_routes`) and the windowless-spawn
   pin over `scripts/` (the regenerator spawns nothing): 181 passed.
-- Scar #9: eleven mutations, each RED (the config-parametrized ones in
+- Scar #9: thirteen mutations, each RED (the CDN dropped from `script-src`;
+  `x-frame-options` put back into the runbook's required list) (the config-parametrized ones in
   their own interpreter, since the targets are read at import): the
   `/__/auth/**` block dropped; `apis.google.com` dropped; a demo wss host
   dropped (the env-derived pin); `X-Frame-Options` reintroduced; the fonts

@@ -32,6 +32,11 @@ REQUIRED_HEADERS = (
 REQUIRED_CSP = {
     "default-src": "'self'",
     "script-src": "https://apis.google.com",
+    # The voice overlay's speech detector (@ricky0123/vad-web) fetches its
+    # model and audio worklet, and onnxruntime-web its WASM runtime, from
+    # jsdelivr today; the policy names it so the report-only soak stays
+    # readable. Self-hosting those assets (bd polyglot-pdf-18o7c) is the
+    # prerequisite for enforcement, and removes this entry.
     "frame-ancestors": "'none'",
     "object-src": "'none'",
     "base-uri": "'self'",
@@ -52,6 +57,7 @@ REQUIRED_CONNECT = (
     "https://identitytoolkit.googleapis.com",
     "https://securetoken.googleapis.com",
     "https://firestore.googleapis.com",
+    "https://cdn.jsdelivr.net",
 )
 ENV_FILES = ("frontend/.env.demo", "schema-editor/.env.hosted", "admin-console/.env.hosted")
 HOSTING_SITES = ("polyglot-demo-aa709", "polyglot-app-staging", "polyglot-editor-demo",
@@ -109,9 +115,10 @@ def test_every_target_csp_carries_the_required_directives(target):
     raw = _headers_for(target)["Content-Security-Policy-Report-Only"]
     bad = [t for t in FORBIDDEN_CSP_TOKENS if t in raw]
     assert not bad, "%s: CSP contains %r" % (target["target"], bad)
-    # script-src: our origin plus the gapi loader Firebase Auth injects --
-    # nothing else, no inline, no eval.
-    assert csp["script-src"] == ["'self'", "https://apis.google.com"], csp["script-src"]
+    # script-src: our origin, the gapi loader Firebase Auth injects, the CDN
+    # the VAD worklet loads from, and WASM (onnxruntime) -- nothing else, no
+    # inline, no eval.
+    assert csp["script-src"] == ["'self'", "https://apis.google.com", "https://cdn.jsdelivr.net", "'wasm-unsafe-eval'"], csp["script-src"]
 
 
 def test_all_targets_share_one_csp():
