@@ -166,6 +166,9 @@ its own table).
 | GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. Also returns `schema` (bd `polyglot-pdf-wxcj0`), `{key: {type, default}}` for every known key derived from `runtime_config.config_schema()` -- the console's only source for a key's type (bool/int/float), so it never hand-lists key types itself. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
 | POST | `/admin/credits/monthly-topup` | The monthly firm-plan credit top-up (bd `polyglot-pdf-0euzk`, maintainer pricing decision 2026-09-14: "35 credits/month cap as a starting place" -- see bd `polyglot-pdf-hnlj3`, 2026-09-15, for why `rollover` now defaults True and "cap" no longer describes the common case). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the SAME shape as the sweep route below, a SEPARATE Cloud Scheduler identity (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`) and a SEPARATE env-var-set audience (this route's own path). **THIS TRIGGER IS INTERIM** (bd `polyglot-pdf-hnlj3`): the per-firm grant logic lives in its own function, `topup_firm(db, firm_id, firm, *, period, actor=None)`, this route just loops it over every active firm -- Epic 5's Stripe webhook (invoice.paid / subscription renewal) will call the SAME function directly for the one firm a payment event names, once that lands. For every `status == active` firm carrying a `plan` (`{tier, monthly_credits, rollover}`, `backend/services/plans.py`; `rollover` defaults True as of bd `polyglot-pdf-hnlj3`), `topup_firm` writes ONE `subscription_grant` through `credit_ledger.append_entry` with `usd_amount=None` ("no money moved" -- the credits are the product a flat recurring fee already covers outside this ledger) and a new `period="YYYY-MM"` field on the entry. `rollover=false` brings the balance UP TO `monthly_credits` (skipped, writing nothing, when already at or over the cap -- a negative balance from the metered soft-launch is brought up to the cap too); `rollover=true` ADDS `monthly_credits` regardless of the current balance. IDEMPOTENT BY MONTH: before writing, queries the firm's ledger for an existing `subscription_grant` with the SAME `period` and skips the firm entirely if one exists -- a retried Scheduler call or a second manual run writes nothing. Mock firms are topped up too (no `kind` filter -- staging needs credits to test). A per-firm failure (a malformed plan, a Firestore hiccup) is logged and skipped, never aborting the whole monthly pass. Audited via `append_entry`'s `extra_writes` hook, the SAME extra_writes-delegated shape the sweep route below and the grant/adjust routes above use. Returns per-outcome firm_id lists (`topped_up`/`skipped_at_cap`/`skipped_already_run`/`skipped_no_plan`/`failed`) -- counts derivable from list lengths; the ledger entry and audit row are the durable record. `admin_backend/routes/credit_routes.py` |
+| GET | `/admin/deploys` | List `deployments/{id}` rows, newest first (bd `polyglot-pdf-tb3kp`, E4.3). Optional `?channel=`/`?target=` filters (422 on an unrecognized `target`); `?limit=` (default 50, max 200). Filtered CLIENT-SIDE over a `ts`-ordered, `limit`-capped fetch rather than a second composite index per filter (this collection is low-volume: one row per deploy, not per request). Response rows are an EXPLICIT key allowlist. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
+| POST | `/admin/deploys` | Trigger a Cloud Build for `{target, sha}` (bd `polyglot-pdf-tb3kp`, E4.3). `target` validated against `deploy/targets.py`'s closed `TARGETS`; `sha` validated as exactly 40 lowercase hex characters -- both 422 otherwise. For a target in `GATED_TARGETS` (`backend-demo`, `frontend-demo`), refuses EARLY with 409 when `admin_backend/services/promotion_gate.py`'s `staging_verified()` finds no successful staging deployment for the same target family and sha -- the build's own in-build gate repeats the identical check, so a bash-triggered build cannot bypass it either. Writes `deployments/{id}` (status `queued`, no `build_id` yet) BEFORE calling Cloud Build, audits pending-then-committed (EXTERNAL form -- the mutation is a Cloud Build API call, not a Firestore write), then calls `admin_backend/services/cloud_build.py::run_target()` (`CloudBuildClient.run_build_trigger`, dispatched with `asyncio.to_thread`). On failure, the audit row is marked failed and the deployment row's status is corrected to `failure` with no `build_id` -- the row is never erased, but it can never be mistaken for a build that is actually running. `admin_backend/routes/deploy_routes.py`, `admin_backend/services/cloud_build.py`, `admin_backend/services/promotion_gate.py` |
+| GET | `/admin/deploys/{deploy_id}` | Read one `deployments/{id}` row (bd `polyglot-pdf-tb3kp`, E4.3), the same explicit key allowlist as the list route. 404 for an unknown id. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
 | GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY. The Error Reporting API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's write-side PII rule already guarantees is the bare exception type name with no message text -- the rest of that message is never returned (E3.8's PII rule reaching the console). `ErrorReportingUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
 | GET | `/admin/firms` | Every firm, with `kind`, `balance_credits` and `status` (bd `polyglot-pdf-zopqq`), unfiltered -- the bead names columns, not filters, so no composite index is owed the way `/admin/audit`'s filters are. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
 | POST | `/admin/firms` | Create a firm (bd `polyglot-pdf-zopqq`). Body `{firm_id, name, contact_email, kind, allowed_kits?, status?}` -- `kind` is REQUIRED with NO default (422 if missing or not `mock`/`live`), matching `upsert_firm`'s own required parameter. Writes the SAME field shape as `backend/services/firms.py::upsert_firm` but does NOT call it: this route needs the doc write and the audit row in one `@firestore.transactional` body (contract 15's in-transaction form), and `upsert_firm` does its own non-transactional read+write -- calling it from inside a transaction would add a second, transaction-illegal read. `admin_backend/routes/firm_routes.py` |
@@ -193,6 +196,7 @@ its own table).
 | PATCH | `/admin/users/{uid}/disable` | Disable or re-enable a staff account (bd `polyglot-pdf-dmjl5`). Body `{disabled, firm_id?}` -- an explicit value, not a toggle, so a retrying console cannot land in whichever state the race decided. Claims are untouched: disabling is not deleting, and a deleted uid would take its audit trail's subject with it. The account must already be in the resolved firm, else the SAME 404 a nonexistent uid gets (a 403 would confirm a guessed uid names a real account). `admin_backend/routes/user_routes.py` |
 | PATCH | `/admin/users/{uid}/role` | Move a staff account between `manager` and `employee` (bd `polyglot-pdf-dmjl5`). Body `{firm_role, firm_id?}`. Merges over every other claim, so a promotion cannot strip the account's `vff_dev` or `schema_editor_role`. Same firm-scoping 404 as disable, so this route cannot move an account between firms however the request is shaped. `admin_backend/routes/user_routes.py` |
 | GET | `/admin/whoami` | The FIRST gated route (bd `polyglot-pdf-7w17m`): returns `{uid, email}` for the caller, gated by `require_app_admin`. Exists to prove the gate end to end before any business logic lands -- a stamped account passes, a valid unstamped account 403s with the `NO_ADMIN_ACCESS:` prefix, a tokenless caller 401s. `admin_backend/routes/whoami.py`, `admin_backend/services/admin_auth.py` |
+| POST | `/api/deploys/webhook` | The Pub/Sub PUSH endpoint for Cloud Build's build-status notifications (bd `polyglot-pdf-tb3kp`, E4.3). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- this gate's SECOND consuming route (after `POST /admin/links/sweep-expired`), pinned against the push subscription's own service-account email (`PUBSUB_PUSH_SA_EMAIL` env var) and this route's own URL. Decodes the base64-encoded Cloud Build `Build` resource out of the Pub/Sub push envelope's `message.data`, then upserts `deployments/{id}` BY `build_id` (never by document id) inside ONE `@firestore.transactional` body with an in-transaction audit row (actor `system:cloud_build_webhook`, since the caller is Cloud Build via Pub/Sub, never an operator) -- a console-triggered build's pre-existing row is updated in place; a bash-triggered build with no row gets one created with `triggered_by: "external"`, target/channel read from the build's own `substitutions`. Idempotent: applying the identical message twice produces the identical document. Cloud Build's `Build.Status` enum collapses onto this collection's five-way `status` (`queued`\|`working`\|`success`\|`failure`\|`cancelled`) -- `INTERNAL_ERROR`/`TIMEOUT`/`EXPIRED` and any unrecognized value all map to `failure`. Always returns 204 on a well-formed message so Pub/Sub's retry policy leaves it alone; a message that cannot even be PARSED is 400 (Pub/Sub does not retry faster for a 400 than a 500, and a 400 is a clearer signal that something upstream sent garbage). `admin_backend/routes/deploy_webhook.py` |
 | GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and, together with `/version`, the ONLY routes that stay so -- every other route on this service carries one of the plan's four named gates, or the fifth route-scoped gate `require_app_admin_or_owning_manager_or_employee` (GET `/admin/firms/{firm_id}/links`, GET `/admin/firms/{firm_id}/alerts`, and PATCH `/admin/alerts/{alert_id}/acknowledge` -- bd `polyglot-pdf-62o4d` put the latter two on this same gate) -- the complete set is enumerated and enforced in `admin_backend/tests/unit/test_admin_route_auth.py`. `deploy-all.sh`'s IAM-based reachability check still issues no HTTP request against it, but `deploy-admin.sh`'s tagged flow (bd `polyglot-pdf-3l2vp`) DOES curl this exact route at the tagged candidate revision's stable URL and aborts the traffic shift on anything but a 200 -- so for the admin service, this route is now exercised by a real deploy gate, not just by an operator's manual curl. `admin_backend/main.py` |
 | GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`, same GIT_SHA env var and "unknown" fallback as the public backend's `/version`) -- the admin app's own `version`, not the public backend's. `admin_backend/main.py` |
 
@@ -2765,8 +2769,10 @@ exactly one place instead of drifting per caller.
   `record_deployment.target_family()` stripping a trailing `-staging`/`-demo`
   suffix (`backend-staging` and `backend-demo` share the family `backend`;
   `admin-service` has no suffix and is its own family), `triggered_by` is
-  always `"build"` here (bead 4.3's Pub/Sub webhook is what will also carry
-  `"console"`/`"cli"` for an admin-triggered build). This is deliberately NOT
+  always `"build"` here (contract 35's own `deployments/{id}` producers --
+  bead 4.3's `POST /admin/deploys` and its Pub/Sub webhook -- carry the
+  actor's uid or `"external"` instead, for an admin-triggered or
+  bash-triggered build respectively). This is deliberately NOT
   the SAME record contract 30's `build_checks/{sha}` writes -- that answers
   "did this commit's suites pass"; this answers "did THIS TARGET deploy
   successfully on THIS channel".
@@ -2828,19 +2834,21 @@ build steps.**
   (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
   their target's mutating step).
 
-**31c. The staging-before-demo gate: build-side enforcement of a
-maintainer-approved rule bead 4.4 will also expose as an admin route.**
+**31c. The staging-before-demo gate: build-side enforcement of a rule
+bead 4.3's admin route also enforces.**
 
 - **The rule:** `admin_backend/services/promotion_gate.py::staging_verified(
   target_family, sha, deployments)` -- a demo build for `(family, sha)` is
   allowed only if `deployments` contains a record with `channel="staging"`,
   the SAME `target_family`, the SAME `sha`, `status="success"`. NO recency
   rule: an OLDER verified sha is not invalidated by a NEWER staging deploy of
-  a different sha -- that is the deliberate rollback case. This module is
-  explicitly a PLACEHOLDER bead 4.4 EXTENDS (adding the admin route that also
-  calls it, plus a richer test suite there) rather than a throwaway bead 4.2
-  will replace -- one function, two eventual callers (the build gate here, and
-  the future route), so neither can drift from the other.
+  a different sha -- that is the deliberate rollback case. This module now has
+  TWO real callers, neither able to drift from the other since both call the
+  SAME function: the build-side gate here (`scripts/promotion_gate.py`), and
+  bead 4.3's `POST /admin/deploys` (`admin_backend/routes/deploy_routes.py`,
+  contract 35's own early, friendly 409 for a `GATED_TARGETS` entry). Bead
+  4.4 (bd polyglot-pdf-jub5f) is expected to extend this module further (a
+  richer test suite), not replace it.
 - **Build-side caller:** `scripts/promotion_gate.py` -- a thin CLI that
   queries `deployments` filtered on `target_family`/`sha`, hands the rows to
   `staging_verified()` unchanged, and fails CLOSED (refuses the deploy) on any
@@ -3221,3 +3229,129 @@ and carry no email at all.
   strings from the backend's own guarantee (`label_for_actor` always
   returns something for a non-null actor) except `employee_label`, which
   is `string | null` to match a null `employee_id`.
+
+### 35. Deploy trigger + build-status webhook: the console-side writers of `deployments/{id}` (Epic 4 bead E4.3, bd polyglot-pdf-tb3kp)
+
+Contract 31a already covers `deployments/{id}` as the BUILD's own success
+record (`scripts/record_deployment.py`, written by the last step of every
+staging target and unconditionally by `admin-service`). This bead adds the
+CONSOLE side: a route that creates a row before a build even starts, and a
+webhook that keeps every row's status current as Cloud Build's own state
+changes -- for BOTH console-triggered and bash-triggered builds.
+
+- **Producers:**
+  - `POST /admin/deploys` (`admin_backend/routes/deploy_routes.py`) writes
+    `deployments/{id}` FIRST (status `queued`, no `build_id` yet), before
+    calling Cloud Build, so a build that fails to even start still leaves a
+    row (corrected to `status: failure`, still no `build_id`) rather than
+    silently vanishing.
+  - `POST /api/deploys/webhook` (`admin_backend/routes/deploy_webhook.py`)
+    is Cloud Build's own Pub/Sub push subscription target. It upserts BY
+    `build_id` (never by document id, since a webhook message never carries
+    the console's auto-generated id) inside one `@firestore.transactional`
+    body: a console-triggered row updates in place, and a bash-triggered
+    build with no pre-existing row gets one created with `triggered_by:
+    "external"` and `target`/`channel` read from the build's own
+    `substitutions` (`_TARGET`, `_CHANNEL`). This is the SAME collection
+    `record_deployment.py` writes to for a staging success -- the webhook is
+    a second, independent writer of the same document once a `build_id`
+    exists, never a competing schema.
+  - Full document shape (superset of 31a's): `{target, target_family,
+    channel, sha, ref, triggered_by, build_id, status, log_url, ts,
+    finished_at}`. `triggered_by` is the actor's uid when
+    `POST /admin/deploys` first writes the row, `"external"` for a
+    bash-triggered build the webhook created, and `"build"` once
+    `record_deployment.py` writes a staging success -- that writer sets
+    `"build"` UNCONDITIONALLY, so any deploy whose build reaches it (every
+    backend-staging, frontend-staging and admin-service build) ends up with
+    `"build"` and the originating uid is not preserved on the row.
+  - `admin_backend/services/cloud_build.py::run_target()` is what
+    `POST /admin/deploys` calls to actually start the build (`CloudBuildClient
+    .run_build_trigger` against the `polyglot-<target>` trigger, `RepoSource
+    (commit_sha=sha, substitutions={"_SHA": sha})` -- no `repo_name`, matching
+    the proven `gcloud builds triggers run --sha=` CLI shape for a
+    2nd-generation connected repo, and carrying `_SHA` because the build's own
+    step 0 (`require-sha`) aborts without it). The request ALSO sets `name`
+    to `projects/<project>/locations/<region>/triggers/<trigger>`: the
+    project/trigger pair alone matches the client's global-only URI template
+    first, and every trigger here is regional. Returns `{build_id, log_url}`
+    read off the operation's metadata, never waiting on the build to finish.
+- **Consumers:**
+  - `admin_backend/services/promotion_gate.py::staging_verified()` (31c) --
+    `POST /admin/deploys`' own early, friendly 409 for a `GATED_TARGETS`
+    entry (`backend-demo`, `frontend-demo`) queries
+    `deployments` for a staging success matching the same target family and
+    sha, refusing BEFORE Cloud Build is ever called. `admin-service` is NOT
+    in that set even though the plan gates its traffic shift: its
+    staging-equivalent proof is written by its own build (before that
+    build's own gate step, deliberately, to avoid a bootstrap deadlock), so
+    a pre-build route check could never find one and would refuse every
+    admin-service deploy. The in-build `admin-service-staging-gate` step is
+    what enforces the rule there. The build's own
+    in-build gate (31c, `scripts/promotion_gate.py`) repeats the identical
+    check, so a bash-triggered build cannot bypass what the console route
+    already refused.
+  - `GET /admin/deploys` / `GET /admin/deploys/{id}` -- the console's read
+    path (bead E4.7, bd polyglot-pdf-ryx86, not yet built): newest-first,
+    client-side filtered on `channel`/`target`, an explicit response-key
+    allowlist (`DEPLOYMENT_VIEW_FIELDS`) so an internal field can never leak
+    without a deliberate addition.
+- **`target` validation: `deploy/targets.py`.** The ONE closed `TARGETS`
+  tuple both `POST /admin/deploys` and (per contract 30/31's own target
+  list) `scripts/setup-cloud-build.sh`'s trigger provisioning agree on --
+  replacing what would otherwise be a second hand-typed copy of the target
+  list. Also carries `CHANNEL_BY_TARGET` (which `deploy/channels/<channel>
+  .env` a target's build steps read), `target_family()` (mirrors
+  `scripts/record_deployment.py`'s own helper of the same name -- kept as
+  an independent copy, not a shared import, since one is a route-time
+  constant module and the other a build-time script; pinned equal by
+  `tests/test_cloudbuild_yaml.py`), and `GATED_TARGETS` (the hand-listed
+  three-target subset the promotion gate actually applies to -- deliberately
+  NOT every "demo channel" target, since `form-kits`, `firestore-rules` and
+  `editor` have no staging counterpart to gate against). "landing" is
+  absent from `TARGETS` on purpose: it is a maintainer call Epic 4's own
+  plan section leaves open.
+- **Audit:** `POST /admin/deploys` audits pending-then-committed (Surface
+  contract 15's EXTERNAL form -- the mutation is a Cloud Build API call, not
+  a Firestore write); the webhook's `_upsert_deployment` audits IN THE SAME
+  transaction as the Firestore write (contract 15's FIRESTORE form, actor
+  `system:cloud_build_webhook`).
+- **Gates:** `POST`/`GET /admin/deploys*` carry the plain `require_app_admin`
+  gate (deploying code has no firm-manager counterpart). `POST
+  /api/deploys/webhook` carries `require_google_oidc`, its SECOND consumer
+  after the sweep route (contract 15's neighbor) -- audience pinned to this
+  route's own URL, caller email pinned to a NEW `PUBSUB_PUSH_SA_EMAIL` env
+  var naming the Pub/Sub push subscription's own dedicated service account
+  (`admin-pubsub-push-sa`, a THIRD identity distinct from both
+  `admin-backend-sa` and `polyglot-cloudbuild-sa` -- see
+  `scripts/setup-admin-service.sh`'s own comment for why reusing either
+  would collapse the two-factor OIDC check).
+- **IAM:** `admin-backend-sa` gains `roles/cloudbuild.builds.editor` (moved
+  out of `DEFERRED_ROLES`, now empty, into `EXPECTED_ADMIN_SA_ROLES` in the
+  same commit as its first real caller, `cloud_build.py::run_target()`).
+  `roles/iam.serviceAccountUser` scoped to `polyglot-cloudbuild-sa` (actAs,
+  needed to submit a build that runs as that identity) was already granted
+  by bead E4.5 (bd polyglot-pdf-p4ale).
+- **Firestore rules:** `deployments` already carries a full client deny
+  block from contract 31a; unchanged by this bead.
+- **Pinned by:** `admin_backend/tests/unit/test_deploy_routes.py` (the
+  queued-row + pending-then-committed audit pair; a Cloud Build failure
+  marks the audit row failed and leaves no queued row claiming a build id,
+  mutation-verified; the early 409 for a gated target with and without a
+  staging success; unknown target and malformed sha 422s; list filtering
+  and single-row reads); `admin_backend/tests/unit/test_deploy_webhook.py`
+  (a real Pub/Sub push envelope upserts by `build_id` for both a
+  console-triggered and a bash-triggered build; every Cloud Build status
+  maps; idempotent on a repeated message; wrong caller email is 403, no
+  token is 401, wrong audience is 401; a malformed message is 400 not 500;
+  one audit row per status update, mutation-verified); `admin_backend/tests
+  /unit/test_admin_route_auth.py` (all four routes registered with their
+  correct, specific gate); `admin_backend/tests/unit/test_admin_audit_
+  coverage.py` (the trigger route's EXTERNAL mutation kind, the webhook's
+  FIRESTORE kind); `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+  (`cloudbuild.builds.editor` in `EXPECTED_ADMIN_SA_ROLES`, `DEFERRED_ROLES`
+  now empty); `tests/test_setup_admin_service_pubsub.py` (the Pub/Sub API
+  enable, the `cloud-builds` topic creation is idempotent, the dedicated
+  push-caller service account is neither runtime identity, the printed
+  subscription-create NOTE names the right topic/path and carries both
+  `--push-auth-*` flags and is a printed NOTE, not an executed command).

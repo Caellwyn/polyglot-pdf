@@ -37,6 +37,8 @@ from admin_backend.routes import (
     alert_routes,
     config_routes,
     credit_routes,
+    deploy_routes,
+    deploy_webhook,
     firm_routes,
     kit_routes,
     link_routes,
@@ -774,6 +776,14 @@ AUDITED_ACTIONS_BY_FILE = {
     "kit_routes.py": {kit_routes.ACTION_KIT_COMMERCIAL_SET},
     "config_routes.py": {config_routes.ACTION_CONFIG_SET},
     "alert_routes.py": {alert_routes.ACTION_ALERT_ACKNOWLEDGE},
+    # The deploy pair (bd polyglot-pdf-tb3kp). Neither carries operator
+    # free text: the trigger route audits a (target, sha) pair already
+    # validated against deploy/targets.py and a 40-hex regex, and the
+    # webhook audits a status Cloud Build itself sent. Listed so the
+    # completeness grep stays satisfied by a deliberate row rather than
+    # by silence.
+    "deploy_routes.py": {deploy_routes.ACTION_DEPLOY_TRIGGER},
+    "deploy_webhook.py": {deploy_webhook.ACTION_DEPLOY_STATUS_UPDATE},
 }
 
 _ROUTES_DIR = Path(admin_backend_routes_path := credit_routes.__file__).parent
@@ -787,6 +797,8 @@ _MODULE_BY_FILENAME = {
     "kit_routes.py": kit_routes,
     "config_routes.py": config_routes,
     "alert_routes.py": alert_routes,
+    "deploy_routes.py": deploy_routes,
+    "deploy_webhook.py": deploy_webhook,
 }
 
 # The three audit_log entry points that take (or, for mark_committed,

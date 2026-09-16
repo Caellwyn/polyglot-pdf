@@ -93,6 +93,25 @@ SWEEP_SCHEDULER_SA_EMAIL="admin-sweep-scheduler-sa@$PROJECT.iam.gserviceaccount.
 # that section's "never reuse a Scheduler caller identity across jobs" rule.
 MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="admin-monthly-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
 
+# PUBSUB_PUSH_SA_EMAIL (bd polyglot-pdf-tb3kp, E4.3's Cloud Build
+# build-status webhook OIDC gate -- fresh-eyes/cross-surface review finding:
+# this var was set by NO deploy path, only printed as a one-time hand-run
+# NOTE by scripts/setup-admin-service.sh, so require_google_oidc's
+# _allowed_caller_emails() resolved to an empty tuple -- allowlisting
+# NOTHING -- on every real deploy, permanently fail-closing
+# POST /api/deploys/webhook regardless of what an operator had hand-set,
+# since --set-env-vars REPLACES the entire env block (the exact SAME
+# incident this section documents for SWEEP_SCHEDULER_SA_EMAIL above). Same
+# "fully knowable ahead of time" reasoning: scripts/setup-admin-service.sh's
+# PUBSUB_PUSH_SA_NAME is a fixed literal ("admin-pubsub-push-sa"), so its
+# email needs no gcloud lookup, matching SWEEP_SCHEDULER_SA_EMAIL and
+# MONTHLY_TOPUP_SCHEDULER_SA_EMAIL immediately above. A THIRD, separate
+# scheduler-style identity from both of those -- see deploy_webhook.py's own
+# module docstring for why the push subscription's caller identity must
+# differ from both admin-backend-sa (the callee) and polyglot-cloudbuild-sa
+# (the build identity).
+PUBSUB_PUSH_SA_EMAIL="admin-pubsub-push-sa@$PROJECT.iam.gserviceaccount.com"
+
 # ADMIN_SERVICE_URL is NOT knowable before the service's FIRST deploy (it is
 # assigned by Google at deploy time -- the same reason ADMIN_URL below is
 # read only AFTER deploy-all.sh runs). On every deploy AFTER the first,
@@ -110,6 +129,7 @@ ADMIN_SERVICE_URL=$(gcloud run services describe "$ADMIN_SERVICE_NAME" \
     --format 'value(status.url)' 2>/dev/null || true)
 SWEEP_ENV="SWEEP_SCHEDULER_SA_EMAIL=$SWEEP_SCHEDULER_SA_EMAIL"
 SWEEP_ENV="$SWEEP_ENV,MONTHLY_TOPUP_SCHEDULER_SA_EMAIL=$MONTHLY_TOPUP_SCHEDULER_SA_EMAIL"
+SWEEP_ENV="$SWEEP_ENV,PUBSUB_PUSH_SA_EMAIL=$PUBSUB_PUSH_SA_EMAIL"
 [ -n "$ADMIN_SERVICE_URL" ] && SWEEP_ENV="$SWEEP_ENV,ADMIN_SERVICE_URL=$ADMIN_SERVICE_URL"
 
 # BACKEND_URLS_JSON (bd polyglot-pdf-mpebj, E3.11a's GET /admin/health fan-out

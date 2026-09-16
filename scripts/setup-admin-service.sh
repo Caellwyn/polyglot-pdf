@@ -133,6 +133,13 @@ PROJECT_ROLES=(
     # Secret Manager. Cloud Run refuses a revision whose runtime SA cannot
     # read a bound secret, so this fails LOUDLY at deploy time, not silently.
     "roles/secretmanager.secretAccessor"
+    # Submit/trigger a Cloud Build (bd polyglot-pdf-tb3kp, E4.3 --
+    # admin_backend/services/cloud_build.py's run_target(), calling
+    # CloudBuildClient.run_build_trigger). This is the role's FIRST real
+    # consumer, moved here (not left deferred) in the same commit that adds
+    # the route that calls it -- admin_backend/tests/unit/
+    # test_admin_sa_iam_envelope.py's EXPECTED_ADMIN_SA_ROLES pin includes it.
+    "roles/cloudbuild.builds.editor"
 )
 
 echo -e "${GREEN}[INFO]${NC} Assigning project-level IAM roles..."
@@ -188,6 +195,77 @@ for role in "${CLOUD_BUILD_SA_ROLES[@]}"; do
         --role="$role" \
         --project "$PROJECT_ID" > /dev/null
 done
+
+# 6. Pub/Sub: Cloud Build's build-status notifications (bd polyglot-pdf-tb3kp,
+# E4.3). Cloud Build publishes to the "cloud-builds" topic AUTOMATICALLY on
+# every build state change once the topic exists and pubsub.googleapis.com
+# is enabled -- this script only needs to create the topic (idempotent) and
+# wire ONE push subscription from it to the admin service's webhook route
+# (POST /api/deploys/webhook, admin_backend/routes/deploy_webhook.py).
+#
+# roles/iam.serviceAccountTokenCreator for the Pub/Sub service agent (so it
+# can MINT the OIDC token the push subscription presents) is granted by
+# scripts/setup-cloud-build.sh, NOT here (bead polyglot-pdf-p4ale, E4.5 --
+# see that script's own "5. The Pub/Sub service agent" section and
+# admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py's
+# test_pubsub_service_agent_gets_token_creator_for_the_build_webhook,
+# which already pins it there). Granting it a SECOND time here would not be
+# wrong, but it would duplicate a grant this repo's own test suite already
+# treats as owned by the other script -- one home per grant (CLAUDE.md
+# scar #8).
+echo -e "${GREEN}[INFO]${NC} Enabling Pub/Sub API..."
+gcloud services enable pubsub.googleapis.com --project "$PROJECT_ID"
+
+CLOUD_BUILDS_TOPIC="cloud-builds"
+if ! gcloud pubsub topics describe "$CLOUD_BUILDS_TOPIC" --project "$PROJECT_ID" &>/dev/null; then
+    echo -e "${GREEN}[INFO]${NC} Creating Pub/Sub topic: $CLOUD_BUILDS_TOPIC..."
+    gcloud pubsub topics create "$CLOUD_BUILDS_TOPIC" --project "$PROJECT_ID"
+else
+    echo -e "${GREEN}[INFO]${NC} Pub/Sub topic $CLOUD_BUILDS_TOPIC already exists"
+fi
+
+# The push subscription's OWN caller identity -- a THIRD service account,
+# separate from both admin-backend-sa (this script's own SA, the WEBHOOK'S
+# callee identity) and polyglot-cloudbuild-sa (the BUILD identity,
+# scripts/setup-cloud-build.sh). require_google_oidc's whole point is
+# pinning a caller identity DIFFERENT from the service it calls -- reusing
+# admin-backend-sa here would mean the service could mint tokens accepted
+# by its OWN gate, collapsing the two-factor check to "does the request
+# carry any Google-signed token at all". Same reasoning as
+# admin-sweep-scheduler-sa above, one section up.
+PUBSUB_PUSH_SA_NAME="admin-pubsub-push-sa"
+PUBSUB_PUSH_SA_EMAIL="$PUBSUB_PUSH_SA_NAME@$PROJECT_ID.iam.gserviceaccount.com"
+
+if ! gcloud iam service-accounts describe "$PUBSUB_PUSH_SA_EMAIL" --project "$PROJECT_ID" &>/dev/null; then
+    echo -e "${GREEN}[INFO]${NC} Creating service account: $PUBSUB_PUSH_SA_NAME..."
+    gcloud iam service-accounts create "$PUBSUB_PUSH_SA_NAME" \
+        --display-name="Admin Pub/Sub Push Caller (Cloud Build webhook)" \
+        --project "$PROJECT_ID"
+else
+    echo -e "${GREEN}[INFO]${NC} Service account $PUBSUB_PUSH_SA_NAME already exists"
+fi
+
+# NOT run here: creating the push subscription needs the admin service's
+# OWN Cloud Run URL, unknown until after its FIRST deploy -- same reason
+# the sweep job's gcloud scheduler command above is a printed NOTE, not an
+# executed one. --push-auth-service-account is what makes Pub/Sub mint an
+# OIDC token as PUBSUB_PUSH_SA_EMAIL on every push (the identity
+# PUBSUB_PUSH_SA_EMAIL, the admin service's own env var, must be set to);
+# --push-auth-token-audience is the route's own URL (service root + path),
+# matching require_google_oidc's audience check
+# (admin_backend/routes/deploy_webhook.py's own _audience()).
+echo -e "${YELLOW}[NOTE]${NC} After the admin service's FIRST deploy, create the build-status push subscription:"
+echo -e "${YELLOW}[NOTE]${NC}"
+echo -e "${YELLOW}[NOTE]${NC}   gcloud pubsub subscriptions create cloud-builds-webhook \\"
+echo -e "${YELLOW}[NOTE]${NC}     --project=\"$PROJECT_ID\" \\"
+echo -e "${YELLOW}[NOTE]${NC}     --topic=\"$CLOUD_BUILDS_TOPIC\" \\"
+echo -e "${YELLOW}[NOTE]${NC}     --push-endpoint=\"\$ADMIN_SERVICE_URL/api/deploys/webhook\" \\"
+echo -e "${YELLOW}[NOTE]${NC}     --push-auth-service-account=\"$PUBSUB_PUSH_SA_EMAIL\" \\"
+echo -e "${YELLOW}[NOTE]${NC}     --push-auth-token-audience=\"\$ADMIN_SERVICE_URL/api/deploys/webhook\""
+echo -e "${YELLOW}[NOTE]${NC}"
+echo -e "${YELLOW}[NOTE]${NC} Then set PUBSUB_PUSH_SA_EMAIL=$PUBSUB_PUSH_SA_EMAIL on the admin"
+echo -e "${YELLOW}[NOTE]${NC} service (alongside the existing ADMIN_SERVICE_URL) so"
+echo -e "${YELLOW}[NOTE]${NC} require_google_oidc accepts this subscription's own pushes."
 
 echo -e "${GREEN}[INFO]${NC} Admin service account ready: $SA_EMAIL"
 echo -e "${YELLOW}[NOTE]${NC} Deploy the admin service with the SHARED image and"

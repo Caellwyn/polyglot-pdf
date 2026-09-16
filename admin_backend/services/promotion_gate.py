@@ -1,14 +1,20 @@
 """The staging-before-demo promotion predicate (Epic 4 of
-docs/sprint_22_admin-console_plan.md, bead polyglot-pdf-ywxoh /4.2, extended
-by bead polyglot-pdf-tb3kp /4.4).
+docs/sprint_22_admin-console_plan.md, bead polyglot-pdf-ywxoh /4.2; CONSUMED
+by bead polyglot-pdf-tb3kp /4.3's POST /admin/deploys, and further extended
+by bead polyglot-pdf-jub5f /4.4).
 
-THIS MODULE IS A PLACEHOLDER FOR 4.4, NOT AN EMPTY SHELL. Bead 4.2 needs a
-working predicate NOW: the build-side gate (scripts/promotion_gate.py, called
-from cloudbuild.yaml's demo targets) has to refuse a demo build for a SHA with
-no verified staging deploy, and that refusal has to be the SAME rule the
-future admin route (bead 4.4) will enforce -- one function, two callers, so
-neither can drift from the other. 4.4 extends this module (adding the route
-that calls it and its own richer test suite); it does not replace it.
+THIS MODULE WAS A PLACEHOLDER FOR 4.4 WHEN 4.2 SHIPPED IT, NOT AN EMPTY
+SHELL. Bead 4.2 needed a working predicate immediately: the build-side gate
+(scripts/promotion_gate.py, called from cloudbuild.yaml demo targets) has
+to refuse a demo build for a SHA with no verified staging deploy, and that
+refusal has to be the SAME rule every other caller enforces -- one function,
+many callers, so none can drift from another. Bead 4.3's POST /admin/deploys
+(admin_backend/routes/deploy_routes.py) is this module SECOND caller (the
+early, friendly 409 before a build is even triggered); bead 4.4 is expected
+to extend this module further (its own richer test suite), not replace it.
+NOTE: an earlier version of this docstring mis-labeled 4.3 as "4.4" -- the
+real 4.4 is bd polyglot-pdf-jub5f, corrected here when bd polyglot-pdf-tb3kp
+became this module SECOND real consumer.
 
 THE RULE (plan: docs/sprint_22_admin-console_plan.md, Epic 4 "Triggering and
 status from the admin service"): a demo build for (target_family, sha) is

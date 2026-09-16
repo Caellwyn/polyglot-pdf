@@ -373,7 +373,7 @@ fi
 # dataset-scoped check under section 8 instead. Including it here would
 # manufacture a permanent FAIL against a role that is correctly scoped
 # elsewhere.
-ADMIN_SA_EXPECTED_PROJECT_ROLES="roles/firebaseauth.admin roles/datastore.user roles/logging.logWriter roles/secretmanager.secretAccessor roles/bigquery.jobUser roles/errorreporting.viewer roles/monitoring.viewer"
+ADMIN_SA_EXPECTED_PROJECT_ROLES="roles/firebaseauth.admin roles/datastore.user roles/logging.logWriter roles/secretmanager.secretAccessor roles/bigquery.jobUser roles/errorreporting.viewer roles/monitoring.viewer roles/cloudbuild.builds.editor"
 check_sa_roles "admin_sa_project" "admin-backend-sa@${PROJECT_ID}.iam.gserviceaccount.com" "$ADMIN_SA_EXPECTED_PROJECT_ROLES"
 
 # CHECK: admin_sa_bucket_role
