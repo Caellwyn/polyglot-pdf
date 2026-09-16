@@ -224,6 +224,8 @@ def test_the_registered_route_set_is_pinned():
         (("GET",), "/admin/health"),
         (("POST",), "/admin/deploys"),
         (("GET",), "/admin/deploys"),
+        (("GET",), "/admin/deploys/targets"),
+        (("GET",), "/admin/deploys/promotable"),
         (("GET",), "/admin/deploys/{deploy_id}"),
         (("POST",), "/api/deploys/webhook"),
     }, (
@@ -301,13 +303,17 @@ def test_firm_scoped_alert_routes_carry_the_fifth_gate_specifically():
 
 
 def test_deploy_routes_are_gated_by_require_app_admin_specifically():
-    """bd polyglot-pdf-tb3kp (E4.3): all three /admin/deploys routes carry
-    the plain require_app_admin gate -- triggering and reading builds has
-    no firm-manager counterpart, same reasoning as the kit/report/alert/ops
+    """bd polyglot-pdf-tb3kp (E4.3), extended by bd polyglot-pdf-ryx86
+    (E4.7)'s two new reads: all five /admin/deploys routes carry the plain
+    require_app_admin gate -- triggering and reading builds has no
+    firm-manager counterpart, same reasoning as the kit/report/alert/ops
     routes above. Mutation: swap any one of these for a different gate --
     red."""
     for route in app.routes:
-        if route.path in ("/admin/deploys", "/admin/deploys/{deploy_id}"):
+        if route.path in (
+            "/admin/deploys", "/admin/deploys/targets",
+            "/admin/deploys/promotable", "/admin/deploys/{deploy_id}",
+        ):
             assert _dependency_names_for(route) == {"require_app_admin"}, (
                 route.path, tuple(sorted(getattr(route, "methods", []) or [])))
 

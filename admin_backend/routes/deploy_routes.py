@@ -1,16 +1,46 @@
 """POST/GET /admin/deploys -- trigger a Cloud Build and read back what has
 run (bd polyglot-pdf-tb3kp, Epic 4 bead 4.3 of
-docs/sprint_22_admin-console_plan.md).
+docs/sprint_22_admin-console_plan.md; the two GET reads below are E4.7, bd
+polyglot-pdf-ryx86, added for the console's Deploys page).
 
-THREE ROUTES:
+FIVE ROUTES:
 
     POST /admin/deploys                trigger a build for {target, sha}
     GET  /admin/deploys                list deployments, newest first
+    GET  /admin/deploys/targets        the closed target-picker list
+    GET  /admin/deploys/promotable     would {target, sha} pass the gate
     GET  /admin/deploys/{id}           read one deployment
 
-ALL THREE behind require_app_admin -- deploying code is not a firm-manager
+ALL FIVE behind require_app_admin -- deploying code is not a firm-manager
 operation; there is no owning-manager counterpart here, same shape as
 firm_routes.py's six routes.
+
+GET /admin/deploys/targets AND GET /admin/deploys/promotable ARE REGISTERED
+ON THIS ROUTER BEFORE GET /admin/deploys/{deploy_id} (bd polyglot-pdf-ryx86):
+FastAPI/Starlette match routes in REGISTRATION order, and `{deploy_id}` is a
+bare path parameter that would otherwise swallow a request for the literal
+path segment "targets" or "promotable" as an attempted deploy-id lookup (a
+404 "No such deployment" instead of the real response) -- the two literal
+routes must be added ahead of the parameterized one for exactly that reason.
+
+GET /admin/deploys/targets EXISTS SO THE CONSOLE'S TRIGGER-FORM PICKER NEVER
+HAND-COPIES deploy/targets.py::TARGETS (bd polyglot-pdf-ryx86, E4.7) -- the
+same "one closed list, not a second hand-typed copy" reasoning `_validated_
+target` already applies to POST's own validation now extends to the picker a
+console renders from. Each row restates target/target_family/channel/gated
+so the console can group and label the picker without a second lookup table
+of its own.
+
+GET /admin/deploys/promotable COMPUTES THE SAME staging_verified() PREDICATE
+POST /admin/deploys' own early 409 uses (bd polyglot-pdf-ryx86, E4.7) -- so
+the console's Deploy button can disable itself with a friendly reason BEFORE
+ever POSTing and hitting that 409. A target OUTSIDE GATED_TARGETS is
+unconditionally `promotable: true`: POST's own early check applies no gate
+to it either (see GATED_TARGETS' own docstring in deploy/targets.py), so
+this read must not invent a stricter rule than the route it is a preview
+of. `_staging_verified_for()` below is the ONE query both this route and
+`_do_trigger_deploy`'s early check call, so the two can never drift into
+checking slightly different things.
 
 POST validates target against deploy/targets.py's closed TARGETS (422 on an
 unknown value -- never silently running an arbitrary trigger name) and sha
@@ -184,6 +214,24 @@ def _public_view(doc_id: str, data: dict) -> dict:
     return row
 
 
+def _staging_verified_for(family: str, sha: str) -> bool:
+    """The ONE query both `_do_trigger_deploy`'s early refusal and GET
+    /admin/deploys/promotable (bd polyglot-pdf-ryx86, E4.7) run: every
+    `deployments` row for this exact (target_family, sha), handed to
+    `promotion_gate.staging_verified()`. A shared helper so the route's
+    early 409 and the console's own preview read can never drift into
+    checking slightly different things.
+    """
+    db = _db()
+    query = (
+        db.collection(COLLECTION)
+        .where("target_family", "==", family)
+        .where("sha", "==", sha)
+    )
+    deployments = [doc.to_dict() or {} for doc in query.stream()]
+    return staging_verified(family, sha, deployments)
+
+
 def _do_trigger_deploy(
     *, target: str, sha: str, actor_uid: str, actor_email: Optional[str],
 ) -> dict:
@@ -199,13 +247,7 @@ def _do_trigger_deploy(
     # -- see deploy/targets.py's own docstring for why this is a hand-listed
     # set, not every "demo channel" target.
     if target in GATED_TARGETS:
-        query = (
-            db.collection(COLLECTION)
-            .where("target_family", "==", family)
-            .where("sha", "==", sha)
-        )
-        deployments = [doc.to_dict() or {} for doc in query.stream()]
-        if not staging_verified(family, sha, deployments):
+        if not _staging_verified_for(family, sha):
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -353,6 +395,68 @@ async def list_deploys(
     rows = await asyncio.to_thread(
         _do_list_deploys, channel=channel, target=target, limit=limit)
     return {"rows": rows}
+
+
+@router.get("/admin/deploys/targets")
+async def list_deploy_targets(
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+) -> dict:
+    """The closed target set the trigger form's picker renders from (bd
+    polyglot-pdf-ryx86, E4.7) -- see module docstring's "GET /admin/deploys/
+    targets" section. Never hand-copied into the console: this is the ONE
+    place `deploy/targets.py::TARGETS` reaches the frontend. A read, so no
+    audit row.
+
+    MUST STAY REGISTERED AHEAD OF GET /admin/deploys/{deploy_id} on this
+    router -- see module docstring.
+    """
+    rows = [
+        {
+            "target": target,
+            "target_family": target_family(target),
+            "channel": CHANNEL_BY_TARGET[target],
+            "gated": target in GATED_TARGETS,
+        }
+        for target in TARGETS
+    ]
+    return {"targets": rows}
+
+
+@router.get("/admin/deploys/promotable")
+async def get_promotable(
+    actor: Annotated[AdminActor, Depends(require_app_admin)],
+    target: Annotated[str, Query()],
+    sha: Annotated[str, Query()],
+) -> dict:
+    """Would {target, sha} pass POST /admin/deploys' own early promotion
+    gate (bd polyglot-pdf-ryx86, E4.7)? See module docstring's "GET
+    /admin/deploys/promotable" section. `target`/`sha` are REQUIRED query
+    params (422 via FastAPI's own validation when either is missing) and
+    validated exactly like the trigger route's own body (422 on an unknown
+    target or a malformed sha). A read, so no audit row.
+
+    MUST STAY REGISTERED AHEAD OF GET /admin/deploys/{deploy_id} on this
+    router -- see module docstring.
+    """
+    target = _validated_target(target)
+    sha = _validated_sha(sha)
+    family = target_family(target)
+    gated = target in GATED_TARGETS
+    if gated:
+        promotable = await asyncio.to_thread(
+            _staging_verified_for, family, sha)
+    else:
+        # POST's own early check applies no gate to a target outside
+        # GATED_TARGETS -- this preview must not invent a stricter rule
+        # than the route it previews (module docstring).
+        promotable = True
+    return {
+        "target": target,
+        "sha": sha,
+        "target_family": family,
+        "gated": gated,
+        "promotable": promotable,
+    }
 
 
 @router.get("/admin/deploys/{deploy_id}")
