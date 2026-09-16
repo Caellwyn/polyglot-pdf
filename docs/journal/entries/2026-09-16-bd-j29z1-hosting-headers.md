@@ -122,7 +122,22 @@ process.
 
 ## Review record
 
-REVIEW_RECORD
+Fresh-eyes (Sonnet, read-only): round 1 found the doc naming only the
+latin subsets and the admin short-form origin missing from the pin; clean
+after. Opus cross-surface, four rounds: round 1 found `X-Frame-Options`
+would deny our own pages the Firebase Auth iframe the app site serves,
+`script-src` missing the gapi loader, the hash-drift risk on the Cloud Run
+hosts, two dead allowances and the fonts cache; round 2 found the posture
+runbook, its pin and the plan's criterion 4 still naming XFO, and the
+voice overlay's VAD/ONNX assets loading from jsdelivr; round 3 read the
+ONNX glue and found `new Function` beyond what `'wasm-unsafe-eval'`
+covers; round 4: NO-GAPS. Filed by the reviews: `polyglot-pdf-18o7c`
+(self-host the VAD assets, non-jsep ORT -- the enforcement prerequisite),
+`polyglot-pdf-p3o51` (the env-derived pin's wss demand and the stale
+in-code WS fallback), `polyglot-pdf-b45a4` (the dead self-hosting
+script); `polyglot-pdf-h5016` (stale ack/journal claims) was fixed here
+and closed. Every pin was mutation-verified, the config-parametrized ones
+in their own interpreter.
 
 ## Lessons
 

@@ -32,14 +32,6 @@ REQUIRED_HEADERS = (
 REQUIRED_CSP = {
     "default-src": "'self'",
     "script-src": "https://apis.google.com",
-    # The voice overlay's speech detector (@ricky0123/vad-web) fetches its
-    # model and audio worklet, and onnxruntime-web its WASM runtime, from
-    # jsdelivr today; the policy names it so the report-only soak stays
-    # readable. 'wasm-unsafe-eval' covers WASM compilation ONLY; the ORT
-    # glue the app currently selects (the jsep variant) also calls
-    # new Function, which needs 'unsafe-eval' -- deliberately not granted.
-    # Enforcement waits on bd polyglot-pdf-18o7c: self-host the assets AND
-    # pick the non-jsep ORT build (no new Function); that removes this entry.
     "frame-ancestors": "'none'",
     "object-src": "'none'",
     "base-uri": "'self'",
@@ -60,8 +52,18 @@ REQUIRED_CONNECT = (
     "https://identitytoolkit.googleapis.com",
     "https://securetoken.googleapis.com",
     "https://firestore.googleapis.com",
+    # See the note below on the CDN.
     "https://cdn.jsdelivr.net",
 )
+# The voice overlay's speech detector (@ricky0123/vad-web) fetches its
+# model and audio worklet, and onnxruntime-web its WASM runtime, from
+# jsdelivr today; the policy names it so the report-only soak stays
+# readable. 'wasm-unsafe-eval' covers WASM compilation ONLY; the ORT
+# glue the app currently selects (the jsep variant) also calls
+# new Function, which needs 'unsafe-eval' -- deliberately not granted.
+# Enforcement waits on bd polyglot-pdf-18o7c: self-host the assets AND
+# pick the non-jsep ORT build (no new Function); that removes the CDN from
+# REQUIRED_CONNECT below and from firebase.json's script-src + connect-src.
 ENV_FILES = ("frontend/.env.demo", "schema-editor/.env.hosted", "admin-console/.env.hosted")
 HOSTING_SITES = ("polyglot-demo-aa709", "polyglot-app-staging", "polyglot-editor-demo",
                  "polyglot-admin-demo", "polyglot-admin-candidate")
