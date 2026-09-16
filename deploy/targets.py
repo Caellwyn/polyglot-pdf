@@ -37,16 +37,28 @@ two never disagree):
     strip.
 
 GATED_TARGETS is the subset the admin route's early promotion-gate check
-(exit criterion 3's friendly 409) actually gates -- it is EXACTLY the three
-targets the plan names ("backend-demo, frontend-demo and admin-service
-traffic shift additionally require a deployments record",
-tests/test_cloudbuild_yaml.py's own STAGING_GATED_DEMO_TARGETS plus
-admin-service), not every "demo-channel" target: form-kits, firestore-rules
+(exit criterion 3's friendly 409) actually gates -- EXACTLY
+tests/test_cloudbuild_yaml.py's own STAGING_GATED_DEMO_TARGETS, not every
+"demo-channel" target: form-kits, firestore-rules
 and editor all deploy to the demo channel too, but NONE has a staging
 counterpart to gate against (form-kits publishes to the shared kit store,
 firestore-rules is project-wide, editor has no separate staging site), so
 the build carries no staging-success step for any of them and the route
-must not invent one. GATED_TARGETS is therefore hand-listed, deliberately
+must not invent one.
+
+"admin-service" IS DELIBERATELY EXCLUDED, and this is the subtle one. The
+plan gates the admin service's TRAFFIC SHIFT, and cloudbuild.yaml's own
+`admin-service-staging-gate` step enforces exactly that INSIDE the build.
+But the admin service has no separate staging build: the only
+staging-equivalent proof for a given sha is written by that same build's
+`admin-service-record-deployment` step, which by construction runs BEFORE
+its own gate (the YAML says so, to avoid a bootstrap deadlock). The ROUTE's
+early check queries for such a row BEFORE the build starts, so for
+admin-service it can never find one for a new sha and would 409 forever --
+refusing a deploy the build itself would allow. The in-build gate is the
+enforcement; the route's check is only the friendly early refusal, and it
+can only be friendly about targets whose proof predates the build.
+GATED_TARGETS is therefore hand-listed, deliberately
 NOT derived from CHANNEL_BY_TARGET == "demo" -- a channel-derived set would
 silently start gating form-kits/firestore-rules/editor the moment a future
 edit gave them "demo" in CHANNEL_BY_TARGET, which is not what the build
@@ -132,9 +144,8 @@ def target_family(target: str) -> str:
     return target
 
 
-# The EXACT three targets the in-build staging-before-demo gate applies to
-# (plan: "backend-demo, frontend-demo and admin-service traffic shift
-# additionally require a deployments record"). See the module docstring's
-# GATED_TARGETS section for why this is a hand-listed tuple, not a
-# CHANNEL_BY_TARGET derivation.
-GATED_TARGETS = ("backend-demo", "frontend-demo", "admin-service")
+# The EXACT two targets the ROUTE's early promotion-gate check applies to.
+# See the module docstring's GATED_TARGETS section for why this is a
+# hand-listed tuple, not a CHANNEL_BY_TARGET derivation, and for why
+# "admin-service" is NOT here even though the plan gates its traffic shift.
+GATED_TARGETS = ("backend-demo", "frontend-demo")

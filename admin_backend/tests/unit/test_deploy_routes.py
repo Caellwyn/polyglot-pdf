@@ -291,6 +291,31 @@ def test_demo_family_target_with_staging_success_proceeds(
     assert resp.json()["build_id"] == "build-456"
 
 
+def test_admin_service_is_not_refused_by_the_early_gate(
+        fake_db, admin_client, monkeypatch):
+    """An admin-service deploy must reach Cloud Build with an EMPTY
+    deployments collection.
+
+    Its staging-equivalent proof is written by its own build's
+    admin-service-record-deployment step, which by construction runs before
+    that build's admin-service-staging-gate -- so a pre-build route check
+    could never find a row for a new sha and would 409 every admin-service
+    deploy forever. The in-build gate is the enforcement; this route's check
+    only covers targets whose proof predates the build.
+    """
+    monkeypatch.setattr(deploy_routes, "_project_id", lambda: "proj-1")
+    monkeypatch.setattr(
+        cloud_build, "run_target",
+        lambda target, sha, project_id: {
+            "build_id": "build-admin", "log_url": "https://example.com/log"})
+
+    resp = admin_client.post(
+        "/admin/deploys", json={"target": "admin-service", "sha": VALID_SHA_A})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["build_id"] == "build-admin"
+
+
 def test_list_deploys_filters_by_channel_and_target(fake_db, admin_client):
     fake_db.docs[("deployments", "d1")] = {
         "target": "backend-staging", "target_family": "backend",

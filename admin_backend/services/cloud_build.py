@@ -153,6 +153,19 @@ def run_target(
         client = _client(region=region)
         operation = client.run_build_trigger(
             request=cloudbuild_v1.RunBuildTriggerRequest(
+                # name= is what makes this a REGIONAL run. The request also
+                # carries project_id/trigger_id, and the REST transport tries
+                # its URI templates IN ORDER: the project/trigger pair alone
+                # matches the global-only
+                # "/v1/projects/{project_id}/triggers/{trigger_id}:run"
+                # template first, so a request without `name` addresses the
+                # GLOBAL trigger registry no matter which regional endpoint
+                # the client points at -- and every trigger this repo
+                # provisions is regional (scripts/setup-cloud-build.sh's
+                # "REGION IS NOT OPTIONAL"), so it would 404 as "trigger not
+                # found". Setting `name` selects the regional template.
+                name="projects/{}/locations/{}/triggers/{}".format(
+                    project_id, region, trigger_name),
                 project_id=project_id,
                 trigger_id=trigger_name,
                 source=cloudbuild_v1.RepoSource(

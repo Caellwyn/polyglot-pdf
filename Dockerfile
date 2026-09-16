@@ -40,6 +40,15 @@ COPY admin_backend /app/admin_backend
 COPY scripts/authoring /app/scripts/authoring
 COPY scripts/bakeoff /app/scripts/bakeoff
 
+# The deploy-target constants (bd polyglot-pdf-tb3kp). admin_backend's deploy
+# route and its Pub/Sub webhook both `from deploy.targets import ...` at
+# module top, and admin_backend/main.py includes both routers
+# unconditionally, so an image without this directory crash-loops the ADMIN
+# service on start with ModuleNotFoundError -- a failure a mock cannot show,
+# since every test imports deploy/ straight from the repo (CLAUDE.md scar #7's
+# shape, on the filesystem instead of IAM).
+COPY deploy /app/deploy
+
 ENV PYTHONPATH=/app
 
 # Cloud Run sets PORT; default for local runs.

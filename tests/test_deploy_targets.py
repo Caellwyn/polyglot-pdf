@@ -69,12 +69,21 @@ def test_gated_targets_is_a_subset_of_targets():
     )
 
 
-def test_gated_targets_is_exactly_the_three_the_plan_names():
+def test_gated_targets_is_exactly_the_two_with_a_pre_build_staging_proof():
     """GATED_TARGETS is hand-listed, deliberately NOT derived from
     CHANNEL_BY_TARGET == "demo" (module docstring's own rationale: several
     demo-channel targets have no staging counterpart to gate against). Pin
     the exact set so a future edit cannot silently widen or narrow it."""
-    assert set(GATED_TARGETS) == {"backend-demo", "frontend-demo", "admin-service"}
+    assert set(GATED_TARGETS) == {"backend-demo", "frontend-demo"}
+
+
+def test_admin_service_is_not_route_gated():
+    """admin-service's staging proof is written INSIDE its own build (see the
+    module docstring), so a route-level pre-check could never find one and
+    would 409 every admin-service deploy forever. The in-build
+    admin-service-staging-gate step is what enforces the plan's rule."""
+    assert "admin-service" in TARGETS
+    assert "admin-service" not in GATED_TARGETS
 
 
 def test_target_family_strips_known_suffixes():

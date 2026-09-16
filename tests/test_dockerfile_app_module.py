@@ -148,6 +148,18 @@ def test_both_packages_are_copied_into_the_image():
         "admin_backend/ is not copied into the image, so a service deployed "
         "with APP_MODULE={} crash-loops on start:".format(ADMIN_APP_MODULE)
         + chr(10) + joined)
+    # deploy/ is a PACKAGE the admin app imports at module top (deploy.targets,
+    # via admin_backend/routes/deploy_routes.py and deploy_webhook.py, both
+    # included unconditionally by admin_backend/main.py) -- not a build-time
+    # helper. Left out of the image, the admin service crash-loops on start
+    # with ModuleNotFoundError while every local test still passes, since
+    # tests import deploy/ from the repo rather than the image.
+    assert re.search(
+        r"^COPY\s+deploy\s+/app/deploy$", joined, re.MULTILINE), (
+        "deploy/ is not copied into the image, so a service deployed with "
+        "APP_MODULE={} crash-loops on start (its deploy routes import "
+        "deploy.targets at module top):".format(ADMIN_APP_MODULE)
+        + chr(10) + joined)
 
 
 def test_the_admin_app_declares_the_same_default_as_the_dockerfile():

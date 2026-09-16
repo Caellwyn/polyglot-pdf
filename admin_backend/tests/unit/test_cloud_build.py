@@ -92,6 +92,28 @@ def test_run_target_names_the_trigger_and_project(fake_client):
     assert request.trigger_id == "polyglot-backend-staging"
 
 
+def test_run_target_addresses_the_trigger_regionally(fake_client):
+    """The REGIONAL name, not just project_id/trigger_id.
+
+    The REST transport tries its URI templates in order and the
+    project/trigger pair alone matches the GLOBAL-only
+    "/v1/projects/{project_id}/triggers/{trigger_id}:run" template first --
+    so without `name` every run addresses the global trigger registry,
+    whatever endpoint the client was built for, and 404s: every trigger this
+    repo provisions is regional (scripts/setup-cloud-build.sh's "REGION IS
+    NOT OPTIONAL").
+    """
+    sha = "c" * 40
+
+    cloud_build.run_target(
+        "admin-service", sha, project_id="proj-3", region="europe-west1")
+
+    request = fake_client.requests[0]
+    assert request.name == (
+        "projects/proj-3/locations/europe-west1/triggers/polyglot-admin-service"
+    ), "the request must carry the regional trigger resource name"
+
+
 def test_run_target_wraps_a_client_failure(monkeypatch):
     def _boom(*, region):
         raise RuntimeError("no credentials")
