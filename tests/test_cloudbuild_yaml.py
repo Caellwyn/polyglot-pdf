@@ -1368,6 +1368,17 @@ def test_staging_verified_gate_actually_evaluates_at_runtime(by_id, target, tmp_
         f"not contain the expected '--target-family {expected_family}'"
     )
 
+    # bd polyglot-pdf-jub5f (4.4) exit criterion 2: the gate step must pass
+    # BOTH the target-derived family (asserted above) AND the SHA it is
+    # gating -- checking family alone would let ANY sha for the right
+    # family through the shell invocation; only passing the real _SHA lets
+    # staging_verified()'s own exact-sha comparison run against the right
+    # commit at all.
+    assert "--sha deadbeef" in invoked, (
+        f"staging-verified-gate invoked python with {invoked!r}, which does "
+        f"not contain the expected '--sha deadbeef' (the rendered _SHA)"
+    )
+
 
 def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
     """The third demo-side case: admin-service's TRAFFIC SHIFT specifically
@@ -1391,6 +1402,80 @@ def test_admin_service_traffic_shift_carries_the_staging_gate(by_id, steps):
         "admin-service-record-deployment runs AFTER admin-service-staging-gate -- "
         "the gate can never find a row, since nothing wrote one yet in this build "
         "(a bootstrap deadlock: admin-service deploys would fail every time)"
+    )
+
+
+def test_admin_service_staging_gate_actually_evaluates_at_runtime(by_id, tmp_path):
+    """bd polyglot-pdf-jub5f (4.4) exit criterion 2, admin-service's RUNTIME
+    half -- the sibling of test_staging_verified_gate_actually_evaluates_
+    at_runtime above, which only covers backend-demo/frontend-demo.
+    admin-service-staging-gate is a SEPARATE step with its own case
+    statement (a bare "${_TARGET}" != "admin-service" check, not the
+    TGT-variable pattern staging-verified-gate uses), so the same class of
+    substitution/escaping bug could hide here independently -- a static
+    substring match (test_admin_service_traffic_shift_carries_the_staging_
+    gate, above) cannot tell a live case arm from one that never reaches
+    promotion_gate.py at all.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-staging-gate"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "invoked_with.txt"
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        "#!/bin/bash\n"
+        f'echo "$@" > "{marker.as_posix()}"\n'
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_python.chmod(0o755)
+    fake_pip = tmp_path / "pip"
+    fake_pip.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8", newline="\n")
+    fake_pip.chmod(0o755)
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{tmp_path.as_posix()}"\n'
+        'export PATH="$PWD:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-staging-gate crashed instead of reaching "
+        f"promotion_gate.py:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        "admin-service-staging-gate exited 0 without ever invoking the "
+        "(stubbed) python interpreter -- it likely hit the '*) skip' arm"
+    )
+    invoked = marker.read_text(encoding="utf-8")
+    assert "--target-family admin-service" in invoked, (
+        f"admin-service-staging-gate invoked python with {invoked!r}, which "
+        f"does not contain '--target-family admin-service'"
+    )
+    assert "--sha deadbeef" in invoked, (
+        f"admin-service-staging-gate invoked python with {invoked!r}, which "
+        f"does not contain the expected '--sha deadbeef' (the rendered _SHA)"
     )
 
 

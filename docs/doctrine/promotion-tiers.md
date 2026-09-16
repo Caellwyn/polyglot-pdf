@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-13 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-16 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -320,6 +320,68 @@ above is still the deploy path today. What exists now:
 
 Until the connection is made, treat this section as a description of what is
 declared, not of how anything currently deploys.
+
+## The staging-before-demo promotion gate
+
+**This gate lives inside `cloudbuild.yaml`, which nothing deploys through
+yet** (bd `polyglot-pdf-oqtm7`, E4.6 -- still open, and blocked by this
+bead). Until that connection is made, `deploy-demo.sh` still deploys
+directly via `deploy-all.sh`'s bare `gcloud builds submit --tag` /
+`gcloud run deploy` / `firebase deploy` calls and is **NOT gated** by any
+of what follows -- the predicate, the CLI, and both call sites below exist
+and are tested, but the sanctioned bash deploy path does not yet reach them.
+
+Once deploys run through `cloudbuild.yaml`, every demo-family deploy --
+`backend-demo`, `frontend-demo`, and the admin service's traffic shift --
+requires a **successful staging deployment for the exact same target family
+and commit SHA** before it may proceed. The rule lives in ONE pure predicate,
+`admin_backend/services/promotion_gate.py::staging_verified(target_family,
+sha, deployments)`, so the two places that enforce it can never disagree
+about what "verified" means:
+
+- **The build is the enforcement.** `cloudbuild.yaml`'s
+  `staging-verified-gate` step (for `backend-demo`/`frontend-demo`) and
+  `admin-service-staging-gate` step (for the admin service's traffic shift)
+  each call the predicate through `scripts/promotion_gate.py`, a thin CLI
+  that queries Firestore's `deployments` collection and translates the
+  boolean into an exit code. This runs INSIDE the build, before the deploy
+  step, so a bash-submitted build cannot bypass it any more than a
+  console-triggered one can.
+- **The route is a courtesy, not the enforcement.** `POST /admin/deploys`
+  (`admin_backend/routes/deploy_routes.py`) calls the same predicate for
+  `backend-demo` and `frontend-demo` BEFORE ever triggering a build, and
+  returns an early 409 naming the missing family/sha combination rather
+  than making the operator wait for a build to fail minutes in.
+  - **The admin service is deliberately excluded from this early route
+    check** (`deploy/targets.py`'s `GATED_TARGETS` names only
+    `backend-demo`/`frontend-demo`). The admin service has no separate
+    staging build of its own -- its tagged-candidate deploy and its
+    traffic shift are two steps of the SAME Cloud Build run, and the
+    staging-equivalent proof (`admin-service-record-deployment`) is
+    written by an earlier step of that same build. A pre-build route
+    check could therefore never find a row for a brand-new SHA and would
+    refuse every admin-service deploy forever; its enforcement is
+    in-build only. Pinned by
+    `admin_backend/tests/unit/test_deploy_routes.py::
+    test_admin_service_is_not_refused_by_the_early_gate`.
+- **No recency rule -- a deliberate, maintainer-reversible decision** (the
+  plan's own open question, "whether a recency rule is wanted on
+  promotion", recommendation: none, taken here). An older SHA's staging
+  success is never invalidated by a LATER staging deploy of a different
+  SHA: promoting that older, already-verified commit to the demo (a
+  rollback) must remain possible even after staging has since moved on.
+  `staging_verified()` matches on exact (family, sha) alone -- there is no
+  "is this the newest staging record" comparison anywhere in the rule.
+
+Pinned by `admin_backend/tests/unit/test_promotion_gate.py` (the pure
+predicate's exhaustive per-field table),
+`admin_backend/tests/unit/test_demo_promotion_gate.py` (the route's both
+directions through a real request, the case table the plan text names by
+name, and the CLI's exit codes under a stubbed Firestore), and
+`tests/test_cloudbuild_yaml.py` (every demo-side gate step actually
+invokes `scripts/promotion_gate.py` with both the target-derived family
+and the real `_SHA`, simulated at runtime rather than only substring-
+matched).
 
 ## The admin tier: its own staging, not a third channel
 
