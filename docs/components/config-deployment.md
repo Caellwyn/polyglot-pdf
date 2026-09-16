@@ -10,6 +10,17 @@ absolute" under Frontend deploy below. No env var or deploy step changed.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo
+promotion gate is finished end to end -- `admin_backend/services/
+promotion_gate.py::staging_verified` is the one pure predicate,
+`scripts/promotion_gate.py` is the build-step CLI `cloudbuild.yaml`'s
+`staging-verified-gate`/`admin-service-staging-gate` steps call, and
+`POST /admin/deploys` calls the same predicate for its own early refusal.
+Full explanation, including the no-recency decision and why the admin
+service is excluded from the route's early check, lives in
+[`../doctrine/promotion-tiers.md`](../doctrine/promotion-tiers.md#the-staging-before-demo-promotion-gate)
+rather than duplicated here. No config key or env var changed.)*
+
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
