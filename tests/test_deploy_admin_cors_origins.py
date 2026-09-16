@@ -1,10 +1,15 @@
-"""ADMIN_CORS_ORIGINS must list every origin on BOTH its Firebase Hosting
-domains (bd polyglot-pdf-3l2vp fresh-eyes fix).
+"""The admin service's CORS allowlist must list every origin on BOTH its
+Firebase Hosting domains (bd polyglot-pdf-3l2vp fresh-eyes fix).
+
+READ FROM deploy/channels/admin.env, which is where this allowlist lives as
+of bd polyglot-pdf-oqtm7 (4.6): deploy-admin.sh used to assemble it inline as
+ADMIN_CORS_ORIGINS and pass it through BACKEND_EXTRA_ENV, and is a thin Cloud
+Build trigger wrapper now. Same property, one source.
 
 WHY THIS EXISTS. Every Firebase Hosting site is reachable at both
 `<site>.web.app` AND `<site>.firebaseapp.com` simultaneously -- platform
 behavior, not project config (the codebase's own established convention:
-deploy-demo.sh / deploy-staging.sh both list both domains for the
+deploy/channels/staging.env and demo.env both list both domains for the
 schema-editor's CORS_EXTRA_ORIGINS, and backend/config.py's docstring example
 does the same). admin_backend/main.py's CORSMiddleware is a strict
 exact-string allowlist with no regex fallback, so a caller served from the
@@ -13,7 +18,7 @@ exactly what happened to the two app-channel origins here originally: the
 admin console origins got both domains, the app-channel origins got only
 `.web.app`.
 
-DERIVED FROM THE SCRIPT, never a hand-typed pair list: this test extracts
+DERIVED FROM THE CHANNEL FILE, never a hand-typed pair list: this test extracts
 every `https://<host>` entry ADMIN_CORS_ORIGINS actually contains and asserts
 each host's sibling domain (.web.app <-> .firebaseapp.com) is ALSO present --
 so it catches the omission for any origin, not just the two that were
@@ -26,7 +31,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEPLOY_ADMIN = REPO_ROOT / "deploy-admin.sh"
+ADMIN_ENV = REPO_ROOT / "deploy" / "channels" / "admin.env"
 
 
 def _live_text(path: Path) -> str:
@@ -40,10 +45,10 @@ def _live_text(path: Path) -> str:
 
 
 def _admin_cors_origins() -> list[str]:
-    text = _live_text(DEPLOY_ADMIN)
-    match = re.search(r'ADMIN_CORS_ORIGINS="([^"]*)"', text)
-    assert match, "no ADMIN_CORS_ORIGINS assignment found in deploy-admin.sh"
-    origins = [o for o in match.group(1).split(";") if o]
+    text = _live_text(ADMIN_ENV)
+    match = re.search(r"^CORS_EXTRA_ORIGINS=(.*)$", text, re.MULTILINE)
+    assert match, "no CORS_EXTRA_ORIGINS entry found in deploy/channels/admin.env"
+    origins = [o for o in match.group(1).strip().split(";") if o]
     assert len(origins) >= 4, (
         f"suspiciously few origins parsed ({origins!r}) -- guard the guard: "
         "a regex that stops matching too early would pass vacuously."
@@ -51,7 +56,7 @@ def _admin_cors_origins() -> list[str]:
     return origins
 
 
-def test_extraction_finds_the_assignment():
+def test_extraction_finds_the_entry():
     """Guard the guard: a match that finds nothing passes every test below
     vacuously."""
     origins = _admin_cors_origins()
@@ -78,11 +83,11 @@ def test_every_origin_has_both_firebase_hosting_domains():
     missing_firebaseapp = hosts_web_app - hosts_firebaseapp
     missing_web_app = hosts_firebaseapp - hosts_web_app
     assert not missing_firebaseapp, (
-        f"ADMIN_CORS_ORIGINS lists {sorted(missing_firebaseapp)} on "
+        f"CORS_EXTRA_ORIGINS lists {sorted(missing_firebaseapp)} on "
         ".web.app but not the matching .firebaseapp.com alias -- a caller "
         "served from that domain will be CORS-rejected."
     )
     assert not missing_web_app, (
-        f"ADMIN_CORS_ORIGINS lists {sorted(missing_web_app)} on "
+        f"CORS_EXTRA_ORIGINS lists {sorted(missing_web_app)} on "
         ".firebaseapp.com but not the matching .web.app alias."
     )

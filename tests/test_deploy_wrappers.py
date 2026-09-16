@@ -408,12 +408,23 @@ UNKNOWN_ARG_SCRIPTS = [
 @pytest.mark.parametrize("script", UNKNOWN_ARG_SCRIPTS)
 def test_an_unknown_argument_is_still_fatal(deploy_repo, stub_bin, script):
     """bd polyglot-pdf-7aez9: a typo used to match no arm, deploy NOTHING, and
-    still print a success banner. The engine changed; that refusal did not."""
+    still print a success banner. The engine changed; that refusal did not.
+
+    The refusal must NAME the offending argument. Without that assertion this
+    test is satisfied by the "nothing selected to deploy" backstop further
+    down each wrapper -- which also exits non-zero with no triggers run, so
+    deleting the unknown-argument arm entirely would leave it green while the
+    operator got a message that never mentions their typo (mutation-verified:
+    replacing the arm with a no-op passed until this line existed).
+    """
     proc, calls, _sha = _run(
         deploy_repo, stub_bin, script, "--front-end", build_check_exit="0"
     )
     assert proc.returncode != 0
     assert _triggers(calls) == []
+    assert "--front-end" in proc.stdout + proc.stderr, (
+        f"{script} refused but never told the operator which argument was wrong"
+    )
 
 
 def test_deploy_new_refuses_a_service_it_has_no_target_for(deploy_repo, stub_bin):

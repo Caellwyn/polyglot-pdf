@@ -583,35 +583,30 @@ def test_the_trigger_script_points_at_this_build_file():
     assert "--build-config=" in setup
 
 
-def test_admin_channel_file_matches_the_wrapper():
-    """admin.env is declarative until bead polyglot-pdf-ywxoh wires it up.
+def test_admin_env_is_the_only_copy_of_the_admin_service_config(by_id):
+    """deploy-admin.sh must NOT restate what deploy/channels/admin.env says.
 
-    Two live copies of the same values is exactly the drift the channel files
-    exist to end, so while BOTH exist they are pinned equal here. When 4.2
-    switches deploy-admin.sh over to the file, this guard goes with the
-    duplication.
+    This replaces the temporary guard that pinned the file and the wrapper
+    EQUAL while both carried the same values -- that duplication ended when
+    deploy-admin.sh became a thin Cloud Build wrapper (bd polyglot-pdf-oqtm7,
+    4.6), which is exactly when its own docstring said this guard should go.
+    What is worth pinning now is the opposite property: one source. A wrapper
+    that started setting env vars again would be a second live copy, and the
+    build's --set-env-vars REPLACES the whole block, so whichever path ran
+    last would silently win.
     """
     admin = _parse_env_section(CHANNELS / "admin.env")
     wrapper = (REPO_ROOT / "deploy-admin.sh").read_text(encoding="utf-8")
-
-    assert f'APP_MODULE="{admin["APP_MODULE"]}"' in wrapper, (
-        "deploy-admin.sh and deploy/channels/admin.env disagree about "
-        "APP_MODULE -- the admin service would serve a different app "
-        "depending on which path deployed it"
-    )
-    for key in (
-        "CORS_EXTRA_ORIGINS", "SWEEP_SCHEDULER_SA_EMAIL",
-        "PUBSUB_PUSH_SA_EMAIL",
-    ):
-        for origin in admin[key].split(";"):
-            # SWEEP_SCHEDULER_SA_EMAIL embeds the project; the wrapper builds
-            # it from $PROJECT, so compare the stable local part.
-            needle = origin.split("@")[0] if "@" in origin else origin
-            needle = needle.replace("polyglot-demo-aa709", "$PROJECT")
-            assert needle in wrapper, (
-                f"deploy/channels/admin.env declares {needle} for {key}, but "
-                "deploy-admin.sh does not -- the two live copies have drifted"
-            )
+    for key in admin:
+        assert f"{key}=" not in wrapper, (
+            f"deploy-admin.sh assigns {key} again -- deploy/channels/admin.env "
+            "is the one source the build reads, and two live copies of one "
+            "config is the drift the channel files exist to end"
+        )
+    # And the build DOES read the file, so the values are not merely declared.
+    body = script_of(by_id["admin-service-deploy-tagged"])
+    assert "deploy/channels/admin.env" in body
+    assert "read_channel_section" in body
 
 
 def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
