@@ -348,7 +348,10 @@ def test_links_store_status_reports_error(monkeypatch):
         raise RuntimeError("iam drift")
 
     monkeypatch.setattr("backend.services.auth.get_db", _boom)
-    assert links_store.links_store_status(channel="demo").startswith("error:")
+    status = links_store.links_store_status(channel="demo")
+    # Class only, like the sink and firms probes (sprint 23 B1b); mutation:
+    # f"error: {e}" -- red.
+    assert status == "error: RuntimeError", status
 
 
 # --------------------------------------------------------- status constants

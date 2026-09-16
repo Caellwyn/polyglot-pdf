@@ -216,7 +216,7 @@ def _do_list_alerts(
     try:
         docs = list(db.collection(alerts.COLLECTION).stream())
     except Exception as exc:  # noqa: BLE001
-        _log.error("admin_alert_list_failed", error=str(exc))
+        _log.error("admin_alert_list_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="alert store unavailable") from exc
 
@@ -311,7 +311,7 @@ def _do_list_firm_alerts(
         docs = list(db.collection(alerts.COLLECTION).stream())
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_firm_alert_list_failed", firm_id=firm_id,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="alert store unavailable") from exc
 
@@ -430,7 +430,7 @@ def _do_acknowledge_alert(
         raise
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_alert_acknowledge_failed", alert_id=alert_id,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="alert acknowledge failed") from exc
 

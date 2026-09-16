@@ -156,7 +156,7 @@ def labels_for_uids(uids) -> dict:
             # unknown/deleted account gets, so a caller sees no difference
             # between "this uid does not exist" and "we could not ask".
             _log.error("identity_labels_lookup_failed", requested=len(to_fetch),
-                       error=str(exc))
+                       error_type=type(exc).__name__)
             for uid in to_fetch:
                 if uid not in result:
                     result[uid] = uid

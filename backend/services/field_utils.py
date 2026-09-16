@@ -170,7 +170,7 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
         except Exception as e:
             # Log field that failed to build but continue processing others
             field_id = field_data.get("id", "unknown")
-            print(f"ERROR: Failed to build field {field_id}: {e}")
+            print(f"ERROR: Failed to build field {field_id}: {type(e).__name__}")  # class only
             continue
 
     return fields

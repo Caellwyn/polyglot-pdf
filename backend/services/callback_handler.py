@@ -294,7 +294,7 @@ class CallbackHandler:
             try:
                 await self._websocket.send_json({"type": "turn_complete"})
             except Exception as e:
-                _log.warning("failed_to_send_turn_complete", error=str(e), session_id=self._session_id)
+                _log.warning("failed_to_send_turn_complete", error_type=type(e).__name__, session_id=self._session_id)
 
         # turn_complete is a safety CLEAR for the processing indicator (bd
         # polyglot-pdf-wpw.5): the transcript arrives after all audio, so the agent
@@ -326,7 +326,7 @@ class CallbackHandler:
                 )
             except Exception as e:
                 _log.warning("failed_to_send_agent_processing",
-                             error=str(e), active=active, session_id=self._session_id)
+                             error_type=type(e).__name__, active=active, session_id=self._session_id)
 
     async def on_processing_done(self) -> None:
         """The agent's turn ended (interrupt OR a real server turn_complete) -- clear
@@ -397,7 +397,7 @@ class CallbackHandler:
                 await self._websocket.send_bytes(data)
             except Exception as e:
                 # Swallow errors to avoid crashing the session loop
-                _log.warning("websocket_audio_send_failed", error=str(e), session_id=self._session_id)
+                _log.warning("websocket_audio_send_failed", error_type=type(e).__name__, session_id=self._session_id)
 
     async def on_go_away(self, time_left: Optional[str]) -> None:
         """Forward a Gemini Live GoAway to the client (bd polyglot-pdf-c5t).
@@ -421,7 +421,7 @@ class CallbackHandler:
                 )
             except Exception as e:
                 _log.warning("websocket_go_away_send_failed",
-                             error=str(e), session_id=self._session_id)
+                             error_type=type(e).__name__, session_id=self._session_id)
 
     async def on_interrupted(self) -> None:
         """Forward a Gemini barge-in interruption to the client (bd polyglot-pdf-s7uf).
@@ -440,7 +440,7 @@ class CallbackHandler:
                 await self._websocket.send_json({"type": "interrupted"})
             except Exception as e:
                 _log.warning("websocket_interrupted_send_failed",
-                             error=str(e), session_id=self._session_id)
+                             error_type=type(e).__name__, session_id=self._session_id)
 
     async def on_session_dropped(self) -> None:
         """Forward a spontaneous Gemini drop to the client (bd polyglot-pdf-ppfy).
@@ -460,7 +460,7 @@ class CallbackHandler:
                 await self._websocket.send_json({"type": "gemini_session_dropped"})
             except Exception as e:
                 _log.warning("websocket_session_dropped_send_failed",
-                             error=str(e), session_id=self._session_id)
+                             error_type=type(e).__name__, session_id=self._session_id)
 
     async def on_tool_call(
         self,

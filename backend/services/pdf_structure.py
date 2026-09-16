@@ -177,7 +177,7 @@ def digest_of_bytes(pdf_bytes: bytes) -> Optional[str]:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         return structure_digest(doc)
     except Exception as exc:  # noqa: BLE001 -- any unreadable file is just None
-        _log.info("pdf_structure_unreadable", error=str(exc))
+        _log.info("pdf_structure_unreadable", error_type=type(exc).__name__)
         return None
     finally:
         if doc is not None:
@@ -245,7 +245,7 @@ def assert_matches_kit_form(
         # The kit's own form is missing or broken. FAIL CLOSED: without a
         # reference we cannot tell a good upload from a hostile one, and
         # admitting it "because we could not check" is the wrong direction.
-        _log.error("kit_form_unreadable", path=kit_form_path, error=str(exc))
+        _log.error("kit_form_unreadable", path=kit_form_path, error_type=type(exc).__name__)
         raise StructureMismatch("reference form unavailable") from exc
     finally:
         if doc is not None:

@@ -132,7 +132,7 @@ async def get_channel_config(
     try:
         snap = db.collection(runtime_config.COLLECTION).document(channel).get()
     except Exception as exc:  # noqa: BLE001
-        _log.error("admin_config_read_failed", channel=channel, error=str(exc))
+        _log.error("admin_config_read_failed", channel=channel, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="config store unavailable")
     doc = (snap.to_dict() or {}) if snap.exists else {}
@@ -267,7 +267,7 @@ def _apply_config_write(
     except Exception as exc:  # noqa: BLE001
         _log.error(
             "admin_config_write_failed",
-            channel=channel, key=key, error=str(exc),
+            channel=channel, key=key, error_type=type(exc).__name__,
         )
         raise HTTPException(status_code=500,
                             detail="config write failed") from exc

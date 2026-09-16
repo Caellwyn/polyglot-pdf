@@ -60,11 +60,11 @@ class Settings(BaseModel):
 	# === Model selection (env-swappable for A/B testing without redeploy) ===
 	# We run native audio-to-audio Live models only (no cascade/half-cascade).
 	# USE_PREMIUM_MODEL flips between the two tiers above; MODEL_NATIVE is the
-	# RESOLVED active model (derived below), kept as a field so /health, pricing,
+	# RESOLVED active model (derived below), kept as a field so pricing,
 	# and dependencies can read the single source of truth. Set MODEL_NATIVE
 	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
-	#   deprecated; kept as an env-swappable knob and surfaced on /health).
+	#   deprecated; kept as an env-swappable knob; not surfaced on /health).
 	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). BOTH families
 	# now emit update_form_fields reliably: the historic "3.1 only calls the tool
 	# ~50% of the time and confabulates a 'trouble saving' message" defect (bd

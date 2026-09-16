@@ -323,7 +323,10 @@ async def test_run_session_loop_logs_on_connect_failure():
     error_calls = [call for call in logger.error.call_args_list if call.args and call.args[0] == "session_loop_error"]
     assert error_calls, "expected session_loop_error to be logged"
     error_call = error_calls[-1]
-    assert error_call.kwargs.get("error") == "boom"
+    # The exception CLASS is logged, never its message (sprint 23 B1b): the
+    # message can embed a field value, and "boom" is the sentinel here.
+    assert error_call.kwargs.get("error_type") == "RuntimeError"
+    assert "boom" not in repr(error_call.kwargs)
     # ensure background tasks are cleaned up to avoid pending tasks
     await adapter.finalize()
 

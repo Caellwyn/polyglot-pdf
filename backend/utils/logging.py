@@ -199,7 +199,7 @@ def pii_safe_exception_processor(logger, method_name, event_dict):
 	return event_dict
 
 
-# EVERY file under backend/ that renders an exception through structlog --
+# EVERY file under backend/ or admin_backend/ that renders an exception through structlog --
 # i.e. calls `.exception(...)` or passes `exc_info=`. Pinned as a SET
 # (CLAUDE.md scar #8) by backend/tests/unit/test_error_shape.py, which
 # re-derives it from the AST and fails on any addition or removal.
@@ -210,12 +210,16 @@ def pii_safe_exception_processor(logger, method_name, event_dict):
 # addition VISIBLE at review time, and to let a reviewer check the claim "all
 # of them are safe" against a real enumeration instead of against recall.
 #
-# backend/utils/logging.py itself is excluded (it DEFINES the processor),
-# as are backend/tests/** and backend/scripts/** (operator probes, the same
-# carve-out backend/tests/unit/test_deployed_iam_envelope.py draws).
+# The walk covers backend/ AND admin_backend/ (sprint 23 B1b). This file is
+# excluded (it DEFINES the processor), as are every tests/ and scripts/ dir
+# (operator probes, the same carve-out test_deployed_iam_envelope.py draws).
 EXCEPTION_LOGGING_SITES = (
 	"backend/adapters/live_ai_gemini.py",
 	"backend/routes/editor_kit_routes.py",
+	# checkbox_fill_failed and manual_section_switch_failed: exc_info replaced
+	# a hand-formatted traceback string that carried the message (sprint 23 B1b).
+	"backend/routes/pdf_fill_routes.py",
+	"backend/routes/websocket_routes.py",
 	"backend/services/validation_handler.py",
 )
 

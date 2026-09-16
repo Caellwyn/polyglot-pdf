@@ -77,7 +77,30 @@ _SENSITIVE_KWARGS = (
     # (bd polyglot-pdf-t1c). spoken_name_length matches the *_length safe-RHS,
     # so the redacted form passes while spoken_name=spoken_name fails.
     "spoken_name",
+    # The exception-MESSAGE class (bd polyglot-pdf-2kbo0, sprint 23 B1b):
+    # `error=str(exc)` carries whatever the exception rendered, and a
+    # ValueError from a field validator renders the field VALUE. The
+    # sanctioned shape is error_type=type(exc).__name__ (a different kwarg
+    # name, so it does not match here) -- e4dt8's processor supplies type +
+    # frames for _log.exception(); a plain _log.warning has only this guard.
+    # `detail` is the same class (HTTP detail strings echo the request).
+    "error", "err", "exc", "detail",
+    # A hand-formatted traceback string (traceback.format_exc()) ends with the
+    # exception MESSAGE line, so it is the same class; exc_info=True is the
+    # sanctioned shape (e4dt8's processor renders frames + type, no message).
+    "traceback", "tb", "stack", "stacktrace",
 )
+
+# Per-site allowlist for the error-class kwargs: EXACT (file, kwarg text)
+# pairs that carry a non-literal that is known not to be client data, each
+# with its reason. test_allowlisted_error_sites_still_exist pins the list
+# against the tree so a removed site leaves no dead entry (scar #8).
+_ERROR_KWARG_ALLOWLIST = {
+    # The extractor subprocess's last stderr line: it runs on a BLANK form
+    # PDF (kit authoring), never on client data, and the tail is capped.
+    ("backend/routes/editor_kit_routes.py", "detail=last_line[:400]"):
+        "extractor stderr tail; blank-form PDF, no client data",
+}
 # `fields` is a SPECIAL case: logging the field IDs (dict KEYS) is always-safe
 # per the PII policy, but the same kwarg carrying field .values() would be a
 # leak. So `fields` is not in _SENSITIVE_KWARGS (which would flag the safe
@@ -104,8 +127,16 @@ _SAFE_RHS = re.compile(
     re.VERBOSE,
 )
 # Match `kwarg = <rhs>` up to the next comma/paren/eol, for each sensitive kwarg.
+# The error class is matched with ANY prefix (final_error=, last_exc=, ...):
+# `\b` never fires after an underscore, so a plain `\berror=` let
+# final_error=str(e) through (bd 2kbo0 fresh-eyes). The name-suffix forms
+# error_type= / error_count= still do not match: `=` must follow the word.
+_PREFIXED_KWARGS = ("error", "err", "exc", "traceback", "detail", "tb", "stack", "stacktrace")
 LEAK_PATTERNS = [
-    re.compile(r"\b" + re.escape(k) + r"\s*=\s*(?P<rhs>[^,)\n#]+)")
+    re.compile(
+        (r"\b[A-Za-z0-9_]*" if k in _PREFIXED_KWARGS else r"\b")
+        + re.escape(k) + r"\s*=\s*(?P<rhs>[^,)\n#]+)"
+    )
     for k in _SENSITIVE_KWARGS
 ]
 
@@ -116,8 +147,13 @@ def _is_leak(match) -> bool:
     return not _SAFE_RHS.match(rhs)
 
 
+# Every logger spelling the tree uses (_log / log / logger, bare or on self,
+# and the inline structlog.get_logger() form)
+# and every level INCLUDING .exception( -- the first version matched only
+# `_log.` and five levels, so a `_log.exception(..., error=str(exc))` and
+# every `log.`/`logger.` file escaped the sweep (bd 2kbo0 mutation catch).
 _LOG_CALL_START = re.compile(
-    r"(?:self\.)?_log\.(?:info|warning|error|debug|critical)\s*\("
+    r"(?:self\.)?(?:_log|log|logger|structlog\.get_logger\(\))\.(?:info|warn|warning|error|debug|critical|exception)\s*\("
     r"|get_structured_logger\(\)\.(?:log_text_ai_usage|log_tts_usage|"
     r"log_gemini_api_response)\s*\("
 )
@@ -185,7 +221,13 @@ _SENSITIVE_IDENTS = (
     "target_value", "original_value", "message", "text", "text_preview",
     "transcript", "sample", "available_options", "system_instruction",
     "field_values", "current_values", "payload", "response", "resp", "state",
+    # The exception-message class (sprint 23 B1b): `{e}` / `{str(exc)}` in a
+    # print renders the message, and stdout IS Cloud Logging on Cloud Run.
+    # `{type(e).__name__}` is the sanctioned shape -- and it matches here
+    # too, so the scanner exempts a `type(<ident>).__name__` interpolation.
+    "e", "exc", "err", "error", "last_exc", "tb", "traceback",
 )
+_EXC_CLASS_ONLY = re.compile(r"\{type\([A-Za-z_][A-Za-z0-9_]*\)\.__name__[^{}]*\}")
 # A `{...}` interpolation whose expression references a sensitive base name --
 # either bare (`{value}`) or as the base of `.attr` / `[idx]` / `(...)`
 # (`{resp.response}`, `{args['k']}`). The base name is bounded by `{` or non-word
@@ -222,7 +264,7 @@ def _scan_print_leaks(text: str):
             code_after = code[m.end():]
         else:
             code_after = code
-        if _FSTRING_SENSITIVE.search(code_after):
+        if _FSTRING_SENSITIVE.search(_EXC_CLASS_ONLY.sub("{}", code_after)):
             flagged = True
         depth += code_after.count("(") - code_after.count(")")
         if depth <= 0:  # the print() call closed
@@ -260,15 +302,16 @@ _SWEEP_SKIP_NAME_PREFIXES = ("test_", "probe_")
 
 
 def _all_backend_source_files() -> list[pathlib.Path]:
-    """Every production backend .py file (excludes tests, probes, dev scripts).
+    """Every production .py file of BOTH services (backend/ and admin_backend/;
+    excludes tests, probes, dev scripts).
 
     This is the completeness backstop: the hand-maintained GUARDED_FILES list
     inevitably lags new files, and an unguarded new file is exactly how a leak
     ships silently. Sweeping ALL of backend/ means a new logging site is covered
     the moment it lands, with no list edit (bd polyglot-pdf-uov.15)."""
     out = []
-    backend = REPO_ROOT / "backend"
-    for p in sorted(backend.rglob("*.py")):
+    for root in ("backend", "admin_backend"):
+      for p in sorted((REPO_ROOT / root).rglob("*.py")):
         rel_parts = p.relative_to(REPO_ROOT).parts
         if any(part in _SWEEP_SKIP_DIR_PARTS for part in rel_parts):
             continue
@@ -303,7 +346,10 @@ def test_no_pii_logging_anywhere_in_backend():
         text = path.read_text(encoding="utf-8")
         offenders = _scan_leaks(text) + _scan_print_leaks(text)
         rel = path.relative_to(REPO_ROOT).as_posix()
-        all_offenders.extend(f"{rel}:{ln}: {txt}" for ln, txt in offenders)
+        all_offenders.extend(
+            f"{rel}:{ln}: {txt}" for ln, txt in offenders
+            if not _is_allowlisted(rel, txt)
+        )
 
     assert not all_offenders, (
         "PII/PHI logging leak in a backend file (bd polyglot-pdf-uov.15 sweep). "
@@ -311,6 +357,28 @@ def test_no_pii_logging_anywhere_in_backend():
         "text, and never print() raw args/values to stdout:\n  "
         + "\n  ".join(all_offenders)
     )
+
+
+def _is_allowlisted(rel: str, line_text: str) -> bool:
+    """True when the offending line carries EXACTLY an allowlisted kwarg text
+    at an allowlisted file -- exact text, so a widened RHS is not covered."""
+    return any(f == rel and kwarg_text in line_text.replace(" ", "")
+               for (f, kwarg_text) in _ERROR_KWARG_ALLOWLIST)
+
+
+def test_allowlisted_error_sites_still_exist():
+    """Every allowlist entry must still match a line in its file, so a
+    site that moves or disappears takes its exemption with it."""
+    for (rel, kwarg_text) in _ERROR_KWARG_ALLOWLIST:
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8").replace(" ", "")
+        assert kwarg_text in text, f"stale allowlist entry: {rel} {kwarg_text}"
+
+
+def test_the_sweep_covers_the_admin_service():
+    """The admin service logs too (bd 2kbo0 found 40 error=str(exc) sites
+    there); the sweep must include it, not just backend/."""
+    rels = {p.relative_to(REPO_ROOT).parts[0] for p in _all_backend_source_files()}
+    assert rels == {"backend", "admin_backend"}, rels
 
 
 def test_guard_catches_known_leaks():
@@ -330,6 +398,30 @@ def test_guard_catches_known_leaks():
     assert not _scan_leaks('_log.error("X", message="Session closed and cleaned up")')
     # A value assignment OUTSIDE a log call must NOT flag.
     assert not _scan_leaks('value_str = str(value)\nmessage = f"...{value_str}"')
+    # The exception-message class (bd 2kbo0): error=str(exc) is a leak on any
+    # level; the sanctioned error_type=type(exc).__name__ is not, nor is
+    # exc_info=True (a different kwarg; e4dt8's processor redacts it).
+    assert _scan_leaks('_log.warning("X", error=str(exc))')
+    assert _scan_leaks('_log.exception("X", error=str(exc))')
+    assert _scan_leaks('_log.error("X", traceback=traceback.format_exc())')
+    assert _scan_leaks('self._log.warn("X", error=str(e))')
+    assert _scan_leaks('structlog.get_logger().warning("X", detail=body)')
+    assert not _scan_leaks('structlog.get_logger().warning("X", detail="fixed text")')
+    assert _scan_leaks('self._log.error("X", attempts=n, final_error=str(e))')
+    assert _scan_leaks('_log.error("X", last_exc=exc)')
+    assert _scan_leaks('_log.error("X", last_detail=body, final_tb=tb)')
+    assert not _scan_leaks('_log.error("X", is_name_error=bool(is_name_err), returning_error=True)')
+    assert not _scan_leaks('_log.error("X", final_error_type=type(e).__name__, error_count=n)')
+    assert _scan_leaks('self._log.error("X", error_type=type(e).__name__, traceback=tb)')
+    assert not _scan_leaks('_log.error("X", error_type=type(e).__name__, exc_info=True)')
+    assert _scan_leaks('log.exception("X", error=str(exc))')
+    assert _scan_leaks('logger.warning("X", value=value)')
+    assert _scan_leaks('self._log.exception("X", detail=body)')
+    assert _scan_leaks('_log.error(\n    "X",\n    error=str(e),\n)')
+    assert _scan_leaks('_log.info("X", detail=resp.text[:200])')
+    assert not _scan_leaks('_log.error("X", error_type=type(exc).__name__)')
+    assert not _scan_leaks('_log.error("X", exc_info=True)')
+    assert not _scan_leaks('_log.warning("X", error_count=len(errs), err_id=eid)')
     # spoken_name: the raw value is a leak; the redacted length form is safe (bd t1c).
     assert _scan_leaks('_log.info("X", spoken_name=spoken_name, found=f)')
     assert not _scan_leaks('_log.info("X", spoken_name_length=len(spoken_name), found=f)')
@@ -349,6 +441,13 @@ def test_guard_catches_print_leaks():
     assert _scan_print_leaks('print(f"Arguments: {arguments}")')
     assert _scan_print_leaks('print(f"value={value}")')
     assert _scan_print_leaks("print(f'transcript: {transcript[:50]}')")
+    # The exception-message class in a print (sprint 23 B1b); the class-only
+    # shape is exempt.
+    assert _scan_print_leaks('print(f"Error: {str(e)}")')
+    assert _scan_print_leaks('print(f"Failed to build {field_id}: {e}")')
+    assert _scan_print_leaks('print(f"Previous: {str(last_exc) if last_exc else 1}")')
+    assert not _scan_print_leaks('print(f"Error: {type(e).__name__}")')
+    assert not _scan_print_leaks('print(f"Previous: {type(last_exc).__name__ if last_exc else 1}")')
     assert _scan_print_leaks('print(f"{field_values}")')
     # ATTRIBUTE/INDEX access on a sensitive base must flag (the live_ai_gemini.py
     # `print(f"Response: {resp.response}")` leak Copilot found on PR #48).

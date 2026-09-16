@@ -261,7 +261,7 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
     try:
         schema = await store.load_schema(kit_id, schema_file)
     except (FormKitNotFound, FormKitStoreError) as exc:
-        _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
+        _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error_type=type(exc).__name__)
         return None
 
     # Resolve through the SAME three ranks the confirmation record used, or the
@@ -318,7 +318,7 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
         await store.put_archived_revision(kit_id, store_marker, schema, meta)
     except FormKitStoreError as exc:
         _log.error("kit_revision_archive_failed", kit_id=kit_id, marker=marker,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         return None
     _log.info("kit_revision_archived", kit_id=kit_id, marker=marker,
               store_marker=store_marker)

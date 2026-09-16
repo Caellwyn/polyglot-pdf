@@ -19,7 +19,7 @@ try:
         firebase_admin.initialize_app()
         logger.info("firebase_admin_initialized", method="ADC")
 except Exception as e:
-    logger.error("firebase_admin_init_failed", error=str(e))
+    logger.error("firebase_admin_init_failed", error_type=type(e).__name__)
     # We don't raise immediately to allow import, but verify_token will fail if not init
 
 # TWO SEPARATE ALLOWLISTS (maintainer, 2026-08-22): "voice app accounts should
@@ -97,7 +97,7 @@ def verify_token(token: str, require_enrolment: bool = True) -> dict:
         # production. Restoring it means granting the IAM role FIRST.
         decoded_token = auth.verify_id_token(token)
     except Exception as e:
-        logger.warning("token_verification_failed", error=str(e))
+        logger.warning("token_verification_failed", error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -204,7 +204,7 @@ def resolve_client_link_credential(token: str) -> dict:
     try:
         payload = verify_link_token(token)
     except LinkTokenError as exc:
-        logger.warning("link_token_rejected", error=str(exc))
+        logger.warning("link_token_rejected", error_type=type(exc).__name__)
         raise _unauth from exc
 
     claims = {
@@ -300,7 +300,7 @@ async def require_paid_client_work(
         # SUBCLASS of RedemptionUnavailable, so this tuple already
         # catches it: a paid door cannot be left admitting a revoked
         # link by an omission at one call site.
-        logger.warning("link_redemption_refused", error=str(exc))
+        logger.warning("link_redemption_refused", error_type=type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

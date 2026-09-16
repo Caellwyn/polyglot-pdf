@@ -197,7 +197,7 @@ def get_allowed_kits(firm_id: str) -> list[str]:
             return []
         return list(kits)
     except Exception as e:
-        _log.error("firms_read_failed", firm_id=firm_id, error=str(e))
+        _log.error("firms_read_failed", firm_id=firm_id, error_type=type(e).__name__)
         return []
 
 
@@ -232,7 +232,7 @@ def firm_kind(firm_id: str) -> str:
             return FIRM_KIND_LIVE
         return kind
     except Exception as e:
-        _log.error("firm_kind_read_failed", firm_id=firm_id, error=str(e))
+        _log.error("firm_kind_read_failed", firm_id=firm_id, error_type=type(e).__name__)
         return FIRM_KIND_LIVE
 
 
@@ -387,8 +387,9 @@ def firms_store_status(max_age_s: float = 300.0) -> str:
         list(get_db().collection(_FIRMS_COLLECTION).limit(1).stream())
         status = "ok"
     except Exception as e:
-        _log.error("firms_store_probe_failed", error=str(e))
-        status = f"error: {e}"
+        _log.error("firms_store_probe_failed", error_type=type(e).__name__)
+        # Class only: /health returns this verbatim to anyone (sprint 23 B1b).
+        status = f"error: {type(e).__name__}"
 
     with _probe_lock:
         _probe_cache = (time.monotonic(), status)

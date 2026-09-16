@@ -254,7 +254,7 @@ def _do_trigger_deploy(
         # build that is actually running.
         deploy_ref.update({"status": STATUS_FAILURE})
         _log.error("admin_deploy_trigger_failed", target=target, sha=sha,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(
             status_code=503,
             detail="could not trigger the build") from exc

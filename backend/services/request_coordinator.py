@@ -175,7 +175,7 @@ class RequestCoordinator:
                 "field_ids": field_ids or [],
             })
         except Exception as exc:
-            _log.error("failed_to_send_form_state_request", session_id=self._session_id, error=str(exc))
+            _log.error("failed_to_send_form_state_request", session_id=self._session_id, error_type=type(exc).__name__)
             self._discard(request_id)
             return {}
 
@@ -207,7 +207,7 @@ class RequestCoordinator:
             self._discard(request_id)
             return {}
         except Exception as exc:
-            _log.error("form_state_request_error", session_id=self._session_id, error=str(exc))
+            _log.error("form_state_request_error", session_id=self._session_id, error_type=type(exc).__name__)
             self._discard(request_id)
             return {}
 
@@ -239,7 +239,7 @@ class RequestCoordinator:
                 "request_id": request_id,
             })
         except Exception as exc:
-            _log.error("failed_to_send_next_field_request", session_id=self._session_id, error=str(exc))
+            _log.error("failed_to_send_next_field_request", session_id=self._session_id, error_type=type(exc).__name__)
             self._discard(request_id)
             return HINT_REQUEST_TIMEOUT
 
@@ -272,7 +272,7 @@ class RequestCoordinator:
             self._discard(request_id)
             return HINT_REQUEST_TIMEOUT
         except Exception as exc:
-            _log.error("next_field_request_error", session_id=self._session_id, error=str(exc))
+            _log.error("next_field_request_error", session_id=self._session_id, error_type=type(exc).__name__)
             self._discard(request_id)
             return HINT_REQUEST_TIMEOUT
 
@@ -320,7 +320,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_confirm_field_request",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -357,7 +357,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("confirm_field_request_error",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -395,7 +395,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_skip_field_request",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -420,7 +420,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("skip_field_request_error",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -459,7 +459,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_switch_field_request",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -484,7 +484,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("switch_field_request_error",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -552,7 +552,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_spellback_request",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -578,7 +578,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("spellback_request_error",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
@@ -624,7 +624,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_section_info_request",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return None
 
@@ -660,7 +660,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("section_info_request_error",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             self._discard(request_id)
             return None
 

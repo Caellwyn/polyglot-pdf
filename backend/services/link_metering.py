@@ -95,7 +95,7 @@ def links_minted_this_period(firm_id: str, now: Optional[float] = None) -> int:
     try:
         snap = _usage_doc(firm_id, billing_period(now)).get()
     except Exception as exc:  # noqa: BLE001 -- reporting must not break minting
-        _log.warning("link_usage_read_failed", firm_id=firm_id, error=str(exc))
+        _log.warning("link_usage_read_failed", firm_id=firm_id, error_type=type(exc).__name__)
         return 0
     if not snap.exists:
         return 0
@@ -135,7 +135,7 @@ def record_mint(firm_id: str, now: Optional[float] = None) -> dict[str, Any]:
         raw = rec.get(MINTED_FIELD)
         minted = raw if isinstance(raw, int) and not isinstance(raw, bool) else 0
     except Exception as exc:  # noqa: BLE001 -- billing must not break minting
-        _log.warning("link_usage_write_failed", firm_id=firm_id, error=str(exc))
+        _log.warning("link_usage_write_failed", firm_id=firm_id, error_type=type(exc).__name__)
 
     over = minted > allowance if minted else False
     if over:

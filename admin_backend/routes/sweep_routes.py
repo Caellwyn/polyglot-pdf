@@ -218,7 +218,7 @@ def _sweep_channel(channel: str, *, now: float) -> dict:
             # abort the whole hourly pass; every other expired link in this
             # channel still gets its refund attempt.
             _log.error("sweep_link_failed", jti=jti, channel=channel,
-                       error=str(exc))
+                       error_type=type(exc).__name__)
             skipped += 1
 
     return {"channel": channel, "refunded": refunded, "skipped": skipped}

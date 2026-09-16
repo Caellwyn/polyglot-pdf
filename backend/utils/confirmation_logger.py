@@ -124,7 +124,7 @@ def _firestore_write(event: dict) -> None:
     except Exception as e:
         _log.error(
             "confirmation_firestore_write_failed",
-            error=str(e),
+            error_type=type(e).__name__,
             form_session_id=event.get("form_session_id"),
             event_type=event.get("event"),
         )
@@ -148,7 +148,7 @@ def _submit_firestore_write(event: dict) -> None:
     except Exception as e:
         _log.error(
             "confirmation_firestore_submit_failed",
-            error=str(e),
+            error_type=type(e).__name__,
             form_session_id=event.get("form_session_id"),
         )
 
@@ -465,7 +465,7 @@ def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:
             f.write(json.dumps(event) + '\n')
 
     except Exception as e:
-        _log.error("confirmation_log_write_failed", error=str(e), form_session_id=form_session_id)
+        _log.error("confirmation_log_write_failed", error_type=type(e).__name__, form_session_id=form_session_id)
 
 
 def log_form_session_start(
@@ -830,8 +830,10 @@ def confirmation_sink_status(max_age_s: float = 300.0) -> str:
         ref.delete()
         status = "ok"
     except Exception as e:
-        _log.error("confirmation_sink_probe_failed", error=str(e))
-        status = f"error: {e}"
+        _log.error("confirmation_sink_probe_failed", error_type=type(e).__name__)
+        # Class only: the string is returned verbatim by the unauthenticated
+        # /health, and a Firestore message can name the project or identity.
+        status = f"error: {type(e).__name__}"
     with _probe_lock:
         _probe_cache = (time.monotonic(), status)
         _probe_in_flight = None
@@ -904,7 +906,7 @@ def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[di
                 if line.strip():
                     events.append(json.loads(line))
     except Exception as e:
-        _log.error("confirmation_log_read_failed", error=str(e), form_session_id=form_session_id)
+        _log.error("confirmation_log_read_failed", error_type=type(e).__name__, form_session_id=form_session_id)
 
     return events
 
@@ -1054,7 +1056,7 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
     except Exception as e:
         _log.error(
             "confirmation_kit_existence_check_failed",
-            error=str(e),
+            error_type=type(e).__name__,
             kit_id=kit_id,
         )
         raise ConfirmationCheckUnavailable(str(e)) from e
@@ -1085,7 +1087,7 @@ def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
     except Exception as e:
         _log.error(
             "confirmation_firestore_read_failed",
-            error=str(e),
+            error_type=type(e).__name__,
             form_session_id=form_session_id,
         )
         raise ConfirmationReadError(str(e)) from e

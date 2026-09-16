@@ -1,8 +1,7 @@
 import asyncio
 import os
 
-from typing import Annotated
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import structlog
@@ -10,7 +9,7 @@ import structlog
 # Load environment variables from .env file (if it exists)
 load_dotenv()
 
-from .config import Settings, get_settings, parse_extra_origins
+from .config import get_settings, parse_extra_origins
 from .routes import websocket_routes, link_routes
 from .routes import pdf_fill_routes
 from .routes import tts_routes
@@ -116,7 +115,16 @@ HEALTH_PROBE_TIMEOUT_S = 3.0
 
 
 @app.get("/health")
-async def health(settings: Annotated[Settings, Depends(get_settings)]):
+async def health():
+    """Liveness + the two Firestore probes -- and NOTHING about the config.
+
+    Unauthenticated, so it discloses no model id, audio rate, upload limit,
+    provider flag or key-presence bit (sprint 23 B1b, PF-10): those are a
+    free fingerprint of the deployment for anyone on the internet. Deploy
+    verification reads /version (the SHA) and the admin service's own
+    /health (app_module); the Vertex-only rule is enforced at startup on
+    K_SERVICE, not verified through this route.
+    """
     # Sink probe (bd z2is round 3): verifies the confirmation trail can WRITE
     # (IAM drift otherwise fails silently). Cached 5 min inside; the wait_for
     # bounds a stalled Firestore so /health never hangs on a broken sink.
@@ -156,26 +164,6 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]):
         "status": "ok",
         "confirmation_sink": sink_status,
         "firms_store": firms_status,
-        "models": {
-            "native": settings.MODEL_NATIVE,
-            "labeling": settings.MODEL_LABELING,
-        },
-        "use_premium_model": settings.USE_PREMIUM_MODEL,
-        # Auth/service mode: vertexai=true -> Vertex (ADC/SA); false -> AI Studio
-        # (Gemini Developer API via GEMINI_API_KEY). Lets a deploy be verified
-        # without dumping env vars.
-        "vertexai": settings.VERTEXAI,
-        "audio": {
-            "in_rate": settings.AUDIO_IN_RATE,
-            "out_rate": settings.AUDIO_OUT_RATE,
-        },
-        "limits": {
-            "max_upload_mb": settings.MAX_UPLOAD_MB,
-            "ws_chunk_ms": settings.WS_CHUNK_MS,
-        },
-        "env": {
-            "gemini_api_key_present": bool(settings.GEMINI_API_KEY),
-        },
     }
 
 

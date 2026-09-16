@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: the `/health` payload is status + the two probes and nothing else.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the token file is local-dev only on two guards -- a K_SERVICE no-op in the writer and the .env.DEV gate at the call site -- and the per-turn print() banner is now the structured `token_usage` event. On a deployed instance `configure_logging` never runs below INFO.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
@@ -345,7 +347,7 @@ processor renders the exception MESSAGE, and in a form-filling app that
 message can embed a field value (a parse error over an A-number, a validation
 error naming a date of birth) -- a P0 (bd `polyglot-pdf-p84m`).
 
-Every `.exception(...)` / `exc_info=True` site under `backend/` renders
+Every `.exception(...)` / `exc_info=True` site under `backend/` or `admin_backend/` renders
 through this one processor, which emits:
 
 | Field | Content |
@@ -365,8 +367,8 @@ speech, so no pattern covers it and only a wholesale drop cannot be defeated
 by an input. Developers who need the message have the `DEV_LOGGING_ENABLED`
 file log (`backend/utils/dev_file_logger.py`), which never leaves the machine.
 
-`EXCEPTION_LOGGING_SITES` in that module registers every file that logs an
-exception; `backend/tests/unit/test_error_shape.py` re-derives the set from
+`EXCEPTION_LOGGING_SITES` in that module registers every file in either
+service that logs an exception; `backend/tests/unit/test_error_shape.py` re-derives the set from
 the AST and fails on an addition or a removal, so a new site is visible at
 review rather than after it has shipped. `backend/tests/test_no_pii_logging.py`
 carries the sentinel case: an exception whose message contains a sentinel must
@@ -432,7 +434,10 @@ cached 5 minutes, coalesce concurrent callers onto one round trip, and are
 bounded by a separate `HEALTH_PROBE_TIMEOUT_S` `wait_for` each -- `/health` is
 unauthenticated, so any caller can drive them at their own rate, and a stalled
 store must not eat the other probe's answer. A degraded probe still returns
-200: the ALERT pages, not a flapping uptime check.
+200: the ALERT pages, not a flapping uptime check. Those two probes and
+`status` are the WHOLE payload: no model id, audio rate, upload limit,
+provider flag or key-presence bit (sprint 23 B1b), because the route is
+unauthenticated and anything more is a free fingerprint of the deployment.
 
 
 ### The uvicorn access log is OFF (bd polyglot-pdf-6rj0j, sprint 23 B0)

@@ -1082,7 +1082,7 @@ def reconcile_expired_for_firm(
                       firm_id=firm_id)
         except Exception as exc:  # noqa: BLE001 -- best-effort, never abort
             _log.error("lazy_reconcile_failed", jti=jti, firm_id=firm_id,
-                       error=str(exc))
+                       error_type=type(exc).__name__)
     return refunded
 
 

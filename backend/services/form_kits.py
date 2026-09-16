@@ -953,7 +953,7 @@ class LocalFormKitStore(FormKitStore):
 						shutil.rmtree(d, ignore_errors=True))
 			except OSError as exc:  # pragma: no cover - defensive
 				_log.warning("draft_snapshot_evict_failed",
-							 kit_id=kit_id, snapshot=stale, error=str(exc))
+							 kit_id=kit_id, snapshot=stale, error_type=type(exc).__name__)
 		return next_id
 
 	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
@@ -1445,7 +1445,7 @@ class GCSFormKitStore(FormKitStore):
 				# Never fatal: an un-evicted snapshot costs a little storage,
 				# failing the save would cost the editor their work.
 				_log.warning("draft_snapshot_evict_failed",
-							 kit_id=kit_id, snapshot=stale, error=str(exc))
+							 kit_id=kit_id, snapshot=stale, error_type=type(exc).__name__)
 		return next_id
 
 	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:

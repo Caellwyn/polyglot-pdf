@@ -151,7 +151,7 @@ def read_commercial(kit_id: str) -> Optional[dict]:
             return None
         snap = db.collection(COLLECTION).document(kit_id).get()
     except Exception as exc:  # noqa: BLE001 -- any failure is "no doc"
-        _log.error("kit_commercial_read_failed", kit_id=kit_id, error=str(exc))
+        _log.error("kit_commercial_read_failed", kit_id=kit_id, error_type=type(exc).__name__)
         return None
     if not snap.exists:
         return None

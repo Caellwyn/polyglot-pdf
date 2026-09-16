@@ -266,7 +266,7 @@ def _get_db():
 
         return get_db()
     except Exception as exc:  # noqa: BLE001 -- best-effort, never raise
-        _log.error("usage_rollups_get_db_failed", error=str(exc))
+        _log.error("usage_rollups_get_db_failed", error_type=type(exc).__name__)
         return None
 
 
@@ -397,7 +397,7 @@ def record_session_end(
             "usage_rollup_write_failed",
             firm_id=firm_id,
             kit_id=kit_id,
-            error=str(exc),
+            error_type=type(exc).__name__,
         )
         return False
 
@@ -445,7 +445,7 @@ def _increment_firm_counter(
     except Exception as exc:  # noqa: BLE001 -- best-effort, never raise
         _log.error(
             "usage_rollup_link_counter_failed", firm_id=firm_id, field=field,
-            error=str(exc),
+            error_type=type(exc).__name__,
         )
         return False
     return True
@@ -557,7 +557,7 @@ def record_link_minted(
             "usage_rollup_link_minted_failed",
             firm_id=firm_id,
             kit_id=kit_id,
-            error=str(exc),
+            error_type=type(exc).__name__,
         )
         return False
 
