@@ -151,6 +151,7 @@ left as-is per the closeout rule.
 - `frontend/src/demo/VoiceOverlayMobile.tsx` -- Clear Form button now calls `clearAllClientState()`
 - `frontend/src/demo/clearFormButtonsClearClientLinkToken.test.tsx` -- new: behavioral pin for both overlay Clear Form buttons
 - `frontend/src/schema-forms/SchemaFormDemo.tsx` -- Start Fresh button now calls `clearAllClientState()`
+- `frontend/src/schema-forms/SchemaFormDemo.startFreshClearsClientLinkToken.test.tsx` -- new: behavioral pin for the Start Fresh button, added closing a fresh-eyes gap
 - `frontend/src/shared/audioManager.ts` -- worklet URL resolves to an absolute path on every route
 - `frontend/src/shared/audioManager.workletUrl.test.ts` -- new: pins the URL across 4 routes under localhost and a stubbed deployed hostname
 - `frontend/src/shared/wipeSitesReload.test.ts` -- self-test count updated 4 -> 7 wipe sites
