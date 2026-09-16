@@ -11,7 +11,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
-import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
@@ -1113,12 +1112,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			return
 		}
 
-		// Clear the form state
-		SchemaFormStateManager.clear()
-		// Also clear the app-start form + language choice so the reload returns
-		// all the way to the language-choice modal -- this is how a tester resets
-		// between clients (bd voice-ux issues).
-		clearOnboardingState()
+		// Wipes form state, the app-start form + language choice (so the
+		// reload returns all the way to the language-choice modal -- this is
+		// how a tester resets between clients, bd voice-ux issues), AND the
+		// client-link token in one call -- a plain clear()+clearOnboardingState()
+		// here left vff_client_link_token behind after an explicit
+		// "Clear form" click (bd polyglot-pdf-ylokf).
+		SchemaFormStateManager.clearAllClientState()
 
 		// Reload the page to reset everything
 		window.location.reload()

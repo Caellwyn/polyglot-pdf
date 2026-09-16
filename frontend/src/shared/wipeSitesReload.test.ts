@@ -122,8 +122,14 @@ describe("every clearAllClientState() call reloads nearby (bd polyglot-pdf-8v8i7
   // so a future refactor that accidentally stops matching (e.g. someone
   // renames the call, or wraps it in a helper) is caught here rather than
   // by the main assertion silently passing on zero sites.
-  it("currently finds exactly 4 wipe sites", () => {
+  //
+  // 7 = the original 4 (SchemaForm.tsx x3, StaffHeader.tsx) plus 3 added by
+  // bd polyglot-pdf-ylokf: the three manual Clear-form/Start-Fresh buttons
+  // (SchemaFormDemo.tsx, VoiceOverlay.tsx, VoiceOverlayMobile.tsx) switched
+  // from a bare clear()+clearOnboardingState() -- which left the client-link
+  // token behind -- to the composed clearAllClientState().
+  it("currently finds exactly 7 wipe sites", () => {
     const sites = findWipeSites();
-    expect(sites.length).toBe(4);
+    expect(sites.length).toBe(7);
   });
 });

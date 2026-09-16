@@ -19,10 +19,10 @@ import { getBackendHttpUrl, resolveKitAssetUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
 import { ArchivedVersionsLink } from "./components/ArchivedVersionsLink";
 import { useAuth } from "../contexts/AuthContext";
+import { SchemaFormStateManager } from "./state/schemaFormState";
 import {
   loadOnboardingState,
   saveOnboardingState,
-  clearOnboardingState,
 } from "./onboardingStorage";
 
 export function SchemaFormDemo() {
@@ -218,10 +218,11 @@ export function SchemaFormDemo() {
 
   const handleClearSession = () => {
     if (confirm("Clear all form data and start fresh?")) {
-      // Clear form data
-      sessionStorage.removeItem("schema_form_state");
-      // Clear onboarding state (forces form/language re-selection)
-      clearOnboardingState();
+      // Wipes form state, onboarding selection, AND the client-link token
+      // in one call (bd polyglot-pdf-8v8i7's composed wipe) -- a plain
+      // clearOnboardingState() here left vff_client_link_token behind after
+      // an explicit "Start Fresh" click (bd polyglot-pdf-ylokf).
+      SchemaFormStateManager.clearAllClientState();
       window.location.reload();
     }
   };

@@ -182,15 +182,15 @@ Fresh button does: the mounted form still holds the answers in React state, and 
 the reload the next keystroke would `save()` them straight back into the storage that was
 just cleared. `wipeSitesReload.test.ts` derives the complete set by scanning
 `frontend/src` for every `clearAllClientState()` call and asserts each one is followed
-nearby by a reload, so a fifth site added later without one fails there instead of
+nearby by a reload, so an eighth site added later without one fails there instead of
 waiting for another review round. The three manual Clear-form / Start Fresh buttons
-(`SchemaFormDemo.tsx`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) are NOT on this
-path: `VoiceOverlay.tsx`/`VoiceOverlayMobile.tsx` call `SchemaFormStateManager.clear()`
-directly, while `SchemaFormDemo.tsx` instead does a raw
-`sessionStorage.removeItem("schema_form_state")` (same key, not through the class); all
-three also call `clearOnboardingState()` and reload at their own call sites. None of the
-three clears `vff_client_link_token` -- an open gap, bd `polyglot-pdf-ylokf`, which
-`wipeSitesReload.test.ts` cannot see because it scans only `clearAllClientState()` calls.
+(`SchemaFormDemo.tsx`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) used to call
+`SchemaFormStateManager.clear()` (or a raw `sessionStorage.removeItem("schema_form_state")`
+in `SchemaFormDemo.tsx`'s case) plus `clearOnboardingState()` directly instead of the
+composed method -- leaving `vff_client_link_token` behind after an explicit wipe request
+(bd `polyglot-pdf-ylokf`). All three now call `SchemaFormStateManager.clearAllClientState()`
+too, so `wipeSitesReload.test.ts`'s scan sees all seven sites (the four automatic ones
+above plus these three), and no site anywhere leaves the client-link token behind.
 `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
 `StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts` and

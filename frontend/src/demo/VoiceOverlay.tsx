@@ -19,7 +19,6 @@ declare global {
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
-import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
@@ -1635,12 +1634,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			return
 		}
 
-		// Clear sessionStorage
-		SchemaFormStateManager.clear()
-		// Also clear the app-start form + language choice so the reload returns
-		// all the way to the language-choice modal -- this is how a tester resets
-		// between clients (bd voice-ux issues).
-		clearOnboardingState()
 		// Clear all DOM fields
 		const inputs = document.querySelectorAll('input, textarea, select')
 		let clearedCount = 0
@@ -1673,6 +1666,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// Remove checkmark badges
 		document.querySelectorAll('.vff-field-badge').forEach(badge => badge.remove())
 
+		// Wipes form state, the app-start form + language choice (so the
+		// reload returns all the way to the language-choice modal -- this is
+		// how a tester resets between clients, bd voice-ux issues), AND the
+		// client-link token in one call -- a plain clear()+clearOnboardingState()
+		// here left vff_client_link_token behind after an explicit
+		// "Clear form" click (bd polyglot-pdf-ylokf). Placed right before the
+		// reload (rather than up front) so wipeSitesReload.test.ts's nearby-
+		// reload guard can actually see it -- the DOM-clearing loop above
+		// runs first regardless, since sessionStorage and the DOM are
+		// independent state the reload will replace either way.
+		SchemaFormStateManager.clearAllClientState()
 		// Reload page to reset all state
 		window.location.reload()
 	}

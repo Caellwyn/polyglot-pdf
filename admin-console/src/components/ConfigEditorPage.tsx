@@ -124,7 +124,15 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
     // UNSET means "the operator has not typed/selected a real value" --
     // there is nothing to PUT. This is reachable for a bool select left on
     // its placeholder option, or a number/text input cleared back to empty.
-    if (draft === undefined || draft === UNSET) return;
+    // The click still needs a visible response: without it, this silent
+    // return is indistinguishable from a broken button, and a stale
+    // "Saved <other key>." banner from an earlier click would keep reading
+    // as confirmation of THIS one.
+    if (draft === undefined || draft === UNSET) {
+      setSavedMessage(null);
+      setError(`Nothing to save for ${key} -- choose a value first (leaving it unset means the backend keeps using its fallback).`);
+      return;
+    }
 
     const schema = config?.schema?.[key];
     const kind = controlKind(schema);

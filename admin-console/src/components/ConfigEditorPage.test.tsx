@@ -323,7 +323,7 @@ describe('ConfigEditorPage', () => {
     expect(setChannelConfigKey).not.toHaveBeenCalled();
   });
 
-  it('a bool select left on "unset -- use the fallback" does not PUT on Save', async () => {
+  it('a bool select left on "unset -- use the fallback" does not PUT on Save, and tells the operator why', async () => {
     const unsetConfig = {
       channel: 'staging',
       values: {},
@@ -342,5 +342,43 @@ describe('ConfigEditorPage', () => {
     // No PUT happens: there is nothing to save while the draft is unset.
     await waitFor(() => expect(getChannelConfig).toHaveBeenCalledTimes(1));
     expect(setChannelConfigKey).not.toHaveBeenCalled();
+    // The click is not silent: the operator is told there was nothing to save.
+    expect(await screen.findByText(/Nothing to save for LINK_MINTING_ENABLED/)).toBeInTheDocument();
+  });
+
+  it('Save on an unset row clears a stale "Saved ..." banner from a previous row', async () => {
+    const config = {
+      channel: 'staging',
+      values: { LINK_FIRM_CAP: 5 },
+      known_keys: ['LINK_FIRM_CAP', 'LINK_MINTING_ENABLED'],
+      unknown_keys: [],
+      schema: STAGING_SCHEMA,
+    };
+    vi.mocked(getChannelConfig).mockResolvedValue(config);
+    vi.mocked(setChannelConfigKey).mockResolvedValue({
+      channel: 'staging',
+      key: 'LINK_FIRM_CAP',
+      before: 5,
+      after: 9,
+      request_id: 'req-2',
+    });
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+
+    const intControl = await screen.findByLabelText('LINK_FIRM_CAP');
+    fireEvent.change(intControl, { target: { value: '9' } });
+    const capRow = intControl.closest('div')!.parentElement!;
+    fireEvent.click(within(capRow).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Saved LINK_FIRM_CAP.')).toBeInTheDocument();
+
+    const boolControl = screen.getByLabelText('LINK_MINTING_ENABLED');
+    expect(boolControl).toHaveValue('__unset__');
+    const boolRow = boolControl.closest('div')!.parentElement!;
+    fireEvent.click(within(boolRow).getByRole('button', { name: 'Save' }));
+
+    // The stale success banner from the PREVIOUS row's save must not survive
+    // a click that does nothing -- it would otherwise read as confirmation
+    // of a save that never happened.
+    expect(screen.queryByText('Saved LINK_FIRM_CAP.')).not.toBeInTheDocument();
+    expect(await screen.findByText(/Nothing to save for LINK_MINTING_ENABLED/)).toBeInTheDocument();
   });
 });
