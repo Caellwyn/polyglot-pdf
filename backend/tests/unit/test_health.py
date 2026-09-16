@@ -29,8 +29,18 @@ def test_health_ok():
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    for key in ("models", "audio", "limits", "env"):
-        assert key in body
+
+
+def test_health_discloses_nothing_but_status_and_the_probes():
+    """/health is unauthenticated; it must not fingerprint the deployment
+    (sprint 23 B1b, PF-10): no model id, audio rate, upload limit, provider
+    flag or key-presence bit. EXACT key set, so a new field fails here
+    rather than shipping silently. Mutation: add "models" back -- red."""
+    body = client.get("/health").json()
+    assert set(body) == {"status", "confirmation_sink", "firms_store"}, sorted(body)
+    flat = repr(body).lower()
+    for banned in ("gemini", "model", "rate", "upload", "vertex", "api_key", "chunk"):
+        assert banned not in flat, banned
 
 
 def test_version_endpoint():

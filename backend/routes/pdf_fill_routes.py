@@ -395,10 +395,10 @@ async def fill_pdf(
 		await require_visible(kit_id, meta, user)
 		pdf_bytes = await store.load_pdf_bytes(kit_id, pdf_filename)
 	except FormKitNotFound as exc:
-		_log.error("kit_pdf_not_found", kit=kit_id, pdf=pdf_filename, error=str(exc))
+		_log.error("kit_pdf_not_found", kit=kit_id, pdf=pdf_filename, error_type=type(exc).__name__)
 		raise HTTPException(status_code=404, detail=str(exc)) from exc
 	except FormKitStoreError as exc:
-		_log.error("kit_pdf_load_failed", kit=kit_id, pdf=pdf_filename, error=str(exc))
+		_log.error("kit_pdf_load_failed", kit=kit_id, pdf=pdf_filename, error_type=type(exc).__name__)
 		raise HTTPException(status_code=502, detail="Unable to load PDF for requested kit") from exc
 
 	doc = None
@@ -474,7 +474,7 @@ async def fill_pdf(
 								_log.debug("button_on_state_found", widget_name=widget.field_name, on_state=state)
 								return state
 			except Exception as e:
-				_log.warning("button_states_error", widget_name=widget.field_name, error=str(e))
+				_log.warning("button_states_error", widget_name=widget.field_name, error_type=type(e).__name__)
 				pass
 			_log.debug("button_on_state_default", widget_name=widget.field_name, default="Yes")
 			return "Yes"
@@ -539,7 +539,7 @@ async def fill_pdf(
 				# NO widget attribute: reading widget.field_name here could itself
 				# raise on the stale weakref that got us into this handler, turning a
 				# cosmetic degradation into a failed fill (bd polyglot-pdf-l53i).
-				_log.warning("comb_fit_failed", error=str(e))
+				_log.warning("comb_fit_failed", error_type=type(e).__name__)
 				return value
 
 		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
@@ -586,7 +586,7 @@ async def fill_pdf(
 
 					_log.debug("checkbox_filled_success", widget_name=fresh_widget.field_name, xref=fresh_widget.xref)  # never log value -- bd hjo
 				except Exception as e:
-					_log.error("checkbox_fill_failed", widget_name=fresh_widget.field_name, error=str(e), traceback=True)
+					_log.error("checkbox_fill_failed", widget_name=fresh_widget.field_name, error_type=type(e).__name__, exc_info=True)
 					raise
 			else:
 				# Text field
@@ -601,7 +601,7 @@ async def fill_pdf(
 					fresh_widget.update()
 					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))
 				except Exception as e:
-					_log.error("text_field_fill_failed", widget_name=fresh_widget.field_name, error=str(e))
+					_log.error("text_field_fill_failed", widget_name=fresh_widget.field_name, error_type=type(e).__name__)
 					raise
 
 		def find_widget(field_name: str):
@@ -724,7 +724,7 @@ async def fill_pdf(
 				_log.warning(
 					"field_flag_change_failed",
 					field_name=widget.field_name,
-					error=str(exc),
+					error_type=type(exc).__name__,
 				)
 
 		filled_count = 0
@@ -817,7 +817,7 @@ async def fill_pdf(
 								kit=request.kit_id,
 								field_id=field_id,
 								pdf_field=shared_pdf_field,
-								error=str(exc),
+								error_type=type(exc).__name__,
 							)
 							error_count += 1
 						continue
@@ -848,7 +848,7 @@ async def fill_pdf(
 							kit=request.kit_id,
 							field_id=field_id,
 							pdf_field=option_pdf_field,
-							error=str(exc),
+							error_type=type(exc).__name__,
 						)
 						error_count += 1
 
@@ -932,7 +932,7 @@ async def fill_pdf(
 							"checkbox_fill_error",
 							kit=request.kit_id,
 							field_id=field_id,
-							error=str(exc),
+							error_type=type(exc).__name__,
 						)
 						error_count += 1
 
@@ -992,7 +992,7 @@ async def fill_pdf(
 								kit=request.kit_id,
 								field_id=field_id,
 								pdf_field=option_pdf_field,
-								error=str(exc),
+								error_type=type(exc).__name__,
 							)
 							error_count += 1
 				else:
@@ -1032,7 +1032,7 @@ async def fill_pdf(
 						"field_fill_error",
 						kit=request.kit_id,
 						field_id=field_id,
-						error=str(exc),
+						error_type=type(exc).__name__,
 					)
 					error_count += 1
 
@@ -1083,7 +1083,7 @@ async def fill_pdf(
 				doc.set_metadata(_meta)
 				_log.info("resume_stamp_written", kit=request.kit_id)
 		except Exception as exc:  # noqa: BLE001 -- never lose the PDF over a stamp
-			_log.warning("resume_stamp_failed", kit=request.kit_id, error=str(exc))
+			_log.warning("resume_stamp_failed", kit=request.kit_id, error_type=type(exc).__name__)
 
 		try:
 			# Save with minimal processing to preserve XFA checkbox appearances
@@ -1116,7 +1116,7 @@ async def fill_pdf(
 	except HTTPException:
 		raise
 	except Exception as exc:
-		_log.error("pdf_fill_failed", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		_log.error("pdf_fill_failed", kit=request.kit_id, pdf=request.pdf_filename, error_type=type(exc).__name__)
 		raise HTTPException(status_code=500, detail=f"PDF filling failed: {exc}") from exc
 	finally:
 		if doc is not None and not doc.is_closed:
@@ -1208,7 +1208,7 @@ async def resume_form(
 		# The REFERENCE form is what an upload is checked against, so an
 		# unreadable one must fail closed with a handled error -- never an
 		# unhandled 500, and never by admitting the upload unchecked.
-		_log.error("resume_reference_load_failed", kit=kit_id, error=str(exc))
+		_log.error("resume_reference_load_failed", kit=kit_id, error_type=type(exc).__name__)
 		raise HTTPException(
 			status_code=502, detail="Unable to load the form for this kit"
 		) from exc
@@ -1244,7 +1244,7 @@ async def resume_form(
 		# ONE refusal for every structural failure -- wrong form, tampered
 		# form, unreadable form. Distinguishing them would tell an attacker
 		# which part of their file to fix.
-		_log.warning("resume_upload_refused", kit=kit_id, reason=str(exc))
+		_log.warning("resume_upload_refused", kit=kit_id, reason_type=type(exc).__name__)
 		raise HTTPException(
 			status_code=400,
 			detail="That file does not match the form you were sent.",
@@ -1265,7 +1265,7 @@ async def resume_form(
 		# an earlier version caught only the first while claiming both.
 		raise HTTPException(status_code=404, detail="Not found") from exc
 	except FormKitStoreError as exc:
-		_log.error("resume_schema_load_failed", kit=kit_id, error=str(exc))
+		_log.error("resume_schema_load_failed", kit=kit_id, error_type=type(exc).__name__)
 		raise HTTPException(
 			status_code=502, detail="Unable to load the form for this kit"
 		) from exc

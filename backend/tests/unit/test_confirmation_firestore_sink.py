@@ -363,7 +363,11 @@ def test_sink_status_disabled_ok_and_error(fake_db, monkeypatch):
 
     monkeypatch.setattr("backend.services.auth.get_db", _broken)
     status = cl.confirmation_sink_status()
-    assert status.startswith("error:")
+    # The exception CLASS only: /health returns this string verbatim to any
+    # unauthenticated caller, and a Firestore message names the project or
+    # identity (sprint 23 B1b). Mutation: f"error: {e}" -- red.
+    assert status == "error: RuntimeError", status
+    assert "Permission" not in status
 
     # disabled: sink off -> "disabled" without touching the client
     monkeypatch.delenv("CONFIRMATION_FIRESTORE_ENABLED", raising=False)

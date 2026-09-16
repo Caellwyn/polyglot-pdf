@@ -196,14 +196,14 @@ async def log_disclaimer_acceptance(
 		_log.error(
 			"disclaimer_acceptance_wiring_error",
 			form_session_id=data.form_session_id,
-			error=str(e),
+			error_type=type(e).__name__,
 			note="the durable-write call has the wrong signature; this fails on every request",
 		)
 	except Exception as e:
 		_log.error(
 			"disclaimer_acceptance_durable_write_failed",
 			form_session_id=data.form_session_id,
-			error=str(e),
+			error_type=type(e).__name__,
 		)
 
 	return {

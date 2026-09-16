@@ -292,7 +292,7 @@ def record_mint(
     except LinksStoreUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 -- any store failure is unavailable
-        _log.error("links_store_write_failed", jti=jti, error=str(exc))
+        _log.error("links_store_write_failed", jti=jti, error_type=type(exc).__name__)
         raise LinksStoreUnavailable(str(exc)) from exc
     _log.info(
         "link_minted",
@@ -323,7 +323,7 @@ def get_link(jti: str, channel: Optional[str] = None) -> Optional[dict]:
     except LinksStoreUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001
-        _log.error("links_store_read_failed", jti=jti, error=str(exc))
+        _log.error("links_store_read_failed", jti=jti, error_type=type(exc).__name__)
         raise LinksStoreUnavailable(str(exc)) from exc
     if not snap.exists:
         return None
@@ -361,7 +361,7 @@ def mark_opened(jti: str, now: Optional[float] = None,
         ref.update({"status": STATUS_OPENED, "opened_at": stamp})
         return True
     except Exception as exc:  # noqa: BLE001 -- advisory mirror, never fatal
-        _log.warning("links_store_mark_opened_failed", jti=jti, error=str(exc))
+        _log.warning("links_store_mark_opened_failed", jti=jti, error_type=type(exc).__name__)
         return False
 
 
@@ -371,7 +371,7 @@ def links_store_status(channel: Optional[str] = None) -> str:
     Same probe shape as firms.firms_store_status() and the confirmation
     sink's status probe: READ-shaped (limit-1 stream), never write+delete,
     because this path never needs write permission and probing with a write
-    would test the wrong grant. Returns "ok" or "error: <msg>" -- unlike
+    would test the wrong grant. Returns "ok" or "error: <ExceptionClass>" -- unlike
     firms_store_status() this store has no enable/disable env gate (it is
     Admin-SDK-only by rules, not by a feature flag), so there is no
     "disabled" branch.
@@ -380,5 +380,7 @@ def links_store_status(channel: Optional[str] = None) -> str:
         list(_collection(channel).limit(1).stream())
         return "ok"
     except Exception as e:
-        _log.error("links_store_probe_failed", error=str(e))
-        return f"error: {e}"
+        _log.error("links_store_probe_failed", error_type=type(e).__name__)
+        # Class only, like its two siblings (sprint 23 B1b): a probe string can
+        # end up on an unauthenticated route.
+        return f"error: {type(e).__name__}"

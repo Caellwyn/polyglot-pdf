@@ -169,7 +169,7 @@ def _write(doc_id: str, *, firm_id: Optional[str], kind: str, level: str,
             })
         ref.set(doc, merge=True)
     except Exception as exc:  # noqa: BLE001 -- best-effort, never raise
-        _log.error("alert_write_failed", doc_id=doc_id, kind=kind, error=str(exc))
+        _log.error("alert_write_failed", doc_id=doc_id, kind=kind, error_type=type(exc).__name__)
         return
     _log.info("alert_written", doc_id=doc_id, kind=kind, level=level,
               firm_id=firm_id)

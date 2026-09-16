@@ -290,7 +290,7 @@ def _run_append_entry(*, actor: AdminActor, request_id: str, **kwargs) -> dict:
         # instead of the same clean, logged 500 config_routes.py's and
         # firm_routes.py's equivalents return.
         _log.error("admin_credit_write_failed", action=kwargs.get("entry_type"),
-                   firm_id=kwargs.get("firm_id"), error=str(exc))
+                   firm_id=kwargs.get("firm_id"), error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="credit ledger write failed") from exc
 
@@ -594,7 +594,7 @@ def _run_monthly_topup(*, period: str) -> dict:
         except Exception as exc:  # noqa: BLE001 -- one bad firm must not
             # abort the whole monthly pass.
             _log.error("monthly_topup_firm_failed", firm_id=firm_id,
-                       error=str(exc))
+                       error_type=type(exc).__name__)
             outcomes["failed"].append(firm_id)
 
     return outcomes

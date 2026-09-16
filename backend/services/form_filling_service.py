@@ -573,7 +573,7 @@ class FormFillingService:
                          form_session_id=form_session_id or session_id)
             except AttributeError as e:
                 # Older adapters may not have this method
-                _log.warning("set_session_context not available on adapter", error=str(e))
+                _log.warning("set_session_context not available on adapter", error_type=type(e).__name__)
 
             # ASR language bias (bd polyglot-pdf-y25o): derive the BCP-47 hint
             # from the session's spoken language (set from the handshake BEFORE
@@ -1154,7 +1154,7 @@ class FormFillingService:
         except Exception as exc:
             _log.error("failed_to_finalize_gemini_session", 
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
 
     async def restart_gemini_session(self, next_field_hint: Optional[str] = None):
         """
@@ -1286,7 +1286,7 @@ class FormFillingService:
                 )
             except Exception as exc:
                 _log.error("restart_gemini_session_initiating_message_failed",
-                          session_id=self._session_id, error=str(exc))
+                          session_id=self._session_id, error_type=type(exc).__name__)
 
     async def change_fill_language(self, new_language: str):
         """
@@ -1513,7 +1513,7 @@ class FormFillingService:
         except Exception as exc:
             _log.error("failed_to_close_gemini_session", 
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
         
         # 2. Restart session with new section schema/values/context
         # Build system instruction from section metadata
@@ -1559,7 +1559,7 @@ class FormFillingService:
             except Exception as exc:
                 _log.error("failed_to_send_section_switched",
                           session_id=session_id,
-                          error=str(exc))
+                          error_type=type(exc).__name__)
 
         # 4. Send initiating message to Gemini with current spoken language
         # This prompts Gemini to greet the user in the selected language and ask for the first field
@@ -1575,7 +1575,7 @@ class FormFillingService:
         except Exception as exc:
             _log.error("failed_to_send_section_switch_initiating_message",
                       session_id=session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
 
     def handle_update_fields_tool_call(
         self, session_id: str, updates: Dict[str, Any], multi_field_call: bool = False
@@ -2792,7 +2792,7 @@ class FormFillingService:
         except Exception as exc:
             _log.error("section_switch_failed",
                       session_id=self._session_id,
-                      error=str(exc))
+                      error_type=type(exc).__name__)
             # Surface the failure to the frontend in a shape it HANDLES: the FE
             # message switch handles `error` (and ignores unknown types), so use
             # the error envelope, not a bespoke section_switch_failed type

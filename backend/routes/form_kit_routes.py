@@ -256,11 +256,11 @@ async def list_form_kits(user: dict = Depends(require_signin)) -> FormKitManifes
         return FormKitManifestResponse(forms=forms)
 
     except FormKitNotFound as exc:
-        _log.error("form_kits_manifest_not_found", error=str(exc))
+        _log.error("form_kits_manifest_not_found", error_type=type(exc).__name__)
         # Return empty list if no manifest (graceful degradation)
         return FormKitManifestResponse(forms=[])
     except FormKitStoreError as exc:
-        _log.error("form_kits_list_failed", error=str(exc))
+        _log.error("form_kits_list_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to load form kit manifest") from exc
 
 
@@ -289,7 +289,7 @@ async def get_form_kit_schema(kit_id: str, user: dict = Depends(require_signin))
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
     except FormKitStoreError as exc:
-        _log.error("form_kit_schema_load_failed", kit_id=kit_id, error=str(exc))
+        _log.error("form_kit_schema_load_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
 
     return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
@@ -349,7 +349,7 @@ async def get_form_kit_pdf(
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc
     except FormKitStoreError as exc:
-        _log.error("form_kit_pdf_load_failed", kit_id=kit_id, error=str(exc))
+        _log.error("form_kit_pdf_load_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to load PDF") from exc
 
     return Response(
@@ -421,7 +421,7 @@ async def list_kit_archive(
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
     except FormKitStoreError as exc:
-        _log.error("kit_archive_list_failed", kit_id=kit_id, error=str(exc))
+        _log.error("kit_archive_list_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to list archived revisions") from exc
 
     revisions = []
@@ -474,7 +474,7 @@ async def get_archived_kit_schema(
         ) from exc
     except FormKitStoreError as exc:
         _log.error(
-            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc)
+            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error_type=type(exc).__name__
         )
         raise HTTPException(status_code=502, detail="Unable to load archived revision") from exc
 
@@ -590,7 +590,7 @@ async def retire_own_kit(
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
     except FormKitStoreError as exc:
-        _log.error("firm_retire_failed", kit_id=kit_id, error=str(exc))
+        _log.error("firm_retire_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to retire this form") from exc
 
     # AUDIT (requirement 4): who did what to which kit, keyed the way the

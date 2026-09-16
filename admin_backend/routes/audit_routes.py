@@ -160,12 +160,12 @@ async def list_audit_rows(
         # the real answer is "click this link" or "the cursor is bad" --
         # see the module docstring's own note on why an unindexed filter
         # fails only at runtime. 400 (not 503): the caller can act on it.
-        _log.error("admin_audit_read_failed", error=str(exc))
+        _log.error("admin_audit_read_failed", error_type=type(exc).__name__)
         raise HTTPException(
             status_code=400,
             detail="AUDIT_QUERY_ERROR: {}".format(exc))
     except Exception as exc:  # noqa: BLE001
-        _log.error("admin_audit_read_failed", error=str(exc))
+        _log.error("admin_audit_read_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=503, detail="audit store unavailable")
 
     has_more = len(docs) > limit

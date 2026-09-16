@@ -209,7 +209,7 @@ def create_staff_user(
     try:
         reset_link = fb_auth.generate_password_reset_link(email)
     except Exception as exc:  # noqa: BLE001
-        _log.warning("user_admin_reset_link_failed", error=str(exc))
+        _log.warning("user_admin_reset_link_failed", error_type=type(exc).__name__)
 
     return {
         "uid": user.uid,

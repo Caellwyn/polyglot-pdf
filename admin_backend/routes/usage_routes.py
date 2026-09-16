@@ -212,7 +212,7 @@ def _do_get_firm_usage(*, firm_id: str, month: str, channel: str) -> dict:
         )
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_firm_usage_read_failed", firm_id=firm_id,
-                   month=month, channel=channel, error=str(exc))
+                   month=month, channel=channel, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="usage store unavailable") from exc
 
@@ -268,7 +268,7 @@ def _do_get_kit_usage(*, kit_id: str, month: str, channel: str) -> dict:
         )
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_kit_usage_read_failed", kit_id=kit_id,
-                   month=month, channel=channel, error=str(exc))
+                   month=month, channel=channel, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="usage store unavailable") from exc
 

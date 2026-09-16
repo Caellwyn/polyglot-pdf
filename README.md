@@ -141,10 +141,11 @@ export VERTEXAI=false
 export GEMINI_API_KEY=your_key_here
 ```
 
-Use `GEMINI_API_KEY` specifically — the backend reads that variable, and `/health`
-and the startup diagnostics key off it. (The underlying SDK will also pick up
-`GOOGLE_API_KEY` as an implicit fallback, but the app's own health check reports it
-as missing, so it makes for confusing debugging.)
+Use `GEMINI_API_KEY` specifically — the backend reads that variable, and the
+startup diagnostics key off it. (The underlying SDK will also pick up
+`GOOGLE_API_KEY` as an implicit fallback, but the app's own startup warning still
+reports the key as missing, so it makes for confusing debugging. `/health` reports
+no configuration at all, by design.)
 
 **Windows PowerShell:**
 ```powershell
@@ -350,7 +351,7 @@ entry points and follow them on demand:
 ### Common Issues
 
 **Connection Errors:**
-- On the default Vertex path, check ADC is authenticated and `GOOGLE_CLOUD_PROJECT` is set (`gcloud auth application-default login`); on the AI Studio path (`VERTEXAI=false`), check `GEMINI_API_KEY` is set (that is the variable `/health` reports on)
+- On the default Vertex path, check ADC is authenticated and `GOOGLE_CLOUD_PROJECT` is set (`gcloud auth application-default login`); on the AI Studio path (`VERTEXAI=false`), check `GEMINI_API_KEY` is set (the startup log warns when it is not; `/health` no longer reports it)
 - Verify backend is running on port 8000
 - Check for zombie processes
 

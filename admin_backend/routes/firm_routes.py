@@ -410,7 +410,7 @@ def _apply_firm_patch(
         raise
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_firm_patch_failed", firm_id=firm_id,
-                   action=action, error=str(exc))
+                   action=action, error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="firm write failed") from exc
 
@@ -484,7 +484,7 @@ def _do_create_firm(*, firm_id: str, body: CreateFirmRequest,
         _txn(db.transaction())
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_firm_create_failed", firm_id=firm_id,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="firm write failed") from exc
 
@@ -540,7 +540,7 @@ def _do_list_firms() -> list[dict]:
     try:
         docs = list(db.collection(_FIRMS_COLLECTION).stream())
     except Exception as exc:  # noqa: BLE001
-        _log.error("admin_firm_list_failed", error=str(exc))
+        _log.error("admin_firm_list_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="firm store unavailable") from exc
     firms_view = [
@@ -578,7 +578,7 @@ def _do_get_firm(*, firm_id: str, ledger_limit: int) -> dict:
             credit_ledger.reconcile_expired_for_firm(firm_id, channel=channel)
         except Exception as exc:  # noqa: BLE001 -- best-effort, see docstring
             _log.error("admin_firm_reconcile_failed", firm_id=firm_id,
-                       channel=channel, error=str(exc))
+                       channel=channel, error_type=type(exc).__name__)
 
     db = _db()
     doc = _get_firm_or_404(db, firm_id)

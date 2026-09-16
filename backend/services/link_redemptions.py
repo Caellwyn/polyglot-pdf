@@ -218,7 +218,7 @@ def open_link(jti: str, firm_id: str, kit_id: str,
     except (LinkAlreadyUsed, RedemptionUnavailable):
         raise
     except Exception as exc:  # noqa: BLE001 -- any store failure refuses
-        _log.error("link_open_failed", jti=jti, error=str(exc))
+        _log.error("link_open_failed", jti=jti, error_type=type(exc).__name__)
         raise RedemptionUnavailable(str(exc)) from exc
 
 
@@ -255,7 +255,7 @@ def complete_link(jti: str, now: Optional[float] = None) -> None:
 
         record_link_completed(firm_id, now=stamp)
     except Exception as exc:  # noqa: BLE001
-        _log.error("link_complete_failed", jti=jti, error=str(exc))
+        _log.error("link_complete_failed", jti=jti, error_type=type(exc).__name__)
 
 
 def _require_mint_record(jti) -> dict:
@@ -285,7 +285,7 @@ def _require_mint_record(jti) -> dict:
     try:
         record = links_store.get_link(jti, channel=link_channel())
     except links_store.LinksStoreUnavailable as exc:
-        _log.error("link_mint_record_unavailable", jti=jti, error=str(exc))
+        _log.error("link_mint_record_unavailable", jti=jti, error_type=type(exc).__name__)
         raise RedemptionUnavailable(str(exc)) from exc
     if record is None:
         # Either a token from before the cutover (the maintainer re-mints

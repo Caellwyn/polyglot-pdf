@@ -1154,7 +1154,7 @@ async def list_editor_kits(
     try:
         files_by_kit = await store.list_kit_files()
     except FormKitStoreError as exc:
-        _log.error("editor_kits_list_failed", error=str(exc))
+        _log.error("editor_kits_list_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to list kits") from exc
 
     kits: list[EditorKitInfo] = []
@@ -1443,7 +1443,7 @@ async def list_kit_draft_snapshots(
     try:
         snapshots = await store.list_draft_snapshots(kit_id)
     except FormKitStoreError as exc:
-        _log.error("draft_snapshots_list_failed", kit_id=kit_id, error=str(exc))
+        _log.error("draft_snapshots_list_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to list earlier versions") from exc
     _log.info("draft_snapshots_listed", kit_id=kit_id, count=len(snapshots), role=role.role, actor=role.label())
@@ -1496,7 +1496,7 @@ async def list_kit_archive(
             *(store.load_archived_metadata_or_none(kit_id, m) for m in markers)
         )
     except FormKitStoreError as exc:
-        _log.error("kit_archive_list_failed", kit_id=kit_id, error=str(exc))
+        _log.error("kit_archive_list_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to list archived revisions") from exc
     revisions = []
@@ -1543,7 +1543,7 @@ async def get_archived_kit_schema(
             detail=f"Archived revision not found for kit {_kit_name(kit_id, meta)}") from exc
     except FormKitStoreError as exc:
         _log.error(
-            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc))
+            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to load archived revision") from exc
     return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
@@ -1588,7 +1588,7 @@ async def restore_kit_draft_snapshot(
         ) from exc
     except FormKitStoreError as exc:
         _log.error("draft_snapshot_read_failed",
-                   kit_id=kit_id, snapshot=snapshot_id, error=str(exc))
+                   kit_id=kit_id, snapshot=snapshot_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to read that earlier version") from exc
 
@@ -1615,7 +1615,7 @@ async def restore_kit_draft_snapshot(
         # The write side below already refuses on failure; this is the read
         # side of the same guarantee (Opus fresh-eyes round 5).
         _log.error("draft_snapshot_pre_restore_read_failed",
-                   kit_id=kit_id, error=str(exc))
+                   kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502,
             detail=("Could not read your current work before restoring, so "
@@ -1626,7 +1626,7 @@ async def restore_kit_draft_snapshot(
             replaced_id = await store.put_draft_snapshot(kit_id, current)
         except FormKitStoreError as exc:
             _log.error("draft_snapshot_pre_restore_failed",
-                       kit_id=kit_id, error=str(exc))
+                       kit_id=kit_id, error_type=type(exc).__name__)
             raise HTTPException(
                 status_code=502,
                 detail=("Could not save your current work before restoring, so "
@@ -1637,7 +1637,7 @@ async def restore_kit_draft_snapshot(
         await store.put_schema(kit_id, restored, schema_file)
     except FormKitStoreError as exc:
         _log.error("draft_snapshot_restore_failed",
-                   kit_id=kit_id, snapshot=snapshot_id, error=str(exc))
+                   kit_id=kit_id, snapshot=snapshot_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to restore that earlier version") from exc
 
@@ -1712,7 +1712,7 @@ async def get_retire_candidates(
             # -- the state bd polyglot-pdf-6dz0 exists to prevent (Opus
             # fresh-eyes round 1).
             _log.warning("editor_retire_candidate_unreadable",
-                         kit_id=kit_id, candidate=other_id, error=str(exc))
+                         kit_id=kit_id, candidate=other_id, error_type=type(exc).__name__)
             continue
         # LIVE only. A draft is not competing for the catalogue slot, and a
         # kit already unpublished has nothing left to retire.
@@ -1786,7 +1786,7 @@ async def get_editor_kit_schema(
             status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema yet"
         ) from exc
     except FormKitStoreError as exc:
-        _log.error("editor_schema_load_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_schema_load_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
     return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
 
@@ -1808,7 +1808,7 @@ async def get_editor_kit_pdf(
             status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no PDF"
         ) from exc
     except FormKitStoreError as exc:
-        _log.error("editor_pdf_load_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_pdf_load_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to load PDF") from exc
     return Response(
         content=data,
@@ -1882,12 +1882,12 @@ async def save_editor_kit_schema(
                       kit_id=kit_id, snapshot=snapshot_id, role=role.role, actor=role.label())
         except FormKitStoreError as exc:
             _log.warning("editor_draft_snapshot_failed",
-                         kit_id=kit_id, error=str(exc))
+                         kit_id=kit_id, error_type=type(exc).__name__)
 
     try:
         await store.put_schema(kit_id, schema, schema_file)
     except FormKitStoreError as exc:
-        _log.error("editor_schema_save_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_schema_save_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to save schema") from exc
     # Stamp the saved schema's readiness (sprint-18 C4). AFTER the schema write
     # and deliberately non-fatal: the save is the editor's work, the stamp is a
@@ -1977,7 +1977,7 @@ async def lint_editor_kit_schema(
     try:
         meta = await store.load_metadata(kit_id)
     except FormKitStoreError as exc:
-        _log.error("editor_kit_lint_meta_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_kit_lint_meta_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to read kit") from exc
     # The dump read does NOT go through _load_kit_dump here: that helper
     # swallows transient store failures into "no dump", which on THIS route
@@ -1992,7 +1992,7 @@ async def lint_editor_kit_schema(
     except FormKitNotFound:
         dump_data = None
     except FormKitStoreError as exc:
-        _log.error("editor_kit_lint_dump_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_kit_lint_dump_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to read the kit's PDF form data"
         ) from exc
@@ -2965,7 +2965,7 @@ async def set_editor_kit_status(
                 # Best-effort, like the archive hook above: failing to clear a
                 # version must not strand a kit in submitted, which would leave
                 # the editor unable to reopen their own work.
-                _log.warning("editor_version_clear_failed", kit_id=kit_id, error=str(exc))
+                _log.warning("editor_version_clear_failed", kit_id=kit_id, error_type=type(exc).__name__)
     if version_cleared:
         _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role.role, actor=role.label())
 
@@ -3357,7 +3357,7 @@ async def set_editor_kit_status(
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:
-        _log.error("editor_status_save_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_status_save_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to update status") from exc
 
     # RETIRE THE OUTGOING KIT LAST -- only once the incoming one is actually
@@ -3387,7 +3387,7 @@ async def set_editor_kit_status(
             await store.put_metadata(superseded_kit, retired_meta)
         except FormKitStoreError as exc:
             _log.error("editor_supersede_failed", kit_id=kit_id,
-                       superseded=superseded_kit, error=str(exc))
+                       superseded=superseded_kit, error_type=type(exc).__name__)
             raise HTTPException(
                 status_code=502,
                 detail=f"{_kit_name(kit_id, meta)} was published, but "
@@ -3764,7 +3764,7 @@ async def set_editor_kit_label(
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:
-        _log.error("editor_label_save_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_label_save_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Unable to update label") from exc
     _log.info("editor_label_set", kit_id=kit_id, role=role.role, actor=role.label())
     return {"ok": True, "label": label}
@@ -3804,7 +3804,7 @@ async def set_editor_kit_hidden(
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:
-        _log.error("editor_hidden_save_failed", kit_id=kit_id, error=str(exc))
+        _log.error("editor_hidden_save_failed", kit_id=kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502,
             detail=f"Unable to update whether {_kit_name(kit_id, meta)} is hidden",
@@ -4018,7 +4018,7 @@ async def onboard_editor_kit(
             await store.put_pdf_bytes(kit_id, data, "form.pdf")
             await store.put_metadata(kit_id, {"label": kit_label, "status": "draft"})
         except FormKitStoreError as exc:
-            _log.error("editor_onboard_failed", kit_id=kit_id, error=str(exc))
+            _log.error("editor_onboard_failed", kit_id=kit_id, error_type=type(exc).__name__)
             raise HTTPException(status_code=502, detail="Unable to store the PDF") from exc
 
     _log.info("editor_kit_onboarded", kit_id=kit_id, size_bytes=len(data), role=role.role, actor=role.label())
@@ -4316,7 +4316,7 @@ async def extract_editor_kit(
                     )
                 except FormKitStoreError as exc:
                     _log.error("editor_extract_dump_store_failed",
-                               kit_id=kit_id, error=str(exc))
+                               kit_id=kit_id, error_type=type(exc).__name__)
                     raise HTTPException(
                         status_code=502,
                         detail="Extraction succeeded but its PDF-widget map could "

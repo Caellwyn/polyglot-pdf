@@ -349,16 +349,18 @@ class LiveAIGemini(ILiveAI):
         # which silently tries ADC and then fails cryptically at the first session.
         # We do NOT raise here: bare LiveAIGemini() (api_key=None, vertexai=False) is
         # the default used by mocked unit tests, which never authenticate for real.
-        # Real deploys also surface this via /health's gemini_api_key_present flag.
+        # A real deploy never reaches this branch: the Vertex-only guard refuses
+        # to start on the AI Studio path when K_SERVICE is set (/health reports
+        # no configuration at all since sprint 23 B1b).
         if not vertexai and api_key is None:
             try:
                 structlog.get_logger().warning(
                     "live_ai_no_api_key_on_ai_studio_path",
-                    detail=(
-                        "vertexai=False (AI Studio) but no API key; client will fall "
-                        "back to ADC and likely fail at session start. Set "
-                        "GEMINI_API_KEY or VERTEXAI=true."
-                    ),
+                    # The literal opens on the kwarg line: the PII guard reads a
+                    # kwarg's value from that line (sprint 23 B1b).
+                    detail="vertexai=False (AI Studio) but no API key; client will fall "
+                           "back to ADC and likely fail at session start. Set "
+                           "GEMINI_API_KEY or VERTEXAI=true.",
                 )
             except Exception:
                 pass
@@ -1114,7 +1116,7 @@ class LiveAIGemini(ILiveAI):
                         "bytes": self._gemini_sent_bytes,
                     })
             except Exception as e:
-                self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
+                self._log.error("[error] AUDIO_SEND_FAILED", error_type=type(e).__name__, chunk_number=chunk_count)
                 self._dev_log_io("send", "gemini_send_failed", {
                     "chunk_number": chunk_count, "error": str(e),
                 })
@@ -1499,12 +1501,12 @@ class LiveAIGemini(ILiveAI):
                         f.write(text)
                         f.write("\n\n" + "=" * 80 + "\n")
                 except Exception as e:
-                    self._log.warn("failed_to_append_debug_file", error=str(e))
+                    self._log.warn("failed_to_append_debug_file", error_type=type(e).__name__)
 
             await self._send_text_turn(self._current_session, text)
             return True
         except Exception as exc:
-            self._log.error("send_client_content_failed", error=str(exc), message_length=len(text))  # never log message text -- bd hjo
+            self._log.error("send_client_content_failed", error_type=type(exc).__name__, message_length=len(text))  # never log message text -- bd hjo
             return False
 
     def _flush_muted_context(self, reason: str) -> None:
@@ -1559,7 +1561,7 @@ class LiveAIGemini(ILiveAI):
         try:
             self._text_queue.put_nowait(self._muted_context)
         except Exception as exc:  # pragma: no cover - queue is unbounded
-            self._log.warning("VOICE_UNMUTE_REPLAY_FAILED", error=str(exc), reason=reason)
+            self._log.warning("VOICE_UNMUTE_REPLAY_FAILED", error_type=type(exc).__name__, reason=reason)
             return
         self._log.info("VOICE_UNMUTE_REPLAY_SENT", reason=reason)
         self._muted_context = None
@@ -1621,7 +1623,7 @@ class LiveAIGemini(ILiveAI):
                 ts_monotonic=round(_t_act_start, 4),
             )
         except Exception as e:
-            self._log.error("[error] ACTIVITY_START_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_START_FAILED", error_type=type(e).__name__)
 
     async def send_activity_end(self):
         """Send activity_end signal to Gemini (user stopped speaking).
@@ -1656,7 +1658,7 @@ class LiveAIGemini(ILiveAI):
                 ts_monotonic=round(_t_act_end, 4),
             )
         except Exception as e:
-            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_END_FAILED", error_type=type(e).__name__)
 
     def begin_graceful_shutdown(self) -> asyncio.Event:
         """Ask the receive loop to exit cleanly AFTER flushing pending tool responses.
@@ -1765,7 +1767,7 @@ class LiveAIGemini(ILiveAI):
                         pre_ready_dropped=self._pre_ready_dropped,
                     )
                 except Exception as e:  # noqa: BLE001 -- summary must never block teardown
-                    self._log.warning("session_cost_summary_failed", error=str(e))
+                    self._log.warning("session_cost_summary_failed", error_type=type(e).__name__)
             # timing_audio_drops_session checkpoint 9 (bd polyglot-pdf-cwsy):
             # emit a dedicated timing event when any frames were dropped this
             # session so a log scan for "timing_audio_drops_session" surfaces
@@ -1962,7 +1964,7 @@ class LiveAIGemini(ILiveAI):
                 "automatic_activity_detection": self._build_vad_settings(settings)
             }
         except Exception as e:
-            self._log.warn("failed_to_set_realtime_input_config", error=str(e))
+            self._log.warn("failed_to_set_realtime_input_config", error_type=type(e).__name__)
         
         # Input transcription is needed for TWO independent reasons, so it is
         # requested if EITHER holds (bd polyglot-pdf-l3a.4):
@@ -2109,7 +2111,7 @@ class LiveAIGemini(ILiveAI):
                 temp = float(raw_temp)
             except ValueError:
                 self._log.warn("LIVE_TEMPERATURE is not a number -- ignoring",
-                               value=raw_temp)
+                               temperature_raw_length=len(raw_temp))
             else:
                 # Clamp away from the known-bad 0 while leaving the useful
                 # range free; a typo must not silently break every session.
@@ -2117,7 +2119,7 @@ class LiveAIGemini(ILiveAI):
                     self._log.warn(
                         "LIVE_TEMPERATURE out of the safe range "
                         "(0 < t <= 2; 0 is known to 1011 native audio) -- ignoring",
-                        value=temp)
+                        temperature=temp)
                 else:
                     config['temperature'] = temp
                     self._log.info("LIVE_TEMPERATURE applied",
@@ -2270,7 +2272,7 @@ class LiveAIGemini(ILiveAI):
                         f.write("END OF SYSTEM INSTRUCTION\n")
                         f.write("=" * 80 + "\n")
                 except Exception as e:
-                    self._log.warn("failed_to_write_debug_file", error=str(e))
+                    self._log.warn("failed_to_write_debug_file", error_type=type(e).__name__)
 
         # Turn off model "thinking" tokens (shipped with bd polyglot-pdf-ppfy; a
         # maintainer-requested cost/latency win, no bead of its own -- NOT the 3v5m
@@ -2395,11 +2397,11 @@ class LiveAIGemini(ILiveAI):
                 try:
                     import socket as _s
                     if isinstance(e, (_s.gaierror, _s.error)):
-                        self._log.error('connect_creation_failed_name_error', error=str(e))
+                        self._log.error('connect_creation_failed_name_error', error_type=type(e).__name__)
                     else:
-                        self._log.error('connect_creation_failed', error=str(e))
+                        self._log.error('connect_creation_failed', error_type=type(e).__name__)
                 except Exception:
-                    self._log.error('connect_creation_failed', error=str(e))
+                    self._log.error('connect_creation_failed', error_type=type(e).__name__)
                 raise
 
             # Use shared helper to recover JSON payloads from non-data parts
@@ -2444,7 +2446,7 @@ class LiveAIGemini(ILiveAI):
                             self._log.debug("[text] TEXT_MESSAGE_SENT",
                                           text_length=len(text))  # never log message text (user-turn content) -- bd hjo
                         except Exception as e:
-                            self._log.error("[error] TEXT_SEND_FAILED", error=str(e))
+                            self._log.error("[error] TEXT_SEND_FAILED", error_type=type(e).__name__)
                             # swallow for robustness
                             pass
 
@@ -2521,7 +2523,7 @@ class LiveAIGemini(ILiveAI):
                             await self._send_text_turn(session, queued_msg)
                         except Exception as exc:
                             self._log.error("queued_client_content_send_failed",
-                                          error=str(exc),
+                                          error_type=type(exc).__name__,
                                           message_length=len(queued_msg))  # never log message text -- bd hjo
                     # Clear the queue after sending
                     self._pending_client_content.clear()
@@ -3472,7 +3474,7 @@ class LiveAIGemini(ILiveAI):
                                                         )
                                                     except Exception as log_err:
                                                         # Don't fail silently - we need to know if logging fails
-                                                        self._log.warning("token_file_logging_error", error=str(log_err))
+                                                        self._log.warning("token_file_logging_error", error_type=type(log_err).__name__)
 
                                                 # Structured stdout emit for Cloud Logging (bd polyglot-pdf-5c2h).
                                                 # The file above is local-dev-only and lives on the Cloud Run
@@ -3517,7 +3519,7 @@ class LiveAIGemini(ILiveAI):
                                                         },
                                                     )
                                                 except Exception as emit_err:
-                                                    self._log.warning("token_structured_emit_error", error=str(emit_err))
+                                                    self._log.warning("token_structured_emit_error", error_type=type(emit_err).__name__)
                                             else:
                                                 # Debug: Why didn't we log?
                                                 self._log.debug("token_file_logging_skipped",
@@ -3526,7 +3528,7 @@ class LiveAIGemini(ILiveAI):
                                                               form_session_id=self._form_session_id,
                                                               form_id=self._form_id)
                                         except Exception as e:
-                                            self._log.warning("token_extraction_error", error=str(e), exc_info=True)
+                                            self._log.warning("token_extraction_error", error_type=type(e).__name__, exc_info=True)
 
                                 except Exception:
                                     self._log.exception("event_handling_error")
@@ -3561,13 +3563,13 @@ class LiveAIGemini(ILiveAI):
                             print(f"\n{'='*80}")
                             print(f"[error] GEMINI CONNECTION DROPPED")
                             print(f"{'='*80}")
-                            print(f"Reason: {str(exc)}")
+                            print(f"Reason: {type(exc).__name__}")  # class only; stdout is Cloud Logging
                             print(f"Events received before disconnect: {event_count}")
                             print(f"Intentional shutdown: {self._intentional_shutdown}")
                             print(f"{'='*80}\n")
 
                             self._log.error("gemini_session_connection_closed",
-                                          reason=str(exc),
+                                          reason_type=type(exc).__name__,
                                           close_code=close_code,
                                           event_count=event_count,
                                           intentional_shutdown=self._intentional_shutdown)
@@ -3810,7 +3812,7 @@ class LiveAIGemini(ILiveAI):
                     print(f"\n{'='*80}")
                     print(f"[retry] RETRY ATTEMPT {attempt}/{max_attempts}")
                     print(f"{'='*80}")
-                    print(f"Previous error: {str(last_exc) if last_exc else 'Unknown'}")
+                    print(f"Previous error: {type(last_exc).__name__ if last_exc else 'Unknown'}")  # class only
                     print(f"{'='*80}\n")
                 # Reset per attempt so a retry's connect_to_ready_ms measures THIS
                 # attempt only, not prior failures + backoff (fresh-eyes, PR #150).
@@ -3895,7 +3897,7 @@ class LiveAIGemini(ILiveAI):
                         print(f"[warn] CONNECTION ATTEMPT FAILED")
                         print(f"{'='*80}")
                         print(f"Attempt: {attempt}/{max_attempts}")
-                        print(f"Error: {str(e)}")
+                        print(f"Error: {type(e).__name__}")  # class only; stdout is Cloud Logging
                         print(f"Host: {host}")
                         print(f"DNS result: {dns_result}")
                         print(f"Is name error: {is_name_err}")
@@ -3904,10 +3906,10 @@ class LiveAIGemini(ILiveAI):
                         self._log.error('connect_attempt_failed',
                                        attempt=attempt,
                                        max_attempts=max_attempts,
-                                       error=str(e),
+                                       error_type=type(e).__name__,
                                        host=host,
                                        dns=dns_result,
-                                       is_name_error=is_name_err)
+                                       is_name_error=bool(is_name_err))
                     except Exception:
                         pass
 
@@ -3916,12 +3918,12 @@ class LiveAIGemini(ILiveAI):
                         print(f"[fatal] ALL RETRY ATTEMPTS EXHAUSTED")
                         print(f"{'='*80}")
                         print(f"Failed after {attempt} attempts")
-                        print(f"Final error: {str(e)}")
+                        print(f"Final error: {type(e).__name__}")  # class only; stdout is Cloud Logging
                         print(f"{'='*80}\n")
 
                         self._log.error("all_retries_exhausted",
                                        attempts=attempt,
-                                       final_error=str(e))
+                                       final_error_type=type(e).__name__)
 
                         # Give up and re-raise the last exception
                         raise
@@ -3939,13 +3941,8 @@ class LiveAIGemini(ILiveAI):
             # Task cancelled: allow exit
             return
         except Exception as e:
-            # Log the exception message and a formatted traceback so operators
-            # can diagnose connection/auth errors more easily.
-            try:
-                import traceback as _tb
-
-                tb = _tb.format_exc()
-            except Exception:
-                tb = None
-            self._log.error("session_loop_error", error=str(e), traceback=tb)
+            # exc_info, not a hand-formatted traceback: the logging processor
+            # renders FRAMES and the type and drops the message (which can embed
+            # a field value) -- format_exc() would carry it straight through.
+            self._log.error("session_loop_error", error_type=type(e).__name__, exc_info=True)
             return

@@ -220,7 +220,7 @@ async def get_cost_report(
         )
     except bigquery_reports.BigQueryUnavailable as exc:
         _log.error("admin_cost_report_failed", group_by=group_by,
-                   from_month=from_month, to_month=to_month, error=str(exc))
+                   from_month=from_month, to_month=to_month, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="cost report unavailable") from exc
 
@@ -256,7 +256,7 @@ async def get_income_report(
         )
     except bigquery_reports.BigQueryUnavailable as exc:
         _log.error("admin_income_report_failed", from_month=from_month,
-                   to_month=to_month, error=str(exc))
+                   to_month=to_month, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="income report unavailable") from exc
 
