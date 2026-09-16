@@ -77,6 +77,10 @@ _SENSITIVE_KWARGS = (
     # (bd polyglot-pdf-t1c). spoken_name_length matches the *_length safe-RHS,
     # so the redacted form passes while spoken_name=spoken_name fails.
     "spoken_name",
+    # A raw address is staff PII (sprint 23 C3: POST /api/signup/check promises
+    # never to log it). email_length=len(...) stays safe; actor_email= on the
+    # admin audit lines is a different kwarg name and does not match.
+    "email",
 )
 # `fields` is a SPECIAL case: logging the field IDs (dict KEYS) is always-safe
 # per the PII policy, but the same kwarg carrying field .values() would be a
@@ -330,6 +334,11 @@ def test_guard_catches_known_leaks():
     assert not _scan_leaks('_log.error("X", message="Session closed and cleaned up")')
     # A value assignment OUTSIDE a log call must NOT flag.
     assert not _scan_leaks('value_str = str(value)\nmessage = f"...{value_str}"')
+    # email (sprint 23 C3): raw is a leak; the length form and the actor_email
+    # audit kwarg are not.
+    assert _scan_leaks('_log.info("X", email=body.email)')
+    assert not _scan_leaks('_log.info("X", email_length=len(body.email))')
+    assert not _scan_leaks('_log.info("X", actor_email=actor.email)')
     # spoken_name: the raw value is a leak; the redacted length form is safe (bd t1c).
     assert _scan_leaks('_log.info("X", spoken_name=spoken_name, found=f)')
     assert not _scan_leaks('_log.info("X", spoken_name_length=len(spoken_name), found=f)')

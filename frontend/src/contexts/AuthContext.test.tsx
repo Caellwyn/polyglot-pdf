@@ -4,7 +4,7 @@
 // (bd polyglot-pdf-uov.13, T3.2). There were no tests for this surface.
 //
 // The load-bearing, security-critical behavior is the email-signup ALLOWLIST
-// GATE: signUpWithEmail must query the authorized_emails collection and REFUSE
+// GATE: signUpWithEmail must ask POST /api/signup/check and REFUSE
 // to create an account when the email is not on the list. A regression here
 // would let anyone self-register, so it is spec'd first and hardest.
 //
@@ -45,7 +45,8 @@ vi.mock('firebase/auth', () => ({
 const mockGetDocs = vi.fn();
 const mockGetDoc = vi.fn();
 const mockSetDoc = vi.fn();
-// where() is a spy so the allowlist-query assertion can check the lowercased email.
+// where()/getDocs() stay in the factory only so the module mock is complete; the
+// allowlist is no longer queried from the browser (sprint 23 C3).
 const mockWhere = vi.fn((...a: unknown[]) => ({ __where: a }));
 
 vi.mock('firebase/firestore', () => ({
@@ -65,6 +66,13 @@ const mockIsTestHarnessEnabled = vi.fn(() => false);
 vi.mock('../shared/config', () => ({
     isTestHarnessEnabled: () => mockIsTestHarnessEnabled(),
 }));
+
+// The signup allowlist check is a backend call (sprint 23 C3); pin the base.
+vi.mock('../schema-forms/utils/pdfFiller', () => ({
+    getBackendHttpUrl: () => 'http://backend.test',
+}));
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', (...a: unknown[]) => mockFetch(...a));
 
 import * as AuthModule from './AuthContext';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -115,11 +123,20 @@ async function renderAuth() {
 
 
 // ===========================================================================
-// 1. The email-signup ALLOWLIST GATE (security-critical)
+// 1. The email-signup ALLOWLIST GATE (security-critical; server-side since C3)
 // ===========================================================================
-describe('AuthContext signUpWithEmail -- authorized_emails allowlist gate', () => {
-    it('REFUSES to create an account when the email is not on the allowlist', async () => {
-        mockGetDocs.mockResolvedValue({ empty: true }); // not in authorized_emails
+describe('AuthContext signUpWithEmail -- the server-side allowlist gate', () => {
+    // POST /api/signup/check answers 204 for an allowlisted address and a
+    // uniform 404 otherwise (sprint 23 C3). The browser never reads the
+    // authorized_emails collection any more -- its rule is a full client deny.
+    const CHECK_URL = 'http://backend.test/api/signup/check';
+
+    beforeEach(() => {
+        mockFetch.mockReset();
+    });
+
+    it('REFUSES to create an account when the backend answers 404', async () => {
+        mockFetch.mockResolvedValue({ status: 404, ok: false });
         await renderAuth();
 
         await expect(
@@ -128,10 +145,21 @@ describe('AuthContext signUpWithEmail -- authorized_emails allowlist gate', () =
 
         // The account was NEVER created -- the gate blocks before Firebase.
         expect(mockCreateUser).not.toHaveBeenCalled();
+        expect(mockGetDocs).not.toHaveBeenCalled(); // no browser-side query
     });
 
-    it('creates the account when the email IS on the allowlist', async () => {
-        mockGetDocs.mockResolvedValue({ empty: false }); // present in authorized_emails
+    it('REFUSES (fails closed) when the check cannot be reached', async () => {
+        mockFetch.mockRejectedValue(new TypeError('network down'));
+        await renderAuth();
+
+        await expect(
+            ctx!.signUpWithEmail('allowed@example.com', 'pw')
+        ).rejects.toThrow(/not authorized/i);
+        expect(mockCreateUser).not.toHaveBeenCalled();
+    });
+
+    it('creates the account when the backend answers 204', async () => {
+        mockFetch.mockResolvedValue({ status: 204, ok: true });
         mockCreateUser.mockResolvedValue({ user: { uid: 'u1' } });
         await renderAuth();
 
@@ -144,20 +172,45 @@ describe('AuthContext signUpWithEmail -- authorized_emails allowlist gate', () =
         expect(password).toBe('pw');
     });
 
-    it('queries the allowlist with a lowercased email (case-insensitive gate)', async () => {
-        mockGetDocs.mockResolvedValue({ empty: false });
+    it('asks the backend with the lowercased email, as JSON, at the check route', async () => {
+        mockFetch.mockResolvedValue({ status: 204, ok: true });
         mockCreateUser.mockResolvedValue({});
         await renderAuth();
 
         await ctx!.signUpWithEmail('MixedCase@Example.COM', 'pw');
 
-        // The where() clause must have been built with the lowercased email, so
-        // an allowlist entry stored lowercase still matches a mixed-case signup.
-        expect(mockWhere).toHaveBeenCalledWith('email', '==', 'mixedcase@example.com');
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe(CHECK_URL);
+        expect(init.method).toBe('POST');
+        expect(JSON.parse(init.body as string)).toEqual({ email: 'mixedcase@example.com' });
+    });
+
+    it('trims the address: the check gets it lower-cased, the account gets it trimmed as typed', async () => {
+        mockFetch.mockResolvedValue({ status: 204, ok: true });
+        mockCreateUser.mockResolvedValue({});
+        await renderAuth();
+
+        await ctx!.signUpWithEmail('  Staff@Example.com  ', 'pw');
+
+        const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(init.body as string)).toEqual({ email: 'staff@example.com' });
+        const [, created] = mockCreateUser.mock.calls[0];
+        expect(created).toBe('Staff@Example.com');
+    });
+
+    it('does not treat a non-204 success as allowed (200 with a body is not the contract)', async () => {
+        mockFetch.mockResolvedValue({ status: 200, ok: true });
+        await renderAuth();
+
+        await expect(
+            ctx!.signUpWithEmail('allowed@example.com', 'pw')
+        ).rejects.toThrow(/not authorized/i);
+        expect(mockCreateUser).not.toHaveBeenCalled();
     });
 
     it('propagates a Firebase create error (e.g. email-already-in-use) to the caller', async () => {
-        mockGetDocs.mockResolvedValue({ empty: false });
+        mockFetch.mockResolvedValue({ status: 204, ok: true });
         mockCreateUser.mockRejectedValue(new Error('auth/email-already-in-use'));
         await renderAuth();
 
