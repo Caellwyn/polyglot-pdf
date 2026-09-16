@@ -984,9 +984,11 @@ one.
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
   `handleAuthExpired`.
-- **Users page** (`pages/UsersPage.tsx`): the firm-ID field is a REQUIRED
-  text input, always shown -- there is no firm-picker dropdown (the Firms
-  page's own firm picker is a SEPARATE tab, not wired into this one) and
+- **Users page** (`pages/UsersPage.tsx`): the firm field is a `<select>`
+  populated from `listFirms()` (`GET /admin/firms`) on load, falling back to
+  the original REQUIRED free-text firm-ID input only when that load fails
+  (never both at once; the Firms page's own firm picker is a SEPARATE tab,
+  not wired into this one) -- and
   because the console's sign-in gate calls only `GET /admin/whoami`
   (`require_app_admin`, the STRICT gate), never the composite
   `require_app_admin_or_owning_manager` the user routes accept -- so every

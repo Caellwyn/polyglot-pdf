@@ -136,6 +136,35 @@ matching pin.
 Full backend suite and root-level tests re-run clean after this round's
 fix (no backend or root-test files touched by either round).
 
+### Outer cross-surface review (adopt/reject/defer)
+
+The Opus outer cross-surface review found one gap: the tier-2 doc's
+"Users page" bullet (`docs/components/admin-service.md`, then lines
+928-930) still described the OLD behavior -- "the firm-ID field is a
+REQUIRED text input, always shown -- there is no firm-picker dropdown" --
+a claim this diff's own change (the `<select>` fed by `listFirms()`, with
+the text input demoted to an error-only fallback) falsified without
+updating. The same file's own "Last updated" stamp three lines above the
+Tracks list already described the new select/fallback behavior correctly,
+so the file self-contradicted within under 900 lines of itself.
+
+- **Adopted:** rewrote the bullet to describe the current `<select>` /
+  free-text-fallback behavior, keeping the surrounding still-true
+  reasoning (app-admin-only sign-in path, the reset-link behavior,
+  disable/role-change re-read pattern) unchanged.
+- **Rejected:** none -- this was the review's only finding, and it was a
+  real, in-scope defect (the diff's own added prose left one older bullet
+  unfixed), not a pre-existing or out-of-scope issue.
+- **Deferred:** none -- the reviewer explicitly found no other blockers
+  and filed no new beads; the two items it deliberately did not flag (the
+  pre-existing stale-users-flash-on-firm-switch UX quirk, and the
+  bead-`z4y91`-stamped historical block at line 441, which matches this
+  file's established per-bead-stamp convention) needed no action.
+
+Full admin-console vitest suite re-run clean (183/183) after this round's
+doc-only fix; no `.tsx`/`.ts` files touched, so no mutation-verification
+was applicable.
+
 ## Lessons
 
 The coverage-test approach (enumerate a directory from disk, assert a
