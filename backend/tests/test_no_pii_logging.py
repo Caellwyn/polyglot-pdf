@@ -15,6 +15,7 @@ rather than a silent BigQuery leak.
 """
 
 import pathlib
+import ast
 import re
 
 import pytest
@@ -52,6 +53,11 @@ GUARDED_FILES = [
     "backend/services/request_coordinator.py",
     "backend/services/form_filling_service.py",
     "backend/routes/websocket_routes.py",
+    # The text-model adapter (validator, secretary, translation calls): its
+    # prompts and completions ARE field values (bd polyglot-pdf-wfgjz).
+    # secretary_context.py builds the prompt and has no log call at all; the
+    # deny-by-default sweep below covers it the day one appears.
+    "backend/adapters/text_ai_gemini.py",
 ]
 
 # Kwarg NAMES that must never carry a raw value/text in a log call. We flag the
@@ -443,3 +449,175 @@ def test_an_exception_message_never_reaches_the_log():
     assert "ValueError" in rendered, (
         "the exception TYPE was dropped along with the message; the error is "
         "now undebuggable and invisible to Cloud Error Reporting")
+
+
+
+# ---------------------------------------------------------------------------
+# Sprint 23 B1a (bd polyglot-pdf-wfgjz): two more sinks a field value could
+# take out of the process -- the 422 response body, and the WebSocket close
+# reason on the wire.
+# ---------------------------------------------------------------------------
+
+_B1A_SENTINEL = "A-098-765-432-PII-SENTINEL"
+
+
+def test_a_422_never_echoes_the_request_body():
+    """RED before backend/utils/validation_errors.py was installed on the
+    app (FastAPI's default 422 carries each error's `input`), green after.
+    Mutation-verified by removing install_validation_error_handler(app)
+    from backend/main.py."""
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    client = TestClient(app)
+    # /api/disclaimer-acceptance is unauthenticated and takes a pydantic
+    # body; a string where an int is expected is the malformed shape.
+    resp = client.post("/api/disclaimer-acceptance", json={
+        "form_session_id": "fs-sentinel-test",
+        "language": "en",
+        "timestamp": _B1A_SENTINEL,
+    })
+    assert resp.status_code == 422, resp.text
+    assert _B1A_SENTINEL not in resp.text, (
+        "the 422 body echoed the request value back: " + resp.text)
+    detail = resp.json()["detail"]
+    assert detail and all(set(e) <= {"loc", "type", "msg"} for e in detail), detail
+    assert any("timestamp" in e["loc"] for e in detail), detail
+
+
+def test_a_422_never_echoes_a_value_through_a_custom_validator_message():
+    """The second echo channel: a route validator's `raise ValueError(f"...{v}...")`
+    is rendered by pydantic into `msg` verbatim. disclaimer_routes bounds the
+    timestamp that way, so an in-type but out-of-range value is the sentinel
+    here (a type mismatch never reaches the custom validator). RED with `msg`
+    passed through for value_error; mutation-verified by removing the
+    _CUSTOM_MESSAGE_TYPES replacement."""
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    sentinel_ts = 100000001  # ms; far below the route's minimum, in type
+    resp = TestClient(app).post("/api/disclaimer-acceptance", json={
+        "form_session_id": "fs-sentinel-test", "language": "en", "timestamp": sentinel_ts})
+    assert resp.status_code == 422, resp.text
+    assert str(sentinel_ts) not in resp.text, (
+        "the custom validator message carried the submitted value into the 422: " + resp.text)
+    assert any(e["type"] == "value_error" for e in resp.json()["detail"]), resp.text
+
+
+def test_the_backend_app_is_not_in_debug_mode():
+    """A debug app renders tracebacks, locals included, into 500 bodies."""
+    from backend.main import app
+
+    assert app.debug is False
+
+
+# --- the close reason on the wire is always a static literal --------------
+
+# Independent statement of the wire reasons /ws/fill may send. Written out
+# here, not derived from the route, so a new site that sends anything else
+# (an f-string, str(exc), a client-supplied token) fails below. The
+# reason_token (telemetry only) is e4dt8's set; this is the ON-THE-WIRE text.
+WS_WIRE_CLOSE_REASONS = frozenset({
+    "",  # the default: most closes send no reason
+    "Idle timeout",
+    "Authentication failed",
+    "This account is not enrolled for the voice application",
+    "budget_exhausted",
+    "budget_unavailable",
+})
+
+_WS_ROUTES = REPO_ROOT / "backend" / "routes" / "websocket_routes.py"
+
+
+def _literal_strings(node: ast.AST) -> set:
+    """Every string a reason expression can evaluate to, or raise if any
+    branch is not a literal."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.IfExp):
+        return _literal_strings(node.body) | _literal_strings(node.orelse)
+    if isinstance(node, ast.BoolOp):
+        out = set()
+        for v in node.values:
+            out |= _literal_strings(v)
+        return out
+    raise AssertionError("non-literal close reason expression at line %d: %s"
+                         % (node.lineno, ast.dump(node)[:120]))
+
+
+def _reason_expression(call: ast.Call, enclosing: ast.AST) -> ast.AST | None:
+    for kw in call.keywords:
+        if kw.arg != "reason":
+            continue
+        if isinstance(kw.value, ast.Name):
+            # Resolve the last assignment to that name before the call, inside
+            # the enclosing function.
+            assigned = None
+            # Same function only: a nested def/lambda is its own scope.
+            nodes = [n for n in ast.walk(enclosing)
+                     if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+                     or n is enclosing]
+            for n in nodes:
+                if (isinstance(n, ast.Assign) and n.lineno < call.lineno
+                        and any(isinstance(t, ast.Name) and t.id == kw.value.id for t in n.targets)):
+                    if assigned is None or n.lineno > assigned.lineno:
+                        assigned = n
+            assert assigned is not None, (
+                "reason=%s at line %d is never assigned a literal" % (kw.value.id, call.lineno))
+            return assigned.value
+        return kw.value
+    return None
+
+
+def _is_close_call(call: ast.Call) -> bool:
+    f = call.func
+    return ((isinstance(f, ast.Name) and f.id == "_close_ws")
+            or (isinstance(f, ast.Attribute) and f.attr == "close"))
+
+
+def test_every_ws_close_reason_is_a_static_literal_from_the_pinned_set():
+    """A close reason built from a client string or an exception message
+    would put that text on the wire (and into Cloud Run's WebSocket log).
+    Every close site on the route must send a literal from
+    WS_WIRE_CLOSE_REASONS. Mutation-verified by changing one site's literal
+    to an f-string carrying the exception."""
+    tree = ast.parse(_WS_ROUTES.read_text(encoding="utf-8"))
+    seen: set = set()
+    sites = 0
+    for func in [n for n in ast.walk(tree)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name != "_close_ws"]:  # the wrapper forwards its parameter
+        for call in [n for n in ast.walk(func) if isinstance(n, ast.Call) and _is_close_call(n)]:
+            sites += 1
+            expr = _reason_expression(call, func)
+            if expr is None:
+                seen.add("")
+                continue
+            seen |= _literal_strings(expr)
+    assert sites >= 8, "the close-site scan is vacuous: %d sites" % sites
+    unexpected = seen - WS_WIRE_CLOSE_REASONS
+    assert not unexpected, "unpinned wire close reasons: " + repr(sorted(unexpected))
+    missing = WS_WIRE_CLOSE_REASONS - seen
+    assert not missing, "pinned reasons no site sends any more: " + repr(sorted(missing))
+
+
+@pytest.mark.asyncio
+async def test_close_ws_puts_only_the_stated_reason_on_the_wire(capsys):
+    """The wrapper's telemetry metadata (which may name an exception type or
+    a mismatched id) must never leak into the wire reason: the peer receives
+    exactly the literal the site stated. Mutation-verified by appending the
+    reason_token to the wire reason inside _close_ws."""
+    from unittest.mock import AsyncMock
+
+    from backend.routes.websocket_routes import _close_ws
+
+    ws = AsyncMock()
+    await _close_ws(ws, 1008, "auth_failed", reason="Authentication failed",
+                    metadata={"detail": _B1A_SENTINEL})
+    ws.close.assert_awaited_once()
+    kwargs = ws.close.await_args.kwargs
+    assert kwargs["reason"] == "Authentication failed"
+    assert _B1A_SENTINEL not in kwargs["reason"]
+    capsys.readouterr()  # the counted close event (metadata is telemetry, not the wire)

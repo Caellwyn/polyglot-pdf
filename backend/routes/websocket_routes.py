@@ -1517,7 +1517,11 @@ async def fill_form_from_schema(
 	# from the user's audio. Only RAISES the flag (never lowers a query=true), and
 	# is a no-op in prod (env unset). Safe for native-audio: enable_transcripts only
 	# adds *_audio_transcription config, never response_modalities=TEXT (which 1007s).
-	if not send_transcript and os.getenv("SEND_TRANSCRIPT", "false").lower() == "true":
+	# The harness knob is honoured LOCALLY only: a deployed instance (K_SERVICE
+	# is set by Cloud Run) never turns on transcript forwarding from the env
+	# (bd polyglot-pdf-wfgjz); the handshake flag remains the client's choice.
+	if (not send_transcript and not os.getenv("K_SERVICE")
+		and os.getenv("SEND_TRANSCRIPT", "false").lower() == "true"):
 		send_transcript = True
 
 	log = _log.bind(endpoint="fill_from_schema")

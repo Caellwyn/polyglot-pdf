@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh
 
-*Last updated: 2026-09-12 (bd polyglot-pdf-6rj0j: the uvicorn access log is OFF -- `--no-access-log` on the deployed CMD plus a WARNING cap on `uvicorn.access` in `configure_logging()` -- see "The uvicorn access log is OFF" below.)*
+*Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the token file is local-dev only on two guards -- a K_SERVICE no-op in the writer and the .env.DEV gate at the call site -- and the per-turn print() banner is now the structured `token_usage` event. On a deployed instance `configure_logging` never runs below INFO.)*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -91,10 +91,13 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
   `log_token_event(...)`. The **caller passes already-computed costs and
   cumulative totals** — the logger does no pricing itself; it just serializes the
   event (per-event `event`/`cost` blocks + a `session_cumulative` block) and
-  flushes. A single global instance is reached via `get_token_logger()`. The
-  module docstring is explicit: this file is for local development / the
-  visualization dashboard, **not** production (BigQuery is the eventual prod
-  path — see roadmap Phase 5).
+  flushes. A single global instance is reached via `get_token_logger()`. This
+  file is for local development / the visualization dashboard, **not**
+  production, on two independent guards (bd `polyglot-pdf-wfgjz`):
+  `log_token_event` returns without writing when `K_SERVICE` is set, and the
+  adapter's call site runs only under the `backend/.env.DEV` marker
+  (`DEV_LOGGING_ENABLED`), which the image never carries. BigQuery is the
+  production path (Phase 5 below).
 
 > **Why cost matters here.** The Gemini Live API re-bills the *entire accumulated
 > context* on every turn, and native audio accrues ~25 tokens/sec (see
@@ -172,8 +175,10 @@ pipeline ("LOGGING_OVERHAUL_PLAN Phase 1"). The **one** wired emitter today is t
 per-turn token event: `live_ai_gemini.py` calls
 `get_structured_logger().log_gemini_api_response(...)` alongside the file write, so
 every turn's counts + costs land as a `gemini_api_response` `jsonPayload` line in
-Cloud Logging — queryable/exportable off a deployed run without scraping the
-`print()` block (bd `polyglot-pdf-5c2h`). The remaining event types (session
+Cloud Logging — queryable/exportable off a deployed run. The per-turn console
+banner that used to `print()` the same counts is gone: it is one structured
+`token_usage` event (counts + cost, no text), so the per-turn token counts no
+longer reach stdout outside structlog's processors (bd `polyglot-pdf-wfgjz`). The remaining event types (session
 lifecycle, field, error) are still scaffolding — the contract is defined, the wiring
 lands in Phases 2–4 below.
 

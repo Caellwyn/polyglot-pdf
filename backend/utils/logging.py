@@ -230,6 +230,12 @@ def configure_logging() -> None:
 	# Get log level from environment or default to INFO
 	log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
 	log_level = getattr(logging, log_level_str, logging.INFO)
+	# A DEPLOYED instance (K_SERVICE is set by Cloud Run) never runs below
+	# INFO: DEBUG-level lines from this app and its libraries can carry
+	# request and response payloads, and no deployed use for them exists
+	# (bd polyglot-pdf-wfgjz). Local dev keeps LOG_LEVEL free.
+	if os.getenv("K_SERVICE") and log_level < logging.INFO:
+		log_level = logging.INFO
 	
 	# Configure stdlib logging
 	logging.basicConfig(level=log_level, format="%(message)s")

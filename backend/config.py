@@ -586,6 +586,14 @@ class Settings(BaseModel):
 				"endpoint that renders client PII. It exists for local development "
 				"only (no K_SERVICE); there is no deployed override."
 			)
+		# The two local-dev dump knobs are inert on a deployed instance whatever
+		# the env says: transcripts and audio dumps are field VALUES on disk.
+		# Both are already double-gated on the backend/.env.DEV marker, which the
+		# image never carries; this is the independent guard for a marker that
+		# somehow shipped (bd polyglot-pdf-wfgjz).
+		if os.getenv("K_SERVICE"):
+			self.LIVE_DEV_TRANSCRIPTS = False
+			self.LIVE_DEV_AUDIO_DUMP = False
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
 		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard
 		# (2.5) tier is BACKEND-AWARE: the native-audio Live model has a different id

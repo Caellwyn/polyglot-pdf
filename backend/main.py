@@ -25,6 +25,7 @@ from .utils.confirmation_logger import (
 )
 from .services.firms import firms_store_status
 from .utils.logging import configure_logging
+from .utils.validation_errors import install_validation_error_handler
 
 
 configure_logging()
@@ -32,6 +33,9 @@ configure_logging()
 _log = structlog.get_logger().bind(module="main")
 
 app = FastAPI(title="Web Form Voice Filler API", version="0.1.0")
+# A 422 must never echo the request body back (bd polyglot-pdf-wfgjz);
+# pinned by backend/tests/test_no_pii_logging.py.
+install_validation_error_handler(app)
 
 
 async def _drain_confirmation_sink_bounded() -> None:
