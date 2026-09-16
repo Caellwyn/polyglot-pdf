@@ -3129,7 +3129,10 @@ unchanged, only which behavior it defaults to.
   Cloud Scheduler declaration + env-var pair**, exactly mirroring the sweep
   job's own (Surface contract 15's `admin_audit_log` neighbor,
   `SWEEP_SCHEDULER_SA_EMAIL`): a NEW `MONTHLY_TOPUP_SCHEDULER_SA_NAME`
-  (`admin-monthly-topup-scheduler-sa`, a SEPARATE identity from BOTH
+  (`admin-topup-scheduler-sa` -- kept under GCP's 30-character
+  service-account-id cap; bd polyglot-pdf-l3kqc shortened it from the
+  original `admin-monthly-topup-scheduler-sa` (32 chars), a SEPARATE
+  identity from BOTH
   `admin-backend-sa` and `admin-sweep-scheduler-sa` -- rotating one job's
   caller credential must never change what a DIFFERENT job accepts), an
   echoed-NOTE `gcloud scheduler jobs create http admin-monthly-credit-topup`

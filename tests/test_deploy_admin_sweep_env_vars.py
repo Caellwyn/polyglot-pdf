@@ -205,7 +205,7 @@ def test_monthly_topup_scheduler_sa_email_is_computed_without_a_gcloud_lookup():
     assert match, (
         "deploy-admin.sh does not declare MONTHLY_TOPUP_SCHEDULER_SA_EMAIL")
     assert match.group(1) == (
-        "admin-monthly-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
+        "admin-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
     ), (
         "MONTHLY_TOPUP_SCHEDULER_SA_EMAIL in deploy-admin.sh does not match "
         "the scheduler SA name literal declared in scripts/setup-admin-"

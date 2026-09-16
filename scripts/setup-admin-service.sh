@@ -350,7 +350,7 @@ echo -e "${YELLOW}[NOTE]${NC} (unset on the very first deploy, before the servic
 # section 5 above) -- see that section's own comment for why a Scheduler
 # caller identity is never reused across jobs: rotating one job's
 # credential must never silently change what a DIFFERENT job accepts.
-MONTHLY_TOPUP_SCHEDULER_SA_NAME="admin-monthly-topup-scheduler-sa"
+MONTHLY_TOPUP_SCHEDULER_SA_NAME="admin-topup-scheduler-sa"
 MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="$MONTHLY_TOPUP_SCHEDULER_SA_NAME@$PROJECT_ID.iam.gserviceaccount.com"
 
 if ! gcloud iam service-accounts describe "$MONTHLY_TOPUP_SCHEDULER_SA_EMAIL" --project "$PROJECT_ID" &>/dev/null; then

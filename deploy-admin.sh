@@ -91,7 +91,7 @@ SWEEP_SCHEDULER_SA_EMAIL="admin-sweep-scheduler-sa@$PROJECT.iam.gserviceaccount.
 # literal (scripts/setup-admin-service.sh's MONTHLY_TOPUP_SCHEDULER_SA_NAME)
 # over. A SEPARATE scheduler identity from the sweep job's own, mirroring
 # that section's "never reuse a Scheduler caller identity across jobs" rule.
-MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="admin-monthly-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
+MONTHLY_TOPUP_SCHEDULER_SA_EMAIL="admin-topup-scheduler-sa@$PROJECT.iam.gserviceaccount.com"
 
 # PUBSUB_PUSH_SA_EMAIL (bd polyglot-pdf-tb3kp, E4.3's Cloud Build
 # build-status webhook OIDC gate -- fresh-eyes/cross-surface review finding:
