@@ -168,6 +168,8 @@ its own table).
 | POST | `/admin/credits/monthly-topup` | The monthly firm-plan credit top-up (bd `polyglot-pdf-0euzk`, maintainer pricing decision 2026-09-14: "35 credits/month cap as a starting place" -- see bd `polyglot-pdf-hnlj3`, 2026-09-15, for why `rollover` now defaults True and "cap" no longer describes the common case). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the SAME shape as the sweep route below, a SEPARATE Cloud Scheduler identity (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`) and a SEPARATE env-var-set audience (this route's own path). **THIS TRIGGER IS INTERIM** (bd `polyglot-pdf-hnlj3`): the per-firm grant logic lives in its own function, `topup_firm(db, firm_id, firm, *, period, actor=None)`, this route just loops it over every active firm -- Epic 5's Stripe webhook (invoice.paid / subscription renewal) will call the SAME function directly for the one firm a payment event names, once that lands. For every `status == active` firm carrying a `plan` (`{tier, monthly_credits, rollover}`, `backend/services/plans.py`; `rollover` defaults True as of bd `polyglot-pdf-hnlj3`), `topup_firm` writes ONE `subscription_grant` through `credit_ledger.append_entry` with `usd_amount=None` ("no money moved" -- the credits are the product a flat recurring fee already covers outside this ledger) and a new `period="YYYY-MM"` field on the entry. `rollover=false` brings the balance UP TO `monthly_credits` (skipped, writing nothing, when already at or over the cap -- a negative balance from the metered soft-launch is brought up to the cap too); `rollover=true` ADDS `monthly_credits` regardless of the current balance. IDEMPOTENT BY MONTH: before writing, queries the firm's ledger for an existing `subscription_grant` with the SAME `period` and skips the firm entirely if one exists -- a retried Scheduler call or a second manual run writes nothing. Mock firms are topped up too (no `kind` filter -- staging needs credits to test). A per-firm failure (a malformed plan, a Firestore hiccup) is logged and skipped, never aborting the whole monthly pass. Audited via `append_entry`'s `extra_writes` hook, the SAME extra_writes-delegated shape the sweep route below and the grant/adjust routes above use. Returns per-outcome firm_id lists (`topped_up`/`skipped_at_cap`/`skipped_already_run`/`skipped_no_plan`/`failed`) -- counts derivable from list lengths; the ledger entry and audit row are the durable record. `admin_backend/routes/credit_routes.py` |
 | GET | `/admin/deploys` | List `deployments/{id}` rows, newest first (bd `polyglot-pdf-tb3kp`, E4.3). Optional `?channel=`/`?target=` filters (422 on an unrecognized `target`); `?limit=` (default 50, max 200). Filtered CLIENT-SIDE over a `ts`-ordered, `limit`-capped fetch rather than a second composite index per filter (this collection is low-volume: one row per deploy, not per request). Response rows are an EXPLICIT key allowlist. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
 | POST | `/admin/deploys` | Trigger a Cloud Build for `{target, sha}` (bd `polyglot-pdf-tb3kp`, E4.3). `target` validated against `deploy/targets.py`'s closed `TARGETS`; `sha` validated as exactly 40 lowercase hex characters -- both 422 otherwise. For a target in `GATED_TARGETS` (`backend-demo`, `frontend-demo`), refuses EARLY with 409 when `admin_backend/services/promotion_gate.py`'s `staging_verified()` finds no successful staging deployment for the same target family and sha -- the build's own in-build gate repeats the identical check, so a bash-triggered build cannot bypass it either. Writes `deployments/{id}` (status `queued`, no `build_id` yet) BEFORE calling Cloud Build, audits pending-then-committed (EXTERNAL form -- the mutation is a Cloud Build API call, not a Firestore write), then calls `admin_backend/services/cloud_build.py::run_target()` (`CloudBuildClient.run_build_trigger`, dispatched with `asyncio.to_thread`). On failure, the audit row is marked failed and the deployment row's status is corrected to `failure` with no `build_id` -- the row is never erased, but it can never be mistaken for a build that is actually running. `admin_backend/routes/deploy_routes.py`, `admin_backend/services/cloud_build.py`, `admin_backend/services/promotion_gate.py` |
+| GET | `/admin/deploys/promotable` | Would `{target, sha}` pass `POST /admin/deploys`' own early promotion gate (bd `polyglot-pdf-ryx86`, E4.7)? `target`/`sha` REQUIRED query params (422 via FastAPI validation if missing, or via the same target/sha validation POST's body uses). Computes the SAME `staging_verified()` predicate through a shared `_staging_verified_for()` helper; a target outside `GATED_TARGETS` is unconditionally `promotable: true`. A read, so no audit row. Registered on this router AHEAD OF `GET /admin/deploys/{deploy_id}` -- a bare path parameter would otherwise swallow the literal `promotable` segment. `admin_backend/routes/deploy_routes.py` |
+| GET | `/admin/deploys/targets` | The closed target-picker list for the console's trigger form (bd `polyglot-pdf-ryx86`, E4.7): `deploy/targets.py`'s `TARGETS` restated as `{target, target_family, channel, gated}` rows, so the console never hand-copies that list. A read, so no audit row. Also registered ahead of `GET /admin/deploys/{deploy_id}`. `admin_backend/routes/deploy_routes.py` |
 | GET | `/admin/deploys/{deploy_id}` | Read one `deployments/{id}` row (bd `polyglot-pdf-tb3kp`, E4.3), the same explicit key allowlist as the list route. 404 for an unknown id. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
 | GET | `/admin/errors` | Cloud Error Reporting `groupStats` for one channel's Cloud Run service (bd `polyglot-pdf-mpebj`, E3.11a; docs: Surface contract 28a). `?channel=demo\|staging` REQUIRED (422 otherwise). Authenticated with the runtime SA's ADC token (`admin-backend-sa` already holds `roles/errorreporting.viewer` from bd `polyglot-pdf-e4dt8` -- no new IAM grant). Returns count, first/last seen, and the group's representative TYPE and TOP FRAME ONLY. The Error Reporting API has no `representative.type` field, so the type is parsed from the terminating line of `representative.message`, which E3.8's write-side PII rule already guarantees is the bare exception type name with no message text -- the rest of that message is never returned (E3.8's PII rule reaching the console). `ErrorReportingUnavailable`-shaped failures map to 503. A read, so no audit row. `admin_backend/routes/ops_routes.py`, `admin_backend/services/error_stats.py` |
 | GET | `/admin/firms` | Every firm, with `kind`, `balance_credits` and `status` (bd `polyglot-pdf-zopqq`), unfiltered -- the bead names columns, not filters, so no composite index is owed the way `/admin/audit`'s filters are. A read, so no audit row. `admin_backend/routes/firm_routes.py` |
@@ -3299,10 +3301,24 @@ changes -- for BOTH console-triggered and bash-triggered builds.
     check, so a bash-triggered build cannot bypass what the console route
     already refused.
   - `GET /admin/deploys` / `GET /admin/deploys/{id}` -- the console's read
-    path (bead E4.7, bd polyglot-pdf-ryx86, not yet built): newest-first,
-    client-side filtered on `channel`/`target`, an explicit response-key
-    allowlist (`DEPLOYMENT_VIEW_FIELDS`) so an internal field can never leak
-    without a deliberate addition.
+    path: newest-first, client-side filtered on `channel`/`target`, an
+    explicit response-key allowlist (`DEPLOYMENT_VIEW_FIELDS`) so an
+    internal field can never leak without a deliberate addition.
+  - `GET /admin/deploys/targets` / `GET /admin/deploys/promotable` (bead
+    E4.7, bd polyglot-pdf-ryx86) -- the two reads the console's Deploys
+    page (`admin-console/src/pages/DeploysPage.tsx`) needs beyond the
+    three above: the closed target-picker list (never hand-copied from
+    `deploy/targets.py`), and a preview of the SAME `staging_verified()`
+    predicate `POST /admin/deploys`' own early 409 uses (via a shared
+    `_staging_verified_for()` helper), so the console's Deploy button can
+    disable itself with the server's own reason before ever POSTing. Both
+    are registered on the router AHEAD OF `GET /admin/deploys/{deploy_id}`
+    -- a bare path parameter would otherwise swallow the literal `targets`/
+    `promotable` segment as an attempted deploy-id lookup. The page also
+    reads `GET /admin/health` (contract 32/E3.11a) per channel for its
+    live-SHA panel, and derives "latest successful deploy per target
+    family" client-side from an unfiltered `GET /admin/deploys` read --
+    no new route for that derivation.
 - **`target` validation: `deploy/targets.py`.** The ONE closed `TARGETS`
   tuple both `POST /admin/deploys` and (per contract 30/31's own target
   list) `scripts/setup-cloud-build.sh`'s trigger provisioning agree on --
@@ -3323,7 +3339,8 @@ changes -- for BOTH console-triggered and bash-triggered builds.
   a Firestore write); the webhook's `_upsert_deployment` audits IN THE SAME
   transaction as the Firestore write (contract 15's FIRESTORE form, actor
   `system:cloud_build_webhook`).
-- **Gates:** `POST`/`GET /admin/deploys*` carry the plain `require_app_admin`
+- **Gates:** `POST`/`GET /admin/deploys*` -- all five routes, the two E4.7
+  reads included -- carry the plain `require_app_admin`
   gate (deploying code has no firm-manager counterpart). `POST
   /api/deploys/webhook` carries `require_google_oidc`, its SECOND consumer
   after the sweep route (contract 15's neighbor) -- audience pinned to this
@@ -3346,16 +3363,32 @@ changes -- for BOTH console-triggered and bash-triggered builds.
   marks the audit row failed and leaves no queued row claiming a build id,
   mutation-verified; the early 409 for a gated target with and without a
   staging success; unknown target and malformed sha 422s; list filtering
-  and single-row reads); `admin_backend/tests/unit/test_deploy_webhook.py`
+  and single-row reads; bd polyglot-pdf-ryx86 (E4.7) adds: `GET .../targets`
+  restates `TARGETS`/`CHANNEL_BY_TARGET`/`GATED_TARGETS` derived off those
+  same constants, not a hand-typed list; `GET .../promotable` computes the
+  same predicate both ways and is unconditionally `true` for a non-gated
+  target; both 422 on a missing/invalid `target`/`sha`; a registration-order
+  guard proving the two literal routes are reachable ahead of `{deploy_id}`
+  -- all mutation-verified); `admin_backend/tests/unit/test_deploy_webhook.py`
   (a real Pub/Sub push envelope upserts by `build_id` for both a
   console-triggered and a bash-triggered build; every Cloud Build status
   maps; idempotent on a repeated message; wrong caller email is 403, no
   token is 401, wrong audience is 401; a malformed message is 400 not 500;
   one audit row per status update, mutation-verified); `admin_backend/tests
-  /unit/test_admin_route_auth.py` (all four routes registered with their
-  correct, specific gate); `admin_backend/tests/unit/test_admin_audit_
+  /unit/test_admin_route_auth.py` (all five `/admin/deploys*` routes
+  registered with the correct, specific gate); `admin_backend/tests/unit/test_admin_audit_
   coverage.py` (the trigger route's EXTERNAL mutation kind, the webhook's
-  FIRESTORE kind); `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+  FIRESTORE kind -- the two new E4.7 reads are GET, so they carry no audit
+  form to pin); `admin-console/src/pages/DeploysPage.test.tsx` (bd
+  polyglot-pdf-ryx86: Deploy disabled/enabled by the promotable response
+  with the plan's own wording shown, the confirm dialog's sha is the FULL
+  40 characters, POST fires exactly once per confirm even under a
+  double-click, the table re-polls every 15s while a row is queued/working
+  and stops once every row in the latest batch is terminal, a status chip
+  renders for every value in `DEPLOY_STATUSES` -- derived from that
+  constant, not a hand list -- and the live-SHA panel renders an
+  unreachable/unconfigured/fetch-failed channel each distinctly, never
+  blank; all mutation-verified); `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
   (`cloudbuild.builds.editor` in `EXPECTED_ADMIN_SA_ROLES`, `DEFERRED_ROLES`
   now empty); `tests/test_setup_admin_service_pubsub.py` (the Pub/Sub API
   enable, the `cloud-builds` topic creation is idempotent, the dedicated

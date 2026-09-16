@@ -1,5 +1,26 @@
 # Admin service + console
 
+*Last updated: 2026-09-16 (bd `polyglot-pdf-ryx86`, E4.7 -- the console's
+Deploys page (`admin-console/src/pages/DeploysPage.tsx`): a live-SHA panel
+per channel (`GET /admin/health`, contract 32) beside the latest successful
+deploy per target family (derived client-side from an unfiltered
+`GET /admin/deploys` read, newest-first, no new route); a gated trigger
+form whose target picker comes ONLY from a NEW `GET /admin/deploys/targets`
+(restates `deploy/targets.py`'s closed `TARGETS`, never hand-copied) and
+whose Deploy button disables with the server's own reason for a
+`GATED_TARGETS` entry via a NEW `GET /admin/deploys/promotable` (computes
+the SAME `staging_verified()` predicate `POST /admin/deploys`' own early
+409 uses, through a shared `_staging_verified_for()` helper so the two can
+never drift) -- a confirm dialog shows the FULL 40-character sha before
+POSTing exactly once; and a deployments table with a status chip per row
+(covering `adminApi.ts`'s new closed `DEPLOY_STATUSES` set) that polls
+`GET /admin/deploys` every 15s while a row is queued/working and stops once
+every row in the latest batch is terminal. Both new GET routes are
+registered on `deploy_routes.py`'s router AHEAD OF `GET
+/admin/deploys/{deploy_id}` -- a bare path parameter would otherwise
+swallow the literal `targets`/`promotable` segment. No new IAM grant, env
+var, or Firestore write.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
 route, Pub/Sub build-status webhook, and the `deployments` collection.
 POST/GET `/admin/deploys` + GET `/admin/deploys/{deploy_id}`
@@ -979,7 +1000,9 @@ one.
   the five monitoring pages (bd polyglot-pdf-i6dlb, E3.11b -- see below):
   Monitoring (`pages/MonitoringPage.tsx`), Usage (`pages/UsagePage.tsx`),
   Cost & income (`pages/CostReportsPage.tsx`), Alerts
-  (`pages/AlertsPage.tsx`), and Errors (`pages/ErrorsPage.tsx`).
+  (`pages/AlertsPage.tsx`), and Errors (`pages/ErrorsPage.tsx`); and Deploys
+  (`pages/DeploysPage.tsx`, bd polyglot-pdf-ryx86, E4.7 -- see the top
+  dated block above for the full description).
   A page's API failures route back to `SignInGate`'s refused screen when
   they are a 401/403 (the account's session ended or was revoked
   mid-session), and to a generic in-page error otherwise -- see `App.tsx`'s
