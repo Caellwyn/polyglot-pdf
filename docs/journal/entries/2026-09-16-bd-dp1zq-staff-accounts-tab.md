@@ -99,6 +99,43 @@ so this was a real gap, not a nit.
   bead introduced. The reviewer filed `polyglot-pdf-gpu4v` for it; no
   further bead needed here.
 
+### Fresh-eyes round 2 (adopt/reject/defer)
+
+The reviewer scored exit criterion 2 a FAIL again, same gap class as round
+1 but on the two siblings round 1's fix did not reach: round 1 added
+`PageIntro` to `WhoAmIPage.tsx` and gave it a brand-new test file pinning
+the header, but `AuditLogPage.tsx` and `ConfigEditorPage.tsx` -- the other
+two `src/components/` shell pages that got a `PageIntro` in the ORIGINAL
+diff, sitting in the identical blast radius -- kept their existing test
+files unchanged. Both pages' `<PageIntro>` block could be deleted and the
+full suite stayed green; per CLAUDE.md scar #8 (enumerate the set before
+fixing any of it), the set was "all three `src/components/` shell pages
+that gained a PageIntro in this bead," and only one of three got the
+matching pin.
+
+- **Adopted:** added one `it()` to each of `AuditLogPage.test.tsx` and
+  `ConfigEditorPage.test.tsx` (mirroring the `WhoAmIPage.test.tsx` pattern
+  from round 1) asserting `findAllByTestId('page-intro')` has length 1 and
+  the intro's text matches the page's own verbatim copy. Mutation-verified:
+  deleted the `<PageIntro>` block from each production file, re-ran both
+  test files, and confirmed exactly the two new assertions went red (21 of
+  23 tests in the two files stayed green, isolating the new tests as the
+  ones actually covering this), then restored both files unchanged (no
+  diff against the pre-mutation copy) before committing.
+- **Rejected (refuted, no code change):** the `<select>` blank placeholder
+  option (`value=""`) in `UsersPage.tsx` -- the reviewer confirmed
+  `loadUsers`'s `if (!targetFirmId) return;` guard already makes selecting
+  it a no-op, and `UsersPage.test.tsx` already covers a real selection
+  working; not a bug.
+- **Deferred (pre-existing, already filed):** the
+  `docs/components/admin-service.md` dated-entry chronological pattern --
+  matches the file's own pre-existing convention, already filed as
+  `polyglot-pdf-gpu4v` in round 1, not worsened by this diff. No new bead
+  needed.
+
+Full backend suite and root-level tests re-run clean after this round's
+fix (no backend or root-test files touched by either round).
+
 ## Lessons
 
 The coverage-test approach (enumerate a directory from disk, assert a
@@ -139,5 +176,9 @@ or cross-surface contract; it only consumes the existing documented
   round 1 after review found it missing).
 - `admin-console/src/components/WhoAmIPage.test.tsx` -- new (fresh-eyes
   round 1): the page had no test file before this fix.
+- `admin-console/src/components/AuditLogPage.test.tsx`,
+  `admin-console/src/components/ConfigEditorPage.test.tsx` -- (fresh-eyes
+  round 2) added the purpose-header assertion these two files were missing;
+  no production code changed.
 - `docs/components/admin-service.md` -- dated current-state entry for this
   bead.
