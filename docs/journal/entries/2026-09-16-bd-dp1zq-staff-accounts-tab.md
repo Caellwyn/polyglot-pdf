@@ -1,0 +1,110 @@
+---
+date: 2026-09-16
+bead: polyglot-pdf-dp1zq
+title: "feat(admin-console): Users tab becomes Staff accounts with a purpose intro, firm select, and a one-line purpose header on every page"
+sprint: 22
+tags: [conventions, testing]
+---
+
+## Trigger
+
+Maintainer feedback 2026-09-15 after the first console sign-in: "not sure
+what the 'users' tab does." The Users tab (bead C3,
+`admin-console/src/pages/UsersPage.tsx`) manages a firm's staff accounts --
+create by email/firm/role (returning a one-time password-reset link, no
+email sent), disable/re-enable, change role, list staff -- but nothing on
+the page said so, and the firm field was a free-text id left over from
+before `GET /admin/firms` (bead B1) existed. This bead traces to the
+admin-console program plan (`docs/sprint_22_admin-console_plan.md`), which
+lists the tab rename and firm select as follow-ups once B1 landed.
+
+## What shipped
+
+1. Renamed the tab and page heading from "Users" to "Staff accounts"
+   (`App.tsx`'s tab list, `UsersPage.tsx`'s `<h2>`).
+2. Added a two-sentence intro to `UsersPage.tsx` naming the concrete
+   actions (create/disable/re-enable/role-change/list) and the
+   manager-vs-employee permission split (manager: mint links, see the
+   firm's links, manage staff from the firm console; employee: mint links,
+   see only their own links) -- the bead's own verbatim requirement.
+3. Turned the firm field from free text into a `<select>` fed by
+   `listFirms()` (`GET /admin/firms`), showing `name (firm_id) [kind]`,
+   loaded once on mount. A `listFirms()` failure falls back to the
+   ORIGINAL free-text field plus its Load button -- the select and the
+   text fallback are never shown together. An `AuthError`/`ForbiddenError`
+   from `listFirms()` still routes through `onAuthExpired` (the console's
+   single mid-session-eviction path) rather than silently degrading to the
+   text fallback.
+4. Added a new shared `admin-console/src/components/PageIntro.tsx`
+   (`data-testid="page-intro"`) and gave every page under
+   `admin-console/src/pages/` (Alerts, Cost & income, Errors, FirmDetail,
+   Firms, Kit commercials, Monitoring, Usage, Users) plus the two shell
+   components `AuditLogPage.tsx` and `ConfigEditorPage.tsx` a one-sentence
+   purpose header through it, per the bead's "apply the same pattern to
+   every tab" instruction. FirmDetailPage (a drill-down sub-view of the
+   Firms tab, not a standalone tab) got one too -- deciding "every page
+   under src/pages" literally, which keeps the enumeration test in point 5
+   below simple (no exclusion list to maintain) and is harmless.
+5. New `admin-console/src/pages/pageIntroCoverage.test.tsx` enumerates
+   `src/pages/*.tsx` with `fs.readdirSync` (not a hand-typed list --
+   CLAUDE.md scar #8) and asserts each page renders exactly one
+   `page-intro` node. Mutation-verified: adding a new page file without a
+   matching case fails the file-list assertion; removing a `<PageIntro>`
+   render (or its import) from any page fails that page's own assertion --
+   caught for real during development when five pages' `<PageIntro>` JSX
+   was added without the matching import, which this test's first run
+   flagged immediately.
+6. `UsersPage.test.tsx` rewritten: the `loadFirm()` helper now drives the
+   `<select>` (the default path once `listFirms()` succeeds), a new
+   describe block covers the text-fallback path (required input, loading
+   through it, and the auth-failure-does-not-fall-back case), plus new
+   tests for the rename and the intro's required phrases. Mutation-verified
+   by reverting the heading rename (rename test fails), forcing the select
+   branch to render unconditionally (all three fallback tests fail), and
+   removing a `<PageIntro>` from `FirmsPage.tsx` (its coverage test fails)
+   -- each mutation was applied, watched red, then reverted before the
+   final commit.
+
+No backend change: this bead is entirely `admin-console/` presentation and
+consumes the existing `GET /admin/firms` response shape (`FirmRow`)
+unchanged. No new route, env var, or wire shape.
+
+## Lessons
+
+The coverage-test approach (enumerate a directory from disk, assert a
+structural property of every file in it) earned its keep twice in one
+session: once catching five missing imports during development, and once
+confirmed by deliberately adding a scratch file to prove the enumeration
+itself is live rather than a frozen snapshot. Worth reaching for whenever a
+bead's exit criterion is phrased as "every X has property Y" -- CLAUDE.md
+scar #8 (enumerate the set, don't hand-list it) applies as much to a
+frontend page inventory as to a backend call-site audit.
+
+## Doc freshness
+
+`docs/components/admin-service.md` (Tracks line already covers
+`admin-console/`) bumped with a dated current-state entry describing the
+rename, the shared PageIntro pattern, and the firm-select/fallback
+behavior. No other tier-2 doc tracks these files. `docs/technical_guide.md`
+gets no new Surface contract entry -- this bead adds no route, wire shape,
+or cross-surface contract; it only consumes the existing documented
+`GET /admin/firms` contract from the client side.
+
+## Files touched
+
+- `admin-console/src/components/PageIntro.tsx` -- new shared one-sentence
+  purpose-header component.
+- `admin-console/src/App.tsx` -- tab label "Users" -> "Staff accounts".
+- `admin-console/src/pages/UsersPage.tsx` -- rename, intro, firm select
+  with text fallback.
+- `admin-console/src/pages/UsersPage.test.tsx` -- rewritten for the select
+  path, new fallback describe block, rename/intro tests.
+- `admin-console/src/pages/pageIntroCoverage.test.tsx` -- new: enumerates
+  `src/pages/*.tsx` and asserts each renders one purpose header.
+- `admin-console/src/pages/{AlertsPage,CostReportsPage,ErrorsPage,
+  FirmDetailPage,FirmsPage,KitCommercialsPage,MonitoringPage,
+  UsagePage}.tsx` -- added a `PageIntro` import + one-sentence header each.
+- `admin-console/src/components/{AuditLogPage,ConfigEditorPage}.tsx` --
+  same, for the two shell tabs.
+- `docs/components/admin-service.md` -- dated current-state entry for this
+  bead.
