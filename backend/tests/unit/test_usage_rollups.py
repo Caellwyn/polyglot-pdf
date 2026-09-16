@@ -675,6 +675,166 @@ def test_record_link_opened_never_raises_on_a_write_failure(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# record_link_minted (bd polyglot-pdf-he3lt, exit criterion 1)
+# ---------------------------------------------------------------------------
+
+
+def test_record_link_minted_increments_firm_kit_and_employee_in_ONE_commit(db):
+    """EXIT CRITERION 1. A mint writes ONE batched commit bumping
+    links_minted on BOTH the firm-month and kit-month docs, plus
+    by_employee.{uid}.links_minted on the firm doc.
+
+    Mutation: split the firm and kit set() calls across two separate
+    batch.commit() calls -- red, commit_count would be 2 instead of 1.
+    """
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    assert ok is True
+    assert db.commit_count == 1, "must be ONE batched commit, not per-doc"
+
+    firm = db.docs[_FIRM_DOC]
+    assert firm["links_minted"] == 1
+    assert firm["by_employee"]["employee-77"]["links_minted"] == 1
+
+    kit = db.docs[_KIT_DOC]
+    assert kit["links_minted"] == 1
+
+
+def test_record_link_minted_ACCUMULATES_across_two_mints(db):
+    usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="demo", now=_NOW + 5,
+    )
+    firm = db.docs[_FIRM_DOC]
+    assert firm["links_minted"] == 2
+    assert firm["by_employee"]["employee-77"]["links_minted"] == 2
+    assert db.docs[_KIT_DOC]["links_minted"] == 2
+
+
+def test_record_link_minted_with_NO_firm_id_writes_NOTHING(db):
+    """Mirrors test_NO_firm_id_writes_NOTHING_and_returns_False's own
+    mutation caveat (see that test's docstring): ok/docs/commit_count alone
+    do NOT distinguish an intentional early return from a crash-then-catch
+    (.document(None) raises, and the function's own broad except swallows
+    it, so the outward result looks identical either way). The get_db spy
+    is what actually tells them apart: an intentional early return never
+    reaches _get_db() at all.
+
+    Mutation: drop the `if not firm_id: return False` guard -- red, this
+    turns get_db_calls from [] into a non-empty list even though ok/docs
+    stay green.
+    """
+    calls = []
+    real_get_db = usage_rollups._get_db
+    import unittest.mock as _mock
+    with _mock.patch.object(
+        usage_rollups, "_get_db",
+        side_effect=lambda: (calls.append(1), real_get_db())[1],
+    ):
+        ok = usage_rollups.record_link_minted(
+            firm_id=None, kit_id="i-90", employee_id="employee-77",
+            channel="demo", now=_NOW,
+        )
+    assert ok is False
+    assert db.docs == {}
+    assert calls == [], (
+        "a firm-less mint must return early WITHOUT ever reaching "
+        "_get_db() -- reaching it (even if the resulting write then fails "
+        "and is caught) is the guard being removed, not the guard working"
+    )
+
+
+def test_record_link_minted_with_NO_kit_id_writes_ONLY_the_firm_doc(db):
+    """Mirrors record_session_end's own kit-less degradation: the firm-side
+    links_minted (and by_employee) still writes; there is simply no kit doc
+    to bump. Mutation: remove the `if kit_id:` guard around the kit-side
+    batch.set() -- red, a KeyError/empty-doc-id write would follow."""
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id=None, employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    assert ok is True
+    firm = db.docs[_FIRM_DOC]
+    assert firm["links_minted"] == 1
+    assert _KIT_DOC not in db.docs
+
+
+def test_record_link_minted_with_NO_employee_id_still_bumps_the_TOP_LEVEL_counter(db):
+    """employee_id absent (should not happen -- mint_link already refuses an
+    unidentified caller before reservation) skips ONLY the by_employee
+    nesting, not links_minted itself. Mutation: gate the top-level
+    links_minted Increment behind `if employee_id:` too -- red, links_minted
+    would be missing from the firm doc entirely."""
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id=None,
+        channel="demo", now=_NOW,
+    )
+    assert ok is True
+    firm = db.docs[_FIRM_DOC]
+    assert firm["links_minted"] == 1
+    assert "by_employee" not in firm
+
+
+def test_record_link_minted_a_HYPHENATED_kit_id_is_DROPPED_when_invalid(db):
+    """_safe_kit_id's existing invalid-id rules apply here too (mint_link's
+    own kit_id is allowlist-checked before this call, but the function makes
+    no assumption about that): an embedded ".." degrades to kit-less rather
+    than raising or writing a malformed path segment."""
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="../escape", employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    assert ok is True
+    assert db.docs[_FIRM_DOC]["links_minted"] == 1
+    # No kit doc keyed on the traversal string was written at all:
+    assert not any(path.startswith("kits/../escape") for path in db.docs)
+
+
+def test_record_link_minted_never_raises_on_a_commit_failure(db):
+    db.commit_error = "boom"
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    assert ok is False
+
+
+def test_record_link_minted_never_raises_when_get_db_itself_RAISES(monkeypatch):
+    """Mirrors test_get_db_itself_RAISING_never_propagates above: get_db()
+    can RAISE (a broken firebase_admin app), not just return None -- patch
+    the thing usage_rollups._get_db() itself wraps, not _get_db directly
+    (which already catches everything and therefore cannot demonstrate this
+    path if patched in place)."""
+    def _broken_get_db():
+        raise AttributeError("'_FakeFirestoreModule' object has no attribute 'client'")
+
+    monkeypatch.setattr("backend.services.auth.get_db", _broken_get_db)
+    ok = usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="demo", now=_NOW,
+    )
+    assert ok is False
+
+
+def test_record_link_minted_is_channel_partitioned_like_session_end(db):
+    """A staging mint must not touch the demo month's totals -- same
+    channel-suffix rule usage_rollups.py enforces everywhere else."""
+    usage_rollups.record_link_minted(
+        firm_id="acme", kit_id="i-90", employee_id="employee-77",
+        channel="staging", now=_NOW,
+    )
+    assert _FIRM_DOC not in db.docs
+    assert "firms/acme/usage/2026-09_staging" in db.docs
+    assert db.docs["firms/acme/usage/2026-09_staging"]["links_minted"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Wiring: link_redemptions.py actually calls the rollup hooks
 # ---------------------------------------------------------------------------
 

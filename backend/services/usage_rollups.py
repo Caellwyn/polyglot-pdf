@@ -16,7 +16,7 @@ links_store._collection_name): the demo channel keeps the bare "YYYY-MM"
 id (nothing already written is orphaned), every other channel gets
 "YYYY-MM_{channel}". See `_month_key`'s docstring for the resolution order.
 
-WHAT THIS IS. TWO entry points write into the same rollup documents:
+WHAT THIS IS. THREE entry points write into the same rollup documents:
 
   record_session_end(...) -- called from the SAME teardown block in
   backend/routes/websocket_routes.py that already runs log_form_session_end
@@ -45,6 +45,28 @@ WHAT THIS IS. TWO entry points write into the same rollup documents:
   way to produce (open and complete are redemption-record events, not
   connection-teardown events, and a link can be opened without a session
   ever completing).
+
+  record_link_minted(...) -- bd polyglot-pdf-he3lt. Called from
+  backend/routes/link_routes.py's mint_link route AFTER the reservation
+  transaction (credit_ledger.append_entry, via _reserve_mint) has already
+  committed -- NEVER from inside it, and never able to fail the mint: a
+  mint is the FIRST visible event in a client link's life, and before this
+  bead the Usage page stayed on "no data" from mint until a client actually
+  opened the link and a connection later tore down. ONE BATCHED update,
+  same "both docs or neither" shape as record_session_end:
+
+    firms/{firm_id}/usage/{YYYY-MM[_channel]}:
+      links_minted, by_employee.{employee_id}.links_minted
+
+    kits/{kit_id}/usage/{YYYY-MM[_channel]}:
+      links_minted
+
+  committed together so a firm-side bump is never left without its kit-side
+  counterpart (or vice versa). by_employee here keys on the MINTING
+  employee's uid -- there is no link-vs-staff ambiguity the way
+  record_session_end's by_employee has, because every mint is a staff
+  action by definition (client links have no signed-in identity to key
+  on).
 
 `connections_ended` is the HONEST name (not `sessions_ended`): this fires
 once per CONNECTION teardown, and a reconnect is a second connection for the
@@ -445,3 +467,104 @@ def record_link_completed(firm_id: Optional[str], *, now: Optional[float] = None
     best-effort so as not to jeopardize the client's already-finished work.
     """
     return _increment_firm_counter(firm_id, "links_completed", now=now)
+
+
+def record_link_minted(
+    *,
+    firm_id: Optional[str],
+    kit_id: Optional[str],
+    employee_id: Optional[str],
+    channel: str,
+    now: Optional[float] = None,
+) -> bool:
+    """Write one batched usage-rollup update for a link mint (bd
+    polyglot-pdf-he3lt).
+
+    Called from backend/routes/link_routes.py's mint_link route AFTER
+    _reserve_mint's transaction has already committed the debit, the ledger
+    entry, and the links/{jti} mint record -- NEVER from inside that
+    transaction (a rollup write must not be able to fail, retry, or slow
+    down the reservation it merely observes), and never able to fail the
+    mint itself: like record_session_end, every exception is caught here
+    and nothing propagates.
+
+    Increments, in ONE batch (both docs or neither, same reasoning as
+    record_session_end):
+
+      firms/{firm_id}/usage/{YYYY-MM[_channel]}:
+        links_minted, by_employee.{employee_id}.links_minted
+      kits/{kit_id}/usage/{YYYY-MM[_channel]}:
+        links_minted
+
+    `firm_id` absent -> nothing to attribute to, same as
+    record_session_end's own firm-less case: both target documents are
+    firm/kit-keyed. `kit_id` is re-validated through `_safe_kit_id` even
+    though mint_link's caller already checked it against the firm's
+    allowlist -- this module makes no assumption about a caller's own
+    validation (see `_safe_kit_id`'s docstring) -- and a kit_id that fails
+    that check degrades to "skip the kit-side write", the same as a kit-less
+    session in record_session_end, rather than failing the firm-side write.
+    `employee_id` absent (should not happen -- mint_link already refuses an
+    unidentified caller with a 403 before reservation) skips only the
+    by_employee nesting, not the top-level links_minted counter.
+
+    Returns True when a write was attempted and did not raise, False when
+    skipped (no firm_id, no Firestore client) or when the write failed.
+    Never raises either way -- the return value is for tests and logging
+    only.
+    """
+    if not firm_id:
+        return False
+
+    kit_id = _safe_kit_id(kit_id)
+
+    db = _get_db()
+    if db is None:
+        return False
+
+    stamp = float(now if now is not None else time.time())
+    month = _month_key(stamp, channel)
+
+    try:
+        from firebase_admin import firestore
+
+        batch = db.batch()
+
+        firm_updates: dict[str, Any] = {"links_minted": firestore.Increment(1)}
+        if employee_id:
+            _nest_increment(firm_updates, "by_employee", employee_id, "links_minted", amount=1)
+
+        firm_ref = (
+            db.collection(FIRMS_COLLECTION)
+            .document(firm_id)
+            .collection(USAGE_SUBCOLLECTION)
+            .document(month)
+        )
+        batch.set(firm_ref, firm_updates, merge=True)
+
+        if kit_id:
+            kit_ref = (
+                db.collection(KITS_COLLECTION)
+                .document(kit_id)
+                .collection(USAGE_SUBCOLLECTION)
+                .document(month)
+            )
+            batch.set(kit_ref, {"links_minted": firestore.Increment(1)}, merge=True)
+
+        batch.commit()
+    except Exception as exc:  # noqa: BLE001 -- best-effort, never raise
+        _log.error(
+            "usage_rollup_link_minted_failed",
+            firm_id=firm_id,
+            kit_id=kit_id,
+            error=str(exc),
+        )
+        return False
+
+    _log.info(
+        "usage_rollup_link_minted",
+        firm_id=firm_id,
+        kit_id=kit_id,
+        month=month,
+    )
+    return True

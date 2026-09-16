@@ -205,6 +205,39 @@ class _Transaction:
         self.writes = []
 
 
+class _WriteBatch:
+    """firestore.Client.batch() -- buffers set() calls, applies them all on
+    commit() (bd polyglot-pdf-he3lt: backend/services/usage_rollups.py's
+    record_link_minted uses a batch, not a transaction, for its
+    reservation-independent rollup write).
+
+    Deliberately NOT the same object as _Transaction: a batch has no
+    reads-before-writes rule and no contention retry -- it is just
+    "apply these set() calls together, or none of them" -- so this is a
+    smaller sibling rather than an alias, mirroring the real Admin SDK's own
+    separate WriteBatch/Transaction types.
+
+    NOTE: like _Transaction, apply_set()'s Increment resolution is FLAT
+    (top-level int fields only) -- it does not recursively merge a nested
+    dict the way test_usage_rollups.py's own purpose-built fake does. That
+    is fine for the flat counters this fake's callers assert on; a test
+    needing the nested by_employee/by_kit/by_language shape belongs in
+    test_usage_rollups.py's own fake, which models that precisely.
+    """
+
+    def __init__(self, store):
+        self._store = store
+        self._pending = []
+
+    def set(self, ref, data, merge=False):
+        self._pending.append((ref._path, dict(data), merge))
+
+    def commit(self):
+        for path, data, merge in self._pending:
+            self._store.apply_set(path, data, merge)
+        self._pending = []
+
+
 class _FakeDb:
     def __init__(self, docs=None):
         # {(collection, doc_id, [subcollection, doc_id, ...]): {...}}
@@ -222,6 +255,9 @@ class _FakeDb:
         tx = _Transaction(self)
         self.transactions.append(tx)
         return tx
+
+    def batch(self):
+        return _WriteBatch(self)
 
     def apply_set(self, path, data, merge):
         resolved = {}
