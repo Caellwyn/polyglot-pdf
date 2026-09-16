@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-14 (bd polyglot-pdf-8v8i7: automatic clearing -- `clearAllClientState()` runs after a client-link session's download/print of a completed form (or its "Done -- clear now" button), after a 10-minute activity-cancellable grace following the WebSocket's own idle timeout (not immediately -- that status means the socket went quiet, not that the client left, and untouched consumers still offer Reconnect / a save nudge off it), and on staff logout via `StaffHeader` (unconditionally, even when `logout()` itself rejects) -- all four sites reload the page right after the wipe, the complete set pinned by `wipeSitesReload.test.ts`; `WebFormConnection.reset()` removed; no field value reaches `console.*` and `console.log`/`debug` are stripped from each app's OWN production bundle test (frontend, schema-editor, admin-console each build only themselves, so CI's per-app jobs -- which `npm ci` only their own deps -- can run them).)*
+*Last updated: 2026-09-16. See [2026-09-16-bd-ylokf-clear-form-buttons-clear-client-link-token.md](../journal/entries/2026-09-16-bd-ylokf-clear-form-buttons-clear-client-link-token.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
