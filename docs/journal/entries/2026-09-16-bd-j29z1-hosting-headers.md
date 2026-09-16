@@ -21,23 +21,34 @@ process.
 
 - **One header block on every Hosting target** (`app`, `app-staging`,
   `editor`, `admin`, `admin-candidate`), applied to `**`: HSTS with
-  `includeSubDomains; preload`; `X-Frame-Options: DENY`;
-  `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`;
+  `includeSubDomains; preload` (inert on the Google-owned parents, noted for
+  a future custom domain); `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`;
   `Permissions-Policy` allowing the microphone to the site itself and denying
   camera, geolocation, payment, USB and interest-cohort; and the CSP.
-- **The CSP, in report-only mode.** `default-src 'self'`; `script-src 'self'`
-  (Vite emits module tags only, no inline script anywhere); `style-src 'self'
-  'unsafe-inline'` (React inline style attributes); `font-src 'self'`;
-  `img-src 'self' data: blob:` plus the Google profile-photo host;
+- **The CSP, in report-only mode.** `default-src 'self'`; `script-src 'self'
+  https://apis.google.com` (Vite emits module tags only and there is no
+  inline script; the one external script is the gapi loader the Firebase
+  Auth SDK injects before opening the sign-in popup -- the outer review
+  traced it in the shipped bundle); `style-src 'self' 'unsafe-inline'` (React
+  inline style attributes); `font-src 'self'`; `img-src 'self' data: blob:`
+  (nothing renders a remote image; the profile photo is stored, not shown);
   `connect-src` naming exactly what the apps contact -- the three Cloud Run
   services over https and wss (demo backend, staging backend, admin, in the
   project-hashed hostname form; the admin's short form too), Firebase Auth
-  (`identitytoolkit`, `securetoken`, `www.googleapis.com`), Firestore over
-  https and its websocket transport, and the installations endpoint;
+  (`identitytoolkit`, `securetoken`) and Firestore over https and its
+  websocket transport (the installations endpoint and `www.googleapis.com`
+  were dropped: the shipped SDK bundles never contact them);
   `frame-src` for the auth popup on the project's auth domain and Google's
   account chooser; `worker-src 'self' blob:` (pdf.js); `media-src 'self'
   blob: data:` (spellback and intro audio); `object-src 'none'`; `base-uri
-  'self'`; `form-action 'self'`; `frame-ancestors 'none'`. It ships as
+  'self'`; `form-action 'self'`; `frame-ancestors 'none'`. There is NO
+  `X-Frame-Options`: the `app` site is the project's auth domain and serves
+  Firebase Auth's reserved `/__/auth/iframe`, which every `signInWithPopup`
+  on our own pages frames -- a blanket DENY (not report-only!) would have
+  broken Google sign-in on the next deploy. Framing is governed by
+  `frame-ancestors` alone, and a second block on `/__/auth/**` allows exactly
+  our five sites (both hostnames each) as ancestors. A third block caches
+  `/fonts/**` for a week. It ships as
   `Content-Security-Policy-Report-Only` on all five targets: `firebase.json`
   is one file for every site, so the staging soak the plan asks for cannot
   be staging-only, and enforcing on the demo without that soak is the wrong
@@ -60,7 +71,10 @@ process.
   it now accepts `Content-Security-Policy-Report-Only` as PASS with the mode
   named in the detail, pinned in `tests/test_infra_posture_script.py`.
 - **`tests/test_hosting_headers.py`**, derived from `firebase.json`: every
-  target carries every header; the CSP carries every required directive,
+  target carries every header and no `X-Frame-Options`; the `/__/auth/**`
+  ancestor list is exactly the five sites; `/fonts/**` is cached; every
+  `a.run.app` host the three apps' env files name is in `connect-src` (the
+  Cloud Run hash has drifted before, bd `emm7`); the CSP carries every required directive,
   every origin the apps need, never `'unsafe-eval'`, `http:` or a wildcard
   host, and `script-src` is exactly `'self'`; all five targets share one
   policy; the voice app's `index.html` names no third-party font host; every
@@ -74,7 +88,11 @@ process.
   `firebase.json` (`test_deploy_channel_isolation`, `test_deploy_admin_url_injection`,
   `test_infra_posture_script`, `test_form_kit_routes`) and the windowless-spawn
   pin over `scripts/` (the regenerator spawns nothing): 181 passed.
-- Scar #9: seven mutations, each RED: the runbook's report-only branch removed; the headers block dropped from one target;
+- Scar #9: eleven mutations, each RED (the config-parametrized ones in
+  their own interpreter, since the targets are read at import): the
+  `/__/auth/**` block dropped; `apis.google.com` dropped; a demo wss host
+  dropped (the env-derived pin); `X-Frame-Options` reintroduced; the fonts
+  cache block dropped; the runbook's report-only branch removed; the headers block dropped from one target;
   `frame-ancestors` removed; `'unsafe-eval'` added to `script-src`; the
   staging backend's wss origin dropped from `connect-src`; the Google Fonts
   link restored in `index.html`; one referenced woff2 deleted.

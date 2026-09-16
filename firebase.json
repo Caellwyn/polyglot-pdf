@@ -31,15 +31,11 @@
                     "headers": [
                         {
                             "key": "Content-Security-Policy-Report-Only",
-                            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebaseinstallations.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
                         },
                         {
                             "key": "Strict-Transport-Security",
                             "value": "max-age=31536000; includeSubDomains; preload"
-                        },
-                        {
-                            "key": "X-Frame-Options",
-                            "value": "DENY"
                         },
                         {
                             "key": "X-Content-Type-Options",
@@ -52,6 +48,24 @@
                         {
                             "key": "Permissions-Policy",
                             "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                        }
+                    ]
+                },
+                {
+                    "source": "/__/auth/**",
+                    "headers": [
+                        {
+                            "key": "Content-Security-Policy-Report-Only",
+                            "value": "frame-ancestors https://polyglot-demo-aa709.web.app https://polyglot-demo-aa709.firebaseapp.com https://polyglot-app-staging.web.app https://polyglot-app-staging.firebaseapp.com https://polyglot-editor-demo.web.app https://polyglot-editor-demo.firebaseapp.com https://polyglot-admin-demo.web.app https://polyglot-admin-demo.firebaseapp.com https://polyglot-admin-candidate.web.app https://polyglot-admin-candidate.firebaseapp.com"
+                        }
+                    ]
+                },
+                {
+                    "source": "/fonts/**",
+                    "headers": [
+                        {
+                            "key": "Cache-Control",
+                            "value": "public, max-age=604800"
                         }
                     ]
                 }
@@ -84,15 +98,11 @@
                     "headers": [
                         {
                             "key": "Content-Security-Policy-Report-Only",
-                            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebaseinstallations.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
                         },
                         {
                             "key": "Strict-Transport-Security",
                             "value": "max-age=31536000; includeSubDomains; preload"
-                        },
-                        {
-                            "key": "X-Frame-Options",
-                            "value": "DENY"
                         },
                         {
                             "key": "X-Content-Type-Options",
@@ -105,6 +115,24 @@
                         {
                             "key": "Permissions-Policy",
                             "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                        }
+                    ]
+                },
+                {
+                    "source": "/__/auth/**",
+                    "headers": [
+                        {
+                            "key": "Content-Security-Policy-Report-Only",
+                            "value": "frame-ancestors https://polyglot-demo-aa709.web.app https://polyglot-demo-aa709.firebaseapp.com https://polyglot-app-staging.web.app https://polyglot-app-staging.firebaseapp.com https://polyglot-editor-demo.web.app https://polyglot-editor-demo.firebaseapp.com https://polyglot-admin-demo.web.app https://polyglot-admin-demo.firebaseapp.com https://polyglot-admin-candidate.web.app https://polyglot-admin-candidate.firebaseapp.com"
+                        }
+                    ]
+                },
+                {
+                    "source": "/fonts/**",
+                    "headers": [
+                        {
+                            "key": "Cache-Control",
+                            "value": "public, max-age=604800"
                         }
                     ]
                 }
@@ -130,15 +158,11 @@
                     "headers": [
                         {
                             "key": "Content-Security-Policy-Report-Only",
-                            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebaseinstallations.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
                         },
                         {
                             "key": "Strict-Transport-Security",
                             "value": "max-age=31536000; includeSubDomains; preload"
-                        },
-                        {
-                            "key": "X-Frame-Options",
-                            "value": "DENY"
                         },
                         {
                             "key": "X-Content-Type-Options",
@@ -151,6 +175,24 @@
                         {
                             "key": "Permissions-Policy",
                             "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                        }
+                    ]
+                },
+                {
+                    "source": "/__/auth/**",
+                    "headers": [
+                        {
+                            "key": "Content-Security-Policy-Report-Only",
+                            "value": "frame-ancestors https://polyglot-demo-aa709.web.app https://polyglot-demo-aa709.firebaseapp.com https://polyglot-app-staging.web.app https://polyglot-app-staging.firebaseapp.com https://polyglot-editor-demo.web.app https://polyglot-editor-demo.firebaseapp.com https://polyglot-admin-demo.web.app https://polyglot-admin-demo.firebaseapp.com https://polyglot-admin-candidate.web.app https://polyglot-admin-candidate.firebaseapp.com"
+                        }
+                    ]
+                },
+                {
+                    "source": "/fonts/**",
+                    "headers": [
+                        {
+                            "key": "Cache-Control",
+                            "value": "public, max-age=604800"
                         }
                     ]
                 }
@@ -176,15 +218,11 @@
                     "headers": [
                         {
                             "key": "Content-Security-Policy-Report-Only",
-                            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebaseinstallations.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
                         },
                         {
                             "key": "Strict-Transport-Security",
                             "value": "max-age=31536000; includeSubDomains; preload"
-                        },
-                        {
-                            "key": "X-Frame-Options",
-                            "value": "DENY"
                         },
                         {
                             "key": "X-Content-Type-Options",
@@ -197,6 +235,24 @@
                         {
                             "key": "Permissions-Policy",
                             "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                        }
+                    ]
+                },
+                {
+                    "source": "/__/auth/**",
+                    "headers": [
+                        {
+                            "key": "Content-Security-Policy-Report-Only",
+                            "value": "frame-ancestors https://polyglot-demo-aa709.web.app https://polyglot-demo-aa709.firebaseapp.com https://polyglot-app-staging.web.app https://polyglot-app-staging.firebaseapp.com https://polyglot-editor-demo.web.app https://polyglot-editor-demo.firebaseapp.com https://polyglot-admin-demo.web.app https://polyglot-admin-demo.firebaseapp.com https://polyglot-admin-candidate.web.app https://polyglot-admin-candidate.firebaseapp.com"
+                        }
+                    ]
+                },
+                {
+                    "source": "/fonts/**",
+                    "headers": [
+                        {
+                            "key": "Cache-Control",
+                            "value": "public, max-age=604800"
                         }
                     ]
                 }
@@ -222,15 +278,11 @@
                     "headers": [
                         {
                             "key": "Content-Security-Policy-Report-Only",
-                            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebaseinstallations.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://polyglot-backend-won24rgefq-uc.a.run.app wss://polyglot-backend-won24rgefq-uc.a.run.app https://polyglot-backend-staging-won24rgefq-uc.a.run.app wss://polyglot-backend-staging-won24rgefq-uc.a.run.app https://polyglot-admin-won24rgefq-uc.a.run.app wss://polyglot-admin-won24rgefq-uc.a.run.app https://polyglot-admin-uc.a.run.app wss://polyglot-admin-uc.a.run.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com; frame-src https://polyglot-demo-aa709.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
                         },
                         {
                             "key": "Strict-Transport-Security",
                             "value": "max-age=31536000; includeSubDomains; preload"
-                        },
-                        {
-                            "key": "X-Frame-Options",
-                            "value": "DENY"
                         },
                         {
                             "key": "X-Content-Type-Options",
@@ -243,6 +295,24 @@
                         {
                             "key": "Permissions-Policy",
                             "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                        }
+                    ]
+                },
+                {
+                    "source": "/__/auth/**",
+                    "headers": [
+                        {
+                            "key": "Content-Security-Policy-Report-Only",
+                            "value": "frame-ancestors https://polyglot-demo-aa709.web.app https://polyglot-demo-aa709.firebaseapp.com https://polyglot-app-staging.web.app https://polyglot-app-staging.firebaseapp.com https://polyglot-editor-demo.web.app https://polyglot-editor-demo.firebaseapp.com https://polyglot-admin-demo.web.app https://polyglot-admin-demo.firebaseapp.com https://polyglot-admin-candidate.web.app https://polyglot-admin-candidate.firebaseapp.com"
+                        }
+                    ]
+                },
+                {
+                    "source": "/fonts/**",
+                    "headers": [
+                        {
+                            "key": "Cache-Control",
+                            "value": "public, max-age=604800"
                         }
                     ]
                 }

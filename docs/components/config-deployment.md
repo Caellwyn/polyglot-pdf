@@ -839,8 +839,10 @@ bucket-only kit silently drops from the manifest on the next deploy.
 ### Hosting security headers (all five sites, bd `polyglot-pdf-j29z1`)
 
 Every Hosting target in `firebase.json` carries one `headers` block on `**`:
-HSTS (`max-age=31536000; includeSubDomains; preload`), `X-Frame-Options: DENY`,
-`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, a
+HSTS (`max-age=31536000; includeSubDomains; preload` -- inert on the shared
+`web.app` / `firebaseapp.com` parents, which Google already preloads; revisit
+before attaching a custom domain), `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, a
 `Permissions-Policy` that allows the microphone to the site itself and denies
 camera/geolocation/payment/usb/interest-cohort, and a Content Security Policy.
 
@@ -856,14 +858,26 @@ header. The policy's
 `connect-src` is built from what the apps actually contact: the three Cloud Run
 services (demo backend, staging backend, admin; https + wss, project-hashed
 hostnames), Firebase Auth (`identitytoolkit`, `securetoken`,
-`www.googleapis.com`), Firestore (https + wss) and the installations endpoint.
-`script-src` is exactly `'self'`; `style-src` allows inline (React style
-attributes); `worker-src` and `media-src` allow `blob:` (pdf.js, spellback
-audio); `frame-src` names the auth domain and Google's account chooser;
-`frame-ancestors 'none'`. A new Cloud Run hostname or a new external endpoint
-MUST be added here or the app breaks silently under report-only and loudly once
-enforced. Pinned by `tests/test_hosting_headers.py` (every target, every header,
-every required origin, no `'unsafe-eval'`/`http:`/wildcard host).
+`www.googleapis.com` is NOT listed -- the shipped SDK never contacts it) and
+Firestore (https + wss). `script-src` is `'self'` plus `https://apis.google.com`,
+the gapi loader the Firebase Auth SDK injects as a `<script>` before it can
+open the sign-in popup; `style-src` allows inline (React style attributes);
+`worker-src` and `media-src` allow `blob:` (pdf.js, spellback audio);
+`frame-src` names the auth domain and Google's account chooser;
+`frame-ancestors 'none'`. **There is deliberately NO `X-Frame-Options`:** the
+`app` site is also the project's auth domain, so it serves Firebase Auth's
+reserved `/__/auth/iframe`, which every `signInWithPopup` on our own pages
+frames; `X-Frame-Options` cannot carve out a path, so framing is governed by
+`frame-ancestors` alone, and a second block on `/__/auth/**` (listed after the
+catch-all so it wins) allows exactly our five sites, both hostnames each, as
+ancestors. A third block gives `/fonts/**` a week of `Cache-Control`. A new
+Cloud Run hostname or a new external endpoint MUST be added to the policy or
+the app breaks silently under report-only and loudly once enforced -- and the
+Cloud Run hash is the one value this repo has seen drift (bd `emm7`), so
+`tests/test_hosting_headers.py` also asserts every `a.run.app` host the three
+apps' env files name is in `connect-src`. The same test pins every target,
+every header, every required origin, the `/__/auth/**` ancestor list, the
+fonts cache, and no `'unsafe-eval'`/`http:`/wildcard host.
 
 Fonts are self-hosted: `scripts/fetch_fonts.py` regenerates
 `frontend/public/fonts/` (Inter + Outfit in every unicode-range subset Google
