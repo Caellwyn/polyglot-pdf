@@ -1190,3 +1190,143 @@ export async function acknowledgeAlert(alertId: string): Promise<AcknowledgeAler
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not acknowledge the alert'));
   return (await res.json()) as AcknowledgeAlertResult;
 }
+
+// ---------------------------------------------------------------------------
+// Deploys (bd polyglot-pdf-ryx86, E4.7), driving admin_backend/routes/
+// deploy_routes.py's POST/GET /admin/deploys plus its two new reads, GET
+// /admin/deploys/targets and GET /admin/deploys/promotable.
+// ---------------------------------------------------------------------------
+
+/** The deployment-channel a deploy target's build steps read from --
+ * WIDER than MonitoringChannel above (which is only the two PUBLIC
+ * backend channels): a deploy target can also carry the admin service's
+ * own "admin" channel (deploy/targets.py's CHANNEL_BY_TARGET). Kept as its
+ * own type rather than widening MonitoringChannel, since every /admin/health
+ * or /admin/errors call still only ever takes "demo"/"staging". */
+export const DEPLOY_CHANNELS = ['staging', 'demo', 'admin'] as const;
+export type DeployChannel = (typeof DEPLOY_CHANNELS)[number];
+
+/** deploy_routes.py's closed status vocabulary (STATUS_QUEUED plus the
+ * four the webhook maps a real Cloud Build status onto) -- THE SET status
+ * chips render from. A test derives the chip coverage off THIS array, not
+ * a second hand-typed list (CLAUDE.md scar #8): a status this array is
+ * missing would otherwise render as an unstyled fallback with nothing to
+ * catch the omission. */
+export const DEPLOY_STATUSES = ['queued', 'working', 'success', 'failure', 'cancelled'] as const;
+export type DeployStatus = (typeof DEPLOY_STATUSES)[number];
+
+/** True while a deployment row is still in flight -- the polling
+ * predicate DeploysPage.tsx uses to decide whether to keep re-fetching
+ * GET /admin/deploys (exit criterion 2: re-poll while a row is in flight,
+ * stop when every row is terminal). */
+export function isDeployInFlight(status: string): boolean {
+  return status === 'queued' || status === 'working';
+}
+
+/** One row from GET /admin/deploys/targets's `targets` array --
+ * deploy/targets.py's TARGETS/CHANNEL_BY_TARGET/GATED_TARGETS restated as
+ * a wire response so the console's trigger-form picker never hand-copies
+ * that list (module docstring's CLAUDE.md scar #8 reasoning). */
+export interface DeployTargetRow {
+  target: string;
+  target_family: string;
+  channel: DeployChannel;
+  gated: boolean;
+}
+
+/** GET /admin/deploys/targets's response shape. */
+export async function getDeployTargets(): Promise<DeployTargetRow[]> {
+  const res = await adminFetch('/admin/deploys/targets');
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the deploy target list'));
+  const body = (await res.json()) as { targets: DeployTargetRow[] };
+  return body.targets;
+}
+
+/** GET /admin/deploys/promotable's response shape -- would {target, sha}
+ * pass POST /admin/deploys' own early promotion gate. `gated: false` means
+ * the target carries no staging-before-demo rule at all (POST applies none
+ * either), in which case `promotable` is unconditionally true. */
+export interface PromotableResult {
+  target: string;
+  sha: string;
+  target_family: string;
+  gated: boolean;
+  promotable: boolean;
+}
+
+/** Preview POST /admin/deploys' own early gate for {target, sha} BEFORE
+ * ever triggering a build, so the console's Deploy button can disable
+ * itself with a friendly reason instead of surfacing the route's 409.
+ * Both params are REQUIRED by the route (422 otherwise). */
+export async function getPromotable(target: string, sha: string): Promise<PromotableResult> {
+  const params = new URLSearchParams({ target, sha });
+  const res = await adminFetch(`/admin/deploys/promotable?${params.toString()}`);
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not check whether this deploy is promotable'));
+  return (await res.json()) as PromotableResult;
+}
+
+/** One row from GET /admin/deploys's `rows` array -- deploy_routes.py's
+ * own explicit DEPLOYMENT_VIEW_FIELDS allowlist, restated field-for-field
+ * (never a second, looser shape a stray internal field could leak
+ * through). `status` is typed to the closed DEPLOY_STATUSES set; a value
+ * the console does not recognize (a future server-side addition this
+ * console has not yet been taught) still round-trips as a plain string,
+ * so a status-chip renderer must handle an unrecognized value rather than
+ * assume the type guarantees membership at runtime. */
+export interface DeploymentRow {
+  id: string;
+  target: string;
+  target_family: string;
+  channel: DeployChannel;
+  sha: string;
+  ref: string | null;
+  triggered_by: string;
+  build_id: string | null;
+  status: DeployStatus;
+  log_url: string | null;
+  ts: number;
+  finished_at: number | null;
+}
+
+export interface ListDeploysFilters {
+  channel?: DeployChannel;
+  target?: string;
+  limit?: number;
+}
+
+/** GET /admin/deploys, newest first. */
+export async function listDeploys(filters: ListDeploysFilters = {}): Promise<DeploymentRow[]> {
+  const params = new URLSearchParams();
+  if (filters.channel) params.set('channel', filters.channel);
+  if (filters.target) params.set('target', filters.target);
+  if (filters.limit) params.set('limit', String(filters.limit));
+  const qs = params.toString();
+  const res = await adminFetch('/admin/deploys' + (qs ? `?${qs}` : ''));
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the deployments list'));
+  const body = (await res.json()) as { rows: DeploymentRow[] };
+  return body.rows;
+}
+
+/** POST /admin/deploys's response shape: a DeploymentRow plus the
+ * trigger's own audit request_id. */
+export interface TriggerDeployResult extends DeploymentRow {
+  request_id: string;
+}
+
+/** Trigger a Cloud Build for {target, sha}. `sha` must already be a full
+ * 40-character hex string -- this function does not truncate, pad or
+ * otherwise reshape it (the route's own 422 is the validation authority);
+ * the console's OWN "never render a sha shorter than 40 characters in the
+ * confirm dialog" rule lives in DeploysPage.tsx, not here. Makes exactly
+ * one POST per call; callers are responsible for not calling it twice per
+ * confirm click. A 409 (no staging success for a gated target) surfaces
+ * via errorDetail like every other route's refusal. */
+export async function triggerDeploy(target: string, sha: string): Promise<TriggerDeployResult> {
+  const res = await adminFetch('/admin/deploys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, sha }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not trigger the deploy'));
+  return (await res.json()) as TriggerDeployResult;
+}
