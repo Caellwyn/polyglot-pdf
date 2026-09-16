@@ -73,7 +73,7 @@ the machine.
   the file write alone; the plumbing tests pass again. Rerun after the fix:
   5939 passed / 282 skipped, no failures. The twelve process-spawning test files, run separately
   with every child windowless: 524 passed / 5 skipped.
-- Scar #9: twelve one-line mutations, each in its own interpreter (the app
+- Scar #9: thirteen one-line mutations, each in its own interpreter (the app
   modules import once per process) and each RED with exit code 1: the handler
   install removed from either app; `input` added back to the safe keys; the
   custom-validator `msg` replacement removed (the submitted timestamp came
@@ -86,7 +86,20 @@ the machine.
 
 ## Review record
 
-REVIEW_RECORD
+Fresh-eyes (Sonnet, read-only): round 1 found a doc stamp this bead had
+broken (the old `voice-ai.md` stamp was a 25-line paragraph and only its
+first line was replaced) and a vacuous guard entry (`secretary_context.py`
+has no log call); round 2 found the `hipaa-pii-policy.md` sentence still
+naming it. Opus cross-surface round 1 found the second 422 channel -- a
+custom validator's text in `msg`, with the disclaimer route interpolating
+the submitted timestamp -- plus a tier-2 claim too broad for the code; it
+filed the adapter's remaining print() blocks (`polyglot-pdf-l9zsf`) and
+widened `polyglot-pdf-giebe` to all four self-built 422 sites. Round 2:
+NO-GAPS after enumerating pydantic-core's whole error catalogue and
+confirming `value_error` + `assertion_error` are the only types whose
+message carries verbatim text; its one nit (no live assert-validator to
+exercise `assertion_error`) became a throwaway-app test here, and a
+catalogue-derived pin is filed as `polyglot-pdf-jbb44`. Every fix was mutation-verified in its own interpreter.
 
 ## Lessons
 

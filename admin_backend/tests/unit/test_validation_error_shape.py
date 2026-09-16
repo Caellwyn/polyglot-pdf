@@ -36,3 +36,38 @@ def test_a_malformed_admin_body_never_comes_back_in_the_422():
     assert SENTINEL not in resp.text, "the admin 422 echoed the request value: " + resp.text
     detail = resp.json()["detail"]
     assert detail and all(set(e) <= {"loc", "type", "msg"} for e in detail), detail
+
+
+def test_an_assert_in_a_validator_renders_the_generic_phrase_only():
+    """pydantic renders a validator's `assert` message verbatim as
+    "Assertion failed, <text>"; the handler replaces it like value_error.
+    Exercised on a throwaway app with the same handler installed, since no
+    live route uses an assert-validator today. Mutation-verified by removing
+    assertion_error from _CUSTOM_MESSAGE_TYPES."""
+    from fastapi import FastAPI
+    from pydantic import BaseModel, field_validator
+
+    from backend.utils.validation_errors import install_validation_error_handler
+
+    class Body(BaseModel):
+        amount: int
+
+        @field_validator("amount")
+        @classmethod
+        def _positive(cls, v):
+            assert v > 0, "amount %d must be positive" % v
+            return v
+
+    mini = FastAPI()
+    install_validation_error_handler(mini)
+
+    @mini.post("/x")
+    async def _x(body: Body):
+        return {"ok": True}
+
+    resp = TestClient(mini).post("/x", json={"amount": -987654321})
+    assert resp.status_code == 422
+    assert "987654321" not in resp.text, resp.text
+    entry = resp.json()["detail"][0]
+    assert entry["type"] == "assertion_error" and entry["msg"] == "Assertion failed"
+
