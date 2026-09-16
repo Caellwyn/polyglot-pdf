@@ -23,16 +23,16 @@ Five beads closed, all `tier: sonnet`/`haiku`, all self-contained:
 - **`t0kjj`** -- `test_no_real_firestore_guard.py`'s
   `test_get_db_is_still_caught_when_the_client_is_already_cached` had an
   `assert not isinstance(db, _FakeCachedClient)` INSIDE a `with
-  pytest.raises(...)` block. That line could never execute either way: if
-  `get_db()` raised as expected (the pass path), the `with` block exits on
-  the exception before reaching the assert; if `get_db()` instead returned
-  successfully, `pytest.raises` itself fails first with "DID NOT RAISE".
-  Moved the assert outside the block. Mutation-verified per the bead's own
-  exit criterion: removing the `fa_firestore.client` patch from
+  pytest.raises(...)` block. On the expected pass path (`get_db()` raises),
+  that line never executed at all. On a guard failure (`get_db()` returns
+  instead of raising), it was NOT dead code -- control fell through to the
+  assert, which did fire, but as a bare `AssertionError` rather than the
+  intended `RealFirestoreReachedInTest`/"DID NOT RAISE" failure shape.
+  Moved the assert outside the block so a guard failure surfaces with its
+  correct, legible failure mode either way. Mutation-verified per the
+  bead's own exit criterion: removing the `fa_firestore.client` patch from
   `install_no_real_firestore_guard` now correctly reddens this exact test
-  with a real "DID NOT RAISE" failure (previously it would have stayed
-  green even with the guard defeated, since the file's other guarded
-  assertions covered for it by coincidence).
+  with a "DID NOT RAISE" failure.
 - **`9utmk`** -- `docs/components/pdf-view.md` stated twice that
   `polyglot-pdf-1utg` (the edit-popover's value read defeating field-value
   aliasing) was an open "known gap". Verified against current code:
@@ -77,18 +77,33 @@ on each cross-referencing the other three and recommending `kyrd4` (the
 most complete -- it also specifies a regrowth-prevention rule for
 `check_doc_freshness.py`) as the canonical bead to consolidate onto.
 
-Fresh-eyes triage: no gaps found in a self-review pass covering the rubric
-above; no out-of-scope findings surfaced beyond the four re-tiered beads
-already described.
+Fresh-eyes triage (Sonnet, routed by diff size): NO-GAPS, all 5 exit
+criteria PASS on independent re-verification. One in-diff finding: this
+entry's and the shipped code comment's first-draft rationale for the
+`t0kjj` fix overstated the bug as "dead code in both directions" -- the
+reviewer mutation-tested it directly and showed the in-block assert DID
+fire (as a bare `AssertionError`) on a guard-failure path, just with a
+worse failure message than the fix's corrected, out-of-block form. Fixed
+inline (comment + this entry, both non-behavioral) before proceeding; no
+re-spawn needed since neither edit changed the fix's own behavior. No
+out-of-scope findings surfaced beyond the four re-tiered beads already
+described.
 
 ## Lessons
 
-- The `t0kjj` shape (an assertion placed inside a `pytest.raises` block,
-  where it can never execute in either branch) is now confirmed to recur --
-  this is the SECOND instance in the same file (`uyoi4` was the first,
-  batch 3). Worth a grep sweep of the rest of the test suite for the same
+- The `t0kjj` shape (an assertion placed inside a `pytest.raises` block)
+  is now confirmed to recur -- this is the SECOND instance in the same
+  file (`uyoi4` was the first, batch 3). The precise defect is narrower
+  than "dead code": on the pass path the in-block assert never runs at
+  all, but on a guard FAILURE it does still run, just producing a bare
+  `AssertionError` instead of the guard's intended, more legible failure
+  shape. Moving the assert outside the block doesn't change whether a
+  regression is CAUGHT, only how clearly it is reported. Worth a grep
+  sweep of the rest of the test suite for the same
   `with pytest.raises(...):` + trailing `assert` shape if it turns up
-  again.
+  again -- and worth verifying the "dead code" framing empirically (a
+  quick mutation test) rather than reasoning it from the code shape alone,
+  since it is easy to state too strongly, as this entry itself first did.
 - `closeout_prep.py`'s internal pytest subprocess run can legitimately take
   10-11 minutes under normal load but stalled far longer than that during
   this closeout under heavy concurrent-session contention on the same

@@ -229,12 +229,15 @@ def test_get_db_is_still_caught_when_the_client_is_already_cached():
         from backend.services.auth import get_db
 
         # The isinstance check runs AFTER pytest.raises, not inside it (bd
-        # polyglot-pdf-t0kjj): a line inside the `with` block never executes
-        # once get_db() has already raised (the expected path), and if
-        # get_db() instead returned successfully, pytest.raises itself fails
-        # with "DID NOT RAISE" before the assert is reached either way -- so
-        # the in-block form was dead code in both directions, not a real
-        # defense-in-depth check.
+        # polyglot-pdf-t0kjj). On the expected pass path (get_db() raises),
+        # a line inside the `with` block never executes at all. On a guard
+        # failure (get_db() returns instead of raising), the in-block form
+        # was NOT dead: control fell through to the assert, which did fire
+        # -- but as a bare AssertionError, not the intended
+        # RealFirestoreReachedInTest/"DID NOT RAISE" failure the guard is
+        # meant to surface. Moving the assert out gives that failure its
+        # correct, legible shape either way, rather than changing whether
+        # it is caught at all.
         db = None
         with pytest.raises(RealFirestoreReachedInTest):
             db = get_db()
