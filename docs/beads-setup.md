@@ -22,9 +22,11 @@ confirm it's on PATH:
 bd version
 ```
 
-**If you installed via npm (`@beads/bd`) on Windows, also do step 2** -- npm
-puts a shell script on PATH ahead of the real executable, which makes every
-`bd` call open a console window.
+There is also an npm wrapper (`@beads/bd`) that carries the same binary; it is
+a fine way to install, and it is what this machine uses. **On Windows an npm
+install needs step 2 as well** -- npm puts a shell script on PATH ahead of the
+real executable, which makes every `bd` call open a console window. A release
+binary installed directly does not need it.
 
 ### 2. Windows: put the native `bd.exe` ahead of npm's shim (skip on macOS/Linux)
 
@@ -48,7 +50,8 @@ Fix it by putting the package's `bin\` directory FIRST in your **user** PATH:
 $bd = Join-Path $env:APPDATA 'npm\node_modules\@beads\bd\bin'
 if (-not (Test-Path (Join-Path $bd 'bd.exe'))) { throw "no bd.exe at $bd" }
 $u = [Environment]::GetEnvironmentVariable('PATH','User')
-$u | Set-Content "$env:USERPROFILE\Desktop\userpath-backup.txt"
+# Timestamped so re-running cannot overwrite an earlier backup.
+$u | Set-Content "$env:USERPROFILE\Desktop\userpath-backup-$(Get-Date -f yyyyMMdd-HHmmss).txt"
 if ($u -notlike "*$bd*") {
   [Environment]::SetEnvironmentVariable('PATH', "$bd;$u", 'User')
 }
