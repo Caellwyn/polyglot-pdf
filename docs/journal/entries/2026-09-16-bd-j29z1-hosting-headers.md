@@ -54,6 +54,11 @@ process.
   with local `url()`s; `frontend/index.html` links that stylesheet instead
   of `fonts.googleapis.com`. The editor and admin console never loaded a
   remote font.
+- **The live posture runbook understands the soak.** `scripts/audit/
+  infra_posture.sh`'s Hosting check (D's check 10) matched only the enforcing
+  header name and would have reported every site FAIL during report-only;
+  it now accepts `Content-Security-Policy-Report-Only` as PASS with the mode
+  named in the detail, pinned in `tests/test_infra_posture_script.py`.
 - **`tests/test_hosting_headers.py`**, derived from `firebase.json`: every
   target carries every header; the CSP carries every required directive,
   every origin the apps need, never `'unsafe-eval'`, `http:` or a wildcard
@@ -69,7 +74,7 @@ process.
   `firebase.json` (`test_deploy_channel_isolation`, `test_deploy_admin_url_injection`,
   `test_infra_posture_script`, `test_form_kit_routes`) and the windowless-spawn
   pin over `scripts/` (the regenerator spawns nothing): 181 passed.
-- Scar #9: six mutations, each RED: the headers block dropped from one target;
+- Scar #9: seven mutations, each RED: the runbook's report-only branch removed; the headers block dropped from one target;
   `frame-ancestors` removed; `'unsafe-eval'` added to `script-src`; the
   staging backend's wss origin dropped from `connect-src`; the Google Fonts
   link restored in `index.html`; one referenced woff2 deleted.
@@ -107,4 +112,5 @@ also tracks it, was already fresh).
 - frontend/public/fonts/ -- 45 woff2 files + fonts.css (new)
 - scripts/fetch_fonts.py -- regenerator (new)
 - tests/test_hosting_headers.py -- new
+- scripts/audit/infra_posture.sh, tests/test_infra_posture_script.py -- report-only CSP reads as the planned soak
 - docs/journal/entries/2026-09-16-bd-j29z1-hosting-headers.md -- this entry

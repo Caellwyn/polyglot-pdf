@@ -849,7 +849,10 @@ The CSP is **one policy shared by all five sites** and ships as
 every site, so the staging soak cannot be staging-only, and enforcing on the
 demo without a soak is the wrong risk. Browsers write violations to the devtools
 console; the staging test-drive reads it, and renaming the header to
-`Content-Security-Policy` is a separate, reviewed change. The policy's
+`Content-Security-Policy` is a separate, reviewed change; the live posture
+runbook (`scripts/audit/infra_posture.sh`, check 10) reads the report-only
+header as PASS with the mode named, so the soak does not read as a missing
+header. The policy's
 `connect-src` is built from what the apps actually contact: the three Cloud Run
 services (demo backend, staging backend, admin; https + wss, project-hashed
 hostnames), Firebase Auth (`identitytoolkit`, `securetoken`,
