@@ -441,16 +441,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				}
 			}
 
-		// Load AudioWorklet module
-		// In production (deployed to GCS), worklet is at ../shared/ relative to demo/
-		// In dev, use public directory path (worklet must be in public/shared/)
-		const isProduction = !window.location.hostname.includes('localhost') && 
-			!window.location.hostname.includes('127.0.0.1')
-		
-		const workletUrl = isProduction
-			? new URL('../shared/audio-processor.worklet.js', window.location.href).href
-			: '/shared/audio-processor.worklet.js'  // Served from public/ in dev
-		
+		// Load AudioWorklet module. Served from the Hosting site ROOT in both
+		// dev (public/shared/) and production -- an absolute path, not one
+		// resolved relative to the current route, since the app is not (and
+		// has never been, on this host) served from a subdirectory a
+		// relative '../shared/' could still land on by coincidence.
+		const workletUrl = '/shared/audio-processor.worklet.js'
+
 		console.log('[VFF Audio] Loading worklet from:', workletUrl)
 		await nodes.recordingContext.audioWorklet.addModule(workletUrl)			// Create AudioWorklet node
 			nodes.workletNode = new AudioWorkletNode(

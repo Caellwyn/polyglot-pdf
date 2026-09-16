@@ -136,12 +136,12 @@ _KNOWN_KINDS = (
 # firm_routes.py's own `ledger_limit` upper bound (200) in spirit; alerts
 # have no per-firm scoping to shrink the collection the way a firm's own
 # ledger page does, so this is a flat cap on the WHOLE query result rather
-# than a caller-tunable one. The firm-scoped route filters to one firm
-# AFTER this cap is applied to the full stream, same as the operator-wide
-# route's own firm_id filter -- a firm with more than _PAGE_LIMIT alerts
-# total across the WHOLE collection could theoretically lose an old one
-# off the far end before its own filter runs, the same accepted tradeoff
-# the operator-wide route already has for its firm_id filter today.
+# than a caller-tunable one. Both list helpers filter FIRST (firm_id/kind/
+# acknowledged, in the Python loop over the full stream), sort, and only
+# THEN apply this cap to the already-filtered result -- so the cap is
+# per-firm on the firm-scoped route, not global: a firm with more than
+# _PAGE_LIMIT of its OWN alerts loses only its oldest ones, ordinary
+# paging, not a cross-firm truncation hazard.
 _PAGE_LIMIT = 200
 
 # The response key allowlist for the OPERATOR-WIDE route (unchanged from

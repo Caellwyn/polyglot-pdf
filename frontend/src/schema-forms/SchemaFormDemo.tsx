@@ -19,6 +19,7 @@ import { getBackendHttpUrl, resolveKitAssetUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
 import { ArchivedVersionsLink } from "./components/ArchivedVersionsLink";
 import { useAuth } from "../contexts/AuthContext";
+import { SchemaFormStateManager } from "./state/schemaFormState";
 import {
   loadOnboardingState,
   saveOnboardingState,
@@ -218,9 +219,15 @@ export function SchemaFormDemo() {
 
   const handleClearSession = () => {
     if (confirm("Clear all form data and start fresh?")) {
-      // Clear form data
-      sessionStorage.removeItem("schema_form_state");
-      // Clear onboarding state (forces form/language re-selection)
+      // Deliberately NOT clearAllClientState(): this is a MID-session reset
+      // (same client, fresh answers), not an end-of-session wipe. A client
+      // link has no way to re-enter without its token -- clearing it here
+      // would reload straight into ClientLinkEntry's "invalid link" phase
+      // (bd polyglot-pdf-ylokf tried the composed wipe and Opus cross-surface
+      // caught the lockout before it shipped). A staff session never has a
+      // token set in the first place, so leaving it untouched is a no-op
+      // there and a save there for a client-link one.
+      SchemaFormStateManager.clear();
       clearOnboardingState();
       window.location.reload();
     }

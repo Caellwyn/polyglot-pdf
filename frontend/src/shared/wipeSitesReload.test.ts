@@ -122,6 +122,19 @@ describe("every clearAllClientState() call reloads nearby (bd polyglot-pdf-8v8i7
   // so a future refactor that accidentally stops matching (e.g. someone
   // renames the call, or wraps it in a helper) is caught here rather than
   // by the main assertion silently passing on zero sites.
+  //
+  // 4 = SchemaForm.tsx x3, StaffHeader.tsx -- the four END-OF-SESSION wipe
+  // triggers (completion, idle timeout, "Done -- clear now", staff logout).
+  // The three manual Clear-form/Start-Fresh buttons (SchemaFormDemo.tsx,
+  // VoiceOverlay.tsx, VoiceOverlayMobile.tsx) are a MID-session reset, not
+  // an end-of-session wipe, and deliberately do NOT call
+  // clearAllClientState() -- clearing the client-link token there would
+  // strand a client-link session on the next reload (bd polyglot-pdf-ylokf
+  // tried routing them through the composed wipe; Opus cross-surface
+  // caught the lockout before it shipped). See
+  // clearFormButtonsClearClientLinkToken.test.tsx and
+  // SchemaFormDemo.startFreshPreservesClientLinkToken.test.tsx for the
+  // corrected behavior these three sites must have instead.
   it("currently finds exactly 4 wipe sites", () => {
     const sites = findWipeSites();
     expect(sites.length).toBe(4);

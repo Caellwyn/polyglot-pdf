@@ -1113,11 +1113,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			return
 		}
 
-		// Clear the form state
+		// Clears form state and the app-start form + language choice, so the
+		// reload returns all the way to the language-choice modal -- this is
+		// how a tester resets between clients (bd voice-ux issues).
+		// Deliberately NOT clearAllClientState(): this is a MID-session reset,
+		// not an end-of-session wipe, so the client-link token must survive --
+		// clearing it here would reload straight into ClientLinkEntry's
+		// "invalid link" phase for a client-link session (bd polyglot-pdf-ylokf
+		// tried the composed wipe; Opus cross-surface caught the lockout before
+		// it shipped). A staff session never has a token set, so leaving it
+		// untouched is a no-op there.
 		SchemaFormStateManager.clear()
-		// Also clear the app-start form + language choice so the reload returns
-		// all the way to the language-choice modal -- this is how a tester resets
-		// between clients (bd voice-ux issues).
 		clearOnboardingState()
 
 		// Reload the page to reset everything

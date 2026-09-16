@@ -1635,12 +1635,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			return
 		}
 
-		// Clear sessionStorage
-		SchemaFormStateManager.clear()
-		// Also clear the app-start form + language choice so the reload returns
-		// all the way to the language-choice modal -- this is how a tester resets
-		// between clients (bd voice-ux issues).
-		clearOnboardingState()
 		// Clear all DOM fields
 		const inputs = document.querySelectorAll('input, textarea, select')
 		let clearedCount = 0
@@ -1673,6 +1667,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// Remove checkmark badges
 		document.querySelectorAll('.vff-field-badge').forEach(badge => badge.remove())
 
+		// Clears form state and the app-start form + language choice, so the
+		// reload returns all the way to the language-choice modal -- this is
+		// how a tester resets between clients (bd voice-ux issues).
+		// Deliberately NOT clearAllClientState(): this is a MID-session reset,
+		// not an end-of-session wipe, so the client-link token must survive --
+		// clearing it here would reload straight into ClientLinkEntry's
+		// "invalid link" phase for a client-link session (bd polyglot-pdf-ylokf
+		// tried the composed wipe; Opus cross-surface caught the lockout before
+		// it shipped). A staff session never has a token set, so leaving it
+		// untouched is a no-op there.
+		SchemaFormStateManager.clear()
+		clearOnboardingState()
 		// Reload page to reset all state
 		window.location.reload()
 	}
