@@ -60,6 +60,43 @@ failure/cancelled vocabulary), the latter being what the status-chip
 coverage test derives its expected set from rather than a second hand-typed
 list.
 
+**Fresh-eyes review round (GAPS-FOUND (2), both adopted).** The outer
+cross-surface review passed all three exit criteria on the rubric, then
+raised two gaps in the trigger form's own logic:
+
+- *Adopted* -- the confirm dialog is a sibling `<div>`, not a modal, so the
+  target/sha controls stayed live while it was open; a user could switch to
+  a gated-and-not-yet-verified target without closing the dialog and still
+  fire the POST, because `handleConfirmDeploy` only re-checked form
+  completeness, not the gated/promotable gate, and the Confirm button was
+  tied to `triggering` alone. Fixed by re-checking the same
+  `selectedTarget?.gated && promotable?.promotable !== true` condition
+  inside `handleConfirmDeploy` itself and tying the Confirm button to the
+  full `deployDisabled` expression, so the gate holds on the control that
+  actually fires the POST, not only on the button that opened the dialog.
+  Mutation-verified: reverting both changes together reproduces the
+  original gap (the new test goes red); either one alone still catches it
+  because they overlap by design (defense in depth).
+- *Adopted* -- the channel filter `<select>` hand-listed
+  `demo`/`staging`/`admin` instead of mapping over the `DEPLOY_CHANNELS`
+  constant this same PR introduces (and which `STATUS_CHIP_CLASSES` two
+  files over already gets right), so a future change to that closed set
+  would silently not reach this dropdown. Fixed by importing
+  `DEPLOY_CHANNELS`/`DeployChannel` and deriving the option list and the
+  filter state's type from it.
+- *Deferred, not a gap in this diff* -- a pre-existing docstring/code
+  mismatch in `admin_backend/routes/deploy_routes.py` (the module docstring
+  names `admin-service` as staging-gated; `GATED_TARGETS` deliberately
+  excludes it) predates this branch and was filed as `polyglot-pdf-638ll`
+  by the reviewer.
+
+Two new/extended tests pin the fixes: one drives exactly the reviewer's
+repro (open the dialog for a non-gated target, switch to a gated
+not-yet-verified one without closing it, confirm no POST fires and the
+Confirm button is disabled); the other asserts the channel filter's option
+list equals `['', ...DEPLOY_CHANNELS]`. Admin-console suite: 201/201
+(199 baseline + 2 new); `tsc --noEmit` clean.
+
 ## Lessons
 
 - **A page reachable only through registration order needs a

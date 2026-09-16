@@ -2,9 +2,10 @@ import React from 'react';
 import {
   getChannelHealth, MONITORING_CHANNELS,
   getDeployTargets, getPromotable, listDeploys, triggerDeploy,
-  isDeployInFlight, DEPLOY_STATUSES,
+  isDeployInFlight, DEPLOY_STATUSES, DEPLOY_CHANNELS,
   type ChannelHealth, type MonitoringChannel,
   type DeployTargetRow, type PromotableResult, type DeploymentRow, type DeployStatus,
+  type DeployChannel,
 } from '../utils/adminApi';
 import { PageIntro } from '../components/PageIntro';
 
@@ -160,7 +161,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
   // Section 2's confirm handler below, purely so that handler can call
   // `loadTable` directly instead of through a ref indirection. The JSX for
   // this section is still rendered LAST, after Section 2's form. ----------
-  const [channelFilter, setChannelFilter] = React.useState('');
+  const [channelFilter, setChannelFilter] = React.useState<DeployChannel | ''>('');
   const [targetFilter, setTargetFilter] = React.useState('');
   const [tableRows, setTableRows] = React.useState<DeploymentRow[]>([]);
   const [tableLoading, setTableLoading] = React.useState(true);
@@ -293,7 +294,16 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
   }, [loadLatestByFamily, loadTable, clearPollTimer, channelFilter, targetFilter]);
 
   const handleConfirmDeploy = React.useCallback(async () => {
+    // Re-check the SAME gate `deployDisabled` enforces on the Deploy button
+    // -- not just the initial form-completeness check -- because the
+    // confirm panel is a sibling <div>, not a modal: the target/sha
+    // controls stay live while it is open, so a user can switch to a
+    // gated-and-not-yet-verified target without closing the dialog first.
+    // Exit criterion 1 ("Deploy is disabled ... enabled when it is") must
+    // hold on the control that actually fires the POST, not only on the
+    // button that opened the dialog.
     if (!formTarget || !shaValid) return;
+    if (selectedTarget?.gated === true && promotable?.promotable !== true) return;
     setTriggering(true);
     setTriggerError(null);
     setTriggerSuccess(null);
@@ -310,7 +320,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
     } finally {
       setTriggering(false);
     }
-  }, [formTarget, formSha, shaValid, onAuthExpired, reloadAfterTrigger]);
+  }, [formTarget, formSha, shaValid, selectedTarget, promotable, onAuthExpired, reloadAfterTrigger]);
 
   return (
     <div data-testid="deploys-page" className="max-w-5xl">
@@ -522,7 +532,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
                 type="button"
                 data-testid="deploy-confirm-button"
                 className="btn btn-primary"
-                disabled={triggering}
+                disabled={deployDisabled}
                 onClick={() => void handleConfirmDeploy()}
               >
                 {triggering ? 'Deploying...' : 'Confirm deploy'}
@@ -549,12 +559,12 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
             id="deploys-channel-filter"
             className="mt-1 border border-gray-300 rounded px-2 py-1"
             value={channelFilter}
-            onChange={(e) => setChannelFilter(e.target.value)}
+            onChange={(e) => setChannelFilter(e.target.value as DeployChannel | '')}
           >
             <option value="">All channels</option>
-            <option value="demo">demo</option>
-            <option value="staging">staging</option>
-            <option value="admin">admin</option>
+            {DEPLOY_CHANNELS.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
         </div>
         <div>

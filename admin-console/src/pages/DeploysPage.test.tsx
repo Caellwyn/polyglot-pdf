@@ -15,7 +15,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DeploysPage } from './DeploysPage';
 import {
   AuthError, getDeployTargets, getPromotable, listDeploys, triggerDeploy,
-  getChannelHealth, DEPLOY_STATUSES,
+  getChannelHealth, DEPLOY_STATUSES, DEPLOY_CHANNELS,
   type DeployTargetRow, type DeploymentRow, type ChannelHealth, type ListDeploysFilters,
 } from '../utils/adminApi';
 
@@ -177,6 +177,31 @@ describe('DeploysPage -- exit criterion 1: gated trigger + confirm dialog', () =
     expect(triggerDeploy).not.toHaveBeenCalled();
   });
 
+  it('re-validates the gated/promotable gate before POSTing if the target changes while the confirm dialog is still open', async () => {
+    // The confirm panel is a sibling <div>, not a modal -- the target/sha
+    // controls stay interactive while it is open. Open the dialog for a
+    // valid NON-gated target, then switch to a GATED target the server has
+    // not (yet) said is promotable, without closing the dialog first.
+    vi.mocked(getPromotable).mockResolvedValue({
+      target: 'backend-demo', sha: SHA_A, target_family: 'backend',
+      gated: true, promotable: false,
+    });
+    render(<DeploysPage onAuthExpired={noAuthExpired} />);
+    await selectTargetAndSha('editor', SHA_A);
+    await waitFor(() => expect(screen.getByTestId('deploy-button')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('deploy-button'));
+    await screen.findByTestId('deploy-confirm-dialog');
+
+    fireEvent.change(screen.getByLabelText('Deploy target'), { target: { value: 'backend-demo' } });
+    await waitFor(() => expect(getPromotable).toHaveBeenCalledWith('backend-demo', SHA_A));
+
+    const confirmButton = await screen.findByTestId('deploy-confirm-button');
+    expect(confirmButton).toBeDisabled();
+    fireEvent.click(confirmButton);
+
+    expect(triggerDeploy).not.toHaveBeenCalled();
+  });
+
   it('routes an AuthError on trigger to onAuthExpired instead of a generic error banner', async () => {
     vi.mocked(triggerDeploy).mockRejectedValueOnce(new AuthError('Sign-in required'));
     const onAuthExpired = vi.fn((_err: unknown) => true);
@@ -245,6 +270,16 @@ describe('DeploysPage -- exit criterion 2: polling table + status chips', () => 
     for (const status of DEPLOY_STATUSES) {
       expect(await screen.findByTestId(`status-chip-${status}`)).toBeInTheDocument();
     }
+  });
+
+  it('the channel filter options are derived from DEPLOY_CHANNELS, not a hand-copied list', async () => {
+    render(<DeploysPage onAuthExpired={noAuthExpired} />);
+    await screen.findByTestId('deploys-table');
+
+    const select = screen.getByLabelText('Channel') as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((o) => o.value);
+    // '' is the "All channels" option this page adds on top of the closed set.
+    expect(optionValues).toEqual(['', ...DEPLOY_CHANNELS]);
   });
 
   it('the channel/target filter submit re-queries with the chosen filters', async () => {
