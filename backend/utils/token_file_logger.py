@@ -1,8 +1,11 @@
 """
 Token usage file logger for local development.
 
-Logs token events to backend/logs/token_usage.jsonl for visualization dashboard.
-NOT used in production - BigQuery will handle that.
+Logs token events to backend/logs/token_usage.jsonl for the local token
+dashboard. Never on a deployed instance: log_token_event is a no-op when
+K_SERVICE (set by Cloud Run) is present, and the only call site
+(backend/adapters/live_ai_gemini.py) is additionally gated on the
+backend/.env.DEV marker. Production token accounting is BigQuery's.
 """
 
 import json
@@ -25,6 +28,12 @@ class TokenFileLogger:
         # Get project root (3 levels up from this file: utils -> backend -> project)
         project_root = Path(__file__).parent.parent.parent
         self.log_file = project_root / log_dir / "token_usage.jsonl"
+
+        # Never touch the container's disk on a deployed instance (K_SERVICE is
+        # set by Cloud Run): the writer below is a no-op there too, so nothing
+        # about this logger depends on its caller's own gate.
+        if os.getenv("K_SERVICE"):
+            return
 
         # Create logs directory if it doesn't exist
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +149,13 @@ class TokenFileLogger:
                 "audio_output": session_audio_output,
             },
         }
+
+        # Never on a deployed instance (K_SERVICE is set by Cloud Run): the
+        # container's disk is not a log store, and this file is only the local
+        # dashboard's input (bd polyglot-pdf-wfgjz). The call site is gated
+        # on the .env.DEV marker as well; this guard stands on its own.
+        if os.getenv("K_SERVICE"):
+            return
 
         # Append to JSONL file (newline-delimited JSON)
         # Write atomically to prevent partial reads by file watcher

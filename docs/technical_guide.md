@@ -210,10 +210,14 @@ its own table).
   (the Cloud Run host) in prod or `ws://localhost:8000/ws/fill` in dev. The
   `/api`-prefixed WS mount exists for parity but the live client uses the direct URL.
 - **The prod frontend build has a single HTML entry (`index.html`).**
-  `frontend/vite.config.ts` declares no multi-page `rollupOptions.input`, so
-  `vad-tuning.html` and `schema-form-demo.html` are **dev-server-only** pages
-  (served by `vite dev`, absent from the deployed bundle); wire them into
-  `rollupOptions.input` if a deployed variant is ever wanted. Static assets
+  Every deploy path (`npm run deploy`, `deploy-staging.sh`, `deploy-demo.sh`)
+  builds with `frontend/vite.config.schema.ts` (via `build:schema` /
+  `build:schema:demo`), not the bare `vite.config.ts` `npm run dev` uses --
+  `vite.config.schema.ts`'s `rollupOptions.input` names only `main:
+  index.html`, so `vad-tuning.html` and `schema-form-demo.html` are
+  **dev-server-only** pages (served by `vite dev`, absent from the deployed
+  bundle); wire them into that config's `rollupOptions.input` if a deployed
+  variant is ever wanted. Static assets
   from `frontend/public/` (e.g. `thank-you.html`) ARE copied verbatim into
   `dist/` by the build (`publicDir`), so the deployed bundle is index.html +
   public assets -- not literally one file.
@@ -3129,7 +3133,10 @@ unchanged, only which behavior it defaults to.
   Cloud Scheduler declaration + env-var pair**, exactly mirroring the sweep
   job's own (Surface contract 15's `admin_audit_log` neighbor,
   `SWEEP_SCHEDULER_SA_EMAIL`): a NEW `MONTHLY_TOPUP_SCHEDULER_SA_NAME`
-  (`admin-monthly-topup-scheduler-sa`, a SEPARATE identity from BOTH
+  (`admin-topup-scheduler-sa` -- kept under GCP's 30-character
+  service-account-id cap; bd polyglot-pdf-l3kqc shortened it from the
+  original `admin-monthly-topup-scheduler-sa` (32 chars), a SEPARATE
+  identity from BOTH
   `admin-backend-sa` and `admin-sweep-scheduler-sa` -- rotating one job's
   caller credential must never change what a DIFFERENT job accepts), an
   echoed-NOTE `gcloud scheduler jobs create http admin-monthly-credit-topup`

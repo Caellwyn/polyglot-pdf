@@ -102,13 +102,16 @@ RUNTIME_CONFIG_KEYS = frozenset({
 })
 
 # Each key's TYPE NAME, for the console's schema-driven form (bd
-# polyglot-pdf-wxcj0): "bool" | "int" | "float". This is the ONE place a
-# key's type is spelled out (CLAUDE.md scar #8) -- admin_backend/routes/
+# polyglot-pdf-wxcj0): "bool" | "int" | "float". This is the ONE AUTHORITATIVE
+# place a key's type is spelled out (CLAUDE.md scar #8) -- admin_backend/routes/
 # config_routes.py's GET response derives its `schema` map from THIS dict,
 # never from a second hand-written list, so a key added here automatically
 # gets the right console control with no second edit required. Every key in
 # RUNTIME_CONFIG_KEYS must appear here exactly once -- pinned by
 # test_runtime_config.py::test_key_types_covers_every_runtime_config_key.
+# The module docstring above also names each key's type in prose (context on
+# what moved and from where) -- that copy is unpinned and can drift; KEY_TYPES
+# is the one nothing else may disagree with.
 KEY_TYPES: dict[str, str] = {
     KEY_LINK_MINTING_ENABLED: "bool",
     KEY_LINK_COST_CEILING_USD: "float",
