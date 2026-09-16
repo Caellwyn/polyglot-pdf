@@ -2,6 +2,7 @@ import React from 'react';
 import {
   listKits, getKitCommercial, setKitCommercial, type KitCommercial,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface KitCommercialsPageProps {
   /** Called first on every catch. Returns true when `err` was an
@@ -217,6 +218,10 @@ export const KitCommercialsPage: React.FC<KitCommercialsPageProps> = ({ onAuthEx
   return (
     <div data-testid="kit-commercials-page" className="max-w-3xl">
       <h2 className="text-lg font-semibold text-gray-900">Kit commercials</h2>
+      <PageIntro>
+        Set each form kit&apos;s credit price and USD spend ceiling per
+        minted link.
+      </PageIntro>
 
       {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
       {loading && <p className="mt-3 text-sm text-gray-500">Loading...</p>}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { getChannelErrors, MONITORING_CHANNELS, type ErrorGroup, type MonitoringChannel } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface ErrorsPageProps {
   onAuthExpired: (err: unknown) => boolean;
@@ -56,6 +57,10 @@ export const ErrorsPage: React.FC<ErrorsPageProps> = ({ onAuthExpired }) => {
   return (
     <div data-testid="errors-page" className="max-w-5xl">
       <h2 className="text-lg font-semibold text-gray-900">Errors</h2>
+      <PageIntro>
+        See grouped, deduplicated application errors per channel from Cloud
+        Error Reporting.
+      </PageIntro>
 
       <nav className="mt-4 flex gap-4 text-sm border-b border-gray-200">
         {MONITORING_CHANNELS.map((c) => (

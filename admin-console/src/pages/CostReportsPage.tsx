@@ -4,6 +4,7 @@ import {
   MAX_REPORT_RANGE_MONTHS,
   type CostGroupBy, type CostReportRow, type IncomeReportRow, type MonitoringChannel,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface CostReportsPageProps {
   onAuthExpired: (err: unknown) => boolean;
@@ -149,6 +150,10 @@ export const CostReportsPage: React.FC<CostReportsPageProps> = ({ onAuthExpired 
   return (
     <div data-testid="cost-reports-page" className="max-w-5xl">
       <h2 className="text-lg font-semibold text-gray-900">Cost &amp; income reports</h2>
+      <PageIntro>
+        Compare what a month cost against what it earned, by firm, kit, or
+        employee, from the BigQuery telemetry views.
+      </PageIntro>
 
       <nav className="mt-4 flex gap-4 text-sm border-b border-gray-200">
         <button

@@ -3,6 +3,7 @@ import {
   listFirms, createFirm, FIRM_KINDS,
   type FirmRow, type FirmKind, type FirmStatus,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface FirmsPageProps {
   /** Called first on every catch. Returns true when `err` was an
@@ -113,6 +114,10 @@ export const FirmsPage: React.FC<FirmsPageProps> = ({ onAuthExpired, onOpenFirm 
   return (
     <div data-testid="firms-page" className="max-w-4xl">
       <h2 className="text-lg font-semibold text-gray-900">Firms</h2>
+      <PageIntro>
+        Create and look up law firms, and open one to manage its plan,
+        credit ledger, and links.
+      </PageIntro>
 
       <form
         onSubmit={(e) => void handleCreate(e)}
