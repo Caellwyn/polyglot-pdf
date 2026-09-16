@@ -36,6 +36,12 @@ ASCII only.
 """
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys as _sys
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -45,6 +51,8 @@ from admin_backend.services import audit_log, cloud_build
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from admin_backend.services.promotion_gate import staging_verified
 import scripts.promotion_gate as promotion_gate_cli
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 VALID_SHA_A = "a" * 40
 VALID_SHA_B = "b" * 40
@@ -351,3 +359,116 @@ def test_cli_exits_one_fail_closed_when_the_query_itself_raises(monkeypatch):
     monkeypatch.setattr(promotion_gate_cli, "_staging_deployments_for", _boom)
     assert promotion_gate_cli.require_staging_verified(
         "backend", VALID_SHA_A, None) == 1
+
+
+# --------------------------------------------------------------------------
+# 4. THE CLI VIA A REAL SUBPROCESS, with google.cloud.firestore stubbed out
+# entirely -- exit criterion 2's literal wording ("subprocess test with a
+# stubbed store"), distinct from the in-process function tests above (which
+# pin require_staging_verified()'s own branches) and from
+# tests/test_cloudbuild_yaml.py's subprocess test (which only proves the CLI
+# IMPORTS correctly under its real invocation form, via --help, never
+# reaching a real query). This test actually SPAWNS `python
+# scripts/promotion_gate.py --target-family ... --sha ...` and reads its
+# real exit code, with a stub google/cloud/firestore.py module (a PEP 420
+# namespace package, matching how google-cloud-firestore itself is laid
+# out) shadowing the real one via a PYTHONPATH entry placed before the repo
+# root. The stub reads its canned deployment rows from an env var as JSON,
+# so one stub file serves every case this test parametrizes.
+# --------------------------------------------------------------------------
+_FIRESTORE_STUB = '''from __future__ import annotations
+
+import json
+import os
+
+
+class FieldFilter:
+    def __init__(self, field, op, value):
+        self.field, self.op, self.value = field, op, value
+
+
+class _Query:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def where(self, *args, **kwargs):
+        return self
+
+    def stream(self):
+        return iter(self._rows)
+
+
+class _Doc:
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+class _Collection:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def where(self, *args, **kwargs):
+        return _Query(self._rows)
+
+
+class Client:
+    def __init__(self, project=None):
+        self._project = project
+
+    def collection(self, name):
+        raw = os.environ.get("PROMOTION_GATE_STUB_ROWS", "[]")
+        rows = [_Doc(r) for r in json.loads(raw)]
+        return _Collection(rows)
+'''
+
+
+def _write_firestore_stub(stub_root: Path) -> None:
+    google_dir = stub_root / "google"
+    cloud_dir = google_dir / "cloud"
+    cloud_dir.mkdir(parents=True, exist_ok=True)
+    (google_dir / "__init__.py").write_text("", encoding="utf-8")
+    # No __init__.py under google/cloud/ -- PEP 420 namespace package, same
+    # as the real google-cloud-firestore distribution, so this stub's
+    # firestore.py MERGES into (and, being first on PYTHONPATH, shadows) the
+    # real google.cloud namespace's own firestore submodule.
+    (cloud_dir / "firestore.py").write_text(_FIRESTORE_STUB, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "rows,expected_exit",
+    [
+        pytest.param([_record()], 0, id="verified-exits-0"),
+        pytest.param([], 1, id="unverified-exits-1"),
+        pytest.param([_record(status="failure")], 1, id="failed-status-exits-1"),
+    ],
+)
+def test_cli_subprocess_exit_codes_with_a_stubbed_firestore(
+        tmp_path, rows, expected_exit):
+    stub_root = tmp_path / "stub"
+    _write_firestore_stub(stub_root)
+
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    # stub_root FIRST so its google/cloud/firestore.py shadows the real
+    # google-cloud-firestore package; _REPO_ROOT so `from admin_backend...`
+    # (imported by scripts/promotion_gate.py) resolves.
+    env["PYTHONPATH"] = os.pathsep.join([str(stub_root), str(_REPO_ROOT)])
+    env["PROMOTION_GATE_STUB_ROWS"] = json.dumps(rows)
+
+    result = subprocess.run(
+        [_sys.executable, "scripts/promotion_gate.py",
+         "--target-family", "backend", "--sha", VALID_SHA_A],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == expected_exit, (
+        "scripts/promotion_gate.py exited {}, expected {}\nstdout: {}\nstderr: {}".format(
+            result.returncode, expected_exit, result.stdout, result.stderr)
+    )

@@ -37,8 +37,11 @@ three real gaps rather than changing behavior:
    through a real `TestClient` request; the predicate's case table (wrong
    family, wrong sha, status failure, and the no-recency rollback case) in
    the bead's own words; and `scripts/promotion_gate.py`'s exit codes (0
-   verified, 1 refused, 1 fail-closed on a query error) under a monkeypatched
-   Firestore query. Every test was mutation-verified by hand: dropping the
+   verified, 1 refused, 1 fail-closed on a query error), both as an
+   in-process function call under a monkeypatched query AND as a real
+   subprocess with a stub `google/cloud/firestore.py` module shadowing the
+   real one (the bead's own "subprocess test with a stubbed store"
+   wording). Every test was mutation-verified by hand: dropping the
    status check, adding a recency rule (picking only the newest staging
    record), short-circuiting the route's gate check, and inverting/removing
    the CLI's branches and its fail-closed guard all turned the matching test
