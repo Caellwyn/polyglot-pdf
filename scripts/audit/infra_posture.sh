@@ -1294,7 +1294,10 @@ echo ""
 echo "--- 10. Hosting response headers (per site) -------------------------------"
 
 HOSTING_SITES="polyglot-demo-aa709 polyglot-app-staging polyglot-editor-demo polyglot-admin-demo polyglot-admin-candidate"
-REQUIRED_HEADERS="content-security-policy strict-transport-security x-frame-options referrer-policy"
+# No x-frame-options: the app site also serves Firebase Auth's reserved
+# /__/auth/iframe, which our own pages frame, and XFO cannot carve out a
+# path -- framing is governed by the CSP's frame-ancestors (sprint 23 E2).
+REQUIRED_HEADERS="content-security-policy strict-transport-security referrer-policy"
 
 for site in $HOSTING_SITES; do
     url="https://${site}.web.app/"
@@ -1318,15 +1321,25 @@ for site in $HOSTING_SITES; do
     FINAL_STATUS=$(echo "$FINAL_BLOCK" | grep '^HTTP/' | tail -1 | tr -d '\r')
     HEADER_BLOB=$(echo "$FINAL_BLOCK" | tr 'A-Z' 'a-z')
     MISSING=""
+    CSP_MODE="enforcing"
     for h in $REQUIRED_HEADERS; do
-        if ! echo "$HEADER_BLOB" | grep -q "^$h:"; then
-            MISSING="$MISSING $h"
+        if echo "$HEADER_BLOB" | grep -q "^$h:"; then
+            continue
         fi
+        # The CSP ships as Content-Security-Policy-Report-Only first (sprint 23
+        # E2, bd polyglot-pdf-j29z1): the policy is present and the browser
+        # reports violations without blocking. That is the planned soak, not
+        # a missing header, so it PASSES with the mode named in the detail.
+        if [ "$h" = "content-security-policy" ] && echo "$HEADER_BLOB" | grep -q "^content-security-policy-report-only:"; then
+            CSP_MODE="report-only"
+            continue
+        fi
+        MISSING="$MISSING $h"
     done
     if [ -z "$MISSING" ]; then
-        record "hosting_${site}_headers" "PASS" "CSP/HSTS/X-Frame-Options/Referrer-Policy all present on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s))"
+        record "hosting_${site}_headers" "PASS" "CSP (${CSP_MODE})/HSTS/Referrer-Policy all present on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s))"
     else
-        record "hosting_${site}_headers" "FAIL" "missing on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s)):${MISSING} (PF-4 -- firebase.json sets no response headers today)"
+        record "hosting_${site}_headers" "FAIL" "missing on the final response (${FINAL_STATUS}, ${HOP_COUNT} hop(s)):${MISSING} (PF-4 -- every Hosting target in firebase.json carries the headers since sprint 23 E2)"
     fi
 done
 

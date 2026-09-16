@@ -635,10 +635,12 @@ def test_required_hosting_headers_set_is_pinned():
     match = re.search(r'REQUIRED_HEADERS="([^"]+)"', text)
     assert match, "REQUIRED_HEADERS is not declared as a literal string"
     headers = set(match.group(1).split())
+    # No x-frame-options: it was removed from every Hosting target by
+    # sprint 23 E2 (the app site serves the Firebase Auth iframe our own
+    # pages frame); frame-ancestors inside the CSP governs framing.
     assert headers == {
         "content-security-policy",
         "strict-transport-security",
-        "x-frame-options",
         "referrer-policy",
     }
 
@@ -834,3 +836,14 @@ def test_removing_the_sa_role_prefix_fails_its_pin():
     assert called != set(SA_ROLE_CHECK_PREFIXES), (
         "the mutated text still matches the pinned SA role prefix set -- "
         "the pin would not have caught this removal")
+
+
+def test_hosting_check_accepts_the_report_only_csp_and_names_the_mode():
+    """Sprint 23 E2 ships the CSP as Content-Security-Policy-Report-Only first;
+    the runbook must read that as the planned soak (PASS, mode named), not as
+    a missing header. Mutation-verified by deleting the report-only branch."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'grep -q "^content-security-policy-report-only:"' in text
+    assert 'CSP_MODE="report-only"' in text
+    assert "CSP (${CSP_MODE})" in text
+

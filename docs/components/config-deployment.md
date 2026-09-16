@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-j29z1, sprint 23 E2: the "Hosting security headers" section -- one header block on all five Hosting targets, the CSP in report-only mode with its connect-src inventory, and self-hosted fonts via scripts/fetch_fonts.py.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the "Deployed verbosity floors" bullet -- LOG_LEVEL clamped to INFO, the two dump knobs forced off, SEND_TRANSCRIPT ignored and the token file unwritten with K_SERVICE set; both apps install the value-free 422 handler from backend/utils/validation_errors.py at import.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
@@ -854,6 +856,68 @@ holds PDFs in memory + tmpfs). **Contractor round trip:**
 (index.json excluded; local-only kits preserved) so contractor work is
 git-reviewable before the normal deploy republishes -- without it, a
 bucket-only kit silently drops from the manifest on the next deploy.
+
+### Hosting security headers (all five sites, bd `polyglot-pdf-j29z1`)
+
+Every Hosting target in `firebase.json` carries one `headers` block on `**`:
+HSTS (`max-age=31536000; includeSubDomains; preload` -- inert on the shared
+`web.app` / `firebaseapp.com` parents, which Google already preloads; revisit
+before attaching a custom domain), `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, a
+`Permissions-Policy` that allows the microphone to the site itself and denies
+camera/geolocation/payment/usb/interest-cohort, and a Content Security Policy.
+
+The CSP is **one policy shared by all five sites** and ships as
+`Content-Security-Policy-Report-Only`: `firebase.json` is a single file for
+every site, so the staging soak cannot be staging-only, and enforcing on the
+demo without a soak is the wrong risk. Browsers write violations to the devtools
+console; the staging test-drive reads it, and renaming the header to
+`Content-Security-Policy` is a separate, reviewed change; the live posture
+runbook (`scripts/audit/infra_posture.sh`, check 10) reads the report-only
+header as PASS with the mode named, so the soak does not read as a missing
+header, and no longer requires `X-Frame-Options`. The policy's
+`connect-src` is built from what the apps actually contact: the three Cloud Run
+services (demo backend, staging backend, admin; https + wss, project-hashed
+hostnames), Firebase Auth (`identitytoolkit`, `securetoken`,
+`www.googleapis.com` is NOT listed -- the shipped SDK never contacts it),
+Firestore (https + wss), and `https://cdn.jsdelivr.net`: the voice overlay's
+speech detector (`@ricky0123/vad-web`, `frontend/src/demo/useDemoVAD.ts`)
+fetches its model and audio worklet from there and `onnxruntime-web` its WASM
+runtime. `script-src` is `'self'` plus `https://apis.google.com` (the gapi
+loader the Firebase Auth SDK injects as a `<script>` before it can open the
+sign-in popup), the same CDN (the worklet is script) and `'wasm-unsafe-eval'`
+-- which covers WASM *compilation* only. The ONNX glue the app currently
+selects (`ort-wasm-simd-threaded.jsep.mjs`) also calls `new Function`, which
+only `'unsafe-eval'` would permit and this policy deliberately does not
+grant; whether that path is reached for the Silero model is what the soak
+must watch for (an `EvalError: Refused to evaluate a string as JavaScript`
+report). Executable code from a third-party CDN is the largest remaining
+browser egress; the prerequisite for switching the CSP to enforcing is bd
+`polyglot-pdf-18o7c`: self-host those assets AND select the non-jsep ORT
+build, which contains no `new Function`; `style-src` allows inline (React style attributes);
+`worker-src` and `media-src` allow `blob:` (pdf.js, spellback audio);
+`frame-src` names the auth domain and Google's account chooser;
+`frame-ancestors 'none'`. **There is deliberately NO `X-Frame-Options`:** the
+`app` site is also the project's auth domain, so it serves Firebase Auth's
+reserved `/__/auth/iframe`, which every `signInWithPopup` on our own pages
+frames; `X-Frame-Options` cannot carve out a path, so framing is governed by
+`frame-ancestors` alone, and a second block on `/__/auth/**` (listed after the
+catch-all so it wins) allows exactly our five sites, both hostnames each, as
+ancestors. A third block gives `/fonts/**` a week of `Cache-Control`. A new
+Cloud Run hostname or a new external endpoint MUST be added to the policy or
+the app breaks silently under report-only and loudly once enforced -- and the
+Cloud Run hash is the one value this repo has seen drift (bd `emm7`), so
+`tests/test_hosting_headers.py` also asserts every `a.run.app` host the three
+apps' env files name is in `connect-src`. The same test pins every target,
+every header, every required origin, the `/__/auth/**` ancestor list, the
+fonts cache, and no `'unsafe-eval'`/`http:`/wildcard host.
+
+Fonts are self-hosted: `scripts/fetch_fonts.py` regenerates
+`frontend/public/fonts/` (Inter + Outfit in every unicode-range subset Google
+serves -- latin, latin-ext, cyrillic, cyrillic-ext, greek, greek-ext,
+vietnamese; 45 woff2 files + `fonts.css`)
+and `frontend/index.html` links that stylesheet, so the browser contacts no
+third-party font host.
 
 ### Admin console (two more Hosting sites, bd `b6943`)
 
