@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: the form-kits rows say what the target actually does -- it reads the BUILD's checkout, no kit is tracked there, so it cannot succeed and no wrapper selects it implicitly any more (bd polyglot-pdf-wm7ga owns the source question); the contractor round-trip note no longer claims a local pull feeds the next deploy.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
 now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
 deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
 and `scripts/deploy_build_targets.sh` is the shared runner. `deploy-all.sh`
@@ -401,7 +401,7 @@ failed build. `scripts/deploy_build_targets.sh` is the whole bash side --
 | Wrapper | Targets, in order |
 |---|---|
 | `deploy-staging.sh` | `verify` (only when this commit has no `build_checks` record), `backend-staging`, `form-kits` with `--form-kits`, `frontend-staging` |
-| `deploy-demo.sh` | `backend-demo`, `form-kits`, `firestore-rules`, `frontend-demo` |
+| `deploy-demo.sh` | `backend-demo`, `form-kits` with `--form-kits`, `firestore-rules`, `frontend-demo` |
 | `deploy-editor.sh` | `editor` |
 | `deploy-admin.sh` | `admin-service` |
 | `deploy-admin-console.sh` | `admin-console-candidate`, or `admin-console` with `--live` |
@@ -582,8 +582,9 @@ be the gate crying wolf.
   standing up a NEW service. If the IAM read itself fails (no permission, transient
   error) the gate WARNS instead of aborting -- being unable to check is not proof the
   service is broken.
-- **Form-kits** — the `form-kits` target uploads the **complete** kits from the
-  checked-out `form-kits/` tree
+- **Form-kits** — the `form-kits` target uploads the **complete** kits it finds
+  in the build's own `form-kits/` tree (i.e. the GIT CHECKOUT of the commit
+  being built)
   to `gs://<bucket>/<prefix>/` plus an `index.json` manifest written and
   validated by `scripts/write_kits_manifest.py`. Demo bucket
   `polyglot-demo-aa709-form-kits`. There is no per-channel split, so this
@@ -591,10 +592,22 @@ be the gate crying wolf.
   uploaded (and listed in the manifest) only when its `metadata.json` has
   `status: complete` — the gate skips
   draft, submitted, unmarked, AND unpublished (retired) kits, so in-progress
-  or no-longer-live forms stay local + git-backed and never reach the voice
+  or no-longer-live forms never reach the voice
   app (bd polyglot-pdf-b0pe). Both the upload loop and the manifest loop are
   gated, so a non-`complete` kit is absent from GCS *and* the served
   manifest.
+  **This target cannot currently succeed, and no wrapper selects it
+  implicitly.** Kits are BUCKET-canonical and none is tracked in git (CLAUDE.md
+  scar #10), so a connected-repo build sees a `form-kits/` tree with no
+  `status: complete` kit in it at all: the upload loop uploads nothing and
+  `write_kits_manifest.py` exits 1 rather than write the empty manifest that
+  would blank the demo's form list. Only an explicit `--form-kits` puts the
+  target in a wrapper's list (bare runs and `--all` no longer do, on either
+  channel), so a normal deploy no longer stops here with `firestore-rules` and
+  the frontend unrun. Reconciling the target's SOURCE with the bucket-canonical
+  storage model is a maintainer direction call, filed as bd
+  `polyglot-pdf-wm7ga`; publishing through the hosted schema editor is the
+  working path meanwhile.
 - **Frontend** — the `frontend-<channel>` target: `npm ci`, then
   `npm run build:schema:demo` (mode `demo` for BOTH channels — they share one
   Firebase project and therefore one set of client-side keys), then
@@ -872,8 +885,11 @@ in `[SET_ENV_VARS]`; the backend deploy runs `--memory=1Gi` (extraction
 holds PDFs in memory + tmpfs). **Contractor round trip:**
 `scripts/pull-form-kits.sh` rsyncs bucket kits DOWN into `form-kits/`
 (index.json excluded; local-only kits preserved) so contractor work is
-git-reviewable before the normal deploy republishes -- without it, a
-bucket-only kit silently drops from the manifest on the next deploy.
+reviewable locally. NOTE that the pulled tree is no longer what a deploy
+publishes: kits are never committed, and the `form-kits` build target reads
+the commit's checkout rather than an operator's working tree, so a local pull
+now feeds local inspection and the schema editor only (bd
+`polyglot-pdf-wm7ga`).
 
 ### Hosting security headers (all five sites, bd `polyglot-pdf-j29z1`)
 

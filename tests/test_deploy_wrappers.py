@@ -175,6 +175,7 @@ def _run(
     *args: str,
     build_check_exit: str = "1",
     fail_trigger: str = "",
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess, list[str], str]:
     """Run a wrapper; return (process, gcloud invocations, HEAD sha)."""
     log = repo.parent / "gcloud.log"
@@ -185,6 +186,7 @@ def _run(
     env["MANIFEST_PYTHON_CANDIDATES"] = "stubpy"
     env["BUILD_CHECK_EXIT"] = build_check_exit
     env["GCLOUD_FAIL_TRIGGER"] = fail_trigger
+    env.update(extra_env or {})
     proc = subprocess.run(
         [BASH, str(repo / script), *args],
         capture_output=True,
@@ -222,18 +224,22 @@ SEQUENCES = [
     (
         "deploy-staging.sh",
         ("--all",),
-        [
-            "polyglot-backend-staging",
-            "polyglot-form-kits",
-            "polyglot-frontend-staging",
-        ],
+        ["polyglot-backend-staging", "polyglot-frontend-staging"],
     ),
     (
         "deploy-demo.sh",
         (),
         [
             "polyglot-backend-demo",
-            "polyglot-form-kits",
+            "polyglot-firestore-rules",
+            "polyglot-frontend-demo",
+        ],
+    ),
+    (
+        "deploy-demo.sh",
+        ("--all",),
+        [
+            "polyglot-backend-demo",
             "polyglot-firestore-rules",
             "polyglot-frontend-demo",
         ],
@@ -332,6 +338,103 @@ def test_staging_skips_verify_when_the_commit_is_already_recorded(
 
 
 # ---------------------------------------------------------------------------
+# 2b. Form kits are never selected IMPLICITLY -- pinned as a SET.
+# ---------------------------------------------------------------------------
+#
+# The form-kits target publishes to the ONE project-wide kits bucket, and the
+# build reads the kit tree from the GIT CHECKOUT while kits are
+# bucket-canonical and never tracked (CLAUDE.md scar #10) -- so the target
+# cannot currently succeed from a build, and run_build_targets stops at the
+# first failure. A wrapper that pulled it into an implicit target list
+# therefore deployed the targets ahead of it and silently abandoned the ones
+# behind it: a bare ./deploy-demo.sh deployed the backend and never reached
+# firestore-rules or frontend-demo.
+#
+# The rule is "only an explicit --form-kits selects it", and the rule is
+# pinned over the whole SET of wrappers that can select the target at all --
+# DISCOVERED from the shipped scripts, not hand-listed, so a NEW wrapper (or a
+# new implicit path in an old one) fails here rather than one review round per
+# script. Where the target should read kits from is bd polyglot-pdf-wm7ga.
+
+KIT_TARGET_LINE = 'TARGETS+=("form-kits")'
+
+KIT_CAPABLE_WRAPPERS = tuple(
+    name
+    for name in WRAPPERS
+    if KIT_TARGET_LINE in (REPO_ROOT / name).read_text(encoding="utf-8")
+)
+
+# Every argv that asks for a deploy WITHOUT naming form kits. "--all" is in
+# here deliberately: it reads as "the whole app", and it used to pull the kits
+# in on both channel wrappers.
+IMPLICIT_ARGVS = ((), ("--all",))
+
+
+def test_the_kit_capable_wrapper_set_is_not_empty():
+    """The parametrizations below are discovered, so an empty discovery would
+    make every one of them vacuously green."""
+    assert len(KIT_CAPABLE_WRAPPERS) >= 3, KIT_CAPABLE_WRAPPERS
+
+
+@pytest.mark.parametrize("script", KIT_CAPABLE_WRAPPERS)
+@pytest.mark.parametrize("argv", IMPLICIT_ARGVS, ids=["bare", "all"])
+def test_no_wrapper_selects_form_kits_without_the_flag(
+    deploy_repo, stub_bin, script, argv
+):
+    proc, calls, _sha = _run(
+        deploy_repo,
+        stub_bin,
+        script,
+        *argv,
+        build_check_exit="0",
+        extra_env={"DEPLOY_CHANNEL": "demo"},
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "polyglot-form-kits" not in _triggers(calls), (
+        f"{script} {' '.join(argv)} published form kits without being asked to"
+    )
+
+
+@pytest.mark.parametrize("script", KIT_CAPABLE_WRAPPERS)
+def test_the_flag_still_selects_form_kits(deploy_repo, stub_bin, script):
+    """The other half of the pair: the rule above must be satisfied by NOT
+    selecting the target implicitly, not by deleting the flag's only effect."""
+    proc, calls, _sha = _run(
+        deploy_repo,
+        stub_bin,
+        script,
+        "--form-kits",
+        build_check_exit="0",
+        extra_env={"DEPLOY_CHANNEL": "demo"},
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "polyglot-form-kits" in _triggers(calls), (
+        f"{script} --form-kits ran {_triggers(calls)}"
+    )
+
+
+@pytest.mark.parametrize("script", KIT_CAPABLE_WRAPPERS)
+def test_selecting_form_kits_warns_that_the_build_reads_kits_from_git(
+    deploy_repo, stub_bin, script
+):
+    """An operator who does pass the flag is told WHY the target will fail,
+    instead of decoding write_kits_manifest.py's refusal out of a build log.
+
+    deploy-all.sh is the exception the discovery includes but this rule does
+    not apply to: it is the low-level, channel-agnostic wrapper the doctrine
+    tells operators not to use directly, and it prints no per-flag guidance at
+    all.
+    """
+    if script == "deploy-all.sh":
+        pytest.skip("deploy-all.sh prints no per-flag guidance by design")
+    proc, _calls, _sha = _run(
+        deploy_repo, stub_bin, script, "--form-kits", build_check_exit="0"
+    )
+    combined = proc.stdout + proc.stderr
+    assert "wm7ga" in combined, combined
+    assert "git" in combined.lower(), combined
+
+# ---------------------------------------------------------------------------
 # 3. A failed build stops the sequence.
 # ---------------------------------------------------------------------------
 
@@ -373,10 +476,13 @@ def test_a_middle_failure_stops_the_rest(deploy_repo, stub_bin):
         stub_bin,
         "deploy-demo.sh",
         build_check_exit="0",
-        fail_trigger="polyglot-form-kits",
+        fail_trigger="polyglot-firestore-rules",
     )
     assert proc.returncode != 0
-    assert _triggers(calls) == ["polyglot-backend-demo", "polyglot-form-kits"]
+    assert _triggers(calls) == [
+        "polyglot-backend-demo",
+        "polyglot-firestore-rules",
+    ]
 
 
 def test_a_trigger_that_cannot_start_fails_the_wrapper(deploy_repo, stub_bin, tmp_path):
@@ -453,15 +559,11 @@ def test_deploy_all_refuses_without_a_channel(deploy_repo, stub_bin):
     [
         (
             "staging",
-            [
-                "polyglot-backend-staging",
-                "polyglot-form-kits",
-                "polyglot-frontend-staging",
-            ],
+            ["polyglot-backend-staging", "polyglot-frontend-staging"],
         ),
         (
             "demo",
-            ["polyglot-backend-demo", "polyglot-form-kits", "polyglot-frontend-demo"],
+            ["polyglot-backend-demo", "polyglot-frontend-demo"],
         ),
     ],
 )

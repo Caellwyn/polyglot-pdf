@@ -311,6 +311,93 @@ Suites re-run after the fixes: backend 3818 passed / 195 skipped, admin_backend
 706 passed, root 1958 passed / 93 skipped, kit-gate harness 38 passed / 0
 failed.
 
+### Outer cross-surface round 3 (adopt / reject / defer)
+
+The Opus outer review returned `GAPS-FOUND (2)`: one blocker and the docs half
+of the same fact. Both adopted.
+
+**Adopted -- the primary demo-deploy command deployed the backend and then
+stopped.** `deploy-demo.sh` defaulted `DEPLOY_FORM_KITS=true`, so a bare run
+produced `backend-demo, form-kits, firestore-rules, frontend-demo`. The
+`form-kits` build target reads the kit tree from the BUILD's checkout
+(`cloudbuild.yaml`'s upload loop walks `form-kits/*/`, and
+`scripts/write_kits_manifest.py` walks the same directory), and no kit is
+tracked in git -- kits are bucket-canonical (CLAUDE.md scar #10). The reviewer
+ran the real manifest script against the tracked tree and it exits 1, refusing
+to write the empty manifest that would blank the demo's form list. Since
+`run_build_targets` stops at the first failed target, a plain `./deploy-demo.sh`
+deployed the backend, failed on kits, and never ran `firestore-rules` or
+`frontend-demo` -- leaving the demo frontend and the project-wide rules on the
+old commit behind a build that reported a failure the operator had to decode.
+Before this bead the same command published the operator's LOCAL
+(bucket-pulled) tree and succeeded, so this was a regression the engine change
+introduced.
+
+**The fix enumerates the set rather than the instance** (scar #8). The defect
+is not "the demo default is wrong", it is "a wrapper can select `form-kits`
+without the operator asking for it". Every such path was enumerated from the
+shipped scripts -- `deploy-demo.sh` bare, `deploy-demo.sh --all`,
+`deploy-staging.sh --all`, and `deploy-all.sh` bare/`--all` -- and all five now
+require an explicit `--form-kits`. Both channel wrappers WARN, when the flag is
+passed, that the build reads kits from git and the target will fail until bd
+`polyglot-pdf-wm7ga` decides where it should read them from, so the operator
+gets the reason up front instead of reconstructing it from a build log.
+
+The rule is pinned as a SET in `tests/test_deploy_wrappers.py`, over wrappers
+DISCOVERED from the shipped scripts (those containing the `form-kits` target
+line) rather than a hand-typed list, so a new wrapper or a new implicit path
+fails here instead of costing a review round. Three properties, paired so the
+rule cannot be satisfied by deletion: no implicit run selects the target; an
+explicit `--form-kits` still does; and the flag still explains itself.
+Mutation-verified per parametrization -- restoring each of the three scripts'
+old implicit selection reddens exactly that script's `bare` and `--all` cases
+(six cases, six reddened), deleting the `--form-kits` arm reddens the
+still-selects test, and weakening the warning reddens the warning test.
+
+**Adopted -- the two tier-2 docs taught the model the code cannot execute.**
+`docs/components/config-deployment.md` said the target publishes "from the
+checked-out `form-kits/` tree" and that non-complete kits "stay local +
+git-backed" (which contradicts scar #10 outright), and
+`docs/doctrine/promotion-tiers.md`'s channel table said the demo's bare run
+deploys kits. Both now say what actually happens, and the same sweep caught two
+more members the reviewer had not cited: `config-deployment.md`'s contractor
+round-trip note (`scripts/pull-form-kits.sh` "before the normal deploy
+republishes" -- a local pull no longer feeds any deploy) and
+`technical_guide.md`'s Surface contract 36 wrapper table.
+
+**Adopted -- the `datastore.indexAdmin` re-run requirement reaches the
+doctrine.** Round 1 added that role to `scripts/setup-cloud-build.sh`; the
+reviewer noted the live SA does not hold it until an operator re-runs the
+script, and that only the journal recorded this. `promotion-tiers.md` now
+carries the role, the consequence (the first `firestore-rules` build fails
+`PERMISSION_DENIED` and, running before `frontend-demo`, takes the frontend
+with it) and the one-line `gcloud` check that answers it without deploying.
+
+**Deferred, not refuted -- the non-interactive index prompt (the reviewer's own
+"flag, unverified").** Whether `firebase-tools deploy --only firestore:indexes`
+prompts in Cloud Build when the project holds an index that
+`firestore.indexes.json` does not can only be answered by a live build, which
+is a demo action. The decision it implies was made and recorded in
+`cloudbuild.yaml` instead: NO `--force`. `--force` would answer "yes, delete
+it", letting a build silently drop an index someone added in the console; a
+build that stops and says so is the safe direction, since a missing index is a
+runtime `FAILED_PRECONDITION` while a deleted one is worse and is not a deploy's
+call to make.
+
+**Deferred -- the reviewer's nits, already filed.** The enumerated set of root
+docs, script docstrings and code comments still describing the deleted bash
+engine (`DEPLOYMENT.md`, `README.md`, `deploy/channels/README.md`,
+`scripts/verify_service_reachable.py`, `scripts/pull-form-kits.sh`,
+`scripts/setup-monitoring.sh`, plus eight code comments) is bd
+`polyglot-pdf-eakkr`; the `form-kits` target's git-vs-bucket source model, which
+the reviewer flagged as possibly epic-scale, is bd `polyglot-pdf-wm7ga`. Neither
+is fixed here.
+
+**Rejected:** nothing.
+
+Suites re-run from the worktree after the fix: root 1972 passed / 94 skipped,
+backend 3818 passed / 195 skipped, admin 706 passed.
+
 ## Lessons
 
 **Deleting a stage is a migration, not a deletion.** Both behaviour losses
@@ -378,10 +465,13 @@ Review outcomes recorded in the closeout ping.
 - `deploy-staging.sh`, `deploy-demo.sh`, `deploy-editor.sh`,
   `deploy-admin.sh`, `deploy-admin-console.sh`, `backend/deploy-new.sh` --
   thin wrappers.
-- `cloudbuild.yaml` -- the `firestore-rules` target ships the indexes too.
+- `cloudbuild.yaml` -- the `firestore-rules` target ships the indexes too;
+  outer round 3 records why the index deploy deliberately carries no
+  `--force`.
 - `deploy/channels/admin.env` -- gains `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`;
   header rewritten as the only copy.
-- `tests/test_deploy_wrappers.py` -- NEW.
+- `tests/test_deploy_wrappers.py` -- NEW; outer round 3 adds the
+  "form kits are never implicit" set, discovered from the shipped wrappers.
 - `tests/test_deploy_all_kit_gates.sh` -- the gate row that pointed at
   `deploy-all.sh`'s deleted upload loop now RUNS `cloudbuild.yaml`'s
   `form-kits-upload` step; the no-bypass wrapper set is enumerated from

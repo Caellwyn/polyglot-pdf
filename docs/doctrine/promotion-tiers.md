@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.) (bd polyglot-pdf-oqtm7, E4.6: deploy is no longer local and manual -- every deploy-*.sh is a thin wrapper that runs Cloud Build triggers at a pushed commit, the inline stages are deleted, and the promotion gate's "nothing deploys through this yet" caveat is retired. The per-instance deploy ask is unchanged.)*
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: form kits are no longer selected implicitly by ANY wrapper -- a bare or `--all` run of either channel script skipped `firestore-rules` and the frontend when the unbuildable `form-kits` target failed ahead of them; plus the Cloud Build SA's new `datastore.indexAdmin` grant and the re-run it needs.) (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.) (bd polyglot-pdf-oqtm7, E4.6: deploy is no longer local and manual -- every deploy-*.sh is a thin wrapper that runs Cloud Build triggers at a pushed commit, the inline stages are deleted, and the promotion gate's "nothing deploys through this yet" caveat is retired. The per-instance deploy ask is unchanged.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -59,8 +59,13 @@ against bad DATA.** Concretely, items 1-4 below cross the boundary; items 5 and
 kit editing lock) is deliberately shared because sharing is the correct design:
 
 1. A kit marked `status:complete` deploys to the one shared bucket and appears
-   in the **demo's** form list. `deploy-staging.sh` therefore does **not** deploy
-   form kits on a bare run -- pass `--form-kits` only when you mean to publish.
+   in the **demo's** form list. NEITHER wrapper deploys form kits implicitly --
+   not on a bare run and not under `--all`, on either channel. Only an explicit
+   `--form-kits` selects the target. (Kits are bucket-canonical and never
+   tracked in git, while the `form-kits` build target reads the kit tree from
+   the CHECKOUT, so that target cannot currently succeed at all -- where it
+   should read kits from is bd `polyglot-pdf-wm7ga`. Publish a kit through the
+   hosted schema editor meanwhile.)
 2. Firestore writes (`confirmation_events`, `users/{uid}`, `firms`,
    `authorized_emails`) land in the one shared database.
 3. `firestore.rules` are PROJECT-wide, not per-site. `deploy-staging.sh`
@@ -237,8 +242,10 @@ per-instance ask did not.
 Two things are gated MORE tightly than the channel itself, because they cross the
 staging/demo boundary (see "What is separate, and what is NOT"):
 
-- **`deploy-staging.sh --form-kits`** publishes to the SHARED bucket and changes
-  the DEMO's form list. Treat it as a demo action, not a staging one.
+- **`--form-kits`, on either wrapper,** publishes to the SHARED bucket and
+  changes the DEMO's form list. Treat it as a demo action whichever channel you
+  ran it from. It is never implied by a bare run or by `--all`; you have to type
+  it. (And today it FAILS -- see bd `polyglot-pdf-wm7ga` above.)
 - **Firestore rules and composite indexes** are project-wide;
   `deploy-staging.sh` never runs the `firestore-rules` target. A rules change
   ships deliberately via `deploy-demo.sh`.
@@ -339,14 +346,26 @@ The pieces:
   It also provisions the build's OWN identity, `polyglot-cloudbuild-sa`
   (bd `polyglot-pdf-p4ale`, E4.5) -- a dedicated SA, never the legacy
   default Cloud Build SA, holding `run.admin`, `firebasehosting.admin`,
-  `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter` and
-  `datastore.user` project-wide, `storage.objectAdmin` on the form-kits
+  `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter`,
+  `datastore.user` and `datastore.indexAdmin` project-wide,
+  `storage.objectAdmin` on the form-kits
   bucket only, and resource-scoped actAs (`roles/iam.serviceAccountUser`)
   on BOTH `polyglot-backend-sa` and `admin-backend-sa` -- deploying a
   revision that runs as a given SA is itself privileged on that SA, so the
   build needs this binding on each runtime identity it deploys as. The
   Pub/Sub service agent also gets `roles/iam.serviceAccountTokenCreator`
   here, for the OIDC token the build-status webhook needs.
+  **`datastore.indexAdmin` is a NEW grant and the live SA does not hold it
+  until this script is re-run** -- the `firestore-rules` target deploys the
+  composite indexes as well as the rules, and neither `firebaserules.admin`
+  (rules only) nor `datastore.user` (read only) covers an index write. Until
+  the re-run, the first `firestore-rules` build fails `PERMISSION_DENIED`, and
+  because `deploy-demo.sh` runs that target BEFORE `frontend-demo` it takes the
+  frontend deploy down with it. Check the live grant without deploying:
+  `gcloud projects get-iam-policy polyglot-demo-aa709
+  --flatten='bindings[].members'
+  --filter='bindings.members:polyglot-cloudbuild-sa@polyglot-demo-aa709.iam.gserviceaccount.com'
+  --format='value(bindings.role)'`.
   `admin-backend-sa` gains the mirror grant -- actAs on
   `polyglot-cloudbuild-sa` ONLY -- so the admin service's trigger route can
   submit a build that runs as the build identity; see
@@ -479,10 +498,11 @@ gcloud account and re-auth if needed.
 | script | `./deploy-staging.sh` | `./deploy-demo.sh` |
 | URL | https://polyglot-app-staging.web.app | https://polyglot-demo-aa709.web.app |
 | Cloud Run | `polyglot-backend-staging` | `polyglot-backend` |
-| form kits on bare run | **skipped** (shared bucket) | deployed |
+| form kits (bare run or `--all`) | **skipped** (shared bucket) | **skipped** (shared bucket) |
 | Firestore rules | never | deployed |
 | channel config | `deploy/channels/staging.env` | `deploy/channels/demo.env` |
-| Cloud Build targets | `verify` (when unrecorded), `backend-staging`, `frontend-staging` | `backend-demo`, `form-kits`, `firestore-rules`, `frontend-demo` |
+| Cloud Build targets | `verify` (when unrecorded), `backend-staging`, `frontend-staging` | `backend-demo`, `firestore-rules`, `frontend-demo` |
+| `form-kits` target | only with `--form-kits` | only with `--form-kits` |
 
 The backend runs on Cloud Run co-located with Gemini and NEVER logs full PII
 bodies -- see [`../standards/hipaa-pii-policy.md`](../standards/hipaa-pii-policy.md).

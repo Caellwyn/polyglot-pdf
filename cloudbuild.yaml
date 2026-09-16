@@ -702,6 +702,15 @@ steps:
         # filters. Index builds are ASYNCHRONOUS: this command returns before
         # a new index is READY, so a freshly added filter can still fail for a
         # few minutes after the build reports success.
+        #
+        # NO --force, deliberately. An index that exists in the project but
+        # not in firestore.indexes.json makes firebase-tools ask whether to
+        # DELETE it; --force answers yes, which would let a build silently
+        # drop an index someone added in the console. Without it the command
+        # simply fails in a non-interactive environment, and a build that
+        # stops and says so is the safe direction -- a missing index is a
+        # runtime FAILED_PRECONDITION, but a deleted one is worse and is not
+        # something a deploy should decide on its own.
         npx --yes firebase-tools deploy --only firestore:indexes --project "$PROJECT_ID"
 
   # --------------------------------------------------------------------

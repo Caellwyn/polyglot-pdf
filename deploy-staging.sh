@@ -96,12 +96,23 @@ DEMO_SITE="polyglot-demo-aa709"
 
 # Determine which components to deploy.
 #
-# NOTE the deliberate asymmetry with deploy-demo.sh: a bare run here deploys
-# backend + frontend but NOT form kits. The bucket is shared with the demo, so a
-# staging form-kits deploy would publish kits to the demo's form list -- exactly
-# the cross-channel leak this environment exists to prevent. Pass --form-kits
-# explicitly if you really mean to publish kits (it is the same act as running
-# deploy-demo.sh --form-kits).
+# FORM KITS ARE NEVER SELECTED IMPLICITLY -- not by a bare run and not by
+# --all, here or in deploy-demo.sh. ONLY an explicit --form-kits selects them.
+# Two reasons:
+#
+#   1. The bucket is shared with the demo, so a staging form-kits deploy would
+#      publish kits to the demo's form list -- exactly the cross-channel leak
+#      this environment exists to prevent. It is the same act as running
+#      deploy-demo.sh --form-kits, and it should take the same explicit typing.
+#   2. The build reads kits from the GIT CHECKOUT (cloudbuild.yaml's
+#      form-kits-upload loop and scripts/write_kits_manifest.py both walk
+#      form-kits/), and NO KIT IS TRACKED IN GIT -- kits are bucket-canonical
+#      (CLAUDE.md scar #10), so the manifest step refuses to write an empty
+#      manifest and exits 1. run_build_targets stops at the first failed
+#      target, so while --all pulled form-kits in, ./deploy-staging.sh --all
+#      deployed the backend and then never reached frontend-staging. Fixing
+#      the target's SOURCE is a maintainer direction call, filed as bd
+#      polyglot-pdf-wm7ga.
 DEPLOY_GCP=true
 DEPLOY_FIREBASE=true
 DEPLOY_FORM_KITS=false
@@ -134,8 +145,6 @@ if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
                 ;;
         esac
     done
-elif [ "$1" = "--all" ]; then
-    DEPLOY_FORM_KITS=true
 fi
 
 SHA=$(deploy_build_sha "$SCRIPT_DIR")
@@ -144,6 +153,9 @@ echo -e "${GREEN}[INFO]${NC} Deploying to the STAGING channel (test deploy) at $
 if [ "$DEPLOY_FORM_KITS" = true ]; then
     echo -e "${YELLOW}[WARN]${NC} Form kits are SHARED with the demo -- publishing here"
     echo -e "${YELLOW}[WARN]${NC} also changes the demo's form list."
+    echo -e "${YELLOW}[WARN]${NC} The build also reads form-kits/ from git, where no kit is"
+    echo -e "${YELLOW}[WARN]${NC} tracked, so expect this target to FAIL until bd"
+    echo -e "${YELLOW}[WARN]${NC} polyglot-pdf-wm7ga decides where it should read kits from."
 fi
 
 # THE TARGET ORDER IS THE OLD STAGE ORDER. Backend first, so the frontend

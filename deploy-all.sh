@@ -235,10 +235,15 @@ DEPLOY_FRONTEND=false
 DEPLOY_FORM_KITS=false
 
 if [ $# -eq 0 ] || [ "$1" = "--all" ]; then
-    # No args or --all: deploy everything
+    # No args or --all: deploy the channel's app. NOT form kits -- those are
+    # never selected implicitly here either (deploy-staging.sh and
+    # deploy-demo.sh match): the kits bucket is project-wide, so publishing is
+    # its own act, and the build reads kits from the GIT CHECKOUT, where no kit
+    # is tracked (CLAUDE.md scar #10), so the form-kits target cannot currently
+    # succeed and would stop every later target in the list. Pass --form-kits
+    # to ask for it anyway. Source question filed as bd polyglot-pdf-wm7ga.
     DEPLOY_BACKEND=true
     DEPLOY_FRONTEND=true
-    DEPLOY_FORM_KITS=true
 else
     for arg in "$@"; do
         case "$arg" in

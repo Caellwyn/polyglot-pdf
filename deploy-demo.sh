@@ -57,8 +57,27 @@ DEMO_SITE="polyglot-demo-aa709"
 
 # Determine which components to deploy. The flags are unchanged; only the
 # engine behind them is.
+#
+# FORM KITS ARE NEVER SELECTED IMPLICITLY -- not by a bare run, not by --all,
+# on EITHER channel (deploy-staging.sh matches). Two reasons, and the second
+# one is why a bare demo run no longer includes them:
+#
+#   1. The kits bucket is shared with staging and has no per-channel split, so
+#      publishing kits is its own act with its own blast radius, not a
+#      side-effect of "deploy the app".
+#   2. The build reads kits from the GIT CHECKOUT (cloudbuild.yaml's
+#      form-kits-upload loop and scripts/write_kits_manifest.py both walk
+#      form-kits/), and NO KIT IS TRACKED IN GIT -- kits are bucket-canonical
+#      (CLAUDE.md scar #10). So the form-kits target cannot currently succeed
+#      from a build: the manifest step refuses to write an empty manifest and
+#      exits 1. While form-kits sat in the bare run's target list, a plain
+#      ./deploy-demo.sh deployed the backend, aborted on that target, and
+#      never reached firestore-rules or frontend-demo. Fixing the target's
+#      SOURCE (bucket vs git) is a maintainer direction call, filed as bd
+#      polyglot-pdf-wm7ga; keeping it out of the implicit target lists is what
+#      stops it taking the rest of the deploy down meanwhile.
 DEPLOY_BACKEND=true
-DEPLOY_FORM_KITS=true
+DEPLOY_FORM_KITS=false
 DEPLOY_FIREBASE=true
 
 if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
@@ -92,6 +111,13 @@ fi
 SHA=$(deploy_build_sha "$SCRIPT_DIR")
 
 echo -e "${GREEN}[INFO]${NC} Deploying to the DEMO channel at $SHA..."
+if [ "$DEPLOY_FORM_KITS" = true ]; then
+    echo -e "${YELLOW}[WARN]${NC} --form-kits publishes kits the BUILD can see, and the"
+    echo -e "${YELLOW}[WARN]${NC} build reads form-kits/ from git, where no kit is tracked."
+    echo -e "${YELLOW}[WARN]${NC} Expect the form-kits target to FAIL until bd polyglot-pdf-wm7ga"
+    echo -e "${YELLOW}[WARN]${NC} decides where the target should read kits from. Publish a kit"
+    echo -e "${YELLOW}[WARN]${NC} through the hosted schema editor meanwhile."
+fi
 
 # THE TARGET ORDER IS THE OLD STAGE ORDER.
 #
