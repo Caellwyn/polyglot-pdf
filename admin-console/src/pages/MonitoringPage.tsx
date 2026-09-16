@@ -3,6 +3,7 @@ import {
   getChannelHealth, MONITORING_CHANNELS,
   type ChannelHealth, type MonitoringChannel,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface MonitoringPageProps {
   /** Called first on every catch -- see UsersPage.tsx's identical prop for
@@ -80,6 +81,10 @@ export const MonitoringPage: React.FC<MonitoringPageProps> = ({ onAuthExpired })
   return (
     <div data-testid="monitoring-page" className="max-w-4xl">
       <h2 className="text-lg font-semibold text-gray-900">Monitoring</h2>
+      <PageIntro>
+        Check each channel&apos;s live health and version so you can see
+        whether staging and demo are up and what is deployed.
+      </PageIntro>
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
         {MONITORING_CHANNELS.map((channel) => (
           <ChannelCard

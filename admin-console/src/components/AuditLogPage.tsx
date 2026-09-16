@@ -1,5 +1,6 @@
 import React from 'react';
 import { listAuditRows, type AuditRow } from '../utils/adminApi';
+import { PageIntro } from './PageIntro';
 
 interface AuditLogPageProps {
   /** Called first on every catch. Returns true when `err` was an
@@ -89,6 +90,10 @@ export const AuditLogPage: React.FC<AuditLogPageProps> = ({ onAuthExpired }) => 
   return (
     <div data-testid="audit-log-page">
       <h2 className="text-lg font-semibold text-gray-900">Audit log</h2>
+      <PageIntro>
+        Browse every mutating action taken through this console, who did it,
+        and what changed.
+      </PageIntro>
 
       <form
         onSubmit={(e) => { e.preventDefault(); void loadFirstPage(); }}

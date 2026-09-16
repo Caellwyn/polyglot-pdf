@@ -3,6 +3,7 @@ import {
   getChannelConfig, setChannelConfigKey, CONFIG_KEY_TYPES,
   type ChannelConfig, type ConfigKeySchema, type ConfigKeyType,
 } from '../utils/adminApi';
+import { PageIntro } from './PageIntro';
 
 // Mirrors admin_backend/routes/config_routes.py's KNOWN_CHANNELS -- there is
 // NO prod (deploy-production.sh targets a dead project and refuses to run).
@@ -191,6 +192,10 @@ export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpire
   return (
     <div data-testid="config-editor-page" className="max-w-2xl">
       <h2 className="text-lg font-semibold text-gray-900">Runtime config</h2>
+      <PageIntro>
+        View and edit the per-channel policy flags (like minting on/off and
+        spend ceilings) that take effect without a redeploy.
+      </PageIntro>
 
       <label className="block mt-4 text-sm text-gray-700" htmlFor="config-channel">
         Channel

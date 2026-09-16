@@ -3,6 +3,7 @@ import {
   getFirm, getFirmUsage, listFirms, MONITORING_CHANNELS,
   type FirmUsagePage, type MonitoringChannel, type FirmRow, type FirmUsageRollup,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface UsagePageProps {
   onAuthExpired: (err: unknown) => boolean;
@@ -191,6 +192,10 @@ export const UsagePage: React.FC<UsagePageProps> = ({ onAuthExpired }) => {
   return (
     <div data-testid="usage-page" className="max-w-4xl">
       <h2 className="text-lg font-semibold text-gray-900">Usage</h2>
+      <PageIntro>
+        See a firm&apos;s session and link activity for a given month,
+        broken down by kit, employee, and language.
+      </PageIntro>
 
       {firmsError && <div className="mt-3 text-sm text-red-600">{firmsError}</div>}
 
