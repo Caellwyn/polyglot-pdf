@@ -68,6 +68,24 @@ three real gaps rather than changing behavior:
    the no-recency decision recorded as the maintainer-reversible call the
    plan flagged it as.
 
+**Review round (cross-surface, Opus).** GAPS-FOUND (1): the new "staging-
+before-demo promotion gate" section stated the gate as current, live
+behavior with no hedge, while the sanctioned bash deploy path
+(`deploy-demo.sh` -> `deploy-all.sh`'s bare `gcloud builds submit --tag` /
+`gcloud run deploy` / `firebase deploy`) never invokes `cloudbuild.yaml` and
+so never reaches the gate -- the exact false-safety belief the staging tier
+exists to prevent. **Adopted**: opened the section with a hedge naming bd
+`polyglot-pdf-oqtm7` (E4.6, blocked by this bead) as the connection point,
+matching the hedge the preceding "Deploy is moving into Cloud Build" section
+already carries. Two pre-existing/nit findings from the same round were
+**deferred** as filed beads rather than fixed here: the fourth stacked
+`*Last updated:*` stamp in `config-deployment.md` being invisible to
+`check_doc_freshness.py`'s first-match regex (`polyglot-pdf-fjxce`), and
+`deploy_routes.py`'s module docstring still listing `admin-service` inside
+`GATED_TARGETS` (`polyglot-pdf-cvmig`, reproduces unchanged on `origin/dev`).
+No finding was rejected. No production code changed by the fix round --
+docs only.
+
 No production code changed. The bead's own text ("the same check on the
 admin-service traffic-shift target") reads as if the route should gate
 admin-service too, but bead 4.3's own shipped code already deliberately

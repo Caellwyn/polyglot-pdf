@@ -323,10 +323,18 @@ declared, not of how anything currently deploys.
 
 ## The staging-before-demo promotion gate
 
-Every demo-family deploy -- `backend-demo`, `frontend-demo`, and the admin
-service's traffic shift -- requires a **successful staging deployment for
-the exact same target family and commit SHA** before it may proceed. The
-rule lives in ONE pure predicate,
+**This gate lives inside `cloudbuild.yaml`, which nothing deploys through
+yet** (bd `polyglot-pdf-oqtm7`, E4.6 -- still open, and blocked by this
+bead). Until that connection is made, `deploy-demo.sh` still deploys
+directly via `deploy-all.sh`'s bare `gcloud builds submit --tag` /
+`gcloud run deploy` / `firebase deploy` calls and is **NOT gated** by any
+of what follows -- the predicate, the CLI, and both call sites below exist
+and are tested, but the sanctioned bash deploy path does not yet reach them.
+
+Once deploys run through `cloudbuild.yaml`, every demo-family deploy --
+`backend-demo`, `frontend-demo`, and the admin service's traffic shift --
+requires a **successful staging deployment for the exact same target family
+and commit SHA** before it may proceed. The rule lives in ONE pure predicate,
 `admin_backend/services/promotion_gate.py::staging_verified(target_family,
 sha, deployments)`, so the two places that enforce it can never disagree
 about what "verified" means:
