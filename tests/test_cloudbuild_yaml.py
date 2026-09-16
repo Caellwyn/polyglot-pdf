@@ -908,6 +908,11 @@ def _ci_commands_for(app: str) -> list[str]:
         for step in job.get("steps", []):
             run = step.get("run", "")
             wd = step.get("working-directory", "")
+            # A step CI itself does not fail on (the informational security
+            # scans, continue-on-error) is not part of "CI's green" and so
+            # not something the verify target must reproduce.
+            if step.get("continue-on-error") is True:
+                continue
             if wd == app and run.startswith("npm"):
                 found.append(run.strip())
     return found

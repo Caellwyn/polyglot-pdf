@@ -8,7 +8,10 @@
 # with `gcloud builds submit --tag ... "$SCRIPT_DIR"` (the repo root);
 # .gcloudignore keeps the Cloud Build upload lean.
 
-FROM python:3.12-slim
+# Pinned by DIGEST so a rebuild cannot silently pick up a different base
+# image; bump the digest deliberately (tests/test_dockerfile_app_module.py
+# pins the form). Resolved from the registry for the 3.12-slim tag.
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
 WORKDIR /app
 
@@ -41,6 +44,17 @@ COPY scripts/authoring /app/scripts/authoring
 COPY scripts/bakeoff /app/scripts/bakeoff
 
 ENV PYTHONPATH=/app
+
+# Run as a non-root user. The only paths the app writes at runtime live
+# under /app (backend/logs for the dev/token loggers, logs/confirmations
+# for the confirmation trail; the PDF routes use the system temp dir), so
+# those directories are created and owned here BEFORE the user switch --
+# a writer whose mkdir fails at import time would otherwise crash the
+# service on start. Pinned by tests/test_dockerfile_app_module.py.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app \
+    && mkdir -p /app/backend/logs /app/logs/confirmations \
+    && chown -R app:app /app
+USER app
 
 # Cloud Run sets PORT; default for local runs.
 ENV PORT=8080

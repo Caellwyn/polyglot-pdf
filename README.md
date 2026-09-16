@@ -112,7 +112,7 @@ cd polyglot-pdf
 python -m venv .venv
 source ./.venv/Scripts/activate  # Windows: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r backend/requirements.txt
+python -m pip install -r backend/requirements-dev.txt   # runtime pins + the test tooling
 
 # Frontend setup
 npm install -C frontend

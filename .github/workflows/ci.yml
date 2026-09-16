@@ -28,8 +28,10 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install backend deps
-        run: pip install -r backend/requirements.txt
+      - name: Install backend deps (runtime + test tooling)
+        # requirements-dev.txt pulls in requirements.txt and adds pytest; the
+        # image installs requirements.txt alone, so no test tooling ships.
+        run: pip install -r backend/requirements-dev.txt
       - name: Run all collected suites (excluding flaky live-Gemini externals)
         # NO explicit suite paths: a bare `pytest` collects every root in
         # pytest.ini's `testpaths`, so a NEW top-level suite runs in CI the day
@@ -108,3 +110,54 @@ jobs:
       - name: Test (admin-console)
         working-directory: admin-console
         run: npm run test:run
+
+  security:
+    name: security scans (informational)
+    runs-on: ubuntu-latest
+    # INFORMATIONAL like every job in this workflow (see the header): the
+    # scans report, they do not gate. Making this job required is a separate
+    # maintainer decision (sprint 23 workstream G records the ask). Each step
+    # continues on error so ONE noisy scanner cannot hide the others' output.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install scanners
+        run: pip install pip-audit bandit detect-secrets semgrep
+      - name: pip-audit (runtime requirements only)
+        continue-on-error: true
+        run: pip-audit -r backend/requirements.txt --strict --desc
+      - name: npm audit (frontend, production deps)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit (schema-editor, production deps)
+        continue-on-error: true
+        working-directory: schema-editor
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit (admin-console, production deps)
+        continue-on-error: true
+        working-directory: admin-console
+        run: npm audit --omit=dev --audit-level=high
+      - name: detect-secrets (files changed by this PR, against the baseline)
+        continue-on-error: true
+        # Only the PR's own files are scanned, against .secrets.baseline, so a
+        # NEW secret shape fails here while the audited baseline stays quiet.
+        run: |
+          git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" \
+            | grep -v -E '^(scripts/spikes/|\.beads/)' \
+            | xargs -r detect-secrets-hook --baseline .secrets.baseline
+      - name: bandit (medium+ severity, both backends)
+        continue-on-error: true
+        run: bandit -r backend admin_backend -ll -x backend/tests,admin_backend/tests
+      - name: semgrep (Python + TypeScript rulesets)
+        continue-on-error: true
+        # Linux-only tool (no Windows build), so it lives here rather than in
+        # the local pre-PR checks.
+        run: semgrep --config p/python --config p/typescript --error --quiet backend admin_backend frontend/src schema-editor/src admin-console/src

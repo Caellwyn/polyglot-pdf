@@ -86,7 +86,7 @@ bash scripts/fix_venv.sh
 **What it does:**
 1. Removes old `.venv` folder
 2. Creates fresh virtual environment
-3. Installs all dependencies from `backend/requirements.txt`
+3. Installs all dependencies from `backend/requirements-dev.txt` (runtime pins + test tooling)
 4. Ready to use!
 
 **Time:** ~2-3 minutes
@@ -132,7 +132,7 @@ skill. See `docs/doctrine/promotion-tiers.md`.
 **Solution:** 
 ```bash
 source .venv/Scripts/activate  # or .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-dev.txt
 ```
 
 ### "Port 8000 already in use"

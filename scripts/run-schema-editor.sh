@@ -88,7 +88,7 @@ if [ "$START_BACKEND" = "1" ]; then
     if [ ! -x "$VENV_PYTHON" ]; then
         echo "WARNING: backend venv not found under $MAIN_REPO/backend/.venv"
         echo "  Create it:  python -m venv backend/.venv"
-        echo "              backend/.venv/Scripts/pip install -r backend/requirements.txt"
+        echo "              backend/.venv/Scripts/pip install -r backend/requirements-dev.txt"
         echo "  Continuing WITHOUT a backend -- the editor will show a"
         echo "  'limited checking' notice and cannot translate or regenerate."
         echo ""

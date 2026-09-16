@@ -1,0 +1,45 @@
+# Weekly, grouped dependency updates (sprint 23, bd polyglot-pdf-ikdnd).
+# Informational like ci.yml: a Dependabot PR still goes through the normal
+# review + merge gate; nothing here auto-merges.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-pip-backend:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-npm-frontend:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/schema-editor"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-npm-schema-editor:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/admin-console"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-npm-admin-console:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-github-actions-root:
+        patterns:
+          - "*"

@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-3bsyv: `frontend/vite.config.schema.ts`'s
 `base` is now `'/'` (absolute), not `'./'` -- see "Asset base MUST be
 absolute" under Frontend deploy below. No env var or deploy step changed.)*
@@ -496,7 +498,8 @@ the gate crying wolf. The counts are pinned per script.
   **REPLACES the service's entire secret block** — gcloud's own help says "All
   existing secrets will be removed first" — so a channel must list every
   binding it wants to survive, not just the one it is adding. The
-  container (the ROOT `Dockerfile`, `python:3.12-slim`) runs
+  container (the ROOT `Dockerfile`: `python:3.12-slim` pinned by digest, runtime
+  requirements only, running as the non-root `app` user) runs
   `uvicorn ${APP_MODULE:-backend.main:app}` on `$PORT` (8080) -- see
   **One image, two services** below for why the module is a runtime variable.
   `--timeout=3600` (the Cloud Run maximum)

@@ -1,0 +1,7 @@
+# Test tooling ONLY -- never installed into the Cloud Run image (the
+# Dockerfile installs requirements.txt alone). Local/CI: pip install -r
+# backend/requirements.txt -r backend/requirements-dev.txt
+-r requirements.txt
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==5.0.0
