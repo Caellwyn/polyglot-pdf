@@ -177,24 +177,29 @@ clear now" button itself, which skips the completion countdown; (d) LOGOUT -- `S
 wipe, UNCONDITIONALLY (even when `logout()` itself rejects -- a failed sign-out leaves
 auth state unchanged and the tree mounted, so it needs the reload exactly as much as a
 successful one, which is harmless there because `ProtectedRoute` is about to unmount the
-tree anyway). All FOUR sites end in `window.location.reload()`, the same way the Start
-Fresh button does: the mounted form still holds the answers in React state, and without
-the reload the next keystroke would `save()` them straight back into the storage that was
-just cleared. `wipeSitesReload.test.ts` derives the complete set by scanning
-`frontend/src` for every `clearAllClientState()` call and asserts each one is followed
-nearby by a reload, so an eighth site added later without one fails there instead of
-waiting for another review round. The three manual Clear-form / Start Fresh buttons
-(`SchemaFormDemo.tsx`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) used to call
-`SchemaFormStateManager.clear()` (or a raw `sessionStorage.removeItem("schema_form_state")`
-in `SchemaFormDemo.tsx`'s case) plus `clearOnboardingState()` directly instead of the
-composed method -- leaving `vff_client_link_token` behind after an explicit wipe request
-(bd `polyglot-pdf-ylokf`). All three now call `SchemaFormStateManager.clearAllClientState()`
-too, so `wipeSitesReload.test.ts`'s scan sees all seven sites (the four automatic ones
-above plus these three), and no site anywhere leaves the client-link token behind.
-`WebFormConnection.reset()` no longer exists. Pinned by
+tree anyway). All FOUR sites end in `window.location.reload()`: the mounted form still
+holds the answers in React state, and without the reload the next keystroke would
+`save()` them straight back into the storage that was just cleared. `wipeSitesReload
+.test.ts` derives the complete set by scanning `frontend/src` for every
+`clearAllClientState()` call and asserts each one is followed nearby by a reload, so a
+fifth site added later without one fails there instead of waiting for another review
+round.
+
+The three manual Clear-form / Start Fresh buttons (`SchemaFormDemo.tsx`,
+`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`) are deliberately NOT on this path -- they
+call `SchemaFormStateManager.clear()` plus `clearOnboardingState()` directly, never
+`clearAllClientState()`, and never `clearClientLinkToken()`. This is a MID-session
+reset (same client, fresh answers), not an end-of-session wipe: `ClientLinkEntry`'s
+reload-recovery branch depends entirely on `hasClientLinkToken()` to reach the "ready"
+phase once the URL's redemption token is gone from the address bar, so clearing the
+token here would reload straight into "This link is not valid" for a client-link
+session. A staff session never has the token set in the first place, so leaving it
+untouched costs staff nothing. `WebFormConnection.reset()` no longer exists. Pinned by
 `SchemaForm.completionClear.test.tsx`, `SchemaForm.idleClear.test.tsx`,
-`StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts` and
-`wipeSitesReload.test.ts`.
+`StaffHeader.test.tsx`, `schemaFormState.clearAllClientState.test.ts`,
+`wipeSitesReload.test.ts`,
+`clearFormButtonsClearClientLinkToken.test.tsx`, and
+`SchemaFormDemo.startFreshPreservesClientLinkToken.test.tsx`.
 
 Back-compat migrations on `load()`: `completedParts → completedSections`,
 `currentPartId → currentSectionId` — residue of the parts→sections rename.

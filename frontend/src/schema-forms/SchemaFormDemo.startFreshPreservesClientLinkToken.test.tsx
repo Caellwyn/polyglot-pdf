@@ -1,12 +1,17 @@
 /**
- * SchemaFormDemo's "Start Fresh" button clears the client-link token
- * (bd polyglot-pdf-ylokf).
+ * SchemaFormDemo's "Start Fresh" button clears form state but PRESERVES
+ * the client-link token (bd polyglot-pdf-ylokf).
  *
- * Fresh-eyes finding on bd ylokf: the sibling behavioral test
- * (clearFormButtonsClearClientLinkToken.test.tsx) covers VoiceOverlay and
- * VoiceOverlayMobile's Clear Form buttons but not SchemaFormDemo's Start
- * Fresh button -- the third of the three handlers the bead's exit criteria
- * name. This file closes that gap.
+ * An earlier version of this bead's fix routed "Start Fresh" through
+ * SchemaFormStateManager.clearAllClientState(), which also clears
+ * vff_client_link_token. Opus cross-surface review caught the
+ * consequence before it shipped: ClientLinkEntry's reload-recovery
+ * branch (readTokenFromHash finds nothing once the URL fragment is
+ * stripped) depends entirely on hasClientLinkToken() to reach the
+ * "ready" phase -- clear the token and the very next reload (which this
+ * button triggers) lands on "This link is not valid" instead of the
+ * form the client was filling. A staff session never has a token set in
+ * the first place, so leaving it untouched costs staff nothing.
  *
  * Renders past the onboarding modal (formId + language pre-seeded, per
  * loadOnboardingState's "returning user" branch) and past schemaLoading
@@ -16,6 +21,10 @@
  *
  * Mocks SchemaForm (heavy: WS/audio/PDF), matching
  * SchemaFormDemo.formPin.test.tsx's own convention.
+ *
+ * Mutation: change handleClearSession back to
+ * SchemaFormStateManager.clearAllClientState() -- red (the token is gone
+ * after the click).
  *
  * @vitest-environment jsdom
  */
@@ -54,11 +63,13 @@ const MINIMAL_SCHEMA = {
 };
 
 const TOKEN_KEY = "vff_client_link_token";
+const FORM_STATE_KEY = "schema_form_state";
 
 beforeEach(() => {
   sessionStorage.setItem(ONBOARDING_FORM_KEY, "firm-a-intake");
   sessionStorage.setItem(ONBOARDING_LANGUAGE_KEY, "en");
   setClientLinkToken("a-real-client-link-token");
+  sessionStorage.setItem(FORM_STATE_KEY, '{"schema":{},"fieldValues":{}}');
 
   vi.stubGlobal(
     "fetch",
@@ -82,8 +93,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("SchemaFormDemo Start Fresh clears the client-link token (bd ylokf)", () => {
-  it("clicking Start Fresh removes vff_client_link_token", async () => {
+describe("SchemaFormDemo Start Fresh preserves the client-link token (bd ylokf)", () => {
+  it("clicking Start Fresh clears form state but PRESERVES vff_client_link_token", async () => {
     expect(sessionStorage.getItem(TOKEN_KEY)).toBe("a-real-client-link-token");
 
     render(<SchemaFormDemo />);
@@ -94,6 +105,7 @@ describe("SchemaFormDemo Start Fresh clears the client-link token (bd ylokf)", (
     );
     fireEvent.click(startFreshButton);
 
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe("a-real-client-link-token");
+    expect(sessionStorage.getItem(FORM_STATE_KEY)).toBeNull();
   });
 });

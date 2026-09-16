@@ -11,6 +11,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
@@ -1112,13 +1113,18 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			return
 		}
 
-		// Wipes form state, the app-start form + language choice (so the
+		// Clears form state and the app-start form + language choice, so the
 		// reload returns all the way to the language-choice modal -- this is
-		// how a tester resets between clients, bd voice-ux issues), AND the
-		// client-link token in one call -- a plain clear()+clearOnboardingState()
-		// here left vff_client_link_token behind after an explicit
-		// "Clear form" click (bd polyglot-pdf-ylokf).
-		SchemaFormStateManager.clearAllClientState()
+		// how a tester resets between clients (bd voice-ux issues).
+		// Deliberately NOT clearAllClientState(): this is a MID-session reset,
+		// not an end-of-session wipe, so the client-link token must survive --
+		// clearing it here would reload straight into ClientLinkEntry's
+		// "invalid link" phase for a client-link session (bd polyglot-pdf-ylokf
+		// tried the composed wipe; Opus cross-surface caught the lockout before
+		// it shipped). A staff session never has a token set, so leaving it
+		// untouched is a no-op there.
+		SchemaFormStateManager.clear()
+		clearOnboardingState()
 
 		// Reload the page to reset everything
 		window.location.reload()

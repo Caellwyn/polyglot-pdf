@@ -1,21 +1,26 @@
 // @vitest-environment jsdom
 //
 // bd polyglot-pdf-ylokf: the three manual Clear-form / Start Fresh buttons
-// (VoiceOverlay.tsx, VoiceOverlayMobile.tsx, SchemaFormDemo.tsx) used to skip
-// SchemaFormStateManager.clearAllClientState() -- clearing the form state and
-// onboarding selection directly instead -- so an explicit "clear my data"
-// click left vff_client_link_token behind in sessionStorage.
+// (VoiceOverlay.tsx, VoiceOverlayMobile.tsx, SchemaFormDemo.tsx) must clear
+// the form state and onboarding selection but MUST NOT clear
+// vff_client_link_token -- a client-link session has no way to re-enter
+// without it (ClientLinkEntry's reload-recovery branch lands on "invalid
+// link" the moment the token is gone), so the buttons preserve it.
 //
-// This seeds the token, clicks each of the two VoiceOverlay variants' Clear
-// Form buttons, and asserts the token is gone afterward. Follows the render
-// harness in VoiceOverlay.reconnectbutton.test.tsx (mocked connection
-// manager + VAD hook; a stubbed sessionStorage backed by a real in-memory
-// store so SchemaFormStateManager's own read/write calls are exercised, not
-// bypassed).
+// An earlier version of this bead's fix routed all three handlers through
+// SchemaFormStateManager.clearAllClientState() (which DOES clear the
+// token) -- Opus cross-surface review caught the client-link lockout
+// before it shipped. This file pins the corrected behavior: the token
+// SURVIVES a Clear Form click, while the form-state key is still wiped.
 //
-// Mutation: revert either overlay's handleClearForm back to
-// `SchemaFormStateManager.clear(); clearOnboardingState()` -- red (the token
-// survives the click).
+// Follows the render harness in VoiceOverlay.reconnectbutton.test.tsx
+// (mocked connection manager + VAD hook; a stubbed sessionStorage backed
+// by a real in-memory store so SchemaFormStateManager's own read/write
+// calls are exercised, not bypassed).
+//
+// Mutation: change either overlay's handleClearForm back to
+// SchemaFormStateManager.clearAllClientState() -- red (the token is gone
+// after the click).
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -51,6 +56,7 @@ const MINIMAL_SCHEMA: FormSchema = {
 } as unknown as FormSchema
 
 const TOKEN_KEY = 'vff_client_link_token'
+const FORM_STATE_KEY = 'schema_form_state'
 
 function makeMockManager() {
   const audioManager = {
@@ -107,7 +113,7 @@ function makeMockManager() {
   } as any
 }
 
-describe('Clear Form buttons clear the client-link token (bd ylokf)', () => {
+describe('Clear Form buttons preserve the client-link token (bd ylokf)', () => {
   let store: Record<string, string>
 
   beforeEach(() => {
@@ -127,6 +133,17 @@ describe('Clear Form buttons clear the client-link token (bd ylokf)', () => {
     // whole `location` object rather than spying on one property.
     vi.stubGlobal('location', { ...window.location, reload: vi.fn() })
     store[TOKEN_KEY] = 'a-real-client-link-token'
+    store[FORM_STATE_KEY] = JSON.stringify({
+      schema: { form_metadata: { form_number: 'test-form', version: '1.0' } },
+      fieldValues: {},
+      currentSectionId: 'section_1',
+      completedSections: [],
+      validationErrors: {},
+      lastUpdated: Date.now(),
+      formSessionId: 'test-session',
+      loadedFieldIds: [],
+      jitModeEnabled: false,
+    })
   })
 
   afterEach(() => {
@@ -158,15 +175,17 @@ describe('Clear Form buttons clear the client-link token (bd ylokf)', () => {
     fireEvent.click(clearButton)
   }
 
-  it('VoiceOverlay: clicking Clear Form removes the client-link token', async () => {
+  it('VoiceOverlay: clicking Clear Form clears form state but PRESERVES the client-link token', async () => {
     expect(store[TOKEN_KEY]).toBe('a-real-client-link-token')
     await clickClearForm(VoiceOverlay, false)
-    expect(store[TOKEN_KEY]).toBeUndefined()
+    expect(store[TOKEN_KEY]).toBe('a-real-client-link-token')
+    expect(store[FORM_STATE_KEY]).toBeUndefined()
   })
 
-  it('VoiceOverlayMobile: clicking Clear Form removes the client-link token', async () => {
+  it('VoiceOverlayMobile: clicking Clear Form clears form state but PRESERVES the client-link token', async () => {
     expect(store[TOKEN_KEY]).toBe('a-real-client-link-token')
     await clickClearForm(VoiceOverlayMobile, true)
-    expect(store[TOKEN_KEY]).toBeUndefined()
+    expect(store[TOKEN_KEY]).toBe('a-real-client-link-token')
+    expect(store[FORM_STATE_KEY]).toBeUndefined()
   })
 })
