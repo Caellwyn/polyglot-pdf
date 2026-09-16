@@ -22,9 +22,14 @@ the machine.
   returns each pydantic error's `loc`, `type` and `msg` only; FastAPI's
   default also returned `input` (the client's value) and `ctx` (which can
   quote it). Installed at import in `backend/main.py` and
-  `admin_backend/main.py`. A sentinel posted where an int is expected
-  (`/api/disclaimer-acceptance`; the admin credit-adjust body) is asserted
-  absent from the 422 text, and `app.debug` is pinned False on both apps.
+  `admin_backend/main.py`. For a custom validator's `value_error` /
+  `assertion_error` -- whose text pydantic renders verbatim, and which route
+  validators interpolate the submitted value into (the disclaimer timestamp
+  bound does exactly that) -- `msg` is replaced by the generic phrase, so the
+  choke point closes every such site at once. A sentinel posted where an int
+  is expected (`/api/disclaimer-acceptance`; the admin credit-adjust body) and
+  an in-type, out-of-range sentinel are both asserted absent from the 422
+  text, and `app.debug` is pinned False on both apps.
 - **The token dashboard file is local-dev only, on two layers.**
   `TokenFileLogger.log_token_event` returns without writing when
   `K_SERVICE` is set (the container's disk is not a log store), and the one
@@ -68,9 +73,11 @@ the machine.
   the file write alone; the plumbing tests pass again. Rerun after the fix:
   5939 passed / 282 skipped, no failures. The twelve process-spawning test files, run separately
   with every child windowless: 524 passed / 5 skipped.
-- Scar #9: eleven one-line mutations, each in its own interpreter (the app
+- Scar #9: twelve one-line mutations, each in its own interpreter (the app
   modules import once per process) and each RED with exit code 1: the handler
   install removed from either app; `input` added back to the safe keys; the
+  custom-validator `msg` replacement removed (the submitted timestamp came
+  straight back in `msg`, exactly as the outer reviewer predicted); the
   K_SERVICE INFO clamp removed; the dump-knob block removed; the SEND_TRANSCRIPT
   guard removed; the token writer's K_SERVICE return removed; the dev-marker
   gate replaced by `if True`; a `print()` of the counts restored; one close
@@ -83,10 +90,13 @@ REVIEW_RECORD
 
 ## Lessons
 
-- **A framework default is a sink.** FastAPI's 422 quoted the client's
-  value by design; nothing in the app wrote it, so no logging guard could
-  see it. The sinks worth enumerating are the ones the framework writes for
-  you.
+- **A framework default is a sink, and it has more than one field.**
+  FastAPI's 422 quoted the client's value in `input`; dropping that was the
+  obvious fix, and the outer review found the second channel -- pydantic
+  renders a custom validator's `ValueError` text into `msg`, and the
+  disclaimer route interpolates the value into that text. The choke point
+  now blanks `msg` for those error types instead of trusting every
+  validator site.
 - **A deploy floor beats a documentation promise.** "Prod never sets
   LOG_LEVEL=DEBUG" is an intention; `K_SERVICE` is a fact the code can
   read. Every knob that could raise log volume or forward transcripts now

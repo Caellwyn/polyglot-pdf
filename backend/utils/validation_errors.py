@@ -29,11 +29,22 @@ from fastapi.responses import JSONResponse
 # input); `url` is documentation noise.
 _SAFE_ERROR_KEYS = ("loc", "type", "msg")
 
+# `msg` is pydantic's own catalogue text for built-in error types (limits and
+# expectations, never the input) -- EXCEPT for a custom validator's
+# `raise ValueError(...)` / `assert`, which pydantic renders verbatim as
+# "Value error, <text>". Route validators do interpolate the submitted value
+# into that text (disclaimer_routes bounds a timestamp with it), so for those
+# types the message is replaced by the type's generic phrase rather than
+# trusting every validator site in both backends to stay value-free.
+_CUSTOM_MESSAGE_TYPES = {"value_error": "Value error", "assertion_error": "Assertion failed"}
+
 
 def _safe_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for err in exc.errors():
         safe = {k: err[k] for k in _SAFE_ERROR_KEYS if k in err}
+        if err.get("type") in _CUSTOM_MESSAGE_TYPES:
+            safe["msg"] = _CUSTOM_MESSAGE_TYPES[err["type"]]
         # loc may carry non-JSON-native items (ints for list indexes are
         # fine; anything else is stringified rather than dropped).
         safe["loc"] = [x if isinstance(x, (str, int)) else str(x)

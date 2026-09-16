@@ -177,8 +177,8 @@ per-turn token event: `live_ai_gemini.py` calls
 every turn's counts + costs land as a `gemini_api_response` `jsonPayload` line in
 Cloud Logging — queryable/exportable off a deployed run. The per-turn console
 banner that used to `print()` the same counts is gone: it is one structured
-`token_usage` event (counts + cost, no text) so nothing reaches stdout outside
-structlog's processors (bd `polyglot-pdf-wfgjz`). The remaining event types (session
+`token_usage` event (counts + cost, no text), so the per-turn token counts no
+longer reach stdout outside structlog's processors (bd `polyglot-pdf-wfgjz`). The remaining event types (session
 lifecycle, field, error) are still scaffolding — the contract is defined, the wiring
 lands in Phases 2–4 below.
 

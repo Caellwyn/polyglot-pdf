@@ -486,6 +486,26 @@ def test_a_422_never_echoes_the_request_body():
     assert any("timestamp" in e["loc"] for e in detail), detail
 
 
+def test_a_422_never_echoes_a_value_through_a_custom_validator_message():
+    """The second echo channel: a route validator's `raise ValueError(f"...{v}...")`
+    is rendered by pydantic into `msg` verbatim. disclaimer_routes bounds the
+    timestamp that way, so an in-type but out-of-range value is the sentinel
+    here (a type mismatch never reaches the custom validator). RED with `msg`
+    passed through for value_error; mutation-verified by removing the
+    _CUSTOM_MESSAGE_TYPES replacement."""
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    sentinel_ts = 100000001  # ms; far below the route's minimum, in type
+    resp = TestClient(app).post("/api/disclaimer-acceptance", json={
+        "form_session_id": "fs-sentinel-test", "language": "en", "timestamp": sentinel_ts})
+    assert resp.status_code == 422, resp.text
+    assert str(sentinel_ts) not in resp.text, (
+        "the custom validator message carried the submitted value into the 422: " + resp.text)
+    assert any(e["type"] == "value_error" for e in resp.json()["detail"]), resp.text
+
+
 def test_the_backend_app_is_not_in_debug_mode():
     """A debug app renders tracebacks, locals included, into 500 bodies."""
     from backend.main import app
