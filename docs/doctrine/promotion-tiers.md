@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share. NO build has run yet: the 2nd-gen GitHub connection is a maintainer step, so bash is still the deploy path.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.)*
+*Last updated: 2026-09-16 (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.) (bd polyglot-pdf-oqtm7, E4.6: deploy is no longer local and manual -- every deploy-*.sh is a thin wrapper that runs Cloud Build triggers at a pushed commit, the inline stages are deleted, and the promotion gate's "nothing deploys through this yet" caveat is retired. The per-instance deploy ask is unchanged.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -79,7 +79,7 @@ kit editing lock) is deliberately shared because sharing is the correct design:
    channels bind the identical Secret Manager secret -- it is declared in the
    `[SET_SECRETS]` section of `deploy/channels/staging.env` and
    `deploy/channels/demo.env`, and reaches `gcloud run deploy` as
-   `--set-secrets` via `deploy-all.sh`'s `read_channel_section`. That sameness
+   `--set-secrets` via the build's `read_channel_section` call. That sameness
    is the intended choice, not an oversight: the signing key is not what
    separates the channels -- the `aud` claim is, and it is checked on every
    redemption regardless of who signed the token. Giving each channel its own key would add nothing (a cross-channel
@@ -150,8 +150,9 @@ then created with no invoker binding and 403s every request at Cloud Run's own
 gate, *before any application code runs*. An EXISTING service never shows this:
 its binding predates the policy and is not retroactively stripped.
 
-`deploy-all.sh` now **aborts** rather than reporting success in that case (bd
-`polyglot-pdf-pidtg`). If it fires:
+The build's reachability gate (`scripts/verify_service_reachable.py`, run as
+`cloudbuild.yaml`'s `backend-reachability-gate` step) **fails the build** rather
+than reporting success in that case (bd `polyglot-pdf-pidtg`). If it fires:
 
 ```bash
 gcloud run services add-iam-policy-binding <service> --region us-central1 --project polyglot-demo-aa709 --member=allUsers --role=roles/run.invoker
@@ -190,8 +191,8 @@ line is the same as the step-2 escalation line; when unsure, ping. Full flow:
 
 This gate governs the PROTECTED channel. The staging gate follows it.
 
-`deploy-demo.sh` deploys BOTH the frontend (Firebase Hosting) and backend
-(Cloud Run) to the demo project `polyglot-demo-aa709`. The agent is authorized to
+`deploy-demo.sh` runs the demo family's Cloud Build targets -- backend, form
+kits, Firestore rules and frontend -- against `polyglot-demo-aa709`. The agent is authorized to
 RUN it -- it is no longer on the NEVER list -- but only with ALL THREE guardrails,
 in order:
 
@@ -218,9 +219,12 @@ class of bug staging exists to catch.
 
 ## The staging-deploy gate
 
-`deploy-staging.sh` deploys the frontend and backend to the staging site/service
-inside the same project. It is **gated the same way as the demo deploy** (local
-test -> explicit per-instance permission -> post-deploy test-drive).
+`deploy-staging.sh` runs the staging family's Cloud Build targets (and
+`verify` first, when the commit has no `build_checks` record yet) against the
+staging site/service inside the same project. It is **gated the same way as the
+demo deploy** (local test -> explicit per-instance permission -> post-deploy
+test-drive). Only the engine changed in bd `polyglot-pdf-oqtm7`; the
+per-instance ask did not.
 
 > **Open question for the maintainer, deliberately NOT decided here.** Staging is
 > disposable and nobody is watching it, so a per-instance ping before each
@@ -235,8 +239,9 @@ staging/demo boundary (see "What is separate, and what is NOT"):
 
 - **`deploy-staging.sh --form-kits`** publishes to the SHARED bucket and changes
   the DEMO's form list. Treat it as a demo action, not a staging one.
-- **Firestore rules** are project-wide; `deploy-staging.sh` does not deploy them
-  at all. A rules change ships deliberately via `deploy-demo.sh`.
+- **Firestore rules and composite indexes** are project-wide;
+  `deploy-staging.sh` never runs the `firestore-rules` target. A rules change
+  ships deliberately via `deploy-demo.sh`.
 
 `deploy-production.sh` targets a DEAD, unreachable project (`polyglot-forms-919f2`,
 bd `polyglot-pdf-je6iy`) and now **refuses to run**, printing a pointer to the two
@@ -246,8 +251,8 @@ reachable project, a full `scripts/setup-gcp-project.sh` bootstrap, real
 
 ## Deploy preflight: a dirty or unpushed tree is refused
 
-Since bd `polyglot-pdf-1s3ko`, `deploy-staging.sh` and `deploy-demo.sh` source
-`scripts/deploy_preflight.sh` and refuse BEFORE anything else runs when:
+Since bd `polyglot-pdf-1s3ko`, EVERY `deploy-*.sh` wrapper sources
+`scripts/deploy_preflight.sh` and refuses BEFORE anything else runs when:
 
 - **the working tree is dirty** -- `git status --porcelain` is non-empty,
   untracked files included; or
@@ -255,12 +260,13 @@ Since bd `polyglot-pdf-1s3ko`, `deploy-staging.sh` and `deploy-demo.sh` source
   checkout.
 
 Both protect the same claim. A Cloud Build build runs from a COMMIT, and
-`build_checks/{sha}` records that that commit's suites passed. A tarball build
-of a dirty tree would ship uncommitted code under a SHA the gate vouches for --
-the record would not be wrong about the commit, it would simply be about a
-different tree than the one that shipped. And a SHA that exists only on one
-laptop can never be re-built by the admin service, which triggers builds by SHA
-against the connected repository.
+`build_checks/{sha}` records that that commit's suites passed. Deploying from a
+dirty tree would ship a commit the operator never looked at while believing
+they shipped what is on their screen -- the record would not be wrong about the
+commit, it would simply be about a different tree than the one they meant. And
+a SHA that exists only on one laptop cannot be fetched by the build at all, nor
+re-built later by the admin service, which triggers builds by SHA against the
+connected repository.
 
 The unpushed check asks which REMOTE branches contain the commit, not whether
 it is an ancestor of `dev`: a commit on a pushed feature branch is perfectly
@@ -272,33 +278,65 @@ This is a mechanical guard, not a new gate: it does not replace the
 per-instance permission ask below, it only removes a class of deploy that was
 never valid.
 
-## Deploy is moving into Cloud Build
+## Deploy runs on Cloud Build, from a pushed commit
 
-Bead `polyglot-pdf-1s3ko` landed the declarative half of Epic 4. **Nothing has
-run yet** -- the first real build needs the 2nd-generation Cloud Build GitHub
-connection, a one-time OAuth only the maintainer can do -- so the bash path
-above is still the deploy path today. What exists now:
+**There is no local deploy any more** (bd `polyglot-pdf-oqtm7`, E4.6). Every
+deploy is a Cloud Build build of `cloudbuild.yaml` at an explicit commit,
+selected by the `_TARGET` substitution and started through a manual trigger
+named `polyglot-<target>`. The `deploy-*.sh` scripts and the admin console are
+two ways to press the same button: one engine, so the human path and the
+console path cannot drift.
 
-- **`cloudbuild.yaml`** at the repo root, one build file selected by the
-  `_TARGET` substitution (with `_CHANNEL` and `_SHA`). The `verify` and
-  `backend-staging` / `backend-demo` targets are implemented; every other
-  target name is declared as a step that fails with "target not implemented"
+**Why that matters more than tidiness: the gates live in the BUILD.** The
+per-SHA `verify` record, the Cloud Run reachability check, the kits-manifest
+validation and the staging-before-demo promotion gate are all build steps, so a
+bash-started build is gated exactly like a console-started one. Before this,
+each gate lived in whichever script happened to call it, and a second path
+around it was one script away.
+
+**What a wrapper does now.** Refuse a dirty or unpushed tree (the preflight
+above), resolve `git rev-parse HEAD`, then run its targets' triggers in order at
+that commit -- streaming each build's log and stopping at the first failed
+build. `scripts/deploy_build_targets.sh` holds that logic once: it reads each
+build's FINAL STATUS from `gcloud builds describe` rather than trusting the log
+reader's exit code, because "the log was read successfully" is not "the build
+succeeded". Which targets each wrapper runs is tabulated in
+[`../components/config-deployment.md`](../components/config-deployment.md).
+
+`deploy-staging.sh` additionally runs the `verify` target FIRST when the commit
+has no `build_checks` record yet, so a first deploy of a new commit is one
+command rather than two -- and a second target for the same commit skips it,
+which is the whole point of recording per SHA.
+
+**Running a wrapper is still a maintainer-gated deploy.** Only the engine
+changed: the per-instance permission ask in the two gate sections above applies
+exactly as before.
+
+The pieces:
+
+- **`cloudbuild.yaml`** at the repo root, one build file selected by `_TARGET`
+  (with `_CHANNEL` and `_SHA`). Every target the plan names is implemented;
+  `landing` is declared as a step that fails with "target not implemented"
   rather than being absent, because a target matching no step would build
   nothing and report SUCCESS.
 - **The verify gate.** `_TARGET=verify` runs the backend, frontend and
   admin-console suites ONCE for a SHA and writes `build_checks/{sha}`. Every
   deploy target's FIRST step requires that record and fails without it, so
   five targets for one commit pay one test run -- and a commit whose suites
-  failed cannot be deployed by any route, bash or console, because the gate is
-  inside the build rather than in a wrapper. It fails CLOSED: a Firestore read
+  failed cannot be deployed by any route. It fails CLOSED: a Firestore read
   that errors refuses the deploy.
 - **`deploy/channels/<channel>.env`**, the per-channel Cloud Run config as
-  plain data, read by BOTH `deploy-all.sh` and the build. See
+  plain data. `cloudbuild.yaml` reads it by SOURCING `deploy-all.sh` and
+  calling that file's own `read_channel_section` -- the one place where a
+  wrapper is still load-bearing, and why `deploy-all.sh` keeps a helper half
+  above its sourcing guard. See
   [`../components/config-deployment.md`](../components/config-deployment.md)
   for the format and the parity rule.
 - **`scripts/setup-cloud-build.sh`**, the operator-run provisioning step that
-  creates one manual trigger per target once the GitHub connection exists.
-  It now also provisions the build's OWN identity, `polyglot-cloudbuild-sa`
+  creates one manual trigger per target once the 2nd-generation GitHub
+  connection exists (that connection is a one-time OAuth only the maintainer
+  can do, and nothing deploys without it).
+  It also provisions the build's OWN identity, `polyglot-cloudbuild-sa`
   (bd `polyglot-pdf-p4ale`, E4.5) -- a dedicated SA, never the legacy
   default Cloud Build SA, holding `run.admin`, `firebasehosting.admin`,
   `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter` and
@@ -308,30 +346,23 @@ above is still the deploy path today. What exists now:
   revision that runs as a given SA is itself privileged on that SA, so the
   build needs this binding on each runtime identity it deploys as. The
   Pub/Sub service agent also gets `roles/iam.serviceAccountTokenCreator`
-  here, for the OIDC token bead 4.3's build-status webhook will need.
+  here, for the OIDC token the build-status webhook needs.
   `admin-backend-sa` gains the mirror grant -- actAs on
-  `polyglot-cloudbuild-sa` ONLY -- so its future trigger route can submit a
-  build that runs as the build identity; see
+  `polyglot-cloudbuild-sa` ONLY -- so the admin service's trigger route can
+  submit a build that runs as the build identity; see
   [`../components/admin-service.md`](../components/admin-service.md) and
   [`../components/config-deployment.md`](../components/config-deployment.md)
   for the full role tables and the two pinning test files
   (`admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py`,
   `tests/test_setup_cloud_build_script.py`).
 
-Until the connection is made, treat this section as a description of what is
-declared, not of how anything currently deploys.
-
 ## The staging-before-demo promotion gate
 
-**This gate lives inside `cloudbuild.yaml`, which nothing deploys through
-yet** (bd `polyglot-pdf-oqtm7`, E4.6 -- still open, and blocked by this
-bead). Until that connection is made, `deploy-demo.sh` still deploys
-directly via `deploy-all.sh`'s bare `gcloud builds submit --tag` /
-`gcloud run deploy` / `firebase deploy` calls and is **NOT gated** by any
-of what follows -- the predicate, the CLI, and both call sites below exist
-and are tested, but the sanctioned bash deploy path does not yet reach them.
+**This gate lives inside `cloudbuild.yaml`, and every deploy now runs through
+it** (bd `polyglot-pdf-oqtm7`, E4.6 -- `deploy-demo.sh` is a thin trigger
+wrapper, so there is no bash path around the gate left to take).
 
-Once deploys run through `cloudbuild.yaml`, every demo-family deploy --
+Every demo-family deploy --
 `backend-demo`, `frontend-demo`, and the admin service's traffic shift --
 requires a **successful staging deployment for the exact same target family
 and commit SHA** before it may proceed. The rule lives in ONE pure predicate,
@@ -395,16 +426,19 @@ staging/demo split: a bad admin deploy would otherwise take the control
 plane down for both channels at once, and there is no second Cloud Run
 service to rehearse against first the way the public backend has staging.
 
-- **Backend (`deploy-admin.sh`):** every deploy lands as a Cloud Run
+- **Backend (the `admin-service` target, started by `deploy-admin.sh`):**
+  every deploy lands as a Cloud Run
   revision with `--no-traffic --tag candidate`, is health-checked at ITS
   OWN stable tagged URL, and only on success receives traffic via
   `gcloud run services update-traffic --to-latest`. A failing health check
-  aborts before any traffic shifts, so the previously-live revision keeps
-  serving. This is that service's own staging tier, expressed as a
-  tagged-revision gate rather than a second deployed service.
-- **Console (`deploy-admin-console.sh`):** every deploy lands on the
-  permanent `polyglot-admin-candidate` Hosting site first; a SEPARATE
-  explicit run with `--live` promotes the same build to
+  fails that build step, so the traffic shift never runs and the
+  previously-live revision keeps serving. This is that service's own staging
+  tier, expressed as a tagged-revision gate rather than a second deployed
+  service.
+- **Console (the `admin-console-candidate` and `admin-console` targets,
+  started by `deploy-admin-console.sh`):** a bare run deploys the
+  permanent `polyglot-admin-candidate` Hosting site; a SEPARATE
+  explicit run with `--live` deploys the same commit to
   `polyglot-admin-demo`, the site operators actually use. A fixed second
   site is used instead of a Hosting preview channel because a preview
   channel's random-hash URL would have to be re-added to Firebase Auth's
@@ -427,9 +461,10 @@ Use ONE canonical signal for "which environment am I in" (e.g. a single
 or env-string checks scattered across the code. If the topology grows, migrate
 the one helper; call sites keep working.
 
-Note that today the two channels are distinguished by *deploy wiring*
-(`BACKEND_SERVICE_NAME`, `FRONTEND_HOSTING_TARGET`) rather than by any runtime
-flag -- the staging backend runs a byte-identical config to the demo's, on
+Note that today the two channels are distinguished by *deploy wiring* -- the
+build's `_CHANNEL` substitution picks the Cloud Run service, the Hosting target
+and the channel config file -- rather than by any runtime
+flag. The staging backend runs a byte-identical config to the demo's, on
 purpose, so staging predicts demo behavior. If a genuine runtime difference is
 ever needed, add it through one helper as above.
 
@@ -447,11 +482,12 @@ gcloud account and re-auth if needed.
 | form kits on bare run | **skipped** (shared bucket) | deployed |
 | Firestore rules | never | deployed |
 | channel config | `deploy/channels/staging.env` | `deploy/channels/demo.env` |
-| Cloud Build target | `backend-staging` (declared, not yet run) | `backend-demo` (declared, not yet run) |
+| Cloud Build targets | `verify` (when unrecorded), `backend-staging`, `frontend-staging` | `backend-demo`, `form-kits`, `firestore-rules`, `frontend-demo` |
 
 The backend runs on Cloud Run co-located with Gemini and NEVER logs full PII
 bodies -- see [`../standards/hipaa-pii-policy.md`](../standards/hipaa-pii-policy.md).
 The hosted schema editor is a third Hosting site (`polyglot-editor-demo`) and
-ships via `deploy-editor.sh`; it has no staging counterpart.
+ships via the `editor` target (`deploy-editor.sh`); it has no staging
+counterpart.
 
 _(Keep secrets out of this doc -- reference names, not values.)_

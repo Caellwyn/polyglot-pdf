@@ -36,9 +36,11 @@ React + TypeScript (Vite) frontend on **Firebase Hosting**; Python/FastAPI backe
 on **Cloud Run** (co-located with Gemini). Entry points: backend `backend/main.py`
 (WebSocket route `backend/routes/websocket_routes.py`, Gemini adapter
 `backend/adapters/live_ai_gemini.py`); frontend `frontend/src/` (WS config
-`frontend/src/shared/config.ts`). Deploy is **local/manual**, two
+`frontend/src/shared/config.ts`). Deploy is **Cloud Build from a pushed
+commit**, two
 channels: `deploy-staging.sh` (the test deploy) then `deploy-demo.sh` (the
-protected demo shown to investors/pilot firms). `deploy-production.sh` is DEAD
+protected demo shown to investors/pilot firms) -- both thin wrappers that run
+the build's triggers. `deploy-production.sh` is DEAD
 and refuses to run. For the current architecture --
 including the **Surface contracts** map of every cross-surface data contract
 (producer/consumer code sites; the blast-radius reference for reviews) -- read
@@ -534,7 +536,11 @@ the conversation.
 - **Flow:** worktree -> local test server (`scripts/dev-local.ps1`, via
   `/run-local`) -> `dev` -> **staging** remote (`deploy-staging.sh`) -> **demo**
   remote (`deploy-demo.sh`). **There is NO prod** for this project --
-  `deploy-production.sh` targets a dead project and refuses to run. Details:
+  `deploy-production.sh` targets a dead project and refuses to run.
+  **Every deploy is a Cloud Build build of a PUSHED commit** -- the
+  `deploy-*.sh` scripts are thin trigger wrappers (they refuse a dirty or
+  unpushed tree), and the admin console starts the same builds; the gates live
+  in the build, not in the scripts. Details:
   [`docs/doctrine/promotion-tiers.md`](docs/doctrine/promotion-tiers.md).
 - **The demo is the PROTECTED target** (investors + pilot firms). Staging exists
   so deploy-only bugs -- Cloud Run WS timeouts, Vertex model-id resolution, the

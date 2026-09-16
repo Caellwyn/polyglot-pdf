@@ -1,6 +1,17 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
+
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
+now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
+deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
+and `scripts/deploy_build_targets.sh` is the shared runner. `deploy-all.sh`
+keeps a sourced helper half (the channel-file parser `cloudbuild.yaml` uses).
+Two behaviours moved rather than being lost: the `firestore-rules` target now
+ships the composite INDEXES alongside the rules, and
+`deploy/channels/admin.env` gains `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, which
+previously reached the service only through `deploy-admin.sh`'s inline env
+assembly.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-j29z1, sprint 23 E2: the "Hosting security headers" section -- one header block on all five Hosting targets, the CSP in report-only mode with its connect-src inventory, and self-hosted fonts via scripts/fetch_fonts.py.)*
 
@@ -28,8 +39,9 @@ rather than duplicated here. No config key or env var changed.)*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
-`BaseModel`); deployment is **local/manual** via the `deploy-*.sh` scripts — there
-is no CI deploy. The two AI-model env vars surface here, but the canonical model
+`BaseModel`); deployment runs on **Cloud Build, from a pushed commit** — the
+`deploy-*.sh` scripts are thin wrappers that start a build, and the admin console
+starts the same builds. The two AI-model env vars surface here, but the canonical model
 rules live in [../standards/ai-models.md](../standards/ai-models.md); VAD flags are
 explained in [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
@@ -104,10 +116,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `FORM_KITS_LOCAL_ROOT` defaults to `<repo>/form-kits`.
 - **`gcs`** (what deploys use) — reads
   `gs://<FORM_KITS_GCS_BUCKET>/<FORM_KITS_REMOTE_PREFIX>/<kit_id>/...`. The
-  `--set-env-vars` that pins `FORM_KITS_MODE=gcs` + the bucket lives in
-  **`deploy-all.sh`**; the `deploy-staging.sh` / `deploy-demo.sh` wrappers only
-  set the shell vars (project, bucket name, service, hosting target) and delegate
-  to it.
+  `--set-env-vars` that pins `FORM_KITS_MODE=gcs` + the bucket is computed by
+  **`cloudbuild.yaml`'s `backend-deploy` step** (and its `admin-service`
+  sibling), not by any wrapper.
 
 ## Required & dev-only env vars
 
@@ -181,7 +192,7 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   and `test_token_usage_local_only.py`.
 - **`CONFIRMATION_FIRESTORE_ENABLED=true`** — mirrors the confirmation audit
   trail (metadata only, never values) to the `confirmation_events` Firestore
-  collection; set in `deploy-all.sh`'s `BACKEND_ENV` because the file-only
+  collection; set in the build's `BACKEND_ENV` because the file-only
   trail dies with the Cloud Run instance. Optional
   `CONFIRMATION_RETENTION_DAYS` stamps an `expire_at` for a TTL policy;
   `CONFIRMATION_LOG_DIR` still points the local JSONL (dev). See
@@ -190,7 +201,7 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   (`backend/services/firms.py`, bd `polyglot-pdf-lo88`): the `firms/{firm_id}`
   Firestore collection holding firm profiles + allowed-kits, consumed by the
   form-kit routes' firm-scoped visibility filter (bd `polyglot-pdf-vccy`).
-  Set in `deploy-all.sh`'s `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list
+  Set in the build's `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list
   hint names it and `tests/test_deploy_form_kit_hints.py` pins that
   enumeration. Reads fail CLOSED (`[]`) when unset or broken, so an outage
   hides private kits rather than exposing them. Firm records are created by
@@ -340,7 +351,21 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > which documents this correctly (it explicitly calls out `VFF_DEV_LOGGING`
 > as dead config and points back here).
 
-## Deployment (local/manual — no CI)
+## Deployment (Cloud Build, from a pushed commit)
+
+**ONE ENGINE.** Every deploy is a Cloud Build build of `cloudbuild.yaml` at an
+explicit commit, selected by the `_TARGET` substitution, started through a
+manual trigger named `polyglot-<target>`. The `deploy-*.sh` scripts and the
+admin console are two ways to press the same button; nothing builds or deploys
+locally any more. What that buys: the gates live in the BUILD, so no route
+around them exists. The per-SHA `verify` record, the reachability check, the
+kits manifest validation and the staging-before-demo promotion gate are all
+build steps -- a bash-started build is gated exactly like a console-started
+one.
+
+**Running a wrapper is still a maintainer-gated deploy.** Only the engine
+changed: each wrapper keeps its flags and still needs its own per-instance
+"yes" before it is run (CLAUDE.md "Deployment / promotion").
 
 **Two LIVE channels, one project.** Both run in `polyglot-demo-aa709` in
 **`us-central1`**, separated by Cloud Run SERVICE and Hosting SITE (bd
@@ -365,30 +390,39 @@ command with no `--project` now errors instead of silently resolving to a dead
 project -- and is not quietly aimed at the live demo either. Every scripted
 `firebase` call passes `--project` explicitly, so nothing depends on an alias.
 
-All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
-stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
-a brand-new Cloud Run service by name -- not part of the regular update flow the
-two channel scripts use.
+**What each wrapper runs** (bd `polyglot-pdf-oqtm7`, 4.6). Every one refuses a
+dirty or unpushed tree, then runs its targets' triggers in order at
+`git rev-parse HEAD`, streams each build's log, and exits non-zero on the first
+failed build. `scripts/deploy_build_targets.sh` is the whole bash side --
+`run_build_target` starts one trigger and reads the build's FINAL STATUS from
+`gcloud builds describe` (never the log reader's exit code), and
+`run_build_targets` runs a list and stops at the first failure.
+
+| Wrapper | Targets, in order |
+|---|---|
+| `deploy-staging.sh` | `verify` (only when this commit has no `build_checks` record), `backend-staging`, `form-kits` with `--form-kits`, `frontend-staging` |
+| `deploy-demo.sh` | `backend-demo`, `form-kits`, `firestore-rules`, `frontend-demo` |
+| `deploy-editor.sh` | `editor` |
+| `deploy-admin.sh` | `admin-service` |
+| `deploy-admin-console.sh` | `admin-console-candidate`, or `admin-console` with `--live` |
+| `backend/deploy-new.sh` | the target for the service named on the command line; an unknown name is REFUSED, never guessed (a new service needs its own channel file and target first) |
+| `deploy-all.sh` | `DEPLOY_CHANNEL`'s targets -- it has no default channel, because guessing one would guess "demo", the protected target |
+
+`deploy-all.sh` also keeps a LIBRARY half, above its sourcing guard:
+`cloudbuild.yaml`'s backend and admin-service steps run `source ./deploy-all.sh`
+and call its `read_channel_section` / `read_channel_value`, so bash and the
+build share one parser for `deploy/channels/*.env` rather than restating the
+format in yaml. Pinned by `tests/test_deploy_channel_parity.py`.
 
 **The reachability gate is ONE module, `scripts/verify_service_reachable.py`**
-(bd `polyglot-pdf-ywxoh`, 4.2), called from FOUR thin bash wrapper functions --
-`deploy-all.sh`, `backend/deploy-new.sh` (bd `polyglot-pdf-6oi9s`),
-`deploy-editor.sh` (bd `polyglot-pdf-dldwb`) and `deploy-admin-console.sh`
-(bd `polyglot-pdf-b6943`) -- and from `cloudbuild.yaml`'s
+(bd `polyglot-pdf-ywxoh`, 4.2), called from `cloudbuild.yaml`'s
 `backend-reachability-gate`, `editor-reachability-warn` and
-`admin-console-reachability-warn` steps. Before this bead each bash script
-carried the FULL check inline (a byte-identical copy, pinned equal by
-`tests/test_deploy_reachability_gate.py`); the module now holds the ONE
-implementation (IAM-policy query, `--flatten`/`--filter` shape, the
-false-pass/false-fail cases, warn-vs-fatal severity) and each bash function is
-a thin wrapper resolving a python interpreter and shelling out to it --
-`tests/test_verify_service_reachable.py` exercises the module directly via
-dependency injection, and `tests/test_deploy_reachability_gate.py` now proves
-the four wrapper functions are byte-identical THIN CALLS (no inline
-`get-iam-policy` query left in any of them) and pins the per-script call-site
-properties (bare-command shape, correct severity, ordering vs. the success
-banner) that still apply to a wrapper the same way they applied to the full
-copy.
+`admin-console-reachability-warn` steps. It once existed as a byte-identical
+bash copy in four deploy scripts, each of which deployed a service itself; none
+does now, so the module has exactly one kind of caller.
+`tests/test_verify_service_reachable.py` exercises it directly via dependency
+injection, and `tests/test_deploy_wrappers.py` pins that no wrapper
+reintroduces a bash copy.
 
 The module spawns `gcloud` through `shutil.which` (bd `polyglot-pdf-o4f7c`):
 on Windows, a bare `gcloud` resolves only to a `gcloud.exe` that the Cloud
@@ -400,45 +434,29 @@ being unable to check is not proof of breakage (the same rule the bash
 gate always had for a failing `gcloud` call) -- never a crash. Both
 properties are pinned in `tests/test_verify_service_reachable.py`.
 
-That file pins **TWO different completeness sets**, and confusing them is what
-let the editor ship ungated for a round:
+The gate's SEVERITY differs by step: a target that just CREATED the service
+aborts, while one binding a PRE-EXISTING backend (the editor, the admin
+console) passes `warn` -- refusing to ship over someone else's IAM state would
+be the gate crying wolf.
 
-| set | membership rule | members |
-|---|---|---|
-| `GATED_DEPLOY_SCRIPTS` | passes `--allow-unauthenticated` (deploys a public service) | `deploy-all.sh`, `backend/deploy-new.sh` |
-| `URL_BAKING_SCRIPTS` | calls `services describe` AND exports a `VITE_*` (bakes a backend URL into a frontend build) | `deploy-all.sh`, `deploy-editor.sh`, `deploy-admin-console.sh` |
-
-`deploy-editor.sh` and `deploy-admin-console.sh` deploy only Hosting, so both
-are correctly absent from the first; `backend/deploy-new.sh` builds no
-frontend, so it is correctly absent from the second. Both sets are derived
-mechanically, so a new script joining either one fails CI rather than
-slipping between them.
-
-The gate's SEVERITY differs by call site: a stage that just CREATED the service
-aborts, while a stage binding a PRE-EXISTING backend (the frontend stage, the
-editor) passes `warn` -- refusing to ship over someone else's IAM state would be
-the gate crying wolf. The counts are pinned per script.
-
-- **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
+- **Backend** — the `backend-<channel>` target: `docker build` + `docker push`
+  to `gcr.io/<project>/polyglot-backend:<sha>`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=`.
 
-  **The env block is assembled in two layers (bd `polyglot-pdf-1s3ko`).**
-  `deploy-all.sh` computes what only it can know -- `GOOGLE_CLOUD_PROJECT`, the
-  `FORM_KITS_*` trio, `APP_MODULE` and `GIT_SHA` (read from the tree being
-  built) -- and then appends the channel's settings read from
-  **`deploy/channels/<channel>.env`**, selected by the `DEPLOY_CHANNEL` the
-  wrapper passes. `BACKEND_EXTRA_ENV` survives as a LAST layer for values only
-  knowable at deploy time (`deploy-admin.sh`'s `ADMIN_SERVICE_URL`, read from a
-  live `services describe`); it is no longer where channel config lives.
+  **The env block is assembled in two layers (bd `polyglot-pdf-1s3ko`).** The
+  build step computes what only it can know -- `GOOGLE_CLOUD_PROJECT`, the
+  `FORM_KITS_*` trio, `APP_MODULE` and `GIT_SHA` (the commit being built) --
+  and then appends the channel's settings read from
+  **`deploy/channels/<channel>.env`**, selected by the `_CHANNEL` substitution
+  the trigger fixes.
 
-  **Why a file rather than a bash string.** `cloudbuild.yaml`'s
-  `backend-<channel>` target deploys the same service, and a Cloud Build step
-  cannot read a variable assembled inside `deploy-staging.sh`. Before the
-  channel files, the build would have had to RESTATE the config -- and a
-  restated config is exactly the drift `tests/test_deploy_channel_parity.py`
-  exists to catch, reintroduced at a second site. The build therefore
-  **sources `deploy-all.sh` and calls its own `read_channel_section`**, so bash
-  and Cloud Build share one parser as well as one file.
+  **Why a file rather than a bash string.** A Cloud Build step cannot read a
+  variable assembled inside `deploy-staging.sh`, so before the channel files
+  the build would have had to RESTATE the config -- and a restated config is
+  exactly the drift `tests/test_deploy_channel_parity.py` exists to catch,
+  reintroduced at a second site. The build **sources `deploy-all.sh` and calls
+  its own `read_channel_section`**, so the file has one parser as well as one
+  copy.
 
   **Format.** Plain `KEY=value` under three section headers, no shell
   expansion: `[SET_ENV_VARS]`, `[SET_SECRETS]`, `[SERVICE_ACCOUNT]`, each
@@ -454,22 +472,25 @@ the gate crying wolf. The counts are pinned per script.
   (`CHANNEL_SPECIFIC` in the parity test). Change staging FIRST, verify there,
   then promote. `admin.env` is deliberately outside that pair -- there is ONE
   admin service backing both channels' data, so it carries
-  `admin-backend-sa` and `APP_MODULE=admin_backend.main:app`. `deploy-admin.sh`
-  still passes those values inline (unchanged by this bead); `admin.env` is now
-  ALSO read directly by `cloudbuild.yaml`'s `admin-service` target (bead
-  `polyglot-pdf-ywxoh`, 4.2), so bash and the build share the same channel file
-  the way the `backend-<channel>` targets already did -- the two live copies
-  stay pinned equal by `tests/test_cloudbuild_yaml.py` until `deploy-admin.sh`
-  itself becomes a thin wrapper over the build (bead `polyglot-pdf-oqtm7`, 4.6).
+  `admin-backend-sa`, `APP_MODULE=admin_backend.main:app`,
+  `CORS_EXTRA_ORIGINS`, and the THREE Scheduler/Pub-Sub caller identities the
+  admin routes' OIDC gates allowlist (`SWEEP_SCHEDULER_SA_EMAIL`,
+  `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, `PUBSUB_PUSH_SA_EMAIL`). It is the ONLY
+  copy: `deploy-admin.sh` restates none of it (bd `polyglot-pdf-oqtm7`, 4.6,
+  which is also when the monthly top-up identity moved here -- it had reached
+  the service only through that script's inline env assembly, and a key
+  missing from the file is a key REMOVED from the running service at the next
+  deploy, since `--set-env-vars` replaces the whole block).
+  `tests/test_deploy_admin_sweep_env_vars.py` derives the required set from
+  the `*_SA_EMAIL` vars the routes actually read, so a fourth caller identity
+  is required here the day its route reads it.
   `admin.env` deliberately omits `ADMIN_SERVICE_URL` and `BACKEND_URLS_JSON`
   (its own `[SET_ENV_VARS]` comment) because both need a live `gcloud run
-  services describe` lookup at deploy time -- `deploy-admin.sh` resolves them
-  inline, and `cloudbuild.yaml`'s `admin-service-deploy-tagged` step now does
-  the SAME live lookups before its own `gcloud run deploy`, for the same
-  reason: `--set-env-vars` replaces the service's entire env block, so
-  omitting either would silently disable the refund sweep's OIDC audience or
-  blank `GET /admin/health`'s channel fan-out on the very next Cloud Build
-  admin-service deploy.
+  services describe` lookup at deploy time; `cloudbuild.yaml`'s
+  `admin-service-deploy-tagged` step does those lookups before its own
+  `gcloud run deploy` and appends them, for the same reason -- omitting either
+  would silently disable the refund sweep's OIDC audience or blank
+  `GET /admin/health`'s channel fan-out.
 
   **The build's own identity, `polyglot-cloudbuild-sa`** (bd
   `polyglot-pdf-p4ale`, E4.5), is separate from every SA above -- it is who
@@ -530,8 +551,8 @@ the gate crying wolf. The counts are pinned per script.
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
 
-  **Deploy preflight (bd `polyglot-pdf-1s3ko`).** `deploy-staging.sh` and
-  `deploy-demo.sh` source `scripts/deploy_preflight.sh` and call
+  **Deploy preflight (bd `polyglot-pdf-1s3ko`).** EVERY wrapper sources
+  `scripts/deploy_preflight.sh` and calls
   `deploy_preflight` BEFORE anything else. It refuses a **dirty** tree
   (`git status --porcelain` non-empty, untracked files included) and a commit
   **no remote branch contains**. Both refusals protect the same claim: a Cloud
@@ -544,8 +565,9 @@ the gate crying wolf. The counts are pinned per script.
   `tests/test_deploy_preflight.py`, which runs the helper under bash against
   real temporary repositories.
 
-  **Reachability gate (bd `polyglot-pdf-pidtg`).** After the deploy, `deploy-all.sh`
-  reads the service's IAM policy and **aborts with `exit 1` if there is no
+  **Reachability gate (bd `polyglot-pdf-pidtg`).** After the deploy, the
+  `backend-reachability-gate` step
+  reads the service's IAM policy and **fails the build if there is no
   `allUsers` invoker binding.** `--allow-unauthenticated` REQUESTS that binding but
   the request can be REFUSED while the deploy still succeeds and exits 0 -- which is
   exactly what happened on the first deploy of `polyglot-backend-staging`: the
@@ -556,55 +578,55 @@ the gate crying wolf. The counts are pinned per script.
   standing up a NEW service. If the IAM read itself fails (no permission, transient
   error) the gate WARNS instead of aborting -- being unable to check is not proof the
   service is broken.
-- **Form-kits** — uploads the **complete** kits from the local `form-kits/` tree
-  to `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
-  `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`. A kit is
+- **Form-kits** — the `form-kits` target uploads the **complete** kits from the
+  checked-out `form-kits/` tree
+  to `gs://<bucket>/<prefix>/` plus an `index.json` manifest written and
+  validated by `scripts/write_kits_manifest.py`. Demo bucket
+  `polyglot-demo-aa709-form-kits`. There is no per-channel split, so this
+  publishes to the DEMO's form list whichever wrapper started it. A kit is
   uploaded (and listed in the manifest) only when its `metadata.json` has
-  `status: complete` — the `kit_is_complete` gate in `deploy-all.sh` skips
+  `status: complete` — the gate skips
   draft, submitted, unmarked, AND unpublished (retired) kits, so in-progress
   or no-longer-live forms stay local + git-backed and never reach the voice
   app (bd polyglot-pdf-b0pe). Both the upload loop and the manifest loop are
   gated, so a non-`complete` kit is absent from GCS *and* the served
   manifest.
-- **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
-  `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
-  → `.env.demo`; staging reuses the demo build, same project keys). Output
-  `frontend/dist` → `firebase deploy --only hosting:$FRONTEND_HOSTING_TARGET`
-  (`app` by default, `app-staging` for staging). The
+- **Frontend** — the `frontend-<channel>` target: `npm ci`, then
+  `npm run build:schema:demo` (mode `demo` for BOTH channels — they share one
+  Firebase project and therefore one set of client-side keys), then
+  `npx firebase-tools deploy --only hosting:<target>` (`app` for demo,
+  `app-staging` for staging). The
   bare `npm run build` is NOT used: it loads `.env.production` under the default
   Vite config, whose Firebase keys differ per channel — a demo built that way dies
   with `auth/invalid-api-key`. **Backend WS URL is resolved at deploy time** (bd
-  `emm7`): before the build, `deploy-all.sh` resolves the live Cloud Run URL
-  (`gcloud run services describe $BACKEND_SERVICE_NAME --format 'value(status.url)'`)
-  and exports `VITE_WS_URL`. **That resolution is what binds a frontend build to
-  its channel's backend** -- `deploy-staging.sh` exports
-  `BACKEND_SERVICE_NAME=polyglot-backend-staging` for the frontend stage too, not
-  just the backend one. `BACKEND_SERVICE_NAME` and `FRONTEND_HOSTING_TARGET` are
-  both `${VAR:-default}` in `deploy-all.sh`, never bare assignments: a bare
-  assignment silently clobbers the caller's export and would deploy staging over
-  the demo with no error (pinned by
-  `backend/tests/unit/test_deploy_channel_isolation.py`). It exports `VITE_WS_URL` (which OVERRIDES the `.env.<mode>` `VITE_WS_URL` line —
-  standard Vite precedence). The `VITE_WS_URL` values committed in `.env.demo` /
-  `.env.production` are now documented FALLBACK-ONLY, because the Cloud Run auto-URL
+  `emm7`): the `frontend-resolve-urls` step resolves the live Cloud Run URL
+  (`gcloud run services describe <service> --format 'value(status.url)'`)
+  and hands it forward through `/workspace` for the build step to export as
+  `VITE_WS_URL`. **That resolution is what binds a frontend build to
+  its channel's backend**, and it is a separate STEP rather than a substitution
+  because substitutions are fixed at trigger time, before the build can look
+  anything up. It OVERRIDES the `.env.<mode>` `VITE_WS_URL` line (standard Vite
+  precedence); the values committed in `.env.demo` /
+  `.env.production` are documented FALLBACK-ONLY, because the Cloud Run auto-URL
   hash is not stable (it drifted on a service recreate and 404'd the deployed
-  frontend). **`VITE_ADMIN_API_BASE_URL` is resolved the SAME way**
-  (bd `polyglot-pdf-z4ljj`, C0): `deploy-all.sh`'s frontend stage also resolves
-  the live `polyglot-admin` Cloud Run URL (`ADMIN_SERVICE_NAME`, defaulted
-  `${ADMIN_SERVICE_NAME:-polyglot-admin}`, never overridden by either channel
-  wrapper — there is ONE admin service backing both channels) and exports it,
+  frontend). An unresolvable backend URL ABORTS the build rather than falling
+  back — both fallbacks name a DEMO backend, so warning-and-continuing would
+  ship a staging site driving the live demo backend (pinned by
+  `backend/tests/unit/test_deploy_channel_isolation.py`).
+  **`VITE_ADMIN_API_BASE_URL` is resolved the SAME way**
+  (bd `polyglot-pdf-z4ljj`, C0): the same step resolves
+  the live `polyglot-admin` Cloud Run URL (ONE admin service backs both
+  channels) and the build step exports it,
   binding the main app's firm-console pages (`frontend/src/console/*`) to the
-  admin service. Both `gcloud run services describe` calls run in the SAME
-  frontend stage and each is followed by its own
-  `verify_service_publicly_reachable(..., warn)` call — see
-  `tests/test_deploy_reachability_gate.py`'s `URL_BAKING_SEVERITY["deploy-
-  all.sh"] = (2, 1)`. An explicitly-selected channel whose admin URL cannot be
-  resolved aborts the build (`exit 1`), reusing the SAME
-  `BACKEND_SERVICE_NAME_EXPLICIT` signal `VITE_WS_URL`'s abort branch uses —
-  there is one "was a channel explicitly selected" flag in `deploy-all.sh`,
-  not two. Pinned by `tests/test_deploy_admin_url_injection.py`. **This is a
-  SECOND producer of the `VITE_ADMIN_API_BASE_URL` name** — the admin
-  console's own `deploy-admin-console.sh` (see "Admin console" below) also
-  resolves and exports it, for a DIFFERENT Vite app/build; the two builds
+  admin service. An unresolvable admin URL aborts too, and for a sharper
+  reason: the build step exports whatever the resolve step wrote,
+  UNCONDITIONALLY, so an empty export would override the committed fallback and
+  turn every firm-console call into a relative path that Hosting's `/api/**`
+  rewrite sends to the VOICE backend. Pinned by
+  `tests/test_deploy_admin_url_injection.py`. **This is a
+  SECOND producer of the `VITE_ADMIN_API_BASE_URL` name** — the
+  `admin-console-*` targets (see "Admin console" below) also
+  resolve and export it, for a DIFFERENT Vite app/build; the two builds
   never run together, so there is no collision, only a shared name for the
   same kind of value.
 
@@ -612,17 +634,12 @@ the gate crying wolf. The counts are pinned per script.
   which channel it IS — required because every firm-scoped admin-service
   route takes an explicit `?channel=` (the admin service has no channel
   identity of its own; it is one Cloud Run service serving both channels'
-  Firestore data). This can NOT be derived from Vite's own `MODE`:
-  `deploy-staging.sh` and `deploy-demo.sh` both build with
-  `npm run build:schema:demo` (mode `demo`) because the two channels share one
-  Firebase project and therefore one set of client-side Firebase keys — so
-  `import.meta.env.MODE` reads `demo` for a staging build too.
-  `deploy-staging.sh` exports `VITE_APP_CHANNEL="staging"` and `deploy-demo.sh`
-  exports `VITE_APP_CHANNEL="demo"` on their own `FRONTEND_BUILD_CMD=...`
-  invocation lines (a `VAR=value` environment prefix, inherited by
-  `deploy-all.sh`'s own `$FRONTEND_BUILD_CMD` child process — no `export`
-  needed inside `deploy-all.sh` itself, unlike the two `gcloud`-resolved URLs
-  above, which are computed there rather than supplied by the caller).
+  Firestore data). This can NOT be derived from Vite's own `MODE`: both
+  channels build mode `demo` (above), so
+  `import.meta.env.MODE` reads `demo` for a staging build too. The build step
+  exports `VITE_APP_CHANNEL="${_CHANNEL}"` — the channel the TRIGGER fixes, so
+  it cannot disagree with the Hosting target or the backend service the same
+  substitution selected.
   `frontend/src/shared/config.ts`'s `getAppChannel()` reads it, falling back
   to `'demo'` on an unset OR unrecognized value — the same "unset means demo"
   convention as `link_channel()` and every bucket default in this repo — so a
@@ -650,16 +667,19 @@ the gate crying wolf. The counts are pinned per script.
   and `admin-console/vite.config.ts` carry no `base` override at all, so both
   already default to Vite's own absolute `/` — this bug was unique to this
   app's config.
-- **Firestore rules** — `firebase deploy --only firestore:rules` ships
-  `firestore.rules` (wired via `firebase.json`). This step lives in the
-  **`deploy-demo.sh` wrapper**, not `deploy-all.sh`, runs
-  only on a frontend/full deploy, and runs **before** the frontend so the new
-  frontend never goes live against stale rules. **`deploy-staging.sh` deliberately
-  does NOT ship rules**: they are project-wide, not per-site, so a staging rules
-  deploy would apply to the live demo. A project left on default-deny
-  breaks the `users/{uid}` profile sync -- see [auth.md](auth.md); email signup
-  no longer depends on a client-readable rule (the allowlist check is
-  server-side since sprint 23 C3, `POST /api/signup/check`).
+- **Firestore rules** — the `firestore-rules` target ships BOTH
+  `firestore.rules` and the composite `firestore.indexes.json` (wired via
+  `firebase.json`), in that order. `deploy-demo.sh` runs it
+  only on a frontend/full deploy, and **before** the frontend target so the new
+  frontend never goes live against stale rules. Index builds are ASYNCHRONOUS:
+  the build reports success before a new index is READY, so a freshly added
+  filter can still fail for a few minutes afterwards. **`deploy-staging.sh`
+  deliberately never runs this target**: rules and indexes are project-wide,
+  not per-site, so a staging rules deploy would apply to the live demo. A
+  project left on default-deny breaks the `users/{uid}` profile sync -- see
+  [auth.md](auth.md); email signup no longer depends on a client-readable
+  rule (the allowlist check is server-side since sprint 23 C3,
+  `POST /api/signup/check`).
 
 ### One image, two services (`APP_MODULE`)
 
@@ -690,11 +710,11 @@ Logging exclusion on `httpRequest.requestUrl` is a separate live-change
 ask tracked on bd `polyglot-pdf-6rj0j`, applied only when the maintainer
 approves it.
 
-**Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
-`gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
-here would freeze at its default in every image while the deploy-time value was
-silently ignored. `APP_MODULE` rides in through `gcloud run deploy
---set-env-vars` instead, so one image can back both Cloud Run services.
+**Why a runtime env var and not a build arg.** ONE image backs both Cloud Run
+services, and which app it serves is a per-SERVICE fact, not a per-image one --
+an `ARG` would freeze at its default in every image while the deploy-time value
+was silently ignored. `APP_MODULE` rides in through `gcloud run deploy
+--set-env-vars` instead, read from `deploy/channels/<channel>.env`.
 
 Rules the pin test `tests/test_dockerfile_app_module.py` enforces:
 
@@ -729,11 +749,11 @@ while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
 matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
 report an empty string in exactly that case. `verify_service_publicly_reachable()`
 itself still never calls this route -- it reads the Cloud Run IAM policy, not
-HTTP -- but `deploy-admin.sh`'s tagged flow (below) now DOES issue a real
-`GET .../health` against this exact route and gates traffic on its response,
-so it is no longer true that this route has no deploy-time behavioral
-coverage; that coverage exists only for the admin service's own deploy path,
-not for a bare `deploy-all.sh --backend` run.
+HTTP -- but the `admin-service` target's tagged flow (below) DOES issue a real
+`GET .../health` against this exact route and gates the traffic shift on its
+response, so it is no longer true that this route has no deploy-time behavioral
+coverage; that coverage exists only on the admin service's own target, not on
+the `backend-<channel>` ones.
 
 **`GET /version` on both services** (bd `polyglot-pdf-9hzod`) returns
 `{"version": app.version, "git_sha": ...}`. `git_sha` reads the `GIT_SHA`
@@ -790,34 +810,26 @@ admin account is stamped by `scripts/bootstrap_admin_user.py`
 deterministic-project-pin + dead-project-refusal machinery as
 `scripts/bootstrap_firm.py`) -- there is no other way to create one.
 
-**`deploy-admin.sh` (bd `polyglot-pdf-3l2vp`, sprint-22 plan bead 1.3)** is the
-admin backend's own deploy bridge. It sets `BACKEND_SERVICE_NAME=polyglot-admin`,
-`BACKEND_SERVICE_ACCOUNT=admin-backend-sa@...`,
-`APP_MODULE=admin_backend.main:app`, and `CORS_EXTRA_ORIGINS` (both admin
-Hosting sites plus both channels' app origins, since the admin console -- and
-the main app's firm-manager `/console/*` pages -- always call this service
-cross-origin), then calls `deploy-all.sh --backend` with
-`BACKEND_NO_TRAFFIC_TAG=candidate` set. That variable is what makes
-`deploy-all.sh`'s backend stage deploy a **no-traffic tagged revision**
-(`--no-traffic --tag candidate`) instead of shifting traffic immediately: it
-verifies the tag's own stable URL's `/health` first (that URL is built by
-inserting `candidate---` ahead of the service's base host -- `gcloud run
-services describe` reports no revision-scoped address of its own), and only on
-a 200 response runs `gcloud run services update-traffic --to-latest`. A failed
-health check aborts WITHOUT shifting traffic, leaving the previous revision
-live. Unset (every other channel), the flag is a no-op: the same `--backend`
-call it wraps produces the identical `gcloud run deploy` invocation it always
-has. This exists because there is ONE admin service backing BOTH channels'
+**The `admin-service` target (bd `polyglot-pdf-3l2vp`, sprint-22 plan bead
+1.3)** is how the admin backend ships, and `deploy-admin.sh` is the one-line
+wrapper that starts it. Its env, secrets and runtime identity come from
+`deploy/channels/admin.env` (above); the target deploys a **no-traffic tagged
+revision** (`--no-traffic --tag candidate`) instead of shifting traffic
+immediately, verifies the tag's own stable URL's `/health` first (that URL is
+built by inserting `candidate---` ahead of the service's base host -- `gcloud
+run services describe` reports no revision-scoped address of its own), and only
+then runs `gcloud run services update-traffic --to-latest`. A failed health
+check fails the step, so the shift never runs and the previous revision stays
+live. This exists because there is ONE admin service backing BOTH channels'
 data -- a bad admin deploy would otherwise take the control plane down for
 staging and the demo at once, and this sequence is that service's own staging
-tier. `deploy-all.sh` also computes `GIT_SHA=$(git rev-parse HEAD)` and passes
-it alongside `APP_MODULE` as runtime env on every backend deploy (feeding the
-eventual `GET /version` git-sha field, bead 1.6 -- not read by any route yet).
-Pinned by `tests/test_deploy_admin_tag_flow.py`. **What this script does NOT
-do:** deploy the admin-console Vite app -- its candidate + live Hosting sites
-are bead 1.7's `deploy-admin-console.sh`; running `deploy-admin.sh` alone
-stands the API up with no UI in front of it, which is a legitimate
-intermediate state.
+tier. Every backend-family target also passes `GIT_SHA=<the built commit>` as
+runtime env, which is what `GET /version` reports. Step order (record the
+success row, then the staging gate, then the traffic shift) is pinned by
+`tests/test_cloudbuild_yaml.py`. **What this target does NOT do:** deploy the
+admin-console Vite app -- that is `admin-console-candidate` / `admin-console`;
+running `deploy-admin.sh` alone stands the API up with no UI in front of it,
+which is a legitimate intermediate state.
 
 ### Hosted schema editor (second Hosting site)
 
@@ -834,17 +846,18 @@ maps `editor` -> `polyglot-editor-demo`, `app-staging` -> `polyglot-app-staging`
 `admin` -> `polyglot-admin-demo`, and `admin-candidate` ->
 `polyglot-admin-candidate`, all on the demo project. **Because targets are
 named, a bare `firebase deploy --only hosting` deploys ALL FIVE sites** --
-`deploy-all.sh` is pinned to the parameterized
-`--only hosting:$FRONTEND_HOSTING_TARGET`, the `frontend/package.json` `deploy` /
+every build target names its own (`--only hosting:<target>`, resolved from
+`_CHANNEL` or fixed per target), the `frontend/package.json` `deploy` /
 `deploy:demo` shortcuts are pinned too (the unscoped prod one would
 otherwise THROW -- prod maps no `editor` target -- and the demo one would
 silently ship a stale editor build), and the editor ships only via
-**`deploy-editor.sh`** (`npm run build:hosted` + `--only hosting:editor`; its
+the **`editor`** target (`npm run build:hosted` + `--only hosting:editor`),
+which `deploy-editor.sh` starts; that script's
 header is the one-time runbook: site create, `target:apply`, granting each
 person editor access with `scripts/bootstrap_editor_user.py`, adding the
 editor's domain to Firebase Auth's authorized domains, and the bucket
-`roles/storage.objectAdmin` grant the editor's writes need).
-`deploy-editor.sh` also **resolves the live Cloud Run URL at deploy time** and
+`roles/storage.objectAdmin` grant the editor's writes need.
+The `editor` target also **resolves the live Cloud Run URL at build time** and
 exports `VITE_API_BASE_URL` (overriding the `.env.hosted` fallback), same as the
 voice app -- a committed hash there once drifted on a service recreate and made
 every request 404 against the backend, looking like a broken deploy rather
@@ -942,22 +955,21 @@ The reason is architectural, not caution for its own sake: the admin service
 has NO channel of its own (`admin_backend/main.py` -- it serves BOTH staging's
 and the demo's data), so there is no cheap staging channel in front of it the
 way `deploy-staging.sh` protects the voice app. The candidate site is the
-console's substitute -- `./deploy-admin-console.sh` (no flag) ships ONLY
-`admin-candidate`; `./deploy-admin-console.sh --live` ships the SAME build to
-`admin` second, after a human checks the candidate. Both share the identical
-Cloud Run-URL-resolution + reachability-gate pattern `deploy-editor.sh` uses
+console's substitute -- `./deploy-admin-console.sh` (no flag) runs ONLY the
+`admin-console-candidate` target; `./deploy-admin-console.sh --live` runs
+`admin-console`, the same commit to the live site, after a human checks the
+candidate. Both targets share the identical
+Cloud Run-URL-resolution + reachability-gate pattern the `editor` target uses
 (`VITE_ADMIN_API_BASE_URL` resolved from the live `polyglot-admin` service at
-build time, `verify_service_publicly_reachable(...)` called in WARN mode since
-the admin service is pre-existing from this script's point of view -- see
-Surface contracts in `technical_guide.md` and
-`tests/test_deploy_reachability_gate.py`, which pins all four now-existing
-copies of that gate byte-identical). A preview channel
+build time, `scripts/verify_service_reachable.py` called in WARN mode since
+the admin service is pre-existing from this target's point of view -- see
+Surface contracts in `technical_guide.md`). A preview channel
 (`firebase hosting:channel:deploy`) is DELIBERATELY NOT used for either site --
 its random-hash URLs would have to be re-added to Firebase Auth's authorized
 domains and the admin service's `CORS_EXTRA_ORIGINS` on every single deploy; a
 fixed candidate site is authorized once, like `polyglot-admin-demo`.
-`deploy-admin.sh`'s `ADMIN_CORS_ORIGINS` already lists both sites' `.web.app`
-and `.firebaseapp.com` domains.
+`deploy/channels/admin.env`'s `CORS_EXTRA_ORIGINS` already lists both sites'
+`.web.app` and `.firebaseapp.com` domains.
 
 ### Frontend → backend wiring
 
@@ -994,10 +1006,12 @@ the `?channel=` query param the admin service's routes require. See "Frontend"
 above for how both env vars are injected at deploy time, and Surface contract
 22 in `technical_guide.md` for the producer/consumer wiring.
 
-> **Promotion path** is worktree → local test server → `dev` → demo remote
-> (`deploy-demo.sh`); deploys stay manual (local shell scripts, not CI) and there
-> is **no active prod**. The agent may run the demo deploy under a three-part gate
-> (local-test-first + per-instance permission + post-deploy test-drive). See
+> **Promotion path** is worktree → local test server → `dev` → staging remote
+> (`deploy-staging.sh`) → demo remote (`deploy-demo.sh`); every deploy is a
+> Cloud Build build of a PUSHED commit, started either from those wrappers or
+> from the admin console, and there is **no active prod**. The agent may run a
+> deploy under a three-part gate (local-test-first + per-instance permission +
+> post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
 ## Live infrastructure posture (read-only)

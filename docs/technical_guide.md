@@ -976,10 +976,11 @@ with `gcloud builds submit --tag`, which cannot pass one.
 - **Pinned by** `tests/test_dockerfile_app_module.py` (CMD shape, default,
   no `ARG`, no `ENV` default, both `COPY` lines, and the constant/Dockerfile
   agreement), `admin_backend/tests/unit/test_admin_health.py`, and
-  `tests/test_deploy_admin_tag_flow.py` (the untagged-vs-tagged `deploy-
-  all.sh` invocation: `APP_MODULE`/`GIT_SHA` always set; `--tag`/`--no-
-  traffic` only with `BACKEND_NO_TRAFFIC_TAG`; a failing tag-URL `/health`
-  aborts before `update-traffic` runs).
+  `tests/test_cloudbuild_yaml.py` (each backend-family target's env block:
+  `APP_MODULE` read from the channel file, `GIT_SHA` set to the built commit,
+  and the `admin-service` target's step order -- the tagged no-traffic deploy,
+  then the tag-URL health check, then the traffic shift, so a failing health
+  check fails the step and the shift never runs).
 
 ### 13. `admin_backend/` -> `backend/` shared-code direction (bd polyglot-pdf-pnoik)
 
@@ -1848,37 +1849,29 @@ proxies only the public backend) and the WebSocket path (contract 9 /
 now call it -- C4's `EmployeesPage.tsx` (contract 19's four `/admin/users`
 routes) and C5's `LinkHistoryPage.tsx` (contract 22's listing + revoke).
 
-- **Producer:** `deploy-all.sh`'s frontend stage. `ADMIN_SERVICE_NAME`
-  (`${ADMIN_SERVICE_NAME:-polyglot-admin}`, matching `deploy-admin.sh`'s and
-  `deploy-admin-console.sh`'s own default) is resolved to a live Cloud Run URL
-  via `gcloud run services describe`, the SAME mechanism `VITE_WS_URL` already
-  uses for the public backend -- a second, independent `gcloud` call and a
-  second `export VITE_ADMIN_API_BASE_URL=...` in the same stage. Unlike
-  `BACKEND_SERVICE_NAME`, `ADMIN_SERVICE_NAME` is never overridden by either
-  channel wrapper: there is ONE admin service serving BOTH channels'
-  Firestore data (see contract 17 and `docs/doctrine/promotion-tiers.md`), so
-  staging and demo both want the same value. Each resolution is followed by
-  its own `verify_service_publicly_reachable(..., warn)` call -- warn, not
-  fatal, because the admin service is pre-existing from this script's point
-  of view (`deploy-admin.sh`'s job, not this one's), the same reasoning
-  `deploy-admin-console.sh`'s and `deploy-editor.sh`'s identical warn-mode
-  calls already use. An EXPLICITLY-selected channel (`BACKEND_SERVICE_NAME_
-  EXPLICIT` -- the SAME capture `VITE_WS_URL`'s abort branch reads; there is
-  only one such signal in `deploy-all.sh`) whose admin URL cannot be resolved
-  aborts the build (`exit 1`); a bare run warns and falls back to the
-  committed `.env.demo` literal, exactly mirroring `VITE_WS_URL`'s two-branch
-  shape. Pinned by `tests/test_deploy_admin_url_injection.py` and
-  `tests/test_deploy_reachability_gate.py`'s `URL_BAKING_SEVERITY["deploy-
-  all.sh"] = (2, 1)` / `GATED_DEPLOY_SEVERITY["deploy-all.sh"] = (2, 1)`.
-- **`VITE_APP_CHANNEL`**, the SECOND half of this contract: `deploy-
-  staging.sh` exports `VITE_APP_CHANNEL="staging"` and `deploy-demo.sh`
-  exports `VITE_APP_CHANNEL="demo"`, each as a `VAR=value` prefix on their own
-  `FRONTEND_BUILD_CMD=...` invocation of `deploy-all.sh` -- inherited by
-  `deploy-all.sh`'s own `$FRONTEND_BUILD_CMD` child process without
-  `deploy-all.sh` needing to `export` it itself (unlike the two
-  `gcloud`-resolved URLs, which `deploy-all.sh` computes rather than
-  receives). This is deliberately NOT derived from Vite's `MODE`: both
-  channel wrappers build with `npm run build:schema:demo` (mode `demo`,
+- **Producer:** `cloudbuild.yaml`'s `frontend-resolve-urls` step, which
+  resolves the live `polyglot-admin` Cloud Run URL via `gcloud run services
+  describe` -- the SAME mechanism and the SAME step that resolves
+  `VITE_WS_URL` for the public backend -- and writes it to
+  `/workspace/.vite_admin_api_base_url` for `frontend-build-deploy` to export.
+  It is a separate STEP rather than a substitution because substitutions are
+  fixed at trigger time, before the build can look anything up. There is ONE
+  admin service serving BOTH channels' Firestore data (see contract 17 and
+  `docs/doctrine/promotion-tiers.md`), so the service name is a literal here
+  rather than derived from `_CHANNEL`. An unresolvable admin URL ABORTS the
+  build (`exit 1`), and the reason is sharper than for `VITE_WS_URL`: the
+  build step exports whatever the resolve step wrote, UNCONDITIONALLY, so an
+  empty export would OVERRIDE the committed `.env.demo` fallback and turn
+  every firm-console call into a relative path Hosting's `/api/**` rewrite
+  sends to the VOICE backend. Pinned by
+  `tests/test_deploy_admin_url_injection.py` and
+  `tests/test_cloudbuild_yaml.py`.
+- **`VITE_APP_CHANNEL`**, the SECOND half of this contract:
+  `frontend-build-deploy` exports `VITE_APP_CHANNEL="${_CHANNEL}"` -- the
+  channel the TRIGGER fixed, so it cannot disagree with the Hosting target or
+  the backend service the same substitution selected. This is
+  deliberately NOT derived from Vite's `MODE`: both
+  channels build with `npm run build:schema:demo` (mode `demo`,
   because staging and demo share one Firebase project and therefore one set
   of client Firebase keys -- see "Frontend" in
   `docs/components/config-deployment.md`), so `import.meta.env.MODE` cannot
@@ -2798,8 +2791,7 @@ exactly one place instead of drifting per caller.
   substring-matching filename); `backend/tests/unit/test_firestore_rules_text.py`
   (the deny block, in `ADMIN_SDK_ONLY_COLLECTIONS`).
 
-**31b. The reachability gate: ONE python module, four bash callers, three
-build steps.**
+**31b. The reachability gate: ONE python module, three build steps.**
 
 - **Before this bead:** `deploy-all.sh`, `backend/deploy-new.sh`,
   `deploy-editor.sh` and `deploy-admin-console.sh` each carried a
@@ -2820,15 +2812,13 @@ build steps.**
   CLI (`python scripts/verify_service_reachable.py <svc> <region> <project>
   [--severity warn|fatal]`) translates that to an exit code for both bash and
   Cloud Build.
-- **Bash callers:** all four scripts' `verify_service_publicly_reachable()` is
-  now a THIN WRAPPER -- resolve a python interpreter
-  (`MANIFEST_PYTHON_CANDIDATES`-style fallback), resolve the module's path
-  relative to the wrapper's OWN file (two candidate depths, since
-  `backend/deploy-new.sh` sits one directory below the other three), shell
-  out, and `exit 1` on a non-zero return so the calling script still
-  terminates (the bare-command-shape requirement from bead pidtg/6oi9s
-  carries over unchanged -- a `| cat` or `$(...)` around the call would still
-  swallow the exit). All four wrapper functions are byte-identical.
+- **No bash callers left** (bd polyglot-pdf-oqtm7, E4.6). Four scripts briefly
+  kept a thin bash wrapper around the module; each existed only because that
+  script deployed a service itself, and none does now -- every deploy is a
+  build. The module therefore has exactly one kind of caller, which is what
+  the port was for. `tests/test_deploy_wrappers.py` pins that no wrapper
+  reintroduces a bash copy (neither the function nor a bare `get-iam-policy`
+  query).
 - **Build callers:** `backend-reachability-gate` (fatal),
   `editor-reachability-warn` and `admin-console-reachability-warn` (warn) call
   `python3 scripts/verify_service_reachable.py` directly on the
@@ -2836,12 +2826,8 @@ build steps.**
   internal use -- NOT `python:3.12`, which has no `gcloud` binary on PATH for
   the module's default `gcloud_runner` to shell out to).
 - **Pinned by:** `tests/test_verify_service_reachable.py` (the module's
-  behavior); `tests/test_deploy_reachability_gate.py` (the four wrapper
-  functions are byte-identical thin calls with NO inline `get-iam-policy`
-  query left, executed end-to-end with a stubbed interpreter to prove the
-  argument binding and exit-code propagation actually work, plus the
-  unchanged per-script call-site properties -- bare command, correct
-  severity counts, ordering vs. the success banner); `tests/test_cloudbuild_yaml.py`
+  behavior); `tests/test_deploy_wrappers.py` (no wrapper carries a bash copy);
+  `tests/test_cloudbuild_yaml.py`
   (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
   their target's mutating step).
 
@@ -3400,3 +3386,74 @@ changes -- for BOTH console-triggered and bash-triggered builds.
   push-caller service account is neither runtime identity, the printed
   subscription-create NOTE names the right topic/path and carries both
   `--push-auth-*` flags and is a printed NOTE, not an executed command).
+
+### 36. `polyglot-<target>` trigger names: the bash wrappers as a third caller of the one deploy engine (Epic 4 bead E4.6, bd polyglot-pdf-oqtm7)
+
+Contract 35 established the trigger-name convention between
+`scripts/setup-cloud-build.sh` (which provisions one manual trigger per target,
+`name="polyglot-$target"`) and `admin_backend/services/cloud_build.py::
+run_target()` (which runs `polyglot-<target>` by name). This bead adds the
+THIRD participant: the bash wrappers, which stopped deploying anything
+themselves and now press the same button. The point of the change is that there
+is no longer any deploy path that does NOT go through `cloudbuild.yaml`, so the
+gates that live in the build (the per-SHA `verify` record, the reachability
+check, the kits-manifest validation, the staging-before-demo promotion gate)
+cannot be routed around by choosing a different script.
+
+- **Producers:**
+  - `scripts/deploy_build_targets.sh::run_build_target(target, sha)` --
+    `gcloud builds triggers run polyglot-<target> --sha=<sha>
+    --region=$CLOUD_BUILD_REGION --project=$POLYGLOT_PROJECT_NAME
+    --substitutions=_SHA=<sha>`. Both the `--sha` and the `_SHA` substitution
+    are required and carry the SAME value: `--sha` tells the trigger which
+    revision of the connected repository to fetch, and `_SHA` is what the
+    build's own step 0 (`require-sha`) demands, the `verify` target writes to
+    `build_checks/{sha}`, and every deploy target reads. This is the identical
+    request shape `cloud_build.py::run_target()` builds through the client
+    library, for the identical reason.
+  - `run_build_targets(sha, target...)` runs a list IN ORDER and stops at the
+    first failure. Each target's result is read from `gcloud builds describe`
+    after the log stream ends, NOT from `gcloud builds log --stream`'s own exit
+    code -- "the log was read successfully" is not "the build succeeded", and
+    treating it as such is how a deploy that deployed nothing reports green.
+  - The wrappers themselves choose which targets to run:
+    `deploy-staging.sh` (`verify` when this commit has no `build_checks`
+    record, then `backend-staging`, `form-kits` with `--form-kits`,
+    `frontend-staging`), `deploy-demo.sh` (`backend-demo`, `form-kits`,
+    `firestore-rules`, `frontend-demo`), `deploy-editor.sh` (`editor`),
+    `deploy-admin.sh` (`admin-service`), `deploy-admin-console.sh`
+    (`admin-console-candidate`, or `admin-console` with `--live`),
+    `backend/deploy-new.sh` (the target for the named service; an unknown
+    service name is REFUSED rather than guessed), and `deploy-all.sh`
+    (`DEPLOY_CHANNEL`'s targets, with no default channel -- guessing one would
+    guess `demo`, the protected target).
+- **Consumers:** the trigger set `scripts/setup-cloud-build.sh` provisions, and
+  through it `cloudbuild.yaml`'s `_TARGET`/`_CHANNEL` dispatch.
+  `deploy/targets.py` holds the same target names for the admin route's own
+  validation.
+- *Breaks if disagreed:* a target name no trigger exists for fails with an
+  empty build id, which the runner turns into a named refusal. The dangerous
+  direction is the reverse -- a trigger whose `_CHANNEL` substitution does not
+  match its name (say `polyglot-backend-staging` fixed to `_CHANNEL=demo`)
+  would deploy the demo's service while every log line said staging. That
+  pairing lives in `setup-cloud-build.sh`'s `TARGETS` list and is pinned by
+  `tests/test_cloudbuild_yaml.py::
+  test_the_trigger_script_names_a_trigger_for_every_target`.
+- *Also load-bearing:* `deploy-all.sh` keeps a LIBRARY half above its sourcing
+  guard. `cloudbuild.yaml`'s `backend-deploy` and `admin-service-deploy-tagged`
+  steps run `source ./deploy-all.sh` and call its `read_channel_section` /
+  `read_channel_value`, so the channel-file format has one parser rather than a
+  bash copy and a yaml copy. Deleting either function, or moving it below the
+  guard, breaks every backend and admin deploy at deploy time.
+- **Pinned by:** `tests/test_deploy_wrappers.py` (each wrapper's trigger
+  sequence, in order, with the current commit's sha in both places, driven by
+  EXECUTING the real scripts against a stubbed `gcloud` in a real clean+pushed
+  temporary repo; the first failed build stops the rest; a trigger that cannot
+  start fails the wrapper; the preflight still refuses a dirty tree; and, as a
+  SET over every wrapper, no surviving `gcloud run deploy` / `firebase deploy`
+  / `gcloud builds submit --tag` and no bash copy of the reachability gate);
+  `tests/test_deploy_channel_parity.py` (the parser survives above the sourcing
+  guard, and each wrapper runs only its own channel's targets);
+  `backend/tests/unit/test_deploy_channel_isolation.py` (the build's
+  channel-to-service and channel-to-Hosting-target maps, and its refusal of an
+  unknown channel).
