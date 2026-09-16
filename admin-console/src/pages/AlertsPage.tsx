@@ -4,6 +4,7 @@ import {
   type AlertRow as AlertRowData, type AlertKind,
 } from '../utils/adminApi';
 import { AlertRow } from '../components/AlertRow';
+import { PageIntro } from '../components/PageIntro';
 
 interface AlertsPageProps {
   onAuthExpired: (err: unknown) => boolean;
@@ -112,6 +113,10 @@ export const AlertsPage: React.FC<AlertsPageProps> = ({ onAuthExpired }) => {
   return (
     <div data-testid="alerts-page" className="max-w-5xl">
       <h2 className="text-lg font-semibold text-gray-900">Alerts</h2>
+      <PageIntro>
+        Review link-exhaustion and credit alerts across every firm, and
+        acknowledge the ones you have handled.
+      </PageIntro>
 
       <form onSubmit={handleFilterSubmit} className="mt-4 flex flex-wrap items-end gap-2 text-sm">
         <div>

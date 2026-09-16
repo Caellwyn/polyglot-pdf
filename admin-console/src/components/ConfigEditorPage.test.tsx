@@ -82,6 +82,20 @@ describe('ConfigEditorPage', () => {
     expect(screen.queryByLabelText('STALE_KEY')).not.toBeInTheDocument();
   });
 
+  // Fresh-eyes round-2 gap on bd polyglot-pdf-dp1zq: this page renders a
+  // PageIntro (same commit as WhoAmIPage's), but nothing pinned it here --
+  // the same gap shape round 1 fixed for WhoAmIPage.tsx, unfixed on this
+  // sibling. A mutation deleting the <PageIntro> block previously passed
+  // the full suite; this assertion is what makes that mutation fail.
+  it('renders exactly one purpose header describing what the page is for', async () => {
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
+    const intros = await screen.findAllByTestId('page-intro');
+    expect(intros).toHaveLength(1);
+    expect(intros[0]).toHaveTextContent(
+      'View and edit the per-channel policy flags (like minting on/off and spend ceilings) that take effect without a redeploy.',
+    );
+  });
+
   it('switching channel re-fetches that channel\'s config', async () => {
     render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
     await screen.findByLabelText('LINK_MINTING_ENABLED');

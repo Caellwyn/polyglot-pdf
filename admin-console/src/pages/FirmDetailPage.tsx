@@ -9,6 +9,7 @@ import {
   type AlertRow as AlertRowData,
 } from '../utils/adminApi';
 import { AlertRow } from '../components/AlertRow';
+import { PageIntro } from '../components/PageIntro';
 
 interface FirmDetailPageProps {
   firmId: string;
@@ -458,6 +459,10 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
           <h2 className="mt-2 text-lg font-semibold text-gray-900">
             {firm.name || firm.firm_id}
           </h2>
+          <PageIntro>
+            Manage this firm&apos;s plan, credit ledger, allowed kits, and
+            minted links, and review its alerts.
+          </PageIntro>
           <div className="mt-1 text-sm text-gray-600">
             <span className="mr-4">ID: {firm.firm_id}</span>
             <span className="mr-4">Contact: {firm.contact_email}</span>

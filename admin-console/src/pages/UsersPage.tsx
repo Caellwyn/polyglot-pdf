@@ -1,8 +1,9 @@
 import React from 'react';
 import {
-  listUsers, createUser, setUserDisabled, setUserRole,
-  FIRM_ROLES, type AdminUserRow, type FirmRole,
+  listUsers, createUser, setUserDisabled, setUserRole, listFirms,
+  FIRM_ROLES, type AdminUserRow, type FirmRole, type FirmRow,
 } from '../utils/adminApi';
+import { PageIntro } from '../components/PageIntro';
 
 interface UsersPageProps {
   /** Called first on every catch. Returns true when `err` was an
@@ -16,10 +17,10 @@ interface UsersPageProps {
 }
 
 /**
- * Staff-account management page (bd polyglot-pdf-z4y91), driving
- * admin_backend/routes/user_routes.py's four routes: list a firm's staff,
- * create one (returning a password-reset link), disable/re-enable, and
- * change role.
+ * Staff-account management page (bd polyglot-pdf-z4y91, tab and intro
+ * rewritten by bd polyglot-pdf-dp1zq), driving admin_backend/routes/
+ * user_routes.py's four routes: list a firm's staff, create one (returning
+ * a password-reset link), disable/re-enable, and change role.
  *
  * THE FIRM SELECTOR IS REQUIRED, always, on this page. The console today
  * only supports the app-admin sign-in path -- GET /admin/whoami gates on the
@@ -30,6 +31,24 @@ interface UsersPageProps {
  * selector (the manager's firm comes from their token) is a later bead's
  * concern once the console itself supports signing in as one; this page
  * does not attempt to guess which actor kind is signed in.
+ *
+ * THE FIRM FIELD IS A <select> FED BY GET /admin/firms (bd polyglot-pdf-
+ * dp1zq), not free text: it was free text originally only because no firm
+ * list existed when bd z4y91 shipped this page. `listFirms()` loads ONCE on
+ * mount; a successful load renders a <select> of "name (firm_id) [kind]"
+ * options (falling back to the bare firm_id when a firm has no name) and
+ * choosing one immediately loads that firm's staff -- no separate "Load"
+ * click, because a <select> onChange already IS the operator's chosen
+ * action, unlike a free-text field that needs an explicit submit to know
+ * typing has finished. THE TEXT FALLBACK -- the original free-text input
+ * plus its own Load button -- renders ONLY when the firms list fails to
+ * load (`firmsLoadError` set), so an app admin can still reach a firm even
+ * when GET /admin/firms itself is down; it is never shown alongside the
+ * select. An AuthError/ForbiddenError from listFirms routes through
+ * onAuthExpired exactly like every other page's mid-session eviction path,
+ * rather than falling into the text fallback (a revoked session should
+ * bounce to the sign-in gate, not silently degrade to manual firm-id
+ * entry).
  *
  * NO PASSWORD EVER RENDERS. create_staff_user (admin_backend/services/
  * user_admin.py) never returns one -- the account's real password is an
@@ -47,6 +66,8 @@ interface UsersPageProps {
 export const UsersPage: React.FC<UsersPageProps> = ({ onAuthExpired }) => {
   const [firmId, setFirmId] = React.useState('');
   const [firmIdInput, setFirmIdInput] = React.useState('');
+  const [firms, setFirms] = React.useState<FirmRow[] | null>(null);
+  const [firmsLoadError, setFirmsLoadError] = React.useState<string | null>(null);
   const [users, setUsers] = React.useState<AdminUserRow[]>([]);
   const [truncated, setTruncated] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -80,6 +101,36 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onAuthExpired }) => {
       setLoading(false);
     }
   }, [onAuthExpired]);
+
+  // Loads ONCE on mount -- see the module docstring for why a failure here
+  // falls back to the free-text firm-id field rather than blocking the page.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listFirms();
+        if (cancelled) return;
+        setFirms(rows);
+      } catch (err) {
+        if (cancelled) return;
+        if (onAuthExpired(err)) return;
+        setFirmsLoadError(err instanceof Error ? err.message : 'Could not load the firm list');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSelectFirm = React.useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = e.target.value;
+    setFirmId(selected);
+    setResetLink(null);
+    setCopied(false);
+    setCreateError(null);
+    void loadUsers(selected);
+  }, [loadUsers]);
 
   const handleLoadFirm = React.useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -161,25 +212,64 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onAuthExpired }) => {
 
   return (
     <div data-testid="users-page" className="max-w-3xl">
-      <h2 className="text-lg font-semibold text-gray-900">Users</h2>
+      <h2 className="text-lg font-semibold text-gray-900">Staff accounts</h2>
+      <PageIntro>
+        This page manages a firm&apos;s staff accounts: create an account by
+        email, firm, and role (which returns a one-time password-reset link
+        for you to hand the person -- no email is sent), disable or
+        re-enable an account, change a role, and list a firm&apos;s staff.
+        A manager can mint links, see the firm&apos;s links, and manage
+        staff from the firm console; an employee can mint links and see
+        only their own links.
+      </PageIntro>
 
-      <form onSubmit={handleLoadFirm} className="mt-4 flex items-end gap-2 text-sm">
-        <div>
-          <label className="block text-gray-700" htmlFor="users-firm-id">
-            Firm ID
-          </label>
-          <input
-            id="users-firm-id"
-            required
-            className="mt-1 border border-gray-300 rounded px-2 py-1"
-            value={firmIdInput}
-            onChange={(e) => setFirmIdInput(e.target.value)}
-          />
+      {firms ? (
+        <div className="mt-4 flex items-end gap-2 text-sm">
+          <div>
+            <label className="block text-gray-700" htmlFor="users-firm-select">
+              Firm
+            </label>
+            <select
+              id="users-firm-select"
+              className="mt-1 border border-gray-300 rounded px-2 py-1"
+              value={firmId}
+              onChange={handleSelectFirm}
+            >
+              <option value="">Select a firm...</option>
+              {firms.map((firm) => (
+                <option key={firm.firm_id} value={firm.firm_id}>
+                  {firm.name ? `${firm.name} (${firm.firm_id})` : firm.firm_id}
+                  {' '}[{firm.kind}]
+                </option>
+              ))}
+            </select>
+          </div>
+          {loading && <span className="text-gray-500">Loading...</span>}
         </div>
-        <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? 'Loading...' : 'Load'}
-        </button>
-      </form>
+      ) : (
+        <form onSubmit={handleLoadFirm} className="mt-4 flex items-end gap-2 text-sm">
+          {firmsLoadError && (
+            <p className="w-full text-xs text-amber-700" data-testid="users-firms-load-error">
+              Could not load the firm list ({firmsLoadError}) -- enter a firm ID directly.
+            </p>
+          )}
+          <div>
+            <label className="block text-gray-700" htmlFor="users-firm-id">
+              Firm ID
+            </label>
+            <input
+              id="users-firm-id"
+              required
+              className="mt-1 border border-gray-300 rounded px-2 py-1"
+              value={firmIdInput}
+              onChange={(e) => setFirmIdInput(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Loading...' : 'Load'}
+          </button>
+        </form>
+      )}
 
       {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 

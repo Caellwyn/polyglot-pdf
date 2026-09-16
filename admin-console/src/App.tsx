@@ -109,7 +109,7 @@ export const App: React.FC = () => {
             { id: 'whoami', label: 'Who am I' },
             { id: 'audit', label: 'Audit log' },
             { id: 'config', label: 'Runtime config' },
-            { id: 'users', label: 'Users' },
+            { id: 'users', label: 'Staff accounts' },
             { id: 'kits', label: 'Kit commercials' },
             { id: 'firms', label: 'Firms' },
             { id: 'monitoring', label: 'Monitoring' },

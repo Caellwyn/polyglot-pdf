@@ -50,6 +50,20 @@ describe('AuditLogPage', () => {
     expect(screen.getByText('LINK_MINTING_ENABLED')).toBeInTheDocument();
   });
 
+  // Fresh-eyes round-2 gap on bd polyglot-pdf-dp1zq: this page renders a
+  // PageIntro (same commit as WhoAmIPage's), but nothing pinned it here --
+  // the same gap shape round 1 fixed for WhoAmIPage.tsx, unfixed on this
+  // sibling. A mutation deleting the <PageIntro> block previously passed
+  // the full suite; this assertion is what makes that mutation fail.
+  it('renders exactly one purpose header describing what the page is for', async () => {
+    render(<AuditLogPage onAuthExpired={noAuthExpired} />);
+    const intros = await screen.findAllByTestId('page-intro');
+    expect(intros).toHaveLength(1);
+    expect(intros[0]).toHaveTextContent(
+      'Browse every mutating action taken through this console, who did it, and what changed.',
+    );
+  });
+
   it('shows a "Load more" button only while next_cursor is non-null, and appends rows on click', async () => {
     render(<AuditLogPage onAuthExpired={noAuthExpired} />);
     await screen.findByText('config.set');
