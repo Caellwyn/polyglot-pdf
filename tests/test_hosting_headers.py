@@ -35,8 +35,11 @@ REQUIRED_CSP = {
     # The voice overlay's speech detector (@ricky0123/vad-web) fetches its
     # model and audio worklet, and onnxruntime-web its WASM runtime, from
     # jsdelivr today; the policy names it so the report-only soak stays
-    # readable. Self-hosting those assets (bd polyglot-pdf-18o7c) is the
-    # prerequisite for enforcement, and removes this entry.
+    # readable. 'wasm-unsafe-eval' covers WASM compilation ONLY; the ORT
+    # glue the app currently selects (the jsep variant) also calls
+    # new Function, which needs 'unsafe-eval' -- deliberately not granted.
+    # Enforcement waits on bd polyglot-pdf-18o7c: self-host the assets AND
+    # pick the non-jsep ORT build (no new Function); that removes this entry.
     "frame-ancestors": "'none'",
     "object-src": "'none'",
     "base-uri": "'self'",
@@ -116,8 +119,8 @@ def test_every_target_csp_carries_the_required_directives(target):
     bad = [t for t in FORBIDDEN_CSP_TOKENS if t in raw]
     assert not bad, "%s: CSP contains %r" % (target["target"], bad)
     # script-src: our origin, the gapi loader Firebase Auth injects, the CDN
-    # the VAD worklet loads from, and WASM (onnxruntime) -- nothing else, no
-    # inline, no eval.
+    # the VAD worklet loads from, and WASM compilation (onnxruntime) --
+    # nothing else, no inline, no 'unsafe-eval' (see the note on REQUIRED_CSP).
     assert csp["script-src"] == ["'self'", "https://apis.google.com", "https://cdn.jsdelivr.net", "'wasm-unsafe-eval'"], csp["script-src"]
 
 

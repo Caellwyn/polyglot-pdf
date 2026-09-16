@@ -43,10 +43,15 @@ process.
   audio worklet from there and `onnxruntime-web` its WASM runtime, on both
   overlays, at mount; the CDN is therefore in `connect-src` and `script-src`
   (a worklet is script) with `'wasm-unsafe-eval'`, so the soak stays
-  readable and the policy stays honest. Executable code from a third-party
-  CDN is the largest remaining browser egress and a supply-chain exposure;
-  self-hosting those assets is filed (`polyglot-pdf-18o7c`) as the prerequisite
-  for the enforcement flip;
+  readable and the policy stays honest. The third outer round then read the
+  ORT glue itself: `'wasm-unsafe-eval'` covers WASM compilation only, and
+  the jsep variant the app selects also calls `new Function` (embind's
+  method-caller factory), which only `'unsafe-eval'` permits -- not granted;
+  whether the Silero inference path reaches it is what the soak must watch
+  for. Executable code from a third-party CDN is the largest remaining
+  browser egress and a supply-chain exposure; the prerequisite for the
+  enforcement flip is `polyglot-pdf-18o7c`: self-host the assets AND pick
+  the non-jsep ORT build, which has no `new Function`;
   `frame-src` for the auth popup on the project's auth domain and Google's
   account chooser; `worker-src 'self' blob:` (pdf.js); `media-src 'self'
   blob: data:` (spellback and intro audio); `object-src 'none'`; `base-uri
@@ -125,6 +130,10 @@ REVIEW_RECORD
   serves five sites; "report-only on staging, then enforce" becomes
   "report-only everywhere, then flip" -- and the test pins the report-only
   header name so the flip is a deliberate, reviewed change.
+- **A CSP token is a claim about a library's internals.** `'wasm-unsafe-eval'`
+  sounded like "the WASM runtime"; it is "WebAssembly.compile". The runtime's
+  glue also builds functions from strings, and only reading the shipped
+  bytes showed it. Every allowance now says what it covers.
 - **Build the allowlist from what the code contacts, then pin the list.**
   The `connect-src` set came from the apps' env files and deploy scripts;
   the test names each origin so a dropped one fails CI before it breaks a

@@ -865,9 +865,15 @@ fetches its model and audio worklet from there and `onnxruntime-web` its WASM
 runtime. `script-src` is `'self'` plus `https://apis.google.com` (the gapi
 loader the Firebase Auth SDK injects as a `<script>` before it can open the
 sign-in popup), the same CDN (the worklet is script) and `'wasm-unsafe-eval'`
-(the ONNX runtime). Executable code from a third-party CDN is the largest
-remaining browser egress; self-hosting those assets is filed as the
-prerequisite for switching the CSP to enforcing; `style-src` allows inline (React style attributes);
+-- which covers WASM *compilation* only. The ONNX glue the app currently
+selects (`ort-wasm-simd-threaded.jsep.mjs`) also calls `new Function`, which
+only `'unsafe-eval'` would permit and this policy deliberately does not
+grant; whether that path is reached for the Silero model is what the soak
+must watch for (an `EvalError: Refused to evaluate a string as JavaScript`
+report). Executable code from a third-party CDN is the largest remaining
+browser egress; the prerequisite for switching the CSP to enforcing is bd
+`polyglot-pdf-18o7c`: self-host those assets AND select the non-jsep ORT
+build, which contains no `new Function`; `style-src` allows inline (React style attributes);
 `worker-src` and `media-src` allow `blob:` (pdf.js, spellback audio);
 `frame-src` names the auth domain and Google's account chooser;
 `frame-ancestors 'none'`. **There is deliberately NO `X-Frame-Options`:** the
