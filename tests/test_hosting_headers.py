@@ -45,6 +45,7 @@ REQUIRED_CONNECT = (
     "https://polyglot-backend-staging-won24rgefq-uc.a.run.app",
     "wss://polyglot-backend-staging-won24rgefq-uc.a.run.app",
     "https://polyglot-admin-won24rgefq-uc.a.run.app",
+    "https://polyglot-admin-uc.a.run.app",  # the short form frontend/.env.demo names as its fallback
     "https://identitytoolkit.googleapis.com",
     "https://securetoken.googleapis.com",
     "https://firestore.googleapis.com",

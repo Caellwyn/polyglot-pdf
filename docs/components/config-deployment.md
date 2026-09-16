@@ -863,7 +863,9 @@ enforced. Pinned by `tests/test_hosting_headers.py` (every target, every header,
 every required origin, no `'unsafe-eval'`/`http:`/wildcard host).
 
 Fonts are self-hosted: `scripts/fetch_fonts.py` regenerates
-`frontend/public/fonts/` (Inter + Outfit, latin/latin-ext woff2 + `fonts.css`)
+`frontend/public/fonts/` (Inter + Outfit in every unicode-range subset Google
+serves -- latin, latin-ext, cyrillic, cyrillic-ext, greek, greek-ext,
+vietnamese; 45 woff2 files + `fonts.css`)
 and `frontend/index.html` links that stylesheet, so the browser contacts no
 third-party font host.
 
