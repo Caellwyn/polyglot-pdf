@@ -197,17 +197,43 @@ def test_indexes_file_is_wired_into_firebase_json():
         "firestore.indexes.json"
 
 
-def test_deploy_demo_ships_the_indexes():
-    """firestore:indexes is deployed, and by the same script as the rules.
+def test_the_firestore_rules_target_ships_the_indexes_too():
+    """firestore:indexes is deployed, by the same target as the rules.
 
     Rules and indexes are both PROJECT-wide, so they belong to the same
-    channel: deploy-demo.sh. A deploy-staging.sh that shipped them would
-    push project-wide state from the disposable channel.
+    target and the same channel: `firestore-rules`, which only deploy-demo.sh
+    runs. A deploy-staging.sh that ran it would push project-wide state from
+    the disposable channel.
+
+    Read from cloudbuild.yaml because that is where the deploy lives (bd
+    polyglot-pdf-oqtm7). deploy-demo.sh shipped BOTH inline until it became a
+    thin trigger wrapper; the target carried only the rules at that moment, so
+    the indexes moved into it rather than being silently retired -- which is
+    the failure this test exists to catch, and did.
     """
-    demo = (REPO_ROOT / "deploy-demo.sh").read_text(encoding="utf-8")
-    assert "firebase deploy --only firestore:indexes" in demo
-    staging = (REPO_ROOT / "deploy-staging.sh").read_text(encoding="utf-8")
-    assert "firestore:indexes" not in staging
+    build = (REPO_ROOT / "cloudbuild.yaml").read_text(encoding="utf-8")
+    assert "firebase-tools deploy --only firestore:rules" in build
+    assert "firebase-tools deploy --only firestore:indexes" in build, (
+        "the firestore-rules target ships the rules but not the composite "
+        "indexes -- a query combining an equality filter with an order_by on "
+        "a different field then fails at runtime with FAILED_PRECONDITION"
+    )
+    # CODE lines only, and the QUOTED target token. Both wrappers explain the
+    # target in prose, so a plain substring search over the whole file matches
+    # the comment and passes even when the target is not run at all
+    # (mutation-verified: deleting it from deploy-demo.sh's TARGETS list left
+    # this green until these two lines were narrowed).
+    def _targets(name):
+        body = (REPO_ROOT / name).read_text(encoding="utf-8")
+        return "\n".join(
+            ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
+        )
+
+    assert '"firestore-rules"' in _targets("deploy-demo.sh"), (
+        "deploy-demo.sh no longer runs the firestore-rules target, so nothing "
+        "ships rules or indexes"
+    )
+    assert '"firestore-rules"' not in _targets("deploy-staging.sh")
 
 
 def test_every_audit_filter_has_a_composite_index():
