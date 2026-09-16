@@ -1,8 +1,13 @@
 /**
- * UsersPage (bd polyglot-pdf-z4y91). Pins the exit criterion verbatim:
- * "create shows the reset link exactly once and never a password; disable
- * and role change call their routes once and re-read; the firm selector is
- * required for the app admin (mocked API, mutation-verified)".
+ * UsersPage (bd polyglot-pdf-z4y91; renamed to "Staff accounts", given a
+ * purpose intro, and the firm ID field turned into a firm-list select by
+ * bd polyglot-pdf-dp1zq). Pins the exit criteria verbatim: "create shows
+ * the reset link exactly once and never a password; disable and role
+ * change call their routes once and re-read; the firm selector is required
+ * for the app admin (mocked API, mutation-verified)" (z4y91) and "the tab
+ * reads 'Staff accounts', the page carries the intro and role explanation,
+ * and the firm selector is a select fed by GET /admin/firms with a text
+ * fallback (tests, mutation-verified)" (dp1zq).
  *
  * Mirrors ConfigEditorPage.test.tsx's mocking approach: keep the real
  * AuthError/ForbiddenError classes (onAuthExpired branches on instanceof),
@@ -13,7 +18,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { UsersPage } from './UsersPage';
 import {
   AuthError, ForbiddenError,
-  listUsers, createUser, setUserDisabled, setUserRole,
+  listUsers, createUser, setUserDisabled, setUserRole, listFirms,
 } from '../utils/adminApi';
 
 vi.mock('../utils/adminApi', async (importOriginal) => {
@@ -24,6 +29,7 @@ vi.mock('../utils/adminApi', async (importOriginal) => {
     createUser: vi.fn(),
     setUserDisabled: vi.fn(),
     setUserRole: vi.fn(),
+    listFirms: vi.fn(),
   };
 });
 
@@ -49,8 +55,35 @@ const MANAGER_ROW = {
 
 const FIRM_A_PAGE = { firm_id: 'firm-a', users: [EMPLOYEE_ROW, MANAGER_ROW], truncated: false };
 
+const FIRM_A = {
+  firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
+  kind: 'live' as const, status: 'active' as const, allowed_kits: [],
+  balance_credits: 100,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
+};
+const FIRM_B = {
+  firm_id: 'firm-b', name: null, contact_email: 'ops@beta.test',
+  kind: 'mock' as const, status: 'active' as const, allowed_kits: [],
+  balance_credits: 0,
+  plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
+};
+
+/** Selects a firm from the <select> populated by listFirms -- the default
+ * path once GET /admin/firms is up (bd polyglot-pdf-dp1zq). Waits for the
+ * select to appear first, since listFirms resolves asynchronously on
+ * mount. */
 async function loadFirm(firmId = 'firm-a') {
-  fireEvent.change(screen.getByLabelText('Firm ID'), { target: { value: firmId } });
+  const select = await screen.findByLabelText('Firm');
+  fireEvent.change(select, { target: { value: firmId } });
+  await waitFor(() => expect(listUsers).toHaveBeenCalledWith(firmId));
+}
+
+/** Loads a firm through the free-text fallback field -- only reachable
+ * when listFirms has failed (see the "firm list fails to load" describe
+ * block below). */
+async function loadFirmViaTextFallback(firmId = 'firm-a') {
+  const input = await screen.findByLabelText('Firm ID');
+  fireEvent.change(input, { target: { value: firmId } });
   fireEvent.click(screen.getByRole('button', { name: 'Load' }));
   await waitFor(() => expect(listUsers).toHaveBeenCalledWith(firmId));
 }
@@ -58,31 +91,107 @@ async function loadFirm(firmId = 'firm-a') {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listUsers).mockResolvedValue(FIRM_A_PAGE);
+  vi.mocked(listFirms).mockResolvedValue([FIRM_A, FIRM_B]);
 });
 
 describe('UsersPage', () => {
-  it('does not load or show the create form / table until a firm ID is submitted', () => {
+  it('renamed to "Staff accounts" (bd polyglot-pdf-dp1zq)', async () => {
     render(<UsersPage onAuthExpired={noAuthExpired} />);
+    await screen.findByLabelText('Firm'); // let the listFirms effect settle
+
+    expect(screen.getByRole('heading', { name: 'Staff accounts' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
+  });
+
+  it('carries a one-sentence intro naming what the page does and the manager/employee split', async () => {
+    render(<UsersPage onAuthExpired={noAuthExpired} />);
+    await screen.findByLabelText('Firm'); // let the listFirms effect settle
+
+    const intro = screen.getByTestId('page-intro');
+    // Names the concrete actions (bead description, verbatim list): create
+    // by email + firm + role, the one-time reset link (no email sent),
+    // disable/re-enable, role change, and listing staff.
+    expect(intro).toHaveTextContent(/create an account/i);
+    expect(intro).toHaveTextContent(/password-reset link/i);
+    expect(intro).toHaveTextContent(/no email is sent/i);
+    expect(intro).toHaveTextContent(/disable or/i);
+    // Names what a manager vs an employee may do.
+    expect(intro).toHaveTextContent(/manager can mint links/i);
+    expect(intro).toHaveTextContent(/employee can mint links/i);
+  });
+
+  it('does not load or show the create form / table until a firm is chosen', async () => {
+    render(<UsersPage onAuthExpired={noAuthExpired} />);
+    await screen.findByLabelText('Firm'); // let the listFirms effect settle
 
     expect(listUsers).not.toHaveBeenCalled();
     expect(screen.queryByTestId('users-table')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 
-  it('the firm ID field is a required input -- the selector app admins cannot skip', () => {
+  it('populates the firm select from GET /admin/firms, showing name and kind', async () => {
     render(<UsersPage onAuthExpired={noAuthExpired} />);
 
-    const firmInput = screen.getByLabelText('Firm ID') as HTMLInputElement;
-    expect(firmInput).toBeRequired();
+    const select = await screen.findByLabelText('Firm') as HTMLSelectElement;
+    await waitFor(() => expect(listFirms).toHaveBeenCalledTimes(1));
+    const optionLabels = Array.from(select.options).map((o) => o.textContent);
+    expect(optionLabels).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Acme LLP (firm-a)'),
+        expect.stringContaining('firm-b'),
+      ]),
+    );
+    // firm-a shows its kind badge; firm-b (no name) falls back to the bare id.
+    expect(optionLabels.some((l) => l?.includes('[live]'))).toBe(true);
+    expect(optionLabels.some((l) => l?.includes('[mock]'))).toBe(true);
+    // No free-text fallback rendered while the select is up.
+    expect(screen.queryByLabelText('Firm ID')).not.toBeInTheDocument();
   });
 
-  it('loading a firm lists its users, keyed by firm_id', async () => {
+  it('choosing a firm from the select lists its users, keyed by firm_id', async () => {
     render(<UsersPage onAuthExpired={noAuthExpired} />);
     await loadFirm('firm-a');
 
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByText('bob@example.com')).toBeInTheDocument();
     expect(listUsers).toHaveBeenCalledTimes(1);
+  });
+
+  describe('when the firm list fails to load', () => {
+    beforeEach(() => {
+      vi.mocked(listFirms).mockRejectedValueOnce(new Error('admin service unreachable'));
+    });
+
+    it('falls back to the free-text firm ID field, which is required', async () => {
+      render(<UsersPage onAuthExpired={noAuthExpired} />);
+
+      const firmInput = await screen.findByLabelText('Firm ID') as HTMLInputElement;
+      expect(firmInput).toBeRequired();
+      // The select never renders while the fallback is showing.
+      expect(screen.queryByLabelText('Firm')).not.toBeInTheDocument();
+    });
+
+    it('loading a firm through the text fallback still lists its users', async () => {
+      render(<UsersPage onAuthExpired={noAuthExpired} />);
+      await loadFirmViaTextFallback('firm-a');
+
+      expect(await screen.findByText('alice@example.com')).toBeInTheDocument();
+      expect(listUsers).toHaveBeenCalledTimes(1);
+    });
+
+    it('routes a 403 from listFirms to onAuthExpired instead of falling back', async () => {
+      vi.mocked(listFirms).mockReset();
+      vi.mocked(listFirms).mockRejectedValueOnce(new ForbiddenError('Access was revoked'));
+      const onAuthExpired = vi.fn((_err: unknown) => true);
+      render(<UsersPage onAuthExpired={onAuthExpired} />);
+
+      await waitFor(() => expect(onAuthExpired).toHaveBeenCalledTimes(1));
+      const [[passedErr]] = onAuthExpired.mock.calls;
+      expect(passedErr).toBeInstanceOf(ForbiddenError);
+      // Neither the select nor the text fallback claims a firm list --
+      // a revoked session bounces to the sign-in gate, it does not degrade.
+      expect(screen.queryByLabelText('Firm')).not.toBeInTheDocument();
+    });
   });
 
   it('create shows the reset link exactly once and never a password', async () => {
@@ -224,8 +333,8 @@ describe('UsersPage', () => {
     const onAuthExpired = vi.fn((_err: unknown) => true);
     render(<UsersPage onAuthExpired={onAuthExpired} />);
 
-    fireEvent.change(screen.getByLabelText('Firm ID'), { target: { value: 'firm-a' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Load' }));
+    const select = await screen.findByLabelText('Firm');
+    fireEvent.change(select, { target: { value: 'firm-a' } });
 
     await waitFor(() => expect(onAuthExpired).toHaveBeenCalledTimes(1));
     const [[passedErr]] = onAuthExpired.mock.calls;

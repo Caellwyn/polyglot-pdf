@@ -61,6 +61,34 @@ routes table and Surface contract 34 for the full four-route wire contract.)*
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/identity_labels.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-16 (bd `polyglot-pdf-dp1zq`: maintainer feedback after
+first console sign-in -- "not sure what the 'users' tab does." The Users tab
+is renamed "Staff accounts" (`App.tsx`'s tab list; `UsersPage.tsx`'s `<h2>`),
+and every page under `admin-console/src/pages/` (Alerts, Cost & income,
+Errors, FirmDetail, Firms, Kit commercials, Monitoring, Usage, Users) plus
+the two shell components `AuditLogPage.tsx` and `ConfigEditorPage.tsx` now
+render a one-sentence purpose header via a NEW shared `admin-console/src/
+components/PageIntro.tsx` (`data-testid="page-intro"`), so the console
+explains itself on every tab. `UsersPage.tsx`'s intro spells out the
+concrete actions (create by email/firm/role returning a one-time
+password-reset link with no email sent; disable/re-enable; role change;
+list staff) and the manager-vs-employee split (manager: mint links, see the
+firm's links, manage staff; employee: mint links, see only their own
+links). The firm field on `UsersPage.tsx` changes from free text to a
+`<select>` populated by `listFirms()` (GET /admin/firms, bead B1 --
+Surface contract already documents the route; no new route or wire shape
+here), showing `name (firm_id) [kind]`; a `listFirms()` failure falls back
+to the ORIGINAL free-text field plus Load button (never both at once), and
+an `AuthError`/`ForbiddenError` from `listFirms()` still routes through
+`onAuthExpired` rather than falling back, matching every other page's
+mid-session-eviction path. NEW `src/pages/pageIntroCoverage.test.tsx`
+enumerates `src/pages/*.tsx` via `fs.readdirSync` (not a hand-typed list,
+CLAUDE.md scar #8) and asserts each renders exactly one `page-intro` node,
+so a future page added without a header fails CI. No backend change, no
+new route, no new env var, no new wire shape -- this bead is entirely
+`admin-console/` presentation and consumes the existing `GET /admin/firms`
+response shape (`FirmRow`) unchanged.)*
+
 *Last updated: 2026-09-16 (bd `polyglot-pdf-he3lt`: maintainer observation
 after the first live mint on staging -- "usage was not updated." A mint
 touched no rollup document, so the Usage page stayed on "no data" until a
