@@ -53,10 +53,11 @@ GUARDED_FILES = [
     "backend/services/request_coordinator.py",
     "backend/services/form_filling_service.py",
     "backend/routes/websocket_routes.py",
-    # The text-model call sites (validator, secretary, translation): their
+    # The text-model adapter (validator, secretary, translation calls): its
     # prompts and completions ARE field values (bd polyglot-pdf-wfgjz).
+    # secretary_context.py builds the prompt and has no log call at all; the
+    # deny-by-default sweep below covers it the day one appears.
     "backend/adapters/text_ai_gemini.py",
-    "backend/services/secretary_context.py",
 ]
 
 # Kwarg NAMES that must never carry a raw value/text in a log call. We flag the

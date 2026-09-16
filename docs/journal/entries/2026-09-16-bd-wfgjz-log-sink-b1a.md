@@ -48,10 +48,12 @@ the machine.
   assignment and refuses anything else. A runtime test proves `_close_ws`
   puts exactly the stated literal on the wire and nothing from its
   telemetry metadata.
-- **The text-model adapters are guarded files.** `text_ai_gemini.py` and
-  `secretary_context.py` joined `test_no_pii_logging.py`'s GUARDED_FILES;
-  their existing log calls carry ids and counts only, and the guard now
-  fails a future `prompt=` / `text=` / `message=` kwarg there.
+- **The text-model adapter is a guarded file.** `text_ai_gemini.py` joined
+  `test_no_pii_logging.py`'s GUARDED_FILES; its existing log calls carry ids
+  and counts only, and the guard now fails a future `prompt=` / `text=` /
+  `message=` kwarg there. `secretary_context.py` builds the prompt and has no
+  log call at all, so it stays under the deny-by-default backend sweep rather
+  than a vacuous per-file entry.
 
 ## Verification
 
@@ -64,7 +66,7 @@ the machine.
   block, which also holds the structured per-turn Cloud Logging emit, so a
   deployed run would have lost its per-turn token events. The gate now wraps
   the file write alone; the plumbing tests pass again. Rerun after the fix:
-  FULL_SUITE_RESULT. The twelve process-spawning test files, run separately
+  5939 passed / 282 skipped, no failures. The twelve process-spawning test files, run separately
   with every child windowless: 524 passed / 5 skipped.
 - Scar #9: eleven one-line mutations, each in its own interpreter (the app
   modules import once per process) and each RED with exit code 1: the handler

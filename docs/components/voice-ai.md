@@ -3,30 +3,6 @@
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the token file is local-dev only (.env.DEV gate at the call site, K_SERVICE no-op in the writer) and the per-turn print() banner became the structured `token_usage` event; nothing else in the adapter changed.)*
-five usage-event context ids -- firm/employee/link/kit/channel -- read by the
-per-turn `log_gemini_api_response` call; see the Session lifecycle bullet.
-bd polyglot-pdf-e4dt8: `.exception(...)` is production-safe here now, and the
-1011/1006 drop emits a counted `ws_error` event -- see Scar tissue.)
-Also current, from bd polyglot-pdf-kvrfq: the `name_spellback` bullet
-now records the client-side stale-arrival guards and the wire-verified fact
-that holding the tool response open does NOT park the model -- see the
-[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md).
-Also current, from bd polyglot-pdf-uxc6s: the speaking predicates are
-now THREE, not two -- `isModelSpeaking()` is what every barge-in / flush site
-reads, `isSpeaking()` is reserved for the VAD suspend/resume pair, and the
-complete call-site classification is pinned by
-`frontend/src/shared/speakingSignalCallSites.test.ts`. Also current: the
-`ask_secretary` bullet now names all three shipped uses -- past-answer
-recall, field identification for navigation, and official instruction text
-quoted back -- plus the hedge-and-defer relay contract, matching
-`backend/config.py`'s declaration (bd polyglot-pdf-9sz5y); synthesized clips
-share the playback graph via the `attachClipElement` seam (bd
-polyglot-pdf-s1iex.4, [journal
-entry](../journal/entries/2026-08-14-bd-s1iex.4-sol-animates-during-clips.md));
-`LIVE_VOICE_NAME` has a THIRD consumer -- the intro-clip route reuses
-`resolve_spellback_voice`, at 0 dB rather than the per-voice gain (bd
-polyglot-pdf-s1iex.3, [journal
-entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md)).)*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
