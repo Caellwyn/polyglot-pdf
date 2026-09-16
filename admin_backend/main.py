@@ -88,6 +88,7 @@ load_dotenv()
 
 from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
+from backend.utils.validation_errors import install_validation_error_handler
 
 from admin_backend.routes import (
     alert_routes, audit_routes, config_routes, credit_routes, deploy_routes,
@@ -124,6 +125,9 @@ configure_logging()
 _log = structlog.get_logger().bind(module="admin_main")
 
 app = FastAPI(title="Polyglot Admin API", version="0.1.0")
+# A 422 must never echo the request body back (bd polyglot-pdf-wfgjz);
+# pinned by admin_backend/tests/unit/test_validation_error_shape.py.
+install_validation_error_handler(app)
 
 # The admin CONSOLE is a separate Vite app on its own Hosting site, so it is
 # always a cross-origin caller -- there is no same-origin Hosting rewrite in

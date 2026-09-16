@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-cjifh: `set_session_context` gains
+*Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the token file is local-dev only (.env.DEV gate at the call site, K_SERVICE no-op in the writer) and the per-turn print() banner became the structured `token_usage` event; nothing else in the adapter changed.)*
 five usage-event context ids -- firm/employee/link/kit/channel -- read by the
 per-turn `log_gemini_api_response` call; see the Session lifecycle bullet.
 bd polyglot-pdf-e4dt8: `.exception(...)` is production-safe here now, and the
@@ -440,8 +440,11 @@ client-link spend ceiling reads (`session_cost_usd()`, bd polyglot-pdf-ik7e),
 and unlike the others it is never reset, because a SECTION SWITCH restarts
 the Gemini session on this same adapter and zeroes the per-session counters.
 Dropping it silently makes the ceiling bank $0 forever; pinned by
-`test_the_two_cost_counters_ACCRUE_IN_LOCKSTEP`. Session context is also
-set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
+`test_the_two_cost_counters_ACCRUE_IN_LOCKSTEP`. The per-turn event is also
+written to `token_usage.jsonl` -- LOCAL DEV ONLY: the call site runs under
+the `backend/.env.DEV` marker and the writer is a no-op with `K_SERVICE` set
+(bd polyglot-pdf-wfgjz); the per-turn console banner is now one structured
+`token_usage` event. Details + the re-billing cost concern in
 [../standards/logging-and-cost.md](../standards/logging-and-cost.md).
 
 ## Response config

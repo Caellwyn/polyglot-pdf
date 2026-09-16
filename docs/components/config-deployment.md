@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the "Deployed verbosity floors" bullet -- LOG_LEVEL clamped to INFO, the two dump knobs forced off, SEND_TRANSCRIPT ignored and the token file unwritten with K_SERVICE set; both apps install the value-free 422 handler from backend/utils/validation_errors.py at import.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-3bsyv: `frontend/vite.config.schema.ts`'s
@@ -156,6 +158,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   agreement keeps client data out of Google's model training. AI Studio is
   permitted **locally only** (no `K_SERVICE`), for testing a model before it
   reaches Vertex GA. See [../standards/ai-models.md](../standards/ai-models.md).
+- **Deployed verbosity floors** (bd `polyglot-pdf-wfgjz`, sprint 23 B1a). With
+  `K_SERVICE` set, no env knob can raise log volume into payload territory:
+  `LOG_LEVEL` below INFO is clamped to INFO by `configure_logging`;
+  `LIVE_DEV_TRANSCRIPTS` / `LIVE_DEV_AUDIO_DUMP` are forced off by `Settings`;
+  the `SEND_TRANSCRIPT` harness knob in `websocket_routes.py` is ignored; and
+  `backend/logs/token_usage.jsonl` is never written. All four stay free
+  locally (no `K_SERVICE`). Pinned by `backend/tests/unit/test_deployed_verbosity_floor.py`
+  and `test_token_usage_local_only.py`.
 - **`CONFIRMATION_FIRESTORE_ENABLED=true`** — mirrors the confirmation audit
   trail (metadata only, never values) to the `confirmation_events` Firestore
   collection; set in `deploy-all.sh`'s `BACKEND_ENV` because the file-only

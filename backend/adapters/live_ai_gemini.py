@@ -3411,57 +3411,68 @@ class LiveAIGemini(ILiveAI):
                                             self._session_text_output_tokens += text_output_tokens
                                             self._session_audio_output_tokens += audio_output_tokens
 
-                                            # Clear console logging for token usage
-                                            print(f"\n{'='*80}")
-                                            print(f"[tokens] TOKEN USAGE")
-                                            print(f"{'='*80}")
-                                            print(f"Prompt: {prompt_tokens:,} tokens (text: {text_input_tokens:,}, audio: {audio_input_tokens:,})")
-                                            print(f"Response: {response_tokens:,} tokens (text: {text_output_tokens:,}, audio: {audio_output_tokens:,})")
-                                            print(f"Total this turn: {total_tokens:,} tokens")
-                                            print(f"Cost this turn: ${total_cost:.6f}")
-                                            print(f"Session total: {self._session_total_tokens:,} tokens (${self._session_total_cost:.6f})")
-                                            print(f"{'='*80}\n")
+                                            # Token usage as ONE structured line: counts and cost only, no
+                                            # text. A print() here bypassed structlog and reached Cloud Logging
+                                            # as bare stdout text (bd polyglot-pdf-wfgjz).
+                                            self._log.info(
+                                                "token_usage",
+                                                prompt_tokens=prompt_tokens,
+                                                response_tokens=response_tokens,
+                                                total_tokens=total_tokens,
+                                                text_input_tokens=text_input_tokens,
+                                                audio_input_tokens=audio_input_tokens,
+                                                text_output_tokens=text_output_tokens,
+                                                audio_output_tokens=audio_output_tokens,
+                                                turn_cost_usd=round(total_cost, 6),
+                                                session_total_tokens=self._session_total_tokens,
+                                                session_total_cost_usd=round(self._session_total_cost, 6),
+                                            )
 
-                                            # Log to file for token dashboard (local dev only)
-                                            # Only log if session context is available
+                                            # With session context: the local-dev token file (under the
+                                            # backend/.env.DEV marker, which the image never carries; the logger
+                                            # also refuses to write with K_SERVICE set) and the structured
+                                            # per-turn Cloud Logging event.
                                             if self._form_session_id and self._form_id:
-                                                try:
-                                                    token_logger = get_token_logger()
-                                                    self._log.debug("token_file_logging",
-                                                                  form_id=self._form_id,
-                                                                  form_session_id=self._form_session_id,
-                                                                  gemini_session_id=self._instance_id)
-                                                    token_logger.log_token_event(
-                                                        form_id=self._form_id,
-                                                        form_session_id=self._form_session_id,
-                                                        gemini_session_id=self._instance_id,
-                                                        section_id=self._current_section_id,
-                                                        # This event's token counts
-                                                        prompt_tokens=prompt_tokens,
-                                                        response_tokens=response_tokens,
-                                                        total_tokens=total_tokens,
-                                                        # Modality breakdown
-                                                        text_input=text_input_tokens,
-                                                        audio_input=audio_input_tokens,
-                                                        text_output=text_output_tokens,
-                                                        audio_output=audio_output_tokens,
-                                                        # Costs
-                                                        text_input_cost=text_input_cost,
-                                                        audio_input_cost=audio_input_cost,
-                                                        text_output_cost=text_output_cost,
-                                                        audio_output_cost=audio_output_cost,
-                                                        total_cost_usd=total_cost,
-                                                        # Session cumulative
-                                                        session_total_tokens=self._session_total_tokens,
-                                                        session_total_cost_usd=self._session_total_cost,
-                                                        session_text_input=self._session_text_input_tokens,
-                                                        session_audio_input=self._session_audio_input_tokens,
-                                                        session_text_output=self._session_text_output_tokens,
-                                                        session_audio_output=self._session_audio_output_tokens,
-                                                    )
-                                                except Exception as log_err:
-                                                    # Don't fail silently - we need to know if logging fails
-                                                    self._log.warning("token_file_logging_error", error=str(log_err))
+                                                # LOCAL DEV ONLY: the marker gates the file write; the structured
+                                                # Cloud Logging emit below runs everywhere.
+                                                if DEV_LOGGING_ENABLED:
+                                                    try:
+                                                        token_logger = get_token_logger()
+                                                        self._log.debug("token_file_logging",
+                                                                      form_id=self._form_id,
+                                                                      form_session_id=self._form_session_id,
+                                                                      gemini_session_id=self._instance_id)
+                                                        token_logger.log_token_event(
+                                                            form_id=self._form_id,
+                                                            form_session_id=self._form_session_id,
+                                                            gemini_session_id=self._instance_id,
+                                                            section_id=self._current_section_id,
+                                                            # This event's token counts
+                                                            prompt_tokens=prompt_tokens,
+                                                            response_tokens=response_tokens,
+                                                            total_tokens=total_tokens,
+                                                            # Modality breakdown
+                                                            text_input=text_input_tokens,
+                                                            audio_input=audio_input_tokens,
+                                                            text_output=text_output_tokens,
+                                                            audio_output=audio_output_tokens,
+                                                            # Costs
+                                                            text_input_cost=text_input_cost,
+                                                            audio_input_cost=audio_input_cost,
+                                                            text_output_cost=text_output_cost,
+                                                            audio_output_cost=audio_output_cost,
+                                                            total_cost_usd=total_cost,
+                                                            # Session cumulative
+                                                            session_total_tokens=self._session_total_tokens,
+                                                            session_total_cost_usd=self._session_total_cost,
+                                                            session_text_input=self._session_text_input_tokens,
+                                                            session_audio_input=self._session_audio_input_tokens,
+                                                            session_text_output=self._session_text_output_tokens,
+                                                            session_audio_output=self._session_audio_output_tokens,
+                                                        )
+                                                    except Exception as log_err:
+                                                        # Don't fail silently - we need to know if logging fails
+                                                        self._log.warning("token_file_logging_error", error=str(log_err))
 
                                                 # Structured stdout emit for Cloud Logging (bd polyglot-pdf-5c2h).
                                                 # The file above is local-dev-only and lives on the Cloud Run
@@ -3471,7 +3482,7 @@ class LiveAIGemini(ILiveAI):
                                                 # human-readable print() block). Counts + costs ONLY -- the
                                                 # StructuredLogger schema carries no field-value slot, so this
                                                 # stays HIPAA-safe by construction. Additive: never disturbs the
-                                                # file write or the print() block above.
+                                                # local-dev file write above.
                                                 try:
                                                     get_structured_logger().log_gemini_api_response(
                                                         form_id=self._form_id,

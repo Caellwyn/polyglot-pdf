@@ -1,8 +1,11 @@
 """
 Token usage file logger for local development.
 
-Logs token events to backend/logs/token_usage.jsonl for visualization dashboard.
-NOT used in production - BigQuery will handle that.
+Logs token events to backend/logs/token_usage.jsonl for the local token
+dashboard. Never on a deployed instance: log_token_event is a no-op when
+K_SERVICE (set by Cloud Run) is present, and the only call site
+(backend/adapters/live_ai_gemini.py) is additionally gated on the
+backend/.env.DEV marker. Production token accounting is BigQuery's.
 """
 
 import json
@@ -140,6 +143,13 @@ class TokenFileLogger:
                 "audio_output": session_audio_output,
             },
         }
+
+        # Never on a deployed instance (K_SERVICE is set by Cloud Run): the
+        # container's disk is not a log store, and this file is only the local
+        # dashboard's input (bd polyglot-pdf-wfgjz). The call site is gated
+        # on the .env.DEV marker as well; this guard stands on its own.
+        if os.getenv("K_SERVICE"):
+            return
 
         # Append to JSONL file (newline-delimited JSON)
         # Write atomically to prevent partial reads by file watcher
