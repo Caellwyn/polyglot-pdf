@@ -150,8 +150,10 @@ def test_firm_usage_returns_the_allowlisted_rollup_fields(
     _set_firm_usage(fake_db, "acme", "2026-09", {
         "connections_ended": 5, "sessions_completed": 4,
         "cost_usd_total": 1.25, "links_opened": 2, "links_completed": 1,
+        "links_minted": 3,
         "by_kit": {"i-90": {"sessions": 4, "cost_usd": 1.25}},
-        "by_employee": {"emp-1": {"sessions": 4, "cost_usd": 1.25}},
+        "by_employee": {"emp-1": {"sessions": 4, "cost_usd": 1.25,
+                                   "links_minted": 3}},
         "by_language": {"zh-CN": {"sessions": 1, "cost_usd": 0.1}},
         "kind": "live", "channel": "demo",
         "extra_internal_field": "should never leak",
@@ -165,9 +167,30 @@ def test_firm_usage_returns_the_allowlisted_rollup_fields(
     assert usage["connections_ended"] == 5
     assert usage["sessions_completed"] == 4
     assert usage["cost_usd_total"] == 1.25
+    assert usage["links_minted"] == 3
     assert usage["by_kit"] == {"i-90": {"sessions": 4, "cost_usd": 1.25}}
+    assert usage["by_employee"] == {
+        "emp-1": {"sessions": 4, "cost_usd": 1.25, "links_minted": 3}}
     assert usage["by_language"] == {"zh-CN": {"sessions": 1, "cost_usd": 0.1}}
     assert "extra_internal_field" not in usage
+
+
+def test_firm_usage_links_minted_alone_is_a_real_reading_not_no_data(
+        admin_client, fake_db):
+    """bd polyglot-pdf-he3lt: a firm-month with ONLY a mint (no session, no
+    open, no completion) still comes back with links_minted set and every
+    other counter null -- the console's own "no data" predicate must treat
+    this as real activity, not a missing doc. Mutation: drop links_minted
+    from _FIRM_USAGE_KEYS -- red (the field silently vanishes from the
+    response even though it was written)."""
+    _set_firm_usage(fake_db, "acme", "2026-09", {"links_minted": 1})
+    resp = admin_client.get(
+        "/admin/firms/acme/usage?month=2026-09&channel=demo")
+    assert resp.status_code == 200, resp.text
+    usage = resp.json()["usage"]
+    assert usage["links_minted"] == 1
+    assert usage["connections_ended"] is None
+    assert usage["links_opened"] is None
 
 
 def test_firm_usage_missing_rollup_doc_is_an_empty_reading_not_404(
@@ -246,7 +269,8 @@ def test_kit_usage_returns_the_allowlisted_rollup_fields(
         admin_client, fake_db):
     _set_kit_usage(fake_db, "i-90", "2026-09", {
         "connections_ended": 3, "sessions_completed": 2,
-        "cost_usd_total": 0.5, "by_firm": {"acme": {"sessions": 2}},
+        "cost_usd_total": 0.5, "links_minted": 2,
+        "by_firm": {"acme": {"sessions": 2}},
         "kind": "live", "channel": "demo",
         "internal_only": "no",
     })
@@ -255,6 +279,7 @@ def test_kit_usage_returns_the_allowlisted_rollup_fields(
     assert resp.status_code == 200, resp.text
     usage = resp.json()["usage"]
     assert usage["connections_ended"] == 3
+    assert usage["links_minted"] == 2
     assert usage["by_firm"] == {"acme": {"sessions": 2}}
     assert "internal_only" not in usage
 
