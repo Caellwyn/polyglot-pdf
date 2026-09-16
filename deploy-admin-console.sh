@@ -30,13 +30,13 @@
 #
 # ONE-TIME setup (per project, before the first console deploy):
 #   1. Create BOTH sites (names are globally unique across Firebase):
-#        firebase hosting:sites:create polyglot-admin-demo --project "$PROJECT"
-#        firebase hosting:sites:create polyglot-admin-candidate --project "$PROJECT"
+#        firebase hosting:sites:create polyglot-admin-demo --project polyglot-demo-aa709
+#        firebase hosting:sites:create polyglot-admin-candidate --project polyglot-demo-aa709
 #   2. Map both deploy targets (mappings persist in .firebaserc "targets";
 #      this repo ships the demo project's mapping already -- re-run
 #      target:apply only for a NEW project):
-#        firebase target:apply hosting admin "$PROJECT" --project "$PROJECT"
-#        firebase target:apply hosting admin-candidate polyglot-admin-candidate --project "$PROJECT"
+#        firebase target:apply hosting admin polyglot-demo-aa709 --project polyglot-demo-aa709
+#        firebase target:apply hosting admin-candidate polyglot-admin-candidate --project polyglot-demo-aa709
 #   3. AUTHORIZED DOMAINS for BOTH sites. Each is a SEPARATE Hosting site, and
 #      Firebase Auth refuses sign-in from any domain not on the project's
 #      list -- with the whole config present and valid, so no build check
@@ -51,7 +51,7 @@
 #   4. Grant each operator admin-console access (bd polyglot-pdf-7w17m) --
 #      there is no shared secret; per-person Firebase custom claims are the
 #      only gate:
-#        python scripts/bootstrap_admin_user.py --email you@example.com --project "$PROJECT"
+#        python scripts/bootstrap_admin_user.py --email you@example.com --project polyglot-demo-aa709
 #      This STAMPS the app_admin claim on an EXISTING Firebase Auth account
 #      -- it does not create one, and the console offers no self-serve
 #      signup. See the script's own docstring for --revoke and --list.

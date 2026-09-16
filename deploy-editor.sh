@@ -16,10 +16,10 @@
 #
 # ONE-TIME setup (per project, before the first editor deploy):
 #   1. Create the site (name is globally unique across Firebase):
-#        firebase hosting:sites:create "$EDITOR_SITE" --project "$PROJECT"
+#        firebase hosting:sites:create polyglot-editor-demo --project polyglot-demo-aa709
 #   2. Map BOTH deploy targets (the voice app keeps the default site):
-#        firebase target:apply hosting app "$PROJECT" --project "$PROJECT"
-#        firebase target:apply hosting editor "$EDITOR_SITE" --project "$PROJECT"
+#        firebase target:apply hosting app polyglot-demo-aa709 --project polyglot-demo-aa709
+#        firebase target:apply hosting editor polyglot-editor-demo --project polyglot-demo-aa709
 #      (Mappings persist in .firebaserc "targets"; this repo ships the demo
 #      mapping already -- re-run target:apply only for a NEW project/site.)
 #   3. Grant each person editor access (bd polyglot-pdf-hn0jq): there is no
@@ -51,7 +51,7 @@
 #      than assume, because the failure only appears at a human's first
 #      sign-in attempt:
 #        Firebase console -> Authentication -> Settings -> Authorized domains
-#      Confirm "$EDITOR_SITE.web.app" is listed (and any custom domain).
+#      Confirm polyglot-editor-demo.web.app is listed (and any custom domain).
 #      The sign-in screen names this case explicitly if it fires.
 #      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy
 #      config (deploy/channels/<channel>.env).
@@ -61,10 +61,10 @@
 #      SERVICE_ACCOUNT in its channel file runs on the default compute SA,
 #      <PROJECT_NUMBER>-compute@developer.gserviceaccount.com):
 #        SA=$(gcloud run services describe polyglot-backend --region us-central1 \
-#          --project "$PROJECT" --format='value(spec.template.spec.serviceAccountName)')
-#        gcloud storage buckets add-iam-policy-binding "gs://$FORM_KITS_BUCKET" \
+#          --project polyglot-demo-aa709 --format='value(spec.template.spec.serviceAccountName)')
+#        gcloud storage buckets add-iam-policy-binding "gs://polyglot-demo-aa709-form-kits" \
 #          --member="serviceAccount:$SA" \
-#          --role=roles/storage.objectAdmin --project "$PROJECT"
+#          --role=roles/storage.objectAdmin --project polyglot-demo-aa709
 #
 # Usage:
 #   ./deploy-editor.sh
