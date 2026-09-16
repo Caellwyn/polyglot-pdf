@@ -72,6 +72,30 @@ EXPECTED_BUILD_SA_PROJECT_ROLES = {
     # success rows (the staging-before-demo gate's evidence); read
     # deployments/{id} to evaluate that gate for a demo build.
     "roles/datastore.user",
+    # Deploy the composite-index half of the firestore-rules target
+    # (`firebase deploy --only firestore:indexes`). Neither neighbour covers
+    # it: firebaserules.admin is rules-only and datastore.user holds
+    # datastore.schemas.list but not create/update/delete.
+    "roles/datastore.indexAdmin",
+}
+
+# PRIVILEGED BUILD STEPS -> the role each one needs. The pin above says what
+# the SA holds; this says what the BUILD ASKS FOR, so the two can be checked
+# against each other instead of against a reviewer's memory. Keyed on the
+# literal command text in cloudbuild.yaml, so a step added or removed there
+# moves the requirement automatically.
+#
+# Why this table exists: bd polyglot-pdf-oqtm7 added the firestore:indexes
+# deploy to the build without adding a role, and NO test noticed -- the
+# EXPECTED_/script comparison above is collusion-proof between its two
+# halves but blind to what cloudbuild.yaml actually calls. That is CLAUDE.md
+# scar #7 one level up: the role list was internally consistent and still
+# short of what the deploy needed (outer cross-surface review, round 1).
+BUILD_STEP_ROLE_REQUIREMENTS = {
+    "firebase-tools deploy --only firestore:rules": "roles/firebaserules.admin",
+    "firebase-tools deploy --only firestore:indexes": "roles/datastore.indexAdmin",
+    "firebase-tools deploy --only hosting": "roles/firebasehosting.admin",
+    "gcloud run deploy": "roles/run.admin",
 }
 
 # Roles granted on ONE RESOURCE (the form-kits bucket) rather than
@@ -158,6 +182,43 @@ def test_build_sa_project_role_pin_matches_the_setup_script():
         + chr(10) + "Widening polyglot-cloudbuild-sa is a deliberate act: "
           "add the role to BOTH, with the one-line justification saying "
           "which build step needs it.")
+
+
+def test_every_privileged_build_step_has_the_role_it_needs():
+    """cloudbuild.yaml's privileged calls, checked against the granted roles.
+
+    The sibling test above proves the pin and the provisioning script agree
+    with EACH OTHER; neither reads the build. So a step added to
+    cloudbuild.yaml that needs a role nobody granted keeps every assertion in
+    this file green and fails on the first real build with
+    INSUFFICIENT_PERMISSION -- which is exactly what `firebase deploy --only
+    firestore:indexes` did when bd polyglot-pdf-oqtm7 moved it off an
+    operator's owner-level account and onto this identity.
+
+    Only steps whose command text appears in BUILD_STEP_ROLE_REQUIREMENTS are
+    checked: a NEW kind of privileged call still needs a human to add its
+    row. What this closes is the cheaper failure -- an already-known call
+    shape reappearing in the build with its role dropped from the grant.
+
+    Every row must MATCH something in cloudbuild.yaml, so a typo'd command
+    key cannot quietly check nothing. A step deliberately removed from the
+    build removes its row here in the same commit -- and then the role it
+    justified has no justification left either.
+    """
+    build = (REPO_ROOT / "cloudbuild.yaml").read_text(encoding="utf-8")
+    granted = _named_array(_setup_script_text(), "PROJECT_ROLES")
+    for command, role in sorted(BUILD_STEP_ROLE_REQUIREMENTS.items()):
+        assert command in build, (
+            "BUILD_STEP_ROLE_REQUIREMENTS names {!r}, which cloudbuild.yaml "
+            "does not contain -- either the command key is misspelled (and "
+            "so checks nothing) or the build step was removed without "
+            "removing its row, and {} may no longer be needed.".format(
+                command, role))
+        assert role in granted, (
+            "cloudbuild.yaml runs {!r} but scripts/setup-cloud-build.sh's "
+            "PROJECT_ROLES does not grant {} to {} -- the build step will "
+            "fail with INSUFFICIENT_PERMISSION on the first run that "
+            "actually changes anything.".format(command, role, BUILD_SA_NAME))
 
 
 def test_build_sa_bucket_role_pin_matches_the_setup_script():

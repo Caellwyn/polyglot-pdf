@@ -462,7 +462,7 @@ fi
 # for instance, would otherwise pass silently: it is not a project-level
 # ROLE at all, and this file's own check_sa_roles only ever queries
 # project-level bindings).
-CLOUD_BUILD_SA_EXPECTED_ROLES="roles/run.admin roles/firebasehosting.admin roles/firebaserules.admin roles/artifactregistry.writer roles/logging.logWriter roles/datastore.user"
+CLOUD_BUILD_SA_EXPECTED_ROLES="roles/run.admin roles/firebasehosting.admin roles/firebaserules.admin roles/datastore.indexAdmin roles/artifactregistry.writer roles/logging.logWriter roles/datastore.user"
 check_sa_roles "cloudbuild_sa" "polyglot-cloudbuild-sa@${PROJECT_ID}.iam.gserviceaccount.com" "$CLOUD_BUILD_SA_EXPECTED_ROLES"
 
 # CHECK: cloudbuild_sa_bucket_role

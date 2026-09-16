@@ -122,6 +122,91 @@ historical artifact it is.
 No behavioural code changed in this round: docs, comments, docstrings and one
 assertion message. The root suite was re-run (1958 passed, 93 skipped).
 
+### Outer cross-surface round 1 (adopt / reject / defer)
+
+The Opus outer review returned `GAPS-FOUND (3)` -- two blockers of the same
+kind, one of a different kind, and all three adopted. Nothing was refuted.
+
+**Adopted -- the index deploy is a permission the build identity does not
+hold.** The bullet above ("two behaviours moved rather than being lost") moved
+`firebase deploy --only firestore:indexes` out of `deploy-demo.sh` and into
+the `firestore-rules` Cloud Build target. What it did not ask was who runs it
+now. In the script it ran on an OPERATOR's owner-level account; in the build it
+runs as `polyglot-cloudbuild-sa`, whose live policy is exactly
+`artifactregistry.writer, datastore.user, firebasehosting.admin,
+firebaserules.admin, logging.logWriter, run.admin`. `roles/firebaserules.admin`
+is rules-only (the setup script's own comment says so), and
+`roles/datastore.user` carries `datastore.schemas.list` and none of
+`create`/`update`/`delete` -- confirmed against the live role definitions, not
+recalled. So the step is a no-op list that passes by luck while
+`firestore.indexes.json` is unchanged, and dies with `PERMISSION_DENIED` the
+first time an index is added or edited -- taking the whole demo frontend deploy
+with it, because `firestore-rules` runs BEFORE `frontend-demo` and the runner
+stops at the first failure. `roles/datastore.indexAdmin` is added to
+`scripts/setup-cloud-build.sh`'s `PROJECT_ROLES`, to
+`test_cloud_build_sa_iam_envelope.py`'s `EXPECTED_BUILD_SA_PROJECT_ROLES`, and
+-- found by the suite, not by the diff -- to `scripts/audit/infra_posture.sh`'s
+`CLOUD_BUILD_SA_EXPECTED_ROLES`, the third home of the same list.
+
+This is CLAUDE.md scar #7 landing on the bead that moved the call, so the fix
+also closes the hole that let it through. The existing role pin is
+collusion-proof between the script and the constant but reads NOTHING about
+what the build actually calls, so a step added to `cloudbuild.yaml` needing a
+role nobody granted keeps every assertion in that file green.
+`BUILD_STEP_ROLE_REQUIREMENTS` maps each privileged command text in
+`cloudbuild.yaml` to the role it needs, and the new
+`test_every_privileged_build_step_has_the_role_it_needs` checks the build
+against the grant. Mutation-verified per entry, not once: dropping each of the
+four roles from BOTH the script and the constant reddens only the new test,
+naming the command and the missing role -- the seven older assertions stay
+green, which is the hole this closes.
+
+**Adopted -- two tier-2 docs still naming a deleted code path.**
+`docs/technical_guide.md` said the composite indexes were "deployed by
+`deploy-demo.sh` (`firebase deploy --only firestore:indexes`)", and
+`docs/standards/confirmation-and-audit.md` named `deploy-all.sh`'s
+`BACKEND_ENV` as the producer of `CONFIRMATION_FIRESTORE_ENABLED`. Both name a
+command that no longer exists anywhere, on the one contract this bead most
+changed. The second one is the interesting miss: round 2's enumeration swept
+variables a CALLER sets, not values the deleted stage PRODUCED, so the
+producer-side moves (`CONFIRMATION_FIRESTORE_ENABLED`, `FIRMS_FIRESTORE_ENABLED`)
+were outside the set it drew.
+
+The set was re-enumerated on the producer axis before fixing either -- `grep`
+for `firebase deploy` and for `BACKEND_ENV` across every tier-1 and tier-2 doc
+-- which found two more of the same shape the reviewer had not cited:
+`docs/technical_guide.md`'s `/admin/audit` route row (same indexes claim,
+second site) and `docs/components/auth.md`'s deploy note (same claim about the
+RULES half). All four fixed together, plus `config-deployment.md`'s build-SA
+role list, which is the doc a reader consults before asking the very question
+finding 1 asked.
+
+**Rejected:** nothing.
+
+**Deferred:** the reviewer's finding 4 is an explicit non-gap -- whether
+`gcloud builds triggers run --substitutions=_SHA=...` MERGES with the trigger's
+provisioned `_TARGET`/`_CHANNEL` rather than replacing them. It cannot be
+settled without a real (paid, deploying) trigger run, and
+`admin_backend/services/cloud_build.py` already committed to the same
+assumption in bd `tb3kp`, so it is pre-existing rather than introduced here.
+The first staging run confirms it by reading one line: the streamed log's first
+line must be `Building target <X> at <sha>`, not `verify`. Finding 5's three
+non-blocking items were filed by the reviewer as bd `polyglot-pdf-q97d8`
+(`DEPLOYMENT.md`/`README.md` still document the deleted bash engine), bd
+`polyglot-pdf-vnniz` (~14 source comments naming a `deploy-*.sh` stage as an
+env producer) and bd `polyglot-pdf-qjjse` (only `deploy-staging.sh` self-heals
+a missing `build_checks` record), and are deliberately not fixed here.
+
+**The IAM binding itself is PENDING-DEPLOY.** The code and the pins are
+complete, but `roles/datastore.indexAdmin` reaches the live project only when
+the maintainer runs `scripts/setup-cloud-build.sh` -- a provisioning run, one
+command, gated like any deploy. Until it runs, the `firestore-rules` target
+keeps passing on an unchanged `firestore.indexes.json` and would fail on the
+first index change.
+
+Suites re-run after the fixes: backend 3818 passed / 195 skipped,
+admin_backend 706 passed, root 1958 passed / 93 skipped.
+
 ## Lessons
 
 **Deleting a stage is a migration, not a deletion.** Both behaviour losses

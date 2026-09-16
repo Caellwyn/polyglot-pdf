@@ -292,7 +292,8 @@ Two sinks (bd polyglot-pdf-z2is):
   this file lives on ephemeral tmpfs and dies with the instance — it is a dev
   convenience, **not** the durable record.
 - **Firestore mirror (deployed).** When `CONFIRMATION_FIRESTORE_ENABLED=true`
-  (set in `deploy-all.sh`'s `BACKEND_ENV`), every event is also written to the
+  (set in `cloudbuild.yaml`'s backend-deploy `BACKEND_ENV`), every event is
+  also written to the
   `confirmation_events` Firestore collection by a fire-and-forget background
   writer (single worker thread; the voice hot path never blocks on the network
   write; failures log `confirmation_firestore_write_failed` at error level —
@@ -532,4 +533,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: `manual` means typed AND explicitly verified -- typing alone no longer produces a confirmation, so a keystroke cannot stand behind a per-field audit claim).*
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review: `CONFIRMATION_FIRESTORE_ENABLED`'s producer is `cloudbuild.yaml`'s backend deploy -- `deploy-all.sh`'s `BACKEND_ENV` was deleted with the inline bash deploy stages. No confirmation or audit behavior changed.) (2026-09-08, bd polyglot-pdf-uum5g: `manual` means typed AND explicitly verified -- typing alone no longer produces a confirmation, so a keystroke cannot stand behind a per-field audit claim).*

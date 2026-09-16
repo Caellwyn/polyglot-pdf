@@ -4,7 +4,7 @@
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the email-signup allowlist check moved server-side to `POST /api/signup/check` (uniform 404, never logs the address); `authorized_emails` is a full client deny; `confirmation_events` has its explicit deny; the deploy note no longer ties signup to a client-readable rule.)*
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-he3lt: maintainer observation
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review: the Firestore deploy note names the `firestore-rules` Cloud Build target as what runs `firebase deploy --only firestore:rules`; `deploy-demo.sh` runs that target and no firebase command of its own since it became a thin trigger wrapper.) (bd polyglot-pdf-he3lt: maintainer observation
 after the first live mint on staging -- a mint touched no usage-rollup
 document, so the console's Usage page stayed on "no data" until a client
 opened the link and a session later completed. New
@@ -122,9 +122,10 @@ unauthenticated list AND get on `authorized_emails` denied) is
 the maintainer's machine nor CI has today.
 
 > **Deploy note.** The repo `firestore.rules` is the source of truth and is wired
-> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` ships it
-> (`firebase deploy --only firestore:rules`) on any
-> frontend/full deploy, so a normal deploy keeps the live rules in sync with the
+> into `firebase.json` (`firestore.rules`). The `firestore-rules` Cloud
+> Build target ships it (`firebase deploy --only firestore:rules`,
+> beside the composite indexes), and `deploy-demo.sh` runs that target on
+> any frontend/full deploy, so a normal deploy keeps the live rules in sync with the
 > repo. A project left on default-deny breaks the `users/{uid}` profile sync
 > below (email signup no longer depends on a client-readable rule). Deploy is a
 > maintainer action (the NEVER-deploy rule); rules are project-wide, so a rules
