@@ -1,6 +1,6 @@
 # Beads setup (prerequisite for the swarm tooling)
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: removed swarm_init.py references; updated beads URLs; fixed config.yaml guidance to sync.remote).*
+*Last updated: 2026-09-16. See [docs/journal/entries/2026-09-16-bd-prskq-windows-bd-path-setup.md](journal/entries/2026-09-16-bd-prskq-windows-bd-path-setup.md) for closeout details.*
 
 The swarm scripts (`bd_safe.py`, `closeout_housekeeping.py`, etc.) and the
 `/closeout` skill all assume [beads](https://github.com/gastownhall/beads)
@@ -22,7 +22,67 @@ confirm it's on PATH:
 bd version
 ```
 
-### 2. Windows long-path prerequisites (skip on macOS/Linux)
+There is also an npm wrapper (`@beads/bd`) that carries the same binary; it is
+a fine way to install, and it is what this machine uses. **On Windows an npm
+install needs step 2 as well** -- npm puts a shell script on PATH ahead of the
+real executable, which makes every `bd` call open a console window. A release
+binary installed directly does not need it.
+
+### 2. Windows: put the native `bd.exe` ahead of npm's shim (skip on macOS/Linux)
+
+**Skip this if `bd` came from the beads releases** -- a directly-installed
+binary has no shim. This is only for an npm install (`@beads/bd`).
+
+npm's Windows install puts three launchers in `%APPDATA%\npm\`: `bd` (a
+`#!/bin/sh` script), `bd.cmd`, and `bd.ps1`. That directory goes on PATH; the
+package's own `bin\` -- which holds the real `bd.exe` -- does not. So a bare
+`bd` from Git Bash finds the **shell script**, and Windows runs it by launching
+`sh.exe`, which opens a console window. One window per `bd` call is unpleasant;
+across several concurrent agent sessions each doing pull-before-read and
+push-after-write it becomes a cascade of windows that steal keyboard focus
+while you type (bd polyglot-pdf-rdftu; measured peak 261 concurrent `git.exe`
+and 74 `sh.exe`).
+
+Fix it by putting the package's `bin\` directory FIRST in your **user** PATH:
+
+```powershell
+# Normal (non-elevated) PowerShell. Back up first -- this rewrites user PATH.
+$bd = Join-Path $env:APPDATA 'npm\node_modules\@beads\bd\bin'
+if (-not (Test-Path (Join-Path $bd 'bd.exe'))) { throw "no bd.exe at $bd" }
+$u = [Environment]::GetEnvironmentVariable('PATH','User')
+# Timestamped so re-running cannot overwrite an earlier backup.
+$u | Set-Content "$env:USERPROFILE\Desktop\userpath-backup-$(Get-Date -f yyyyMMdd-HHmmss).txt"
+if ($u -notlike "*$bd*") {
+  [Environment]::SetEnvironmentVariable('PATH', "$bd;$u", 'User')
+}
+```
+
+Open a NEW terminal, then verify `bd.exe` -- not the extensionless shim --
+comes first:
+
+```
+where bd
+```
+
+The first line must end in `\@beads\bd\bin\bd.exe`. If it names
+`%APPDATA%\npm\bd` instead, the entry did not land or the terminal is stale.
+
+**Why this lives in your user PATH and not in the repo.** A tracked config
+cannot express it: the PATH separator is `;` on Windows and `:` on POSIX, and
+no single literal is correct on both -- `;` silently drops the first real entry
+on macOS/Linux, `:` splits the `C:` drive letter on Windows, and the Git-Bash
+form (`/c/Users/...`) resolves in bash but not for a Windows-native process.
+Machine-specific paths therefore stay on the machine; a test
+(`tests/test_claude_settings_env.py`) keeps them out of the shared
+`.claude/settings*.json` (bd polyglot-pdf-6peeg).
+
+Python callers are already covered and need no setup -- `scripts/swarm_config.py`
+prepends the same directory to `os.environ["PATH"]` at import time, derived
+from the home directory and guarded on the file existing, so it is a no-op off
+Windows. This step covers the *shell* callers (the skills and hooks that run
+bare `bd`).
+
+### 3. Windows long-path prerequisites (skip on macOS/Linux)
 
 Dolt's git-remote-cache builds very deep paths (well over 260 chars even from a
 short root), so enable long paths:
@@ -39,7 +99,7 @@ git config --global core.longpaths true   # verify: returns "true"
 Also clone under a SHORT root (`C:\code\`, `C:\Users\<you>\code_projects\`) --
 a deep worktree path can still trigger `$GIT_DIR too big` on push.
 
-### 3. Set the maintainer role BEFORE the first bd command
+### 4. Set the maintainer role BEFORE the first bd command
 
 If you OWN this repo, you are a maintainer, not a contributor:
 
