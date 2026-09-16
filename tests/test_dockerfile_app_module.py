@@ -339,10 +339,12 @@ def test_the_admin_module_path_is_importable_as_written():
 
 
 def test_the_cmd_disables_uvicorns_access_log():
-    """The WS credential rides the URL, so the access log must be OFF.
+    """The WS credential rode the URL until sprint 23 C2, so the access log is OFF.
 
-    /ws/fill takes `?token=<Firebase ID token or magic-link token>` as a query
-    parameter, and uvicorn's access logger prints the full request line --
+    /ws/fill took `?token=<Firebase ID token or magic-link token>` as a query
+    parameter (the first frame carries it now; `?token=` is honoured for one
+    more deploy, and the flag stays as defence in depth), and uvicorn's access
+    logger prints the full request line --
     query string included -- at INFO on every connection, straight into the
     container's stdout and so into Cloud Logging. `--no-access-log` turns that
     logger off at the server, independent of the level cap

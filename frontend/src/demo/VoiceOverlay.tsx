@@ -198,7 +198,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// file they save is their only copy.
 		voiceEnding: status.toLowerCase() === 'idle_timeout'
 			|| status.toLowerCase() === 'reconnect_failed'
-			|| status.toLowerCase() === 'budget_exhausted',
+			|| status.toLowerCase() === 'budget_exhausted'
+			// A policy refusal (sprint 23 C2) ends the session for good too.
+			|| status.toLowerCase() === 'policy_refused',
 		enabled: isClientSession,
 	})
 
@@ -954,6 +956,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					console.log('[VoiceOverlay] Link spend ceiling reached -- not waiting for connect')
 					break
 				}
+				// A policy refusal (sprint 23 C2) is decided; the backend's phrase is
+				// the message, not a timeout.
+				if (currentStatus === 'policy_refused') {
+					console.log('[VoiceOverlay] Policy refusal -- not waiting for connect')
+					break
+				}
 
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
@@ -961,7 +969,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 			// Check final status
 			const finalStatus = connectionManager.getStatus()
-			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
+			if (finalStatus === 'policy_refused') {
+				// The backend's fixed phrase ("Authentication failed", "Kit not
+				// available", ...) -- never a timeout message for a decided refusal.
+				setConnectionError(connectionManager.lastPolicyRefusal || 'Connection refused')
+			} else if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
 				setConnectionError('Connection timed out - please try again')
 			}
@@ -996,7 +1008,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const statusNow = typeof connectionManager?.getStatus === 'function'
 				? connectionManager.getStatus()
 				: undefined
-			if (statusNow !== 'budget_exhausted') {
+			if (statusNow !== 'budget_exhausted' && statusNow !== 'policy_refused') {
 				setStatus('error')
 			}
 		}

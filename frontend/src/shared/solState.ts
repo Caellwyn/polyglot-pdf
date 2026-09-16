@@ -85,7 +85,10 @@ function isOffline(s: string): boolean {
 		// The link's spend ceiling is used up (bd polyglot-pdf-cke6v). Voice is
 		// over for good, so Sol LEAVES rather than dimming -- dimming reads as
 		// "paused, coming back", which is the one thing this state is not.
-		s === 'budget_exhausted'
+		s === 'budget_exhausted' ||
+		// A policy refusal (sprint 23 C2): the backend will not accept this
+		// socket again; Sol leaves, as on a spent link.
+		s === 'policy_refused'
 	)
 }
 

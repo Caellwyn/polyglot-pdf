@@ -48,6 +48,12 @@ const SCHEMA: FormSchema = {
   sections: [{ id: 's1', label: 'S1', order: 1 }],
 } as unknown as FormSchema
 
+function firstFrameToken(): string | undefined {
+  const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+  const first = ws.send.mock.calls[0]?.[0]
+  return first ? JSON.parse(first as string).token : undefined
+}
+
 function lastUrl(): string {
   return MockWebSocket.instances[MockWebSocket.instances.length - 1].url
 }
@@ -69,14 +75,15 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     } as unknown as Storage
   })
 
-  it('appends a token from getToken when connect() is called WITHOUT an explicit token (reconnect path)', async () => {
+  it('sends the token from getToken in the FIRST FRAME, never on the URL, when connect() is called WITHOUT an explicit token (reconnect path)', async () => {
     const conn = new WebFormConnection(SCHEMA)
     conn.setGetToken(async () => 'fresh-token-123')
 
     // No token argument -- mirrors startSection()/attemptReconnect() calling connect(wsUrl).
     await conn.connect('wss://example/ws/fill')
 
-    expect(lastUrl()).toContain('token=fresh-token-123')
+    expect(lastUrl()).not.toContain('token=')
+    expect(firstFrameToken()).toBe('fresh-token-123')
   })
 
   it('re-fetches a fresh token on each reconnect (covers token expiry)', async () => {
@@ -85,14 +92,15 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     conn.setGetToken(async () => `token-${++n}`)
 
     await conn.connect('wss://example/ws/fill')
-    expect(lastUrl()).toContain('token=token-1')
+    expect(firstFrameToken()).toBe('token-1')
+    expect(lastUrl()).not.toContain('token=')
 
     conn.disconnect()
     await conn.connect('wss://example/ws/fill')
-    expect(lastUrl()).toContain('token=token-2')
+    expect(firstFrameToken()).toBe('token-2')
   })
 
-  it('strips a stale baked-in token before appending the fresh one (no double token param)', async () => {
+  it('strips a stale baked-in token from the URL and sends the fresh one in the first frame', async () => {
     const conn = new WebFormConnection(SCHEMA)
     conn.setGetToken(async () => 'fresh')
 
@@ -100,10 +108,9 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     await conn.connect('wss://example/ws/fill?token=STALE')
 
     const url = lastUrl()
-    expect(url).toContain('token=fresh')
+    expect(url).not.toContain('token=')
     expect(url).not.toContain('STALE')
-    // Exactly one token param.
-    expect(url.match(/token=/g)?.length).toBe(1)
+    expect(firstFrameToken()).toBe('fresh')
   })
 
   it('strips a stale token that is the FIRST of several params without leaving ?& (regression for the strip edge case)', async () => {
@@ -117,8 +124,8 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     expect(url).not.toContain('STALE')
     expect(url).not.toContain('?&')
     expect(url).toContain('version=2')
-    expect(url).toContain('token=fresh')
-    expect(url.match(/token=/g)?.length).toBe(1)
+    expect(url).not.toContain('token=')
+    expect(firstFrameToken()).toBe('fresh')
   })
 
   it('falls back to the last-known token when getToken throws', async () => {
@@ -131,12 +138,13 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     })
 
     await conn.connect('wss://example/ws/fill')
-    expect(lastUrl()).toContain('token=good-token')
+    expect(firstFrameToken()).toBe('good-token')
 
     conn.disconnect()
     // Second connect: getToken throws -> fall back to cached 'good-token'.
     await conn.connect('wss://example/ws/fill')
-    expect(lastUrl()).toContain('token=good-token')
+    expect(firstFrameToken()).toBe('good-token')
+    expect(lastUrl()).not.toContain('token=')
   })
 
   it('explicit token argument still wins (back-compat)', async () => {
@@ -145,8 +153,9 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
 
     await conn.connect('wss://example/ws/fill', 10000, 'explicit-token')
 
-    expect(lastUrl()).toContain('token=explicit-token')
-    expect(lastUrl()).not.toContain('callback-token')
+    expect(firstFrameToken()).toBe('explicit-token')
+    expect(lastUrl()).not.toContain('token=')
+    expect(JSON.stringify(MockWebSocket.instances[MockWebSocket.instances.length - 1].send.mock.calls[0])).not.toContain('callback-token')
   })
 })
 
@@ -166,5 +175,20 @@ describe('stripToken (bd polyglot-pdf-wq0)', () => {
   })
   it('strips a token that is last (no trailing separator)', () => {
     expect(stripToken('wss://x/ws?a=b&token=abc')).toBe('wss://x/ws?a=b')
+  })
+})
+
+describe('WebFormConnection handshake send sites (sprint 23 C2)', () => {
+  it('EVERY handshake send site carries the token (connect, continuous-session switch, legacy switch)', async () => {
+    // A static pin over the source: the backend verifies the first frame of
+    // every socket, and a section switch opens a new socket, so a handshake
+    // literal or spread without `token: this.lastToken` is a refused switch.
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.resolve(__dirname, 'webFormConnection.ts'), 'utf8')
+    const sends = (src.match(/type: ["']handshake["']|getHandshakePayload\(/g) ?? []).length
+    const withToken = (src.match(/token: this\.lastToken/g) ?? []).length
+    expect(sends).toBeGreaterThanOrEqual(3)
+    expect(withToken).toBe(sends)
   })
 })

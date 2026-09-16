@@ -58,6 +58,14 @@ CHANNEL_SPECIFIC = {
     # times, so a future channel file pinning one (e.g. holding staging on an
     # older verified SHA) must not be rejected as drift.
     "GIT_SHA",
+    # Sprint 23 C2 (bd polyglot-pdf-bwevj): /ws/fill checks the browser Origin
+    # against this list, and the voice app opens the socket from ITS channel's
+    # Hosting site directly (no rewrite for WebSockets) -- so each channel
+    # must name its own app site (demo: polyglot-demo-aa709; staging:
+    # polyglot-app-staging) and must not name the other's. The shared editor
+    # origins are in both. Pinned per channel by
+    # backend/tests/unit/test_ws_first_frame_credential.py.
+    "CORS_EXTRA_ORIGINS",
 }
 
 SECTIONS = ("SET_ENV_VARS", "SET_SECRETS", "SERVICE_ACCOUNT")

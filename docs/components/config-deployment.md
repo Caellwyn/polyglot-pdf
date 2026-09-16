@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the access-log paragraph -- the credential left the URL; the flag stays load-bearing through the one-deploy deprecation; `deploy/channels/*.env` CORS lists gained the voice app's Hosting origins for the socket's Origin check.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-j29z1, sprint 23 E2: the "Hosting security headers" section -- one header block on all five Hosting targets, the CSP in report-only mode with its connect-src inventory, and self-hosted fonts via scripts/fetch_fonts.py.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the "Deployed verbosity floors" bullet -- LOG_LEVEL clamped to INFO, the two dump knobs forced off, SEND_TRANSCRIPT ignored and the token file unwritten with K_SERVICE set; both apps install the value-free 422 handler from backend/utils/validation_errors.py at import.)*
@@ -302,10 +304,17 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN` are deleted (bd
   `polyglot-pdf-rhc2v`); if either is still attached to a deployed service, it
   is inert and can be dropped at the next deploy.
-- **`CORS_EXTRA_ORIGINS`** — comma-separated extra CORS origins appended to the
-  hardcoded localhost list in `backend/main.py` (e.g. the hosted schema-editor
-  site, which calls Cloud Run directly rather than through the Hosting `/api`
-  rewrite — the rewrite's 60s cap would kill minutes-long extraction requests).
+- **`CORS_EXTRA_ORIGINS`** — semicolon- (or comma-) separated extra browser
+  origins appended to the local dev list (`backend/config.py`
+  `LOCAL_BROWSER_ORIGINS`; `browser_origins()` is the ONE list `main.py`'s CORS
+  middleware AND `/ws/fill`'s Origin allowlist use, sprint 23 C2). It must name
+  the hosted schema-editor site (which calls Cloud Run directly rather than
+  through the Hosting `/api` rewrite — the rewrite's 60s cap would kill
+  minutes-long extraction requests) AND the channel's own voice-app Hosting
+  site (the WebSocket is opened from it directly; a missing app origin refuses
+  every voice session with "Origin not allowed"). Each channel names its own
+  app site only; `deploy/channels/*.env` carry the values, pinned by
+  `backend/tests/unit/test_ws_first_frame_credential.py`.
   List explicit origins only; do NOT set `*` — the app runs
   `allow_credentials=True`, and browsers reject the wildcard+credentials
   combination, so `*` silently breaks CORS instead of opening it.
@@ -450,8 +459,9 @@ the gate crying wolf. The counts are pinned per script.
   strip every setting off the service.
 
   **Parity.** `staging.env` and `demo.env` must agree key-for-key and
-  value-for-value except for `LINK_BASE_URL`, `LINK_CHANNEL` and `GIT_SHA`
-  (`CHANNEL_SPECIFIC` in the parity test). Change staging FIRST, verify there,
+  value-for-value except for `LINK_BASE_URL`, `LINK_CHANNEL`, `GIT_SHA` and
+  `CORS_EXTRA_ORIGINS` (each channel names its own app site; `CHANNEL_SPECIFIC`
+  in the parity test). Change staging FIRST, verify there,
   then promote. `admin.env` is deliberately outside that pair -- there is ONE
   admin service backing both channels' data, so it carries
   `admin-backend-sa` and `APP_MODULE=admin_backend.main:app`. `deploy-admin.sh`
@@ -672,10 +682,14 @@ CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-a
 
 **`--no-access-log` is load-bearing for privacy** (bd `polyglot-pdf-6rj0j`,
 sprint 23 B0). uvicorn's access line prints the full request target at
-INFO, and `/ws/fill` carries its credential in the query string
-(`?token=<Firebase ID token or magic-link token>`), so with the access
-log on, every voice connection wrote a live, replayable token into the
-container's stdout and Cloud Logging. `configure_logging()`
+INFO, and until sprint 23 C2 `/ws/fill` carried its credential in the
+query string (`?token=<Firebase ID token or magic-link token>`), so with
+the access log on, every voice connection wrote a live, replayable token
+into the container's stdout and Cloud Logging. C2 moved the credential
+into the first WebSocket frame; `?token=` is still honoured for one deploy
+cycle, so the flag stays load-bearing until that branch is removed (and
+the request-log exclusion filter from B0 matches nothing once every
+client sends the new frame). `configure_logging()`
 (`backend/utils/logging.py`) also caps the `uvicorn.access` logger at
 WARNING, so a uvicorn started WITHOUT the flag (the local launchers)
 drops the line too; the two guards are pinned separately

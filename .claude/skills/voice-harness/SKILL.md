@@ -51,8 +51,9 @@ field. No human speaks.
    sandbox does not). Open a tab, then `navigate` to the frontend URL.
 2. **Frontend in `--mode demo`** (else `firebase/config.ts` throws
    `auth/invalid-api-key` and the app never mounts).
-3. **CORS-allowed port** for the frontend: 5173-5177 (`backend/main.py`
-   `allow_origins`). Use 5174. A stray port fails `/api/form-kits` preflight
+3. **CORS-allowed port** for the frontend: 5173-5177 (`backend/config.py`
+   `LOCAL_BROWSER_ORIGINS`, the one list CORS and `/ws/fill`'s Origin check
+   share). Use 5174. A stray port fails `/api/form-kits` preflight
    ("Unable to load available forms").
 4. **Backend with `VFF_DISABLE_AUTH=true`** on a free port (else the WS handshake
    times out 10s verifying the Firebase token). Point the frontend WS at it via

@@ -5,7 +5,13 @@ import json
 import asyncio
 import os
 import time
-from ..config import get_settings
+from ..config import get_settings, browser_origins
+from ..services.form_kits import FormKitNotFound, FormKitStoreError, get_form_kit_store
+from ..services.kit_gates import (
+	load_live_metadata as _load_live_metadata,
+	require_published as _require_published,
+	require_visible as _require_visible,
+)
 from ..dependencies import get_form_filling_service
 from ..utils.dev_file_logger import DEV_LOGGING_ENABLED
 from ..utils.confirmation_logger import (
@@ -29,9 +35,11 @@ async def ws_echo(
 	ping_interval: int | None = Query(default=None),
 	idle_timeout: int | None = Query(default=None),
 ):
-	if not DEV_LOGGING_ENABLED:
-		# Dev-only debug socket: reject the handshake in production, same
-		# backend/.env.DEV marker gate as the dev console-log route.
+	if not DEV_LOGGING_ENABLED or os.getenv("K_SERVICE"):
+		# Dev-only debug socket: refused before accept in production. Two
+		# gates on purpose (sprint 23 C2, the /dev/console-log pattern): the
+		# backend/.env.DEV marker, AND K_SERVICE fail-closed so a marker file
+		# that ever reached an image still cannot open this socket deployed.
 		await ws.close(code=1008)
 		return
 	await ws.accept()
@@ -98,9 +106,11 @@ async def ws_echo(
 
 @router.websocket("/audio")
 async def ws_audio(ws: WebSocket, idle_timeout: int | None = Query(default=None)):
-	if not DEV_LOGGING_ENABLED:
-		# Dev-only debug socket: reject the handshake in production, same
-		# backend/.env.DEV marker gate as the dev console-log route.
+	if not DEV_LOGGING_ENABLED or os.getenv("K_SERVICE"):
+		# Dev-only debug socket: refused before accept in production. Two
+		# gates on purpose (sprint 23 C2, the /dev/console-log pattern): the
+		# backend/.env.DEV marker, AND K_SERVICE fail-closed so a marker file
+		# that ever reached an image still cannot open this socket deployed.
 		await ws.close(code=1008)
 		return
 	await ws.accept()
@@ -580,6 +590,10 @@ async def _handle_fill_session(
 			last_rx[0] = time.time()
 
 			if "text" in msg and msg["text"] is not None:
+				if _text_frame_too_large(msg["text"]):
+					_log.warning("websocket_frame_too_large", frame_length=len(msg["text"]))
+					await _close_ws(websocket, 1009, "frame_too_large", reason="Frame too large")
+					break
 				try:
 					obj = json.loads(msg["text"]) if msg["text"] else {}
 				except Exception:
@@ -1501,10 +1515,35 @@ async def _close_ws(websocket, code: int, reason_token: str, *,
 		pass
 
 
+def _allowed_ws_origins() -> frozenset:
+	"""The browser origins that may open /ws/fill: the CORS list, read per
+	call so a test can vary CORS_EXTRA_ORIGINS without re-importing."""
+	return frozenset(browser_origins(get_settings()))
+
+
+def _text_frame_too_large(text: str) -> bool:
+	# BYTES on the wire, not code points: a translated handshake is up to ~3x
+	# its character count in UTF-8. Cheap: the cap fires on frames far above
+	# any control message and the handshake is encoded once.
+	return len(text.encode("utf-8")) > settings.WS_MAX_TEXT_FRAME_BYTES
+
+
+async def _refuse_ws_auth(websocket, log, exc: Exception) -> None:
+	"""The one auth refusal shape (before OR after accept): the wire reason
+	is a fixed phrase, the log carries the exception class, never its text."""
+	not_enrolled = getattr(exc, "status_code", None) == 403
+	log.warning("websocket_auth_failed", error_type=type(exc).__name__,
+				not_enrolled=not_enrolled)
+	reason = ("This account is not enrolled for the voice application"
+			  if not_enrolled else "Authentication failed")
+	await _close_ws(websocket, 1008, "auth_failed", reason=reason,
+					metadata={"not_enrolled": not_enrolled})
+
+
 @router.websocket("/fill")
 async def fill_form_from_schema(
 	websocket: WebSocket,
-	token: str = Query(...),
+	token: str | None = Query(default=None),
 	send_transcript: bool = Query(default=False),
 	service = Depends(get_form_filling_service),
 ):
@@ -1525,70 +1564,95 @@ async def fill_form_from_schema(
 		send_transcript = True
 
 	log = _log.bind(endpoint="fill_from_schema")
-	
-	try:
-		# Verify Auth Token
-		try:
-			# KEEP the decoded claims: the firm_id custom claim (bd
-			# polyglot-pdf-lo88) rides this verification, and the telemetry
-			# below keys session + confirmation records on it (bd
-			# polyglot-pdf-xwlt). Discarding the return value was why the
-			# WS path could not see firm identity at all.
-			#
-			# TWO CREDENTIAL KINDS REACH THIS SOCKET (bd polyglot-pdf-ugm6):
-			# a firm STAFF member's Firebase ID token, or a CLIENT's signed
-			# magic-link token. A client has no Firebase account and must
-			# never have one, so without this branch the client tier could
-			# not open the voice socket at all -- the feature would be
-			# unreachable in exactly the case it exists for.
-			#
-			# The two formats are structurally distinct (a link token has ONE
-			# dot, a Firebase JWT has two), so neither verifier can silently
-			# accept the other's token. We try the LINK shape first and only
-			# by that shape; anything else goes to Firebase verification
-			# unchanged. Both paths end with claims we SIGNED or Firebase
-			# signed -- the handshake is never trusted for identity.
-			#
-			# NO check_revoked ON THE STAFF PATH (kept from #644, and
-			# _verify_ws_credential's Firebase branch is a plain
-			# verify_token(token) for exactly this reason). check_revoked
-			# forces a Firebase USER-RECORD FETCH needing
-			# firebaseauth.users.get -- a permission polyglot-backend-sa
-			# deliberately does NOT have, so deployed, EVERY handshake failed
-			# with INSUFFICIENT_PERMISSION and the app could not connect at
-			# all. It is STRUCTURALLY INVISIBLE locally and in tests:
-			# VFF_DISABLE_AUTH returns earlier, and every test stubs the
-			# Firebase SDK, so the failure exists only against real Firebase
-			# with the real service account. Cost of dropping it: revoking an
-			# account takes effect when its token expires (up to an hour)
-			# rather than immediately -- the maintainer chose that over
-			# widening the deployed backend's permissions (2026-08-26).
-			claims = _verify_ws_credential(token)
-		except Exception as e:
-			# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
-			# the enrolment requirement, so collapsing both into
-			# "Authentication failed" would leave someone locked out of an app
-			# they can sign into, with nothing pointing at the remedy
-			# (scripts/bootstrap_voice_dev.py). Same 401-vs-403 distinction the
-			# HTTP side draws, carried onto the surface where it actually bites.
-			not_enrolled = getattr(e, "status_code", None) == 403
-			log.warning("websocket_auth_failed", error_type=type(e).__name__,
-						not_enrolled=not_enrolled)
-			reason = ("This account is not enrolled for the voice application"
-					  if not_enrolled else "Authentication failed")
-			await _close_ws(websocket, 1008, "auth_failed",
-							reason=reason,
-							metadata={"not_enrolled": not_enrolled})
-			return
 
+	# ORIGIN ALLOWLIST, before accept (sprint 23 C2). A browser always sends
+	# Origin; one it can neither omit nor forge. The list is the SAME one CORS
+	# uses (backend/config.py browser_origins), so a Hosting site that may call
+	# the HTTP routes may open the socket and no other site may. A request
+	# with NO Origin (a non-browser client: the voice harness driver, tests,
+	# curl) is not a browser and is not what this check is for.
+	try:
+		origin = websocket.headers.get("origin")
+	except Exception:
+		origin = None  # a bare test double with no headers
+	if isinstance(origin, str) and origin not in _allowed_ws_origins():
+		log.warning("websocket_origin_refused", origin=origin)
+		await _close_ws(websocket, 1008, "origin_refused", reason="Origin not allowed")
+		return
+
+	# KEEP the decoded claims: the firm_id custom claim (bd
+	# polyglot-pdf-lo88) rides this verification, and the telemetry
+	# below keys session + confirmation records on it (bd
+	# polyglot-pdf-xwlt). Discarding the return value was why the
+	# WS path could not see firm identity at all.
+	#
+	# TWO CREDENTIAL KINDS REACH THIS SOCKET (bd polyglot-pdf-ugm6):
+	# a firm STAFF member's Firebase ID token, or a CLIENT's signed
+	# magic-link token. A client has no Firebase account and must
+	# never have one, so without this branch the client tier could
+	# not open the voice socket at all -- the feature would be
+	# unreachable in exactly the case it exists for.
+	#
+	# The two formats are structurally distinct (a link token has ONE
+	# dot, a Firebase JWT has two), so neither verifier can silently
+	# accept the other's token. We try the LINK shape first and only
+	# by that shape; anything else goes to Firebase verification
+	# unchanged. Both paths end with claims we SIGNED or Firebase
+	# signed -- the handshake is never trusted for identity.
+	#
+	# NO check_revoked ON THE STAFF PATH (kept from #644, and
+	# _verify_ws_credential's Firebase branch is a plain
+	# verify_token(token) for exactly this reason). check_revoked
+	# forces a Firebase USER-RECORD FETCH needing
+	# firebaseauth.users.get -- a permission polyglot-backend-sa
+	# deliberately does NOT have, so deployed, EVERY handshake failed
+	# with INSUFFICIENT_PERMISSION and the app could not connect at
+	# all. It is STRUCTURALLY INVISIBLE locally and in tests:
+	# VFF_DISABLE_AUTH returns earlier, and every test stubs the
+	# Firebase SDK, so the failure exists only against real Firebase
+	# with the real service account. Cost of dropping it: revoking an
+	# account takes effect when its token expires (up to an hour)
+	# rather than immediately -- the maintainer chose that over
+	# widening the deployed backend's permissions (2026-08-26).
+	# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
+	# the enrolment requirement, so collapsing both into
+	# "Authentication failed" would leave someone locked out of an app
+	# they can sign into, with nothing pointing at the remedy
+	# (scripts/bootstrap_voice_dev.py). Same 401-vs-403 distinction the
+	# HTTP side draws, carried onto the surface where it actually bites.
+	# WebSocket already in wrong state (likely already accepted/closed)
+	claims = None
+	credential_verified = False  # set by WHICHEVER transport verified it
+	try:
+		if token is not None:
+			# DEPRECATED transport, kept for ONE deploy cycle (sprint 23 C2): the
+			# credential on the URL lands in Cloud Run's request log. The client
+			# sends it in the first frame now; this branch goes when the old
+			# bundle can no longer be cached anywhere.
+			log.warning("ws_token_in_url_deprecated")
+			try:
+				claims = _verify_ws_credential(token)
+				credential_verified = True
+			except Exception as e:
+				await _refuse_ws_auth(websocket, log, e)
+				return
 		await websocket.accept()
 	except RuntimeError as e:
-		# WebSocket already in wrong state (likely already accepted/closed)
 		log.error("websocket_accept_failed", error_type=type(e).__name__)
 		return
-	
 	try:
-		first_frame = await websocket.receive_text()
+		if not credential_verified:
+			# The credential rides the FIRST frame: an accepted socket that
+			# sends nothing is closed after WS_AUTH_TIMEOUT_SEC so an
+			# unauthenticated peer cannot hold a connection open.
+			first_frame = await asyncio.wait_for(
+				websocket.receive_text(), timeout=settings.WS_AUTH_TIMEOUT_SEC)
+		else:
+			first_frame = await websocket.receive_text()
+	except asyncio.TimeoutError:
+		log.warning("websocket_auth_timeout")
+		await _close_ws(websocket, 1008, "auth_timeout", reason="Authentication failed")
+		return
 	except WebSocketDisconnect:
 		return
 	except Exception as e:
@@ -1601,6 +1665,10 @@ async def fill_form_from_schema(
 		return
 
 	try:
+		if _text_frame_too_large(first_frame):
+			log.warning("websocket_frame_too_large", frame_length=len(first_frame))
+			await _close_ws(websocket, 1009, "frame_too_large", reason="Frame too large")
+			return
 		handshake = json.loads(first_frame)
 	except json.JSONDecodeError as e:
 		log.error("json_decode_failed", error_type=type(e).__name__)
@@ -1620,6 +1688,21 @@ async def fill_form_from_schema(
 	# NOT the removed JIT SI mode (bd polyglot-pdf-en2j): the backend builds a
 	# minimal per-section schema from the manifest, and ai_context renders the DTI
 	# static SI (or legacy full-SI when USE_DTI is off) from it.
+	# THE CREDENTIAL IN THE FIRST FRAME (sprint 23 C2). Verified here, before
+	# anything else in the handshake is read and long before a Gemini session
+	# starts. It is popped so it never reaches the handshake log/telemetry
+	# paths below.
+	frame_token = handshake.get("token")
+	handshake.pop("token", None)
+	if not credential_verified:
+		try:
+			if not isinstance(frame_token, str) or not frame_token:
+				raise ValueError("no credential in the first frame")
+			claims = _verify_ws_credential(frame_token)
+			credential_verified = True
+		except Exception as e:
+			await _refuse_ws_auth(websocket, log, e)
+			return
 	handshake_type = handshake.get("type", "handshake")
 	is_jit_mode = handshake_type == "handshake_jit"
 
@@ -1779,6 +1862,38 @@ async def fill_form_from_schema(
 			return
 		# Absent/blank handshake kit_id: the token's is authoritative anyway.
 		kit_id = _link_kit
+	else:
+		# A STAFF token names a kit in the handshake (client-controlled). The
+		# HTTP kit routes refuse a private kit outside the caller's firm with
+		# the uniform 404 (kit_gates.require_visible); the socket never did
+		# (found by C1's matrix, bd fr20a). Same gate here, BEFORE any Gemini
+		# session: refuse 1008 unless the kit is public or firm-allowed.
+		if isinstance(kit_id, str) and kit_id:
+			try:
+				_store = get_form_kit_store()
+				_meta = await _load_live_metadata(_store, kit_id)
+				# The same two gates, in the same order, as every HTTP kit read:
+				# an unpublished (draft/reverted) kit must not open a voice session
+				# either, and a private one only for its firm.
+				_require_published(_store, kit_id, _meta)
+				await _require_visible(kit_id, _meta, claims if isinstance(claims, dict) else None)
+			except FormKitNotFound:
+				# PERMANENT denial (unpublished, or private outside the firm):
+				# 1008, which the client treats as terminal.
+				log.warning("ws_kit_not_visible", kit_id=kit_id,
+							firm_id=claims.get("firm_id") if isinstance(claims, dict) else None)
+				await _close_ws(websocket, 1008, "kit_not_visible", reason="Kit not available")
+				return
+			except Exception as e:
+				# TRANSIENT (a GCS 5xx, FormKitStoreError, anything unexpected):
+				# still fail CLOSED for this connection, but as 1013 -- the same
+				# shape as budget_unavailable -- so the client's ordinary bounded
+				# retry runs instead of the terminal policy-refusal path. The HTTP
+				# kit routes make the same split (404 vs 502).
+				log.error("ws_kit_visibility_check_failed", error_type=type(e).__name__,
+						  transient=isinstance(e, FormKitStoreError))
+				await _close_ws(websocket, 1013, "kit_unavailable", reason="kit_unavailable")
+				return
 
 	if is_jit_mode:
 		# Manifest-first transport: extract the manifest + first field schema.

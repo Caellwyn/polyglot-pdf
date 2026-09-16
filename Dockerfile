@@ -86,8 +86,9 @@ EXPOSE 8080
 # Shell form on purpose: ${PORT} and ${APP_MODULE:-...} both need shell
 # expansion. Pinned by tests/test_dockerfile_app_module.py.
 #
-# --no-access-log: /ws/fill carries its credential as `?token=` (a Firebase
-# ID token or a client magic-link token) and uvicorn's access line prints
+# --no-access-log: until sprint 23 C2 /ws/fill carried its credential as
+# `?token=` (a Firebase ID token or a client magic-link token; it rides the
+# first frame now, `?token=` honoured one more deploy) and uvicorn's access line prints
 # the full request target at INFO, so with the access log on, every voice
 # connection wrote a live token into the container's stdout and Cloud
 # Logging. Pinned by tests/test_dockerfile_app_module.py. The WARNING cap on

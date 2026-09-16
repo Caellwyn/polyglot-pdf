@@ -2,6 +2,8 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/usage_rollups.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the WebSocket credential rides the first frame, not the URL; the Origin check before accept.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-he3lt: maintainer observation
 after the first live mint on staging -- a mint touched no usage-rollup
 document, so the console's Usage page stayed on "no data" until a client
@@ -136,13 +138,19 @@ raises `HTTPException(401)` on failure.
 
 The WebSocket handshake (`backend/routes/websocket_routes.py`):
 
-1. `/ws/fill` takes a **required `token` query param** (`token: str = Query(...)`).
-   The frontend appends it to the WS URL — `SchemaForm` calls `user.getIdToken()` and
-   threads it through `createConnectionManager` → `WebFormConnection.connect`, which
-   does `?token=<idToken>`.
-2. `verify_token(token)` runs **before `websocket.accept()`**. On failure the socket
-   is closed with **code 1008** ("Authentication failed") and the handler returns —
-   no session is created. (The plan mentioned 4001/4003; the code uses 1008.)
+1. `/ws/fill` takes its credential from the **first frame** (sprint 23 C2): the
+   handshake carries a `token` key. `SchemaForm` calls `user.getIdToken()` and
+   threads it through `createConnectionManager` → `WebFormConnection.connect`,
+   which keeps it off the URL and sends it as `{...handshake, token}`. (A
+   credential on the URL landed in Cloud Run's request log for every session
+   -- the sprint-23 P0.) The deprecated `?token=` query parameter still works
+   for one deploy cycle behind a `ws_token_in_url_deprecated` log line.
+2. A browser Origin outside the CORS list is refused **before
+   `websocket.accept()`** (`1008`, "Origin not allowed"). The socket is then
+   accepted and the first frame must arrive within `WS_AUTH_TIMEOUT_SEC`;
+   `_verify_ws_credential(token)` runs on it before anything else in the
+   handshake is read. On failure the socket is closed with **code 1008**
+   ("Authentication failed") and the handler returns — no session is created.
 3. Only after a valid token does the first-frame handshake proceed (see
    [websocket-routing.md](websocket-routing.md)).
 
@@ -834,7 +842,7 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
 - **Staff identity** — `firm_id` + `firm_role` (`manager` | `employee`) custom
   claims on the staff member's normal Firebase account, stamped by the admin
   bootstrap script below. The claims ride the existing ID-token verification
-  (`require_auth` / the WS `?token=` gate). **`firm_id` is consumed** by the
+  (`require_auth` / the WS first-frame `token` gate). **`firm_id` is consumed** by the
   form-kit routes' firm-scoped visibility filter
   (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`) AND by the
   voice path's telemetry: the `/ws/fill` gate keeps its decoded claims and

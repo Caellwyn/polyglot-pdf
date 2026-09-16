@@ -124,6 +124,13 @@ export type ConnectionStatus =
   // transient and keeps the normal retry path, so this branches on the REASON,
   // never on the code alone.
   | "budget_exhausted"
+  // NOT retryable either (sprint 23 C2): the backend refused this socket on
+  // policy -- 1008 (authentication, origin, link/kit scope) or 1009 (frame
+  // cap). Its own status so every consumer that ends the session on
+  // budget_exhausted (save nudge, connect poll, Sol) can end it here too, and
+  // the Reconnect button (which cannot work) stays hidden. The wire phrase is
+  // in lastPolicyRefusal.
+  | "policy_refused"
   | "error";
 
 export interface ConnectionCallbacks {
@@ -244,6 +251,10 @@ export class WebFormConnection {
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
   private dtiModeEnabled = false; // DTI: send next field's full schema on hint response (bd polyglot-pdf-jnjj.22)
+  /** The wire reason of the last 1008/1009 close (sprint 23 C2): a fixed
+   *  backend phrase ("Authentication failed", "Kit not available", ...) the
+   *  UI can show instead of a generic reconnect failure. */
+  public lastPolicyRefusal: string | null = null;
   private continuousSessionEnabled = false; // Whole form as ONE session; suppress section advance (bd polyglot-pdf-x8rt)
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
@@ -429,14 +440,11 @@ export class WebFormConnection {
     // so we never send two token params or a stale one. stripToken handles the
     // token appearing first, middle, last, or alone without leaving a dangling
     // or doubled separator (it does NOT rely on the strip being unreachable).
+    // The credential NEVER rides the URL (sprint 23 C2): a URL lands in the
+    // request log of every hop. It goes in the first frame (the handshake)
+    // instead; stripToken() still scrubs a token a caller may pass in.
     const baseUrl = stripToken(wsUrl);
-
-    // Append the resolved token to the URL
-    let finalUrl = baseUrl;
-    if (resolvedToken) {
-      const separator = baseUrl.includes('?') ? '&' : '?';
-      finalUrl = `${baseUrl}${separator}token=${resolvedToken}`;
-    }
+    const finalUrl = baseUrl;
 
     // Clear idle timeout flag on reconnect (user manually clicked reconnect)
     if (this.idleTimedOut) {
@@ -649,7 +657,10 @@ export class WebFormConnection {
       || SchemaFormStateManager.hasInProgressSession(this.state);
     this.hasConnectedOnce = true;
     const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, isResume);
-    this.send(handshake);
+    // The credential rides the FIRST frame (sprint 23 C2); the backend pops
+    // it before the handshake is read and closes 1008 if it is missing or
+    // invalid, before any Gemini session starts.
+    this.send({ ...handshake, token: this.lastToken });
   }
 
   /**
@@ -3583,6 +3594,22 @@ export class WebFormConnection {
 
     // Don't auto-reconnect if this is the initial connection attempt
     // (allows fallback logic in connection.ts to try cloud URL)
+    // A POLICY refusal is terminal (sprint 23 C2): 1008 is the backend's
+    // fixed-reason refusal (authentication, origin, link/kit scope, schema
+    // source) and 1009 is the frame cap. Retrying sends the same thing to the
+    // same gate five times and then shows a generic 'connection lost' -- the
+    // wire reason IS the message. Since C2 these refusals arrive after
+    // accept(), so they reach here rather than failing connect().
+    if (event?.code === 1008 || event?.code === 1009) {
+      console.warn('[WebFormConnection] Policy refusal -- terminal, no reconnect', { code: event.code, reason: event.reason });
+      this.clearSectionSwitchWatchdog();
+      this.switchInFlight = false;
+      this.isSectionSwitching = false;
+      this.goAwayReconnectInFlight = false;
+      this.lastPolicyRefusal = event.reason || null;
+      this.setStatus("policy_refused", "handleClose:policy-refusal");
+      return;
+    }
     if (!this.enableAutoReconnect) {
       this.setStatus("disconnected", "handleClose:no-auto-reconnect");
       return;
@@ -4271,7 +4298,10 @@ export class WebFormConnection {
       // the "having trouble reaching the AI" modal would stack on top of the
       // spend-ceiling one -- two explanations for one event, the wrong one on
       // top.
-      status === "budget_exhausted"
+      status === "budget_exhausted" ||
+      // Terminal the same way (sprint 23 C2): a refused socket is never
+      // "reconnecting" again, so the marker must not stay armed.
+      status === "policy_refused"
     ) {
       this.droppedReconnectInFlight = false;
     }
@@ -4579,7 +4609,7 @@ export class WebFormConnection {
       // total_sections=1. currentState was already switched into this.state above.
       if (this.continuousSessionEnabled) {
         this.send(
-          SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, this.hasConnectedOnce)
+          { ...SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, this.hasConnectedOnce), token: this.lastToken }
         );
         this.hasConnectedOnce = true;
       } else {
@@ -4589,9 +4619,12 @@ export class WebFormConnection {
         // Compute initial field hint (first unfilled field in this section)
         const initialFieldHint = this.computeNextFieldHintString();
 
-        // Send handshake with section metadata and initial field hint
+        // Send handshake with section metadata and initial field hint. The
+        // credential rides this frame too (sprint 23 C2): a section switch
+        // reconnects, and the backend verifies the FIRST frame of every socket.
         this.send({
           type: "handshake",
+          token: this.lastToken,
           schema: sectionSchema,
           // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
           // jnjj.45d). Re-sent on the section-switch handshake so the backend's

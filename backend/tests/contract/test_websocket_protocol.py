@@ -206,8 +206,10 @@ def frontend_send_types() -> set[str]:
         src = (REPO_ROOT / Path(rel)).read_text(encoding="utf-8")
         # `.send(` optionally wrapping JSON.stringify, then an object literal;
         # scan a short window for its `type` property. Binary sends
-        # (`this.send(audioData)`) and variable sends (`this.send(handshake)`)
-        # have no object literal and are correctly skipped.
+        # (`this.send(audioData)`) have no object literal and are correctly
+        # skipped; a spread-send (`this.send({ ...handshake, token })`, sprint
+        # 23 C2) matches but carries no `type:` inside the window, so it adds
+        # no type -- the literal handshake site still does.
         for m in re.finditer(r"\.send\(\s*(?:JSON\.stringify\(\s*)?\{", src):
             window = src[m.end() : m.end() + 250]
             t = re.search(r"""type:\s*['"]([a-zA-Z0-9_]+)['"]""", window)

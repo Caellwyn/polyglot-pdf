@@ -2,6 +2,8 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the credential in the first frame, the Origin allowlist, the auth timeout, the text-frame cap, the staff kit-scope gate; `?token=` deprecated.)*
+
 *Last updated: 2026-09-09 (bd polyglot-pdf-e4dt8: every close on `/fill`
 now routes through `_close_ws`, which emits a counted `ws_error` event with
 the close code and a fixed reason token before closing. The 1011/1006
@@ -26,14 +28,29 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 
 ## /ws/fill handshake
 
-1. Connect with `?token=<auth>` (and optional `?send_transcript=`). The token is
-   verified **before** `accept()`; failure closes with `1008`. The verifier is
+1. Connect (optional `?send_transcript=`; a browser Origin outside the CORS
+   list -- `backend/config.py` `browser_origins`, the local dev origins plus the
+   channel's `CORS_EXTRA_ORIGINS` -- is refused with `1008` **before**
+   `accept()`; a request with no Origin is a non-browser client and passes).
+   The credential rides the **first frame**: the handshake's `token` key
+   (sprint 23 C2). After `accept()` the first frame must arrive within
+   `WS_AUTH_TIMEOUT_SEC` and must not exceed `WS_MAX_TEXT_FRAME_BYTES`
+   (`1009` otherwise); the token is popped and verified before anything else
+   in the handshake is read; failure closes with `1008` and no Gemini session
+   starts. The deprecated `?token=` query parameter is still honoured for one
+   deploy cycle (verified before `accept()`, logged as
+   `ws_token_in_url_deprecated`), then removed. The verifier is
    `_verify_ws_credential`, which dispatches on token SHAPE: a ONE-dot token
    is a CLIENT MAGIC LINK (`verify_link_token`, bd `polyglot-pdf-ugm6`), a
    TWO-dot JWT is firm staff (`verify_token`). A client has no Firebase
    account and never will, so the socket must accept both -- see
    [auth.md](auth.md) (Client magic links). A client link is additionally
    REDEEMED here (one-time use + the completion window), not merely verified.
+   A STAFF credential's handshake `kit_id` is then checked with the same
+   gate the HTTP kit routes use (`kit_gates.require_visible`): a private kit
+   outside the caller's firm closes `1008` ("Kit not available") before any
+   session, mirroring the client-link mismatch branch (found by C1's matrix).
+   Every text frame in the session is capped by `WS_MAX_TEXT_FRAME_BYTES`.
 2. The client's **first frame is the handshake itself** — a single JSON text frame
    (`receive_text()` → `json.loads`). There is no `hello`/`hello_ack` here.
 3. `type` selects the mode:
