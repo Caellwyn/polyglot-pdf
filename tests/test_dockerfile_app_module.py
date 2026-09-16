@@ -1,19 +1,21 @@
 """ONE image, TWO Cloud Run services, selected at RUNTIME (bd polyglot-pdf-pnoik).
 
-The root Dockerfile is built by deploy-all.sh with `gcloud builds submit --tag`,
-which CANNOT pass `--build-arg`. So the ASGI target cannot be baked in at build
-time without building a second image per service. Instead the CMD reads
+The root Dockerfile is built ONCE per commit by cloudbuild.yaml and both Cloud
+Run services run that same image, so the ASGI target cannot be baked in at
+build time without building a second image per service. Instead the CMD reads
 `${APP_MODULE:-backend.main:app}`, which a `gcloud run deploy --set-env-vars`
 block can override per service.
 
-deploy-all.sh now sets APP_MODULE at runtime for every backend deploy
-(defaulting to the public backend.main:app), and deploy-admin.sh (bd
-polyglot-pdf-3l2vp) overrides it to admin_backend.main:app for the admin
-service. The admin Cloud Run service itself has not been deployed yet -- that
-is a separate, maintainer-gated step -- but the producer side is real code on
-this branch, not a future plan. The AGREEMENT between the scripts and the
-docs describing them is pinned below, in both directions, so neither can
-quietly go stale relative to the other.
+cloudbuild.yaml's backend-deploy step sets APP_MODULE at runtime for every
+public backend deploy (the literal backend.main:app), and its
+admin-service-deploy-tagged step reads admin_backend.main:app out of
+deploy/channels/admin.env for the admin service (bd polyglot-pdf-3l2vp for the
+split, bd polyglot-pdf-oqtm7 for the move off bash). The admin Cloud Run
+service itself has not been deployed yet -- that is a separate,
+maintainer-gated step -- but the producer side is real code on this branch,
+not a future plan. The AGREEMENT between the build and the docs describing it
+is pinned below, in both directions, so neither can quietly go stale relative
+to the other.
 
 Three properties this pins, each of which breaks a deploy if it drifts:
 
@@ -25,8 +27,8 @@ Three properties this pins, each of which breaks a deploy if it drifts:
      deploy that sets nothing (the demo and staging both predate APP_MODULE)
      starts serving the wrong app, or fails to start at all.
   3. No build arg was introduced. An `ARG APP_MODULE` reads as equivalent and
-     is not: `gcloud builds submit --tag` has no way to set it, so the value
-     would freeze at its default while the deploy-time env var is ignored.
+     is not: the image is built once and shared, so the value would freeze at
+     its default while the deploy-time env var is ignored.
 
 Also pins that admin_backend/ is actually COPIED into the image -- an APP_MODULE
 pointing at a package the image does not contain is a container that crash-loops
@@ -108,16 +110,16 @@ def test_the_cmd_default_is_the_public_backend():
 
 
 def test_no_build_arg_was_introduced_for_the_app_module():
-    """Property 3: deploy-all.sh cannot pass --build-arg, so none may exist.
+    """Property 3: ONE image serves both services, so no build ARG may exist.
 
-    `gcloud builds submit --tag <image> <dir>` builds with no way to set a
-    build ARG. An ARG here would freeze at its default in every image while
+    The build produces a single image per commit and both Cloud Run services
+    run it. An ARG here would freeze at its default in that one image while
     the deploy-time --set-env-vars value is silently ignored.
     """
     args = [l for l in _dockerfile_lines() if l.startswith("ARG ")]
     assert not args, (
-        "the Dockerfile declares build ARGs, which deploy-all.sh's "
-        "`gcloud builds submit --tag` cannot set:"
+        "the Dockerfile declares build ARGs, which the one shared image "
+        "cannot vary per service:"
         + chr(10) + "  " + (chr(10) + "  ").join(args))
 
 

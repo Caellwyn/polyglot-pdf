@@ -82,6 +82,46 @@ without naming where the property went.
 `polyglot-pdf-lm9n8` rather than folded in: consolidating them is a change to
 the kits path, not to the deploy engine.
 
+### Fresh-eyes round 2 (adopt / reject / defer)
+
+**Adopted -- both rubric gaps, and the set they belonged to.** The reviewer
+scored the doc criterion FAIL: `docs/technical_guide.md` still described the
+mechanism this same diff deleted, in the Environments section and in Surface
+contract 12's body, even though its sibling contracts 22 and 31b had been
+rewritten. Both are fixed. Rather than fix the two cited spots, the whole SET
+was enumerated first (`grep` for `deploy-all.sh`, `gcloud builds submit --tag`,
+`BACKEND_NO_TRAFFIC_TAG`, `BACKEND_EXTRA_ENV`, `DEPLOY_CHANNEL`,
+`FRONTEND_BUILD_CMD` across docs, tests and `cloudbuild.yaml`) -- CLAUDE.md scar
+#8, and the reviewer's own note that the last two rounds of this bead had the
+same shape. That found eight more true-yesterday statements: two env-var table
+rows and the admin `/health` row naming `deploy-all.sh`/`deploy-admin.sh` as the
+thing that sets or curls them, the `LINK_MINTING_ENABLED` fallback paragraph,
+the `BACKEND_URLS_JSON` producer, contract 30's "the wrappers remain the live
+deploy path" preamble, contract 29a's bash consumer, and the
+`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` note -- plus six `cloudbuild.yaml` comments
+and four test docstrings/messages pointing at the deleted stages. All fixed
+together, in one pass.
+
+**Adopted -- the dangling test-name reference.** The reviewer's third finding
+(`tests/test_cloudbuild_yaml.py`'s docstring citing
+`test_admin_channel_file_matches_the_wrapper`, renamed by this diff) was a
+comment-only nit, but it is a member of the same set, so it was fixed with the
+rest rather than deferred; the same docstring's claim that `deploy-admin.sh`
+folds the live URLs into `BACKEND_EXTRA_ENV` was stale in the same sentence.
+
+**Rejected:** nothing. No finding was refuted.
+
+**Deferred:** the reviewer's own pre-existing find --
+`docs/doctrine/promotion-tiers.md`'s stale "both deploy scripts set
+`LINK_CHANNEL`" claim, byte-identical on `origin/dev` -- is filed as bd
+`polyglot-pdf-4gvsa` and deliberately not fixed here.
+`docs/sprint_22_admin-console_plan.md` also still describes the pre-E4.6
+mechanism; it is the approved PLAN OF RECORD and is deliberately left as the
+historical artifact it is.
+
+No behavioural code changed in this round: docs, comments, docstrings and one
+assertion message. The root suite was re-run (1958 passed, 93 skipped).
+
 ## Lessons
 
 **Deleting a stage is a migration, not a deletion.** Both behaviour losses
@@ -119,9 +159,14 @@ refusal NAMES the offending argument separated them.
   `scripts/deploy_build_targets.sh` added to **Tracks:**.
 - `docs/components/admin-service.md` -- the deploy section plus four other
   places that described the old inline env assembly. Stamped.
-- `docs/technical_guide.md` -- contracts 12, 22 and 31b updated; NEW contract
-  36 records the `polyglot-<target>` trigger-name contract from the wrappers'
-  side. Stamped (it tracks the deploy scripts, and was already stale).
+- `docs/technical_guide.md` -- contracts 12, 22, 29a, 30 and 31b updated; NEW
+  contract 36 records the `polyglot-<target>` trigger-name contract from the
+  wrappers' side; the Environments section, two env-var rows, the admin
+  `/health` row, the `LINK_MINTING_ENABLED` fallback, the `BACKEND_URLS_JSON`
+  producer and the `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` note all repointed at the
+  build (the second half of that list came out of the fresh-eyes round-2
+  enumeration above). Stamped twice (it tracks the deploy scripts, and was
+  already stale).
 - `CLAUDE.md` -- the one-line "Deploy is local/manual" claim and the
   "Deployment / promotion" flow bullet.
 - The other docs `check_doc_freshness.py` still reports STALE track files this

@@ -613,12 +613,11 @@ def test_admin_service_deploy_tagged_env_set_is_complete(by_id):
     """(Not in the original handoff, cross-surface review round: bd
     polyglot-pdf-ywxoh.) admin.env's own [SET_ENV_VARS] comment says
     ADMIN_SERVICE_URL and BACKEND_URLS_JSON are DELIBERATELY absent from the
-    file because they need a live gcloud lookup -- deploy-admin.sh resolves
-    both and folds them into BACKEND_EXTRA_ENV precisely because
-    --set-env-vars REPLACES the service's entire env block (that script's
-    own comment records the incident). Pin the COMPLETE set this Cloud
-    Build step must assemble, not just the three keys
-    test_admin_channel_file_matches_the_wrapper already checks against
+    file because they need a live gcloud lookup -- this step resolves them
+    and appends them itself, precisely because --set-env-vars REPLACES the
+    service's entire env block. Pin the COMPLETE set this Cloud Build step
+    must assemble, not just the keys
+    test_admin_env_is_the_only_copy_of_the_admin_service_config reads out of
     admin.env -- a step that silently drops any of these keys disables the
     refund sweep's OIDC audience
     (admin_backend/routes/sweep_routes.py::_audience), blanks

@@ -292,10 +292,11 @@ def _live_text(script: Path) -> str:
 def test_deploy_all_no_longer_defines_the_env_block_inline():
     """THE POINT OF THE BEAD: the channel env must come from the FILE.
 
-    deploy-all.sh may still assemble the COMPUTED keys (GOOGLE_CLOUD_PROJECT,
-    the FORM_KITS_* trio, GIT_SHA, APP_MODULE) -- none of those is static data.
-    What it must NOT do is spell out channel settings, because a Cloud Build
-    step cannot read a bash string, and a restated config is exactly the drift
+    The COMPUTED keys (GOOGLE_CLOUD_PROJECT, the FORM_KITS_* trio, GIT_SHA,
+    APP_MODULE) are assembled by cloudbuild.yaml's deploy steps -- none of
+    those is static data, so none belongs in a channel file. What no bash
+    script may do is spell out channel SETTINGS, because a Cloud Build step
+    cannot read a bash string, and a restated config is exactly the drift
     this file exists to catch.
 
     DERIVED from the shipped channel file rather than a hand-typed list: a
@@ -387,8 +388,10 @@ def test_each_wrapper_runs_only_its_own_channels_targets(script, channel):
 def test_no_wrapper_rebuilds_the_channel_env_inline(script: Path):
     """The wrappers must not carry a second copy of the settings.
 
-    BACKEND_EXTRA_ENV survives for deploy-time-only values (deploy-admin.sh's
-    ADMIN_SERVICE_URL). It must no longer carry channel configuration.
+    No wrapper assembles an env block at all since bd polyglot-pdf-oqtm7 --
+    the deploy-time-only values (ADMIN_SERVICE_URL, BACKEND_URLS_JSON) are
+    resolved by the build itself. A wrapper line setting a channel key would
+    be a second live copy of config the build reads from the file.
     """
     text = _live_text(script)
     for key in sorted(parse_channel_file(STAGING)["SET_ENV_VARS"]):

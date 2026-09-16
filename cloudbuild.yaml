@@ -254,8 +254,10 @@ steps:
   # backend-<channel> -- docker build + push, then gcloud run deploy with the
   # env/secrets/SA read from deploy/channels/${_CHANNEL}.env.
   #
-  # This is exactly what deploy-all.sh's backend stage does today, reading the
-  # SAME channel file, which is the point of moving that config out of bash.
+  # This is the ONLY place a public backend is deployed: deploy-staging.sh and
+  # deploy-demo.sh run this target rather than deploying anything themselves.
+  # The channel file is the one source of the env/secrets/SA it reads, which
+  # is the point of keeping that config out of bash (bd polyglot-pdf-1s3ko).
   # --------------------------------------------------------------------
   - id: staging-verified-gate
     # THE STAGING-BEFORE-DEMO GATE (plan: "The staging-before-demo gate lives
@@ -336,7 +338,7 @@ steps:
         CHANNEL_SECRETS=$(read_channel_section "$$CHANNEL_FILE" SET_SECRETS)
         CHANNEL_SA=$(read_channel_value "$$CHANNEL_FILE" SERVICE_ACCOUNT SERVICE_ACCOUNT)
 
-        # Same refusal as deploy-all.sh's backend stage, for the same reason:
+        # The empty-section refusal, for the reason the channel files exist:
         # --set-env-vars REPLACES the service's whole env block, so a channel
         # file with an empty [SET_ENV_VARS] would deploy the computed defaults
         # alone -- every VERTEXAI, LINK_* and CORS_EXTRA_ORIGINS setting
@@ -357,9 +359,11 @@ steps:
           *) echo "ABORT: backend target has no service for channel ${_CHANNEL}"; exit 1 ;;
         esac
 
-        # The computed keys, matching deploy-all.sh's BACKEND_ENV exactly --
-        # including GIT_SHA=${_SHA}, which is what GET /version reports, and
-        # APP_MODULE, which selects the ASGI app inside the one shared image.
+        # The computed keys -- everything that cannot be a literal in a
+        # channel file. GIT_SHA=${_SHA} is the commit this build ran at, which
+        # is what GET /version reports, and APP_MODULE selects the ASGI app
+        # inside the one shared image (Surface contract 12). The public
+        # backends take APP_MODULE literally here; only admin.env declares it.
         BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FORM_KITS_MODE=gcs"
         BACKEND_ENV="$$BACKEND_ENV,FORM_KITS_GCS_BUCKET=$PROJECT_ID-form-kits"
         BACKEND_ENV="$$BACKEND_ENV,FORM_KITS_REMOTE_PREFIX=form-kits"
@@ -517,8 +521,7 @@ steps:
         fi
         cd frontend
         npm ci
-        # build:schema:demo for BOTH channels, deliberately -- mirrors
-        # deploy-staging.sh's own FRONTEND_BUILD_CMD override. There is no
+        # build:schema:demo for BOTH channels, deliberately. There is no
         # separate build:schema:staging script; the staging channel has
         # always built the SAME demo-mode bundle (see
         # docs/components/config-deployment.md) -- only the injected
@@ -703,7 +706,8 @@ steps:
 
   # --------------------------------------------------------------------
   # admin-service -- tagged no-traffic revision, verified at its own stable
-  # tag URL, THEN traffic shift. Mirrors deploy-admin.sh's own sequence.
+  # tag URL, THEN traffic shift. This IS the admin deploy sequence;
+  # deploy-admin.sh only runs this target.
   # There is ONE admin service backing BOTH channels' data, so this is its
   # own staging tier independent of the backend-staging/demo split -- see
   # the plan's "Admin-tier targets" note.
@@ -746,15 +750,15 @@ steps:
         # admin service's own URL only at first deploy, and the admin
         # service has no channel of its own so it cannot derive either
         # public backend's URL the way a channel derives its sibling's.
-        # deploy-admin.sh resolves both live and folds them into
-        # BACKEND_EXTRA_ENV; --set-env-vars REPLACES the service's entire
-        # env block (that script's own comment records the incident this
-        # mirrors), so omitting them here would silently wipe the refund
-        # sweep's OIDC audience and blank GET /admin/health's channel fan-out
-        # on every Cloud Build admin-service deploy (review round: bd
-        # polyglot-pdf-ywxoh). "2>/dev/null || true" makes a not-yet-deployed
-        # service resolve to empty rather than aborting (set -e), matching
-        # deploy-admin.sh's own first-deploy behavior.
+        # This step resolves all three live and appends them below;
+        # --set-env-vars REPLACES the service's entire env block, so omitting
+        # them here would silently wipe the refund sweep's OIDC audience and
+        # blank GET /admin/health's channel fan-out on every admin-service
+        # deploy (review round: bd polyglot-pdf-ywxoh). This is the only
+        # copy of that resolution -- deploy-admin.sh is a thin trigger
+        # wrapper. "2>/dev/null || true" makes a not-yet-deployed service
+        # resolve to empty rather than aborting (set -e), which is the
+        # first-deploy case.
         ADMIN_SERVICE_URL=$(gcloud run services describe polyglot-admin \
           --platform managed --region us-central1 --project "$PROJECT_ID" \
           --format 'value(status.url)' 2>/dev/null || true)
