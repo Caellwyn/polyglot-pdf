@@ -1424,7 +1424,12 @@ ledger on a read, so a second writer breaks the invariant silently.
   (None for a missing firm -- distinct from 0, which a CLI dry run relies
   on) and does NOT sum the ledger; `read_entries(db, firm_id, limit=None)`
   returns entries oldest-first by `ts` (the replay shape, not the console's
-  newest-n).
+  newest-n -- see `read_recent_entries` below for that); `read_recent_entries(db,
+  firm_id, limit) -> tuple[list[dict], bool]` returns this firm's `limit`
+  newest entries (`order_by("ts", DESCENDING)`, bounded to `limit + 1` reads
+  regardless of the firm's total entry count) plus a `truncated` flag --
+  the reader behind `GET /admin/firms/{firm_id}`, the console's firm-detail
+  page.
 - **Expiry refund (Epic 2 bead A5): `refund_expired_link(db, jti, *, actor,
   channel=None, now=None) -> dict` and `reconcile_expired_for_firm(firm_id,
   channel=None, now=None) -> list[dict]`.** ONE transactional helper, keyed
@@ -3141,9 +3146,7 @@ unchanged, only which behavior it defaults to.
   job's own (Surface contract 15's `admin_audit_log` neighbor,
   `SWEEP_SCHEDULER_SA_EMAIL`): a NEW `MONTHLY_TOPUP_SCHEDULER_SA_NAME`
   (`admin-topup-scheduler-sa` -- kept under GCP's 30-character
-  service-account-id cap; bd polyglot-pdf-l3kqc shortened it from the
-  original `admin-monthly-topup-scheduler-sa` (32 chars), a SEPARATE
-  identity from BOTH
+  service-account-id cap), a SEPARATE identity from BOTH
   `admin-backend-sa` and `admin-sweep-scheduler-sa` -- rotating one job's
   caller credential must never change what a DIFFERENT job accepts), an
   echoed-NOTE `gcloud scheduler jobs create http admin-monthly-credit-topup`

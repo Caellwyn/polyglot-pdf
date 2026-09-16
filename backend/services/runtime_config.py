@@ -1,7 +1,7 @@
 """Per-channel runtime config, backed by Firestore app_config/{channel}
 (bd polyglot-pdf-bg313, Epic 1 child 1.5).
 
-WHAT MOVES HERE. Four keys, moved off deploy-time env so an operator can
+WHAT MOVES HERE. Five keys, moved off deploy-time env so an operator can
 retune them without a redeploy:
 
     LINK_MINTING_ENABLED   (bool)  -- was backend/routes/link_routes.py
