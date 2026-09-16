@@ -132,7 +132,7 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. After the reservation commits, bumps the `links_minted` usage-rollup counter (bd `polyglot-pdf-he3lt`, Surface contract 26) best-effort -- never able to fail the mint. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -2168,10 +2168,10 @@ a deploy script.
   them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
   that constant out before comparing against `setup-admin-service.sh` alone.
 
-### 26. Session-end usage rollups: `firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (Epic 3 bead E3.4, bd polyglot-pdf-w828m)
+### 26. Session-end usage rollups: `firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (Epic 3 bead E3.4, bd polyglot-pdf-w828m; extended by bd polyglot-pdf-he3lt)
 
-**Two entry points, new `backend/services/usage_rollups.py`, write into the
-SAME per-month rollup documents from three call sites.**
+**Three entry points, `backend/services/usage_rollups.py`, write into the
+SAME per-month rollup documents from four call sites.**
 
 - **`record_session_end(firm_id, kit_id, employee_id, language, channel,
   kind, completion_status, cost_usd, now=None)`** -- called from the SAME
@@ -2207,6 +2207,36 @@ SAME per-month rollup documents from three call sites.**
   only on the public backend, which has exactly one channel of its own, so
   the month id resolves through `link_channel()`, same as
   `record_session_end`'s default-resolution sibling.
+- **`record_link_minted(*, firm_id, kit_id, employee_id, channel, now=None)`**
+  (bd polyglot-pdf-he3lt) -- the missing FIRST link-lifecycle event: called
+  from `backend/routes/link_routes.py`'s `mint_link` route right after
+  `_reserve_mint`'s reservation transaction has already committed the
+  debit, the ledger entry, and the `links/{jti}` mint record -- NEVER from
+  inside that transaction, so a rollup write can never slow down or fail
+  the reservation it merely observes. Wrapped in the ROUTE'S OWN
+  try/except at the call site, on top of this function's own
+  never-raises contract (defense in depth, mirroring the
+  `record_session_end` call site's own wrapper in `websocket_routes.py`):
+  an exception raised before this function's internal guard is even
+  reached (or a future edit removing that guard) still cannot fail an
+  otherwise-successful mint. ONE BATCHED update, same "both docs or
+  neither" shape as `record_session_end`: `firms/{firm_id}/usage/
+  {YYYY-MM[_channel]}.links_minted` + `.by_employee.{employee_id}.
+  links_minted`, and `kits/{kit_id}/usage/{YYYY-MM[_channel]}.links_minted`.
+  `by_employee` here keys on the MINTING employee's uid unconditionally --
+  unlike `record_session_end`'s by_employee (staff uid OR link employee_id,
+  caller-resolved), every mint is a staff action by definition, so there is
+  no ambiguity to resolve. `kit_id` re-validates through `_safe_kit_id` even
+  though the route's own caller already checked it against the firm's
+  allowlist (this module assumes nothing about a caller's own validation);
+  an invalid or absent `kit_id` degrades to a firm-only write, never a
+  failure. `employee_id` absent (should not happen -- the route already
+  refuses an unidentified caller with a 403 before reservation) skips only
+  the `by_employee` nesting, not the top-level counter. `admin_backend/
+  routes/usage_routes.py`'s `_FIRM_USAGE_KEYS`/`_KIT_USAGE_KEYS` response
+  allowlists gain `links_minted` so the console read side actually surfaces
+  it (an allowlist omission would silently drop a written field, same
+  reasoning as every other key in that allowlist).
 - **The month DOCUMENT ID is channel-suffixed, not the collection.** Staging
   and demo share one Firestore project (see "Deployment / promotion" in
   CLAUDE.md), and these rollup docs are shared AGGREGATE counters each

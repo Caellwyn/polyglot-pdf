@@ -2,6 +2,35 @@
 
 **Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/identity_labels.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
 
+*Last updated: 2026-09-16 (bd `polyglot-pdf-he3lt`: maintainer observation
+after the first live mint on staging -- "usage was not updated." A mint
+touched no rollup document, so the Usage page stayed on "no data" until a
+client opened the link and a session later completed. NEW
+`backend/services/usage_rollups.py::record_link_minted(firm_id, kit_id,
+employee_id, channel, now)`, called from `backend/routes/link_routes.py`'s
+`mint_link` route right after `_reserve_mint`'s transaction commits --
+NEVER inside it, and wrapped in its own try/except at the call site (on top
+of the function's own never-raises contract) so a rollup failure can never
+fail an otherwise-successful mint. Writes ONE BATCHED update, same "both
+docs or neither" shape as `record_session_end`: `firms/{firm_id}/usage/
+{month}.links_minted` + `.by_employee.{employee_id}.links_minted`, and
+`kits/{kit_id}/usage/{month}.links_minted`. `admin_backend/routes/
+usage_routes.py`'s `_FIRM_USAGE_KEYS`/`_KIT_USAGE_KEYS` allowlists gain
+`links_minted` so the new counter actually reaches the console (an
+allowlist omission would have silently dropped it). Console:
+`UsagePage.tsx` renders `links_minted` in the summary stats row and as a
+fourth column on the by-employee breakdown table only (by_kit/by_language
+never carry it). Also on that page: a missing rollup doc now checks a
+SECOND signal before claiming "no data" -- a best-effort `getFirm(firm_id)`
+read (the same route `FirmDetailPage.tsx` already uses) checking whether
+any of the firm's ledger rows fall in the selected month (UTC, matching
+`_month_key`'s own convention); if so, the page shows "no sessions yet this
+month" instead, since a mint's ledger entry commits synchronously in the
+same transaction as the debit even on the rare chance its own rollup write
+did not land. A failed or empty ledger check silently degrades to the
+plain "no data" message -- never a wrong claim of activity, and never a
+second error banner.)*
+
 *Last updated: 2026-09-15 (bd `polyglot-pdf-cpsi0`: maintainer feedback after
 the first live mint on staging -- the firm overview's ledger showed `actor`
 as a raw Firebase uid, "not really useful as is." NEW `admin_backend/

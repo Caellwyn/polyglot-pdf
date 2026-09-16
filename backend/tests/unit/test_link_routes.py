@@ -652,6 +652,67 @@ def test_a_funded_mint_debits_the_ledger_and_writes_the_record(client):
     assert records[jti]["firm_id"] == "firm-a"
 
 
+def test_a_mint_increments_the_links_minted_usage_rollup(client):
+    """EXIT CRITERION 1 (bd polyglot-pdf-he3lt): a mint through the real
+    route bumps links_minted on BOTH the firm-month and kit-month usage
+    rollup docs, plus the by_employee breakdown, right after the reservation
+    commits.
+
+    Mutation: drop the record_link_minted call in mint_link -- red (the
+    usage doc never appears at all).
+    """
+    c, store = client
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    from backend.services import usage_rollups
+    import time as _t
+    # link_channel() with LINK_CHANNEL unset defaults to "demo" -- the fake
+    # firm here is "mock", not gated by the live-channel check, so the
+    # mint's own channel resolution matches _month_key's own demo default.
+    month = usage_rollups._month_key(_t.time(), "demo")
+    firm_usage = store.db.docs.get(("firms", "firm-a", "usage", month))
+    assert firm_usage is not None, "no usage rollup doc was written at all"
+    assert firm_usage["links_minted"] == 1
+    # This fake's apply_set() only resolves a top-level Increment (see
+    # _WriteBatch's own docstring); the NESTED by_employee.{uid}.links_minted
+    # shape is proven correct against a faithful recursive-merge fake in
+    # test_usage_rollups.py, so here it is enough to confirm the write
+    # reached the right nested key at all, unresolved sentinel included.
+    nested = firm_usage["by_employee"]["u-emp-a"]["links_minted"]
+    assert nested.delta == 1
+
+    kit_usage = store.db.docs.get(("kits", "firm-a-intake", "usage", month))
+    assert kit_usage is not None
+    assert kit_usage["links_minted"] == 1
+
+
+def test_a_ROLLUP_WRITE_FAILURE_leaves_the_mint_successful(client, monkeypatch):
+    """EXIT CRITERION 1: the rollup write is best-effort and must never turn
+    a successful reservation into a failed mint.
+
+    Mutation: let record_link_minted's exception propagate instead of being
+    caught -- red (the route would 500 instead of returning 200).
+    """
+    c, store = client
+
+    def _broken(*args, **kwargs):
+        raise RuntimeError("firestore hiccup")
+
+    monkeypatch.setattr(lr, "record_link_minted", _broken)
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200, (
+        "a broken usage rollup must not fail an otherwise-successful mint"
+    )
+    assert "jti" in resp.json()
+    # The reservation itself is untouched: the debit and record still stand.
+    assert _balance(store) == _START_BALANCE - 1
+    assert len(_ledger(store)) == 1
+
+
 def test_mint_refuses_at_zero_balance(client):
     """EXIT CRITERION 1. A firm with nothing left cannot mint: 402, the
     staff-facing status (this door is authenticated, so it may say why --

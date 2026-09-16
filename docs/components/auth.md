@@ -2,6 +2,22 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/usage_rollups.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-he3lt: maintainer observation
+after the first live mint on staging -- a mint touched no usage-rollup
+document, so the console's Usage page stayed on "no data" until a client
+opened the link and a session later completed. New
+`usage_rollups.record_link_minted(firm_id, kit_id, employee_id, channel,
+now)`, called from `link_routes.py`'s `mint_link` route right after
+`_reserve_mint`'s transaction commits -- NEVER inside it, and wrapped in
+its own try/except at the call site (mirroring `websocket_routes.py`'s own
+`record_session_end` call site) so a rollup write can never fail an
+otherwise-successful mint. Writes ONE BATCHED update, same "both docs or
+neither" shape as `record_session_end`:
+`firms/{firm_id}/usage/{month}.links_minted` +
+`.by_employee.{employee_id}.links_minted`, and
+`kits/{kit_id}/usage/{month}.links_minted`. See Surface contract 26 in
+docs/technical_guide.md for the full field-level contract.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-cpsi0: the mint record and the
 credit ledger entry each gain an optional human-readable email label
 alongside their uid -- `links_store.build_mint_record`'s `employee_email`

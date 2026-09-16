@@ -957,15 +957,21 @@ export async function getChannelErrors(channel: MonitoringChannel): Promise<Chan
  * as stored maps, keyed by kit id / uid / language code respectively, each
  * value itself `{sessions, cost_usd}`-shaped (usage_rollups.py's own
  * increments), read here as loosely-typed records since this client does
- * not interpret them further. */
+ * not interpret them further. `links_minted` (bd polyglot-pdf-he3lt,
+ * usage_rollups.record_link_minted) is the third link-lifecycle counter,
+ * alongside links_opened/links_completed; unlike those two it ALSO appears
+ * nested under by_employee (keyed on the MINTING employee's uid -- every
+ * mint is a staff action, so there is no link-vs-staff ambiguity there the
+ * way sessions/cost_usd's by_employee has). */
 export interface FirmUsageRollup {
   connections_ended: number | null;
   sessions_completed: number | null;
   cost_usd_total: number | null;
   links_opened: number | null;
   links_completed: number | null;
+  links_minted: number | null;
   by_kit: Record<string, { sessions?: number; cost_usd?: number }> | null;
-  by_employee: Record<string, { sessions?: number; cost_usd?: number }> | null;
+  by_employee: Record<string, { sessions?: number; cost_usd?: number; links_minted?: number }> | null;
   by_language: Record<string, { sessions?: number; cost_usd?: number }> | null;
   kind: string | null;
   channel: string | null;

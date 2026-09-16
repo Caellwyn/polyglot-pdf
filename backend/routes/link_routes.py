@@ -82,6 +82,7 @@ from backend.services.link_tokens import (
 )
 from backend.services.runtime_config import credits_enforced as _rc_credits_enforced
 from backend.services.runtime_config import minting_enabled as _rc_minting_enabled
+from backend.services.usage_rollups import record_link_minted
 
 _log = structlog.get_logger().bind(module="link_routes")
 
@@ -435,6 +436,28 @@ async def mint_link(
         raise HTTPException(
             status_code=503,
             detail="Link minting is temporarily unavailable") from exc
+
+    # USAGE ROLLUP (bd polyglot-pdf-he3lt), AFTER the reservation has
+    # committed -- never inside it (see usage_rollups.record_link_minted's
+    # own docstring). Wrapped in its OWN try/except here, on top of
+    # record_link_minted's own never-raises contract -- defense in depth,
+    # mirroring websocket_routes.py's own record_session_end call site: a
+    # rollup failure must leave the mint successful, and this guards against
+    # an unexpected exception raised BEFORE record_link_minted's own
+    # internal try/except is reached (or a future edit that removes it),
+    # not just the write itself failing.
+    try:
+        await asyncio.to_thread(
+            record_link_minted,
+            firm_id=firm_id,
+            kit_id=body.kit_id,
+            employee_id=employee_id,
+            channel=channel,
+            now=issued,
+        )
+    except Exception as exc:  # noqa: BLE001 -- best-effort, never fail the mint
+        _log.error("link_mint_usage_rollup_failed", firm_id=firm_id,
+                  jti=jti, error=str(exc))
 
     # --- SIGN (only now, from the jti the reservation committed) ---------
     try:

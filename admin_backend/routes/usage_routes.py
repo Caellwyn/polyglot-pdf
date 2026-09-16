@@ -104,17 +104,20 @@ _USAGE_SUBCOLLECTION = "usage"
 # docstring: usage_rollups.record_session_end's own field list, restated
 # here as the read side's contract). by_kit/by_employee/by_language are
 # passed through as stored (they are themselves maps this route does not
-# further interpret).
+# further interpret). links_minted (bd polyglot-pdf-he3lt,
+# usage_rollups.record_link_minted) joins links_opened/links_completed as
+# the third link-lifecycle counter on this doc.
 _FIRM_USAGE_KEYS = (
     "connections_ended", "sessions_completed", "cost_usd_total",
-    "links_opened", "links_completed", "by_kit", "by_employee",
-    "by_language", "kind", "channel",
+    "links_opened", "links_completed", "links_minted", "by_kit",
+    "by_employee", "by_language", "kind", "channel",
 )
 
-# The response key allowlist for a kit-month rollup doc.
+# The response key allowlist for a kit-month rollup doc. links_minted (bd
+# polyglot-pdf-he3lt) mirrors the firm doc's own counter of the same name.
 _KIT_USAGE_KEYS = (
-    "connections_ended", "sessions_completed", "cost_usd_total", "by_firm",
-    "kind", "channel",
+    "connections_ended", "sessions_completed", "cost_usd_total",
+    "links_minted", "by_firm", "kind", "channel",
 )
 
 
