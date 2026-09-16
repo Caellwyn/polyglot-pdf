@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
 now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
 deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
 and `scripts/deploy_build_targets.sh` is the shared runner. `deploy-all.sh`
@@ -751,7 +751,7 @@ The admin service's `/health` reports the `app_module` it is actually running,
 because a service pointed at the wrong module otherwise looks perfectly healthy
 while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
 matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
-report an empty string in exactly that case. `verify_service_publicly_reachable()`
+report an empty string in exactly that case. `scripts/verify_service_reachable.py`
 itself still never calls this route -- it reads the Cloud Run IAM policy, not
 HTTP -- but the `admin-service` target's tagged flow (below) DOES issue a real
 `GET .../health` against this exact route and gates the traffic shift on its

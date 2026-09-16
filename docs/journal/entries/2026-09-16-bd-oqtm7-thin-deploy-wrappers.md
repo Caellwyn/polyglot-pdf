@@ -208,6 +208,106 @@ first index change.
 Suites re-run after the fixes: backend 3818 passed / 195 skipped,
 admin_backend 706 passed, root 1958 passed / 93 skipped.
 
+### Outer cross-surface round 2 (adopt / reject / defer)
+
+`GAPS-FOUND (2)`. Both adopted; nothing refuted.
+
+**Adopted -- the deleted form-kits stage took a live safety assertion with it,
+and CI went red.** `tests/test_deploy_all_kit_gates.sh`'s
+`assert_gated "deploy-all.sh"` greps that script for the guard CALL
+(`if ! kit_is_complete "..."`), which vanished with the inline upload loop. The
+harness exits 1 and `tests/test_deploy_all_kit_gates_wrapper.py` asserts exit 0
+-- green on this Windows box only because the wrapper SKIPS when `bash` resolves
+to the WSL shim, which is exactly the hole the wrapper's own docstring warns
+about ("CI is ubuntu-latest, where bash runs natively"). Reproduced against Git
+Bash directly: `REAL_EXIT=1`, one FAIL row.
+
+Deleting the row was the wrong fix: it was the only thing pinning "every path
+that uploads form kits guards each upload against a draft kit", and after this
+diff `cloudbuild.yaml`'s `form-kits-upload` step is the SOLE publisher in the
+deployed flow while carrying its own hand-inlined copies of the status-complete
+grep and the two underscore skips, which nothing pinned at all.
+
+So the set was enumerated before anything was fixed (scar #8). Every non-comment
+`gcloud storage`/`gsutil` `cp`/`rsync` in a tracked `.sh`/`.yaml`:
+`cloudbuild.yaml` (the build's kit upload and its manifest upload),
+`scripts/deploy-form-kit.sh` (the hand-run publisher),
+`scripts/pull-form-kits.sh` (a DOWNLOAD -- bucket to local, not a publisher)
+and the harness itself. Two publishers, therefore two gate checks:
+
+- The hand-run one keeps its existing `assert_gated` row, unchanged.
+- The build step gets a NEW check that RUNS it rather than grepping it. Its
+  script body is extracted from `cloudbuild.yaml`, the `$$` yaml escape is
+  resolved, `PROJECT_ID`/`_TARGET` are supplied as env vars, `gcloud` is
+  shadowed by a recording stub, and the body is executed against a synthetic
+  kit tree holding one kit of each shape (complete, draft, no status field, no
+  `metadata.json`, a top-level `_` kit, and a complete kit carrying `_drafts/`
+  and `_archive/` rings). Eight assertions read the stub's log. This is the
+  same extract-and-run pattern the harness already uses for
+  `deploy-form-kit.sh`'s own helper copy, and for the same reason: a grep stays
+  green through a reformat that breaks the filter.
+- The no-bypass rows are now ENUMERATED from `git ls-files -- 'deploy-*.sh'
+  'scripts/deploy-*.sh'` instead of hand-listing two wrappers. That widened the
+  check from `deploy-demo.sh`/`deploy-production.sh` to all seven, and a new
+  `deploy-*.sh` that starts uploading kits now fails here instead of being
+  invisible because nobody remembered the literal list. `git ls-files`, not a
+  directory scan -- tracked is what CI sees.
+- `deploy-all.sh` drops out of the raw-glob loop, because it no longer uploads;
+  its library half (the helpers the harness sources, and the channel parser
+  `cloudbuild.yaml` sources) is untouched.
+
+Mutation-verified per assertion, against the real `cloudbuild.yaml`, restoring
+from git between runs: dropping the status-complete grep reddens exactly the
+draft and no-status rows; dropping the top-level `_` skip reddens only the
+`_scratchkit` row; NARROWING the child skip from `_*` to `_drafts)` reddens only
+the `_archive` row (the general underscore rule, not one instance); renaming the
+build step reddens the extraction guard plus both "did upload" rows; replacing
+the upload with `true` reddens both "did upload" rows, proving they are not
+vacuous; and adding a kit upload to `deploy-admin-console.sh` -- a wrapper the
+old literal list did not cover -- reddens its new no-bypass row. Harness: 25 ->
+38 assertions, `REAL_EXIT=0`.
+
+One honest negative: deleting `[ -f "$meta" ] || continue` from the build step
+leaves every row green, because `grep` on a missing file fails too and the
+`|| continue` catches it. The line is a redundant fast path, not a guard, and
+the test comment says so rather than letting the row be read as pinning it.
+
+**Adopted -- a tier-2 doc naming a function this diff deleted repo-wide.**
+`docs/components/config-deployment.md` asserted what
+`verify_service_publicly_reachable()` does; that bash function is gone from
+every file. The behaviour is still true of `scripts/verify_service_reachable.py`,
+so only the symbol changed. The stale-symbol set was enumerated rather than
+fixing the one cited line: outside the journal (the chronological record, which
+keeps its own history), the live hits are `admin_backend/main.py`,
+`admin_backend/tests/unit/test_admin_health.py`,
+`backend/tests/unit/test_deploy_channel_isolation.py` and this doc. The three
+CODE comments are already filed as bd `polyglot-pdf-h6kct` by the reviewer and
+are deliberately left to it; the tier-2 doc is fixed here because it is
+surface-authoritative and current-state-only.
+`tests/test_deploy_wrappers.py`'s use of the name is a guard that the bash copy
+stays deleted -- correct as written, untouched.
+
+**Rejected:** nothing.
+
+**Deferred:** the reviewer's finding 3 is four beads it filed itself --
+`polyglot-pdf-68xz3` (stale citations to the deleted
+`tests/test_deploy_reachability_gate.py` in six untouched files),
+`polyglot-pdf-h6kct` (eleven untouched files describing the deleted bash engine
+as live), `polyglot-pdf-qwxy1` (`DEPLOYMENT.md`/`README.md` documenting commands
+that now refuse) and `polyglot-pdf-vus05` (only `deploy-staging.sh` self-serves
+the `verify` record) -- none fixed here. Finding 4 is
+`Dockerfile.oqtm7.bak`, an untracked mutation-test backup left in the MAIN
+checkout, not in this worktree; this worktree's tree is clean and nothing is
+committed from main, so it is reported rather than deleted from under whichever
+session owns it. The two unverified items stay PENDING-DEPLOY by design: that
+`gcloud builds triggers run` returns a build id (bd `polyglot-pdf-4wk0b` reads
+it from the first staging run) and that `roles/datastore.indexAdmin` alone
+suffices for `firebase deploy --only firestore:indexes`.
+
+Suites re-run after the fixes: backend 3818 passed / 195 skipped, admin_backend
+706 passed, root 1958 passed / 93 skipped, kit-gate harness 38 passed / 0
+failed.
+
 ## Lessons
 
 **Deleting a stage is a migration, not a deletion.** Both behaviour losses
@@ -260,6 +360,11 @@ refusal NAMES the offending argument separated them.
   `voice-ai`, `websocket-routing`, and nine `standards/*`): reviewed the list,
   left alone -- none of their tracked files is in this diff.
 
+- `docs/components/config-deployment.md` -- re-stamped in outer round 2: the
+  post-deploy reachability check is named by its module
+  (`scripts/verify_service_reachable.py`), not by the deleted
+  `verify_service_publicly_reachable()` bash function.
+
 Review outcomes recorded in the closeout ping.
 
 ## Files touched
@@ -274,6 +379,10 @@ Review outcomes recorded in the closeout ping.
 - `deploy/channels/admin.env` -- gains `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`;
   header rewritten as the only copy.
 - `tests/test_deploy_wrappers.py` -- NEW.
+- `tests/test_deploy_all_kit_gates.sh` -- the gate row that pointed at
+  `deploy-all.sh`'s deleted upload loop now RUNS `cloudbuild.yaml`'s
+  `form-kits-upload` step; the no-bypass wrapper set is enumerated from
+  `git ls-files` (outer round 2).
 - `tests/test_deploy_reachability_gate.py`, `tests/test_deploy_admin_tag_flow.py`
   -- DELETED.
 - `tests/test_deploy_admin_sweep_env_vars.py`,

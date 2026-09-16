@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Functional tests for the kit-gate helpers in deploy-all.sh (bd polyglot-pdf-45x5
-# for kit_is_complete; bd polyglot-pdf-snpi for kit_schema_file).
+# for kit_is_complete; bd polyglot-pdf-snpi for kit_schema_file), and for the two
+# places that actually publish kits: cloudbuild.yaml's form-kits-upload step (the
+# deployed path) and scripts/deploy-form-kit.sh (the hand-run one).
 #
 # kit_is_complete is the safety-critical gate that keeps DRAFT form-kits out of
 # production GCS -- before this, only `bash -n` (a syntax check) guarded it, so a
@@ -98,12 +100,14 @@ printf '{ "schema" : " padded.json " }' > "$TMP/paddedschema/metadata.json"
 assert_schema "whitespace-padded value trimmed" "$TMP/paddedschema" "padded.json"
 
 # --- no-bypass: every deploy path routes form-kits through the gate (bd nr8u) ---
-# deploy-demo.sh and deploy-production.sh do NOT upload form-kits themselves --
-# they set env/bucket then invoke deploy-all.sh, whose kit_is_complete loop is the
-# single gate. Assert neither wrapper has its OWN form-kit upload (a gcloud/gsutil
-# copy targeting the form-kits bucket/dir) that would bypass the gate. This is the
-# static guarantee behind D2 exit criterion 2 across all three paths; it fails if a
-# future edit adds a bypassing upload to a wrapper.
+# No deploy wrapper uploads form-kits itself. The wrappers are thin Cloud Build
+# triggers (bd polyglot-pdf-oqtm7), so the only publisher in the DEPLOYED flow is
+# cloudbuild.yaml's form-kits-upload step -- gated below -- and
+# scripts/deploy-form-kit.sh is the one hand-run publisher. Assert no wrapper has
+# its OWN form-kit upload (a gcloud/gsutil copy targeting the form-kits
+# bucket/dir) that would bypass the gate. This is the static guarantee behind D2
+# exit criterion 2 across every path; it fails if a future edit adds a bypassing
+# upload to a wrapper.
 # A "bypass" is ANY storage write of form-kits (cp OR rsync, gcloud OR gsutil)
 # in a wrapper that is supposed to delegate. The regex covers cp and rsync so a
 # future `gsutil rsync form-kits ...` can't slip past (fresh-eyes finding).
@@ -118,7 +122,7 @@ assert_no_bypass() {
         echo "FAIL  no-bypass: $label has its own form-kit upload (bypasses the gate)"
         FAIL=$((FAIL + 1))
     else
-        echo "PASS  no-bypass: $label routes form-kits through deploy-all.sh"
+        echo "PASS  no-bypass: $label delegates form-kits to the build"
         PASS=$((PASS + 1))
     fi
 }
@@ -145,13 +149,140 @@ assert_gated() {
     fi
 }
 
-# Wrappers that delegate to deploy-all.sh must NOT upload form-kits themselves.
-assert_no_bypass "deploy-demo.sh" "$SCRIPT_DIR/../deploy-demo.sh"
-assert_no_bypass "deploy-production.sh" "$SCRIPT_DIR/../deploy-production.sh"
+# The wrapper set is ENUMERATED from git rather than hand-listed: a NEW
+# deploy-*.sh that starts uploading kits has to fail HERE, instead of being
+# invisible because nobody remembered to add it to a literal list (CLAUDE.md
+# scar #8 -- pin the SET, not the instance). git ls-files, not a directory scan:
+# tracked is what CI actually sees. scripts/deploy-form-kit.sh is the one
+# legitimate hand-run publisher and is gate-checked below instead of here.
+_wrappers=$(cd "$SCRIPT_DIR/.." && git ls-files -- 'deploy-*.sh' 'scripts/deploy-*.sh')
+if [ -z "$_wrappers" ]; then
+    echo "FAIL  no-bypass: git ls-files listed no deploy wrappers (not a checkout?)"
+    FAIL=$((FAIL + 1))
+fi
+for _w in $_wrappers; do
+    [ "$_w" = "scripts/deploy-form-kit.sh" ] && continue
+    assert_no_bypass "$_w" "$SCRIPT_DIR/../$_w"
+done
 
-# Paths that DO upload form-kits directly must guard every upload with the gate.
-assert_gated "deploy-all.sh" "$SCRIPT_DIR/../deploy-all.sh"
+# The one hand-run publisher must guard every upload with the gate.
 assert_gated "scripts/deploy-form-kit.sh" "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"
+
+# --- cloudbuild.yaml form-kits-upload: the build IS the deployed gate --------
+#
+# The wrappers no longer upload kits (bd polyglot-pdf-oqtm7), so cloudbuild.yaml's
+# form-kits-upload step is the SOLE publisher in the deployed flow -- and it
+# carries its OWN inlined copies of both guards (the status-complete grep and the
+# two underscore skips) rather than sourcing deploy-all.sh. This block replaces
+# the `assert_gated "deploy-all.sh"` row that the deleted bash stage took with
+# it: retiring that row without repointing it would have silently ended
+# draft-kit protection coverage on the only path that still publishes.
+#
+# A grep would stay green through a reformat that broke the filter, so EXTRACT
+# the step's script body and RUN it against a synthetic kit tree with a stub
+# gcloud -- the same extract-and-run pattern (and the same reason) as the
+# deploy-form-kit.sh helper check below.
+#
+# The body is yaml-escaped bash: `$$` is how cloudbuild.yaml spells a literal
+# `$` for the build shell, so it is unescaped here. PROJECT_ID and _TARGET are
+# Cloud Build substitutions; supplying them as environment variables expands to
+# the same text the build would have substituted.
+
+# _build_step_body <step-id> -- print that step's `args: [-c, |]` script body,
+# de-indented and with cloudbuild's `$$` escape resolved.
+_build_step_body() {
+    awk -v want="  - id: $1" '
+        $0 == want { instep = 1; next }
+        instep && /^  - id: / { exit }
+        instep && !inbody && $0 == "      - |" { inbody = 1; next }
+        inbody {
+            if ($0 != "" && $0 !~ /^        /) exit
+            sub(/^        /, "")
+            print
+        }
+    ' "$SCRIPT_DIR/../cloudbuild.yaml" | sed 's/[$][$]/$/g'
+}
+
+_fk_body=$(_build_step_body form-kits-upload)
+if [ -z "$_fk_body" ]; then
+    echo "FAIL  build-gate: could not extract cloudbuild.yaml's form-kits-upload body (renamed or reshaped?)"
+    FAIL=$((FAIL + 1))
+fi
+
+# One kit of each shape the gate has to tell apart. NESTED under $TMP -- see the
+# one-EXIT-trap note further down; do NOT register a second trap for this tree.
+BUILD_ROOT="$TMP/buildkits"
+mkdir -p "$BUILD_ROOT/form-kits/good/_drafts/1" "$BUILD_ROOT/form-kits/good/_archive/v1"
+printf '{"status":"complete"}' > "$BUILD_ROOT/form-kits/good/metadata.json"
+touch "$BUILD_ROOT/form-kits/good/schema.json" "$BUILD_ROOT/form-kits/good/form.pdf"
+touch "$BUILD_ROOT/form-kits/good/_drafts/1/schema.json"
+touch "$BUILD_ROOT/form-kits/good/_archive/v1/schema.json"
+mkdir -p "$BUILD_ROOT/form-kits/draftkit"
+printf '{"status":"draft"}' > "$BUILD_ROOT/form-kits/draftkit/metadata.json"
+touch "$BUILD_ROOT/form-kits/draftkit/schema.json"
+mkdir -p "$BUILD_ROOT/form-kits/nostatuskit"
+printf '{"label":"X"}' > "$BUILD_ROOT/form-kits/nostatuskit/metadata.json"
+touch "$BUILD_ROOT/form-kits/nostatuskit/schema.json"
+mkdir -p "$BUILD_ROOT/form-kits/nometakit"
+touch "$BUILD_ROOT/form-kits/nometakit/schema.json"
+mkdir -p "$BUILD_ROOT/form-kits/_scratchkit"
+printf '{"status":"complete"}' > "$BUILD_ROOT/form-kits/_scratchkit/metadata.json"
+touch "$BUILD_ROOT/form-kits/_scratchkit/schema.json"
+
+_fk_log="$TMP/build_uploads.txt"
+: > "$_fk_log"
+_fk_ran=no
+if (
+    cd "$BUILD_ROOT" || exit 1
+    export PROJECT_ID="testproj"
+    export _TARGET="form-kits"
+    # A shell function shadows the real binary, so the body's upload is recorded
+    # instead of attempted. One arg per line keeps the log greppable.
+    gcloud() { printf '%s\n' "$@" >> "$_fk_log"; }
+    eval "$_fk_body"
+) 2> "$TMP/build_gate_err.txt"; then
+    _fk_ran=yes
+    echo "PASS  build-gate: form-kits-upload body runs against a synthetic kit tree"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  build-gate: form-kits-upload body failed to run -- $(tail -n 1 "$TMP/build_gate_err.txt")"
+    FAIL=$((FAIL + 1))
+fi
+
+# assert_build_upload <label> <grep -E pattern> <expect: yes|no>
+assert_build_upload() {
+    local label="$1" pat="$2" expect="$3" got
+    if [ "$_fk_ran" != "yes" ]; then
+        echo "FAIL  build-gate: $label (body did not run)"
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    if grep -qE "$pat" "$_fk_log"; then got="yes"; else got="no"; fi
+    if [ "$got" = "$expect" ]; then
+        echo "PASS  build-gate: $label"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  build-gate: $label (expected uploaded=$expect, got $got)"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+# Real content of a status:complete kit must SHIP -- an over-broad filter that
+# uploaded nothing would satisfy every exclusion below on its own.
+assert_build_upload "complete kit's schema.json uploaded" "form-kits/good/schema.json" "yes"
+assert_build_upload "complete kit's form.pdf uploaded" "form-kits/good/form.pdf" "yes"
+# The status gate (bd polyglot-pdf-45x5), now inlined in the build. The
+# no-metadata case is carried by that same grep, NOT by the `[ -f "$meta" ]`
+# fast path above it: deleting that line leaves this row green, because grep
+# on a missing file fails too (measured). Do not read the row as pinning it.
+assert_build_upload "status:draft kit skipped" "draftkit" "no"
+assert_build_upload "kit with no status field skipped" "nostatuskit" "no"
+assert_build_upload "kit with no metadata.json skipped" "nometakit" "no"
+# Both underscore skips (bd polyglot-pdf-06u5o): the top-level kit id, and the
+# rings INSIDE a kit. Mutating either one alone must redden exactly one row.
+assert_build_upload "top-level _ kit skipped" "_scratchkit" "no"
+assert_build_upload "_drafts ring not uploaded" "_drafts" "no"
+assert_build_upload "_archive ring not uploaded" "_archive" "no"
 
 # --- collect_publishable_kit_files: underscore dirs never reach the bucket ---
 #
@@ -274,8 +405,11 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Both upload sites must go through the helper rather than a raw glob.
-for _f in "$SCRIPT_DIR/../deploy-all.sh" "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"; do
+# The hand-run publisher must go through the helper rather than a raw glob.
+# deploy-all.sh dropped out of this loop when it stopped uploading kits (bd
+# polyglot-pdf-oqtm7); the build's inlined equivalent is covered behaviorally by
+# the build-gate block above, which is stronger than a raw-glob grep.
+for _f in "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"; do
     _label=$(basename "$_f")
     # Match any raw-glob upload of the kit dir, not two incidental spellings:
     # ${kit_dir} (brace form) and --recursive (long flag) both reintroduce the
