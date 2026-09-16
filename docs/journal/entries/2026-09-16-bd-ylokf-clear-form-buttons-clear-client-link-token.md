@@ -54,15 +54,17 @@ test:
   patch targets after the guard's round-2 warm-cache fix.
 - **A hand-listed drift test** (bd polyglot-pdf-ddavu):
   `test_known_channels_matches_every_admin_route_copy` hand-listed 3 of
-  the 5 `admin_backend/routes/*.py` modules carrying their own literal
-  `KNOWN_CHANNELS` tuple, silently missing `ops_routes.py` and
-  `report_routes.py` -- both of whose own comments already said "matching
-  every other admin route module's own copy." Now derives the file set by
-  globbing for the literal, with a `>=5` floor as a broken-glob tripwire.
-  Mutation-verified against exactly the shape the old test could not
-  catch: changing `ops_routes.py`'s tuple alone (leaving the three
-  originally hand-listed files and `purge.py` untouched) now reddens the
-  test.
+  the 7 `admin_backend/routes/*.py` modules carrying their own literal
+  `KNOWN_CHANNELS` tuple, silently missing `ops_routes.py`,
+  `report_routes.py`, `sweep_routes.py`, and `usage_routes.py` -- the
+  first two of whose own comments already said "matching every other
+  admin route module's own copy." Now derives the file set by globbing
+  for the literal, with a `>=5` floor as a broken-glob tripwire (5, not 7,
+  since the floor is a gross-undercount tripwire rather than a tight
+  bound -- see the test's own docstring). Mutation-verified against
+  exactly the shape the old test could not catch: changing
+  `ops_routes.py`'s tuple alone (leaving the three originally hand-listed
+  files and `purge.py` untouched) now reddens the test.
 - **A code comment describing the wrong evaluation order**
   (bd polyglot-pdf-lnvjg): the `_PAGE_LIMIT` comment in
   `admin_backend/routes/alert_routes.py` claimed the firm-scoped route's
