@@ -299,7 +299,10 @@ the `verify` record) -- none fixed here. Finding 4 is
 `Dockerfile.oqtm7.bak`, an untracked mutation-test backup left in the MAIN
 checkout, not in this worktree; this worktree's tree is clean and nothing is
 committed from main, so it is reported rather than deleted from under whichever
-session owns it. The two unverified items stay PENDING-DEPLOY by design: that
+session owns it -- filed as bd `polyglot-pdf-qk2pf`, which also notes the two
+sibling strays (`grant_credits.bak.py`, `prep-3l2vp-deploy-admin-tag-flow.txt`)
+already sitting there from earlier beads. Checked before filing: main's
+`Dockerfile` is clean and byte-identical to the `.bak`, so no mutation is live. The two unverified items stay PENDING-DEPLOY by design: that
 `gcloud builds triggers run` returns a build id (bd `polyglot-pdf-4wk0b` reads
 it from the first staging run) and that `roles/datastore.indexAdmin` alone
 suffices for `firebase deploy --only firestore:indexes`.
