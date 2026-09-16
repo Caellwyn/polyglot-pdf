@@ -1,7 +1,7 @@
 ---
 date: 2026-09-16
 bead: polyglot-pdf-ylokf
-title: "bug hunt batch 3: config-editor silent Save, worklet URL, vacuous guard test, KNOWN_CHANNELS drift, alert-cap comment, Clear-form token leak"
+title: "bug hunt batch 3: config-editor silent Save, worklet URL, vacuous guard test, KNOWN_CHANNELS drift, alert-cap comment, Clear-form token handling"
 tags: [testing, review, security]
 ---
 
@@ -72,20 +72,35 @@ test:
   cross-firm truncation hazard). Both list helpers actually filter FIRST,
   then sort, then cap the already-filtered result -- the cap is per-firm,
   not global. Comment-only fix, no behavior change.
-- **Three manual Clear-form/Start-Fresh buttons leaking the client-link
-  token** (bd polyglot-pdf-ylokf): `SchemaFormDemo.tsx`, `VoiceOverlay.tsx`,
-  and `VoiceOverlayMobile.tsx` each called `SchemaFormStateManager.clear()`
-  (or a raw `sessionStorage.removeItem`) plus `clearOnboardingState()`
-  directly instead of the composed `clearAllClientState()` the four
-  AUTOMATIC wipe triggers (completion, idle timeout, "Done -- clear now",
-  staff logout) already use -- so an explicit "clear my data" click left
-  `vff_client_link_token` behind. All three now call
-  `clearAllClientState()`. In `VoiceOverlay.tsx` the call had to move to
-  just before the reload (after the DOM-clearing loop) so
-  `wipeSitesReload.test.ts`'s nearby-reload source-scan guard could
-  actually see it within its 4-code-line lookahead budget; that guard's
-  self-test count moved from 4 to 7 sites and was mutation-verified by
-  restoring the far-apart placement.
+- **Three manual Clear-form/Start-Fresh buttons and the client-link token**
+  (bd polyglot-pdf-ylokf): the bead's premise was that `SchemaFormDemo.tsx`,
+  `VoiceOverlay.tsx`, and `VoiceOverlayMobile.tsx` each called
+  `SchemaFormStateManager.clear()` (or a raw `sessionStorage.removeItem`)
+  plus `clearOnboardingState()` directly instead of the composed
+  `clearAllClientState()` the four AUTOMATIC end-of-session wipe triggers
+  (completion, idle timeout, "Done -- clear now", staff logout) already
+  use -- and that this was a bug, since it left `vff_client_link_token`
+  behind after an explicit "clear my data" click. The first pass of the
+  fix routed all three handlers through `clearAllClientState()` to close
+  that "leak". **The premise was wrong, and the Opus outer cross-surface
+  review caught it before merge**: `ClientLinkEntry.tsx`'s reload-recovery
+  branch depends entirely on `hasClientLinkToken()` to reach the "ready"
+  phase once the URL's redemption fragment is stripped (which it always is,
+  post-redemption) -- clear the token and the reload every one of these
+  handlers triggers lands on "This link is not valid" instead of the
+  client's own form. `onboardingStorage.ts`'s `clearOnboardingState()`
+  already documents the matching half of this invariant (bd
+  polyglot-pdf-ugm6: "A CLIENT-LINK SESSION KEEPS ITS FORM"); the token
+  needs the identical protection. The corrected fix reverts all three
+  handlers to `SchemaFormStateManager.clear()` + `clearOnboardingState()`
+  -- the ORIGINAL pre-bug-hunt shape -- and never touches the token there.
+  A staff session never has the token set in the first place, so this costs
+  staff nothing; a client-link session keeps its ability to resume.
+  `wipeSitesReload.test.ts`'s self-test count went 4 -> 7 -> back to 4 as
+  the fix was tried and then corrected -- the three manual buttons are
+  correctly NOT on the `clearAllClientState()` scan path. Three behavioral
+  tests (one per handler) now pin the CORRECTED direction: the token
+  survives a click while form state is cleared.
 
 ## Lessons
 
@@ -99,15 +114,28 @@ test:
   surfaces. Running the actual build, not just the test runner, before
   closing a frontend bead is worth the extra step when the change touches
   a typed mock.
+- **A bead's own premise can be wrong, and "the exit criteria pass" is not
+  proof it wasn't.** bd ylokf described the token surviving a manual
+  Clear-form click as a leak to close. It is not -- it is the SAME
+  mid-session-preservation invariant `clearOnboardingState()`'s own comment
+  already documents for the form pin (bd polyglot-pdf-ugm6), just applied
+  to the credential instead of the form id. Both the inner fresh-eyes round
+  and the first outer-review pass on the FIRST fix attempt scored the
+  bead's stated exit criteria as met and moved on; it took the SECOND
+  outer-review pass -- specifically tracing the consumer
+  (`ClientLinkEntry.tsx`'s reload-recovery branch) that the bead's own
+  description never mentioned -- to find that meeting the letter of the
+  bead shipped a client-facing lockout. A bead whose fix touches a shared
+  wipe path used by both staff and client-link sessions needs its
+  consumers traced, not just its own exit criteria checked.
 - **A source-level "nearby reload" scan has a real lookahead budget, and
-  code has to be written to fit it, not just to work.** `wipeSitesReload
-  .test.ts`'s guard only looks 4 CODE lines ahead of a
-  `clearAllClientState()` call for a `window.location.reload()`; placing
-  the wipe call before an unrelated 30-line DOM-clearing loop (functionally
-  harmless -- the reload replaces all of it regardless) still fails the
-  guard. When adding a call the guard scans for, place it directly
-  adjacent to the reload it must be near, not wherever is logically
-  convenient.
+  code has to be written to fit it, not just to work** -- moot for this
+  bead's final shape (the three manual buttons no longer call
+  `clearAllClientState()` at all), but worth keeping for the next site that
+  does: `wipeSitesReload.test.ts`'s guard only looks 4 CODE lines ahead of
+  a `clearAllClientState()` call for a `window.location.reload()`. When
+  adding a call the guard scans for, place it directly adjacent to the
+  reload it must be near.
 - **Re-verify a git branch's diff against `origin/dev` before trusting it,
   especially mid-session after another PR from the same lineage merged.**
   This batch's branch was initially created on top of batch 2's now-merged
@@ -127,11 +155,13 @@ test:
 changes to `frontend/src/demo/VoiceOverlay.tsx`,
 `VoiceOverlayMobile.tsx`, and `frontend/src/schema-forms/SchemaFormDemo.tsx`.
 The "two-step path" paragraph describing the three manual Clear-form/Start
-Fresh buttons previously said they call `clear()`/`removeItem()` +
-`clearOnboardingState()` directly and never clear `vff_client_link_token` --
-now corrected to describe the fixed behavior (all three call
-`clearAllClientState()` too). The `*Last updated:*` stamp itself was missed
-in the first commit and bumped in a follow-up commit, caught by
+Fresh buttons went through two revisions matching the two fix attempts:
+first corrected to (wrongly) say all three now call `clearAllClientState()`
+too, then corrected again once the outer review caught the client-link
+lockout to state the final, shipped behavior -- the three manual buttons
+are deliberately NOT on the `clearAllClientState()` path and never clear
+`vff_client_link_token`. The `*Last updated:*` stamp itself was missed in
+the first commit and bumped in a follow-up commit, caught by
 `check_doc_freshness.py`.
 
 All other STALE docs the checker flagged (tool-call-flow.md,
@@ -147,12 +177,12 @@ left as-is per the closeout rule.
 - `admin_backend/routes/alert_routes.py` -- `_PAGE_LIMIT` comment corrected (filter-then-cap, not cap-then-filter)
 - `backend/tests/unit/test_no_real_firestore_guard.py` -- assertion moved outside `pytest.raises`, docstring widened to three patch targets
 - `docs/components/schema-forms.md` -- corrected "two-step path" paragraph, stamp bumped
-- `frontend/src/demo/VoiceOverlay.tsx` -- Clear Form button now calls `clearAllClientState()`, moved adjacent to the reload
-- `frontend/src/demo/VoiceOverlayMobile.tsx` -- Clear Form button now calls `clearAllClientState()`
-- `frontend/src/demo/clearFormButtonsClearClientLinkToken.test.tsx` -- new: behavioral pin for both overlay Clear Form buttons
-- `frontend/src/schema-forms/SchemaFormDemo.tsx` -- Start Fresh button now calls `clearAllClientState()`
-- `frontend/src/schema-forms/SchemaFormDemo.startFreshClearsClientLinkToken.test.tsx` -- new: behavioral pin for the Start Fresh button, added closing a fresh-eyes gap
+- `frontend/src/demo/VoiceOverlay.tsx` -- Clear Form button clears form state + onboarding selection, deliberately preserves the client-link token
+- `frontend/src/demo/VoiceOverlayMobile.tsx` -- Clear Form button clears form state + onboarding selection, deliberately preserves the client-link token
+- `frontend/src/demo/clearFormButtonsClearClientLinkToken.test.tsx` -- behavioral pin: both overlay Clear Form buttons clear form state but PRESERVE the client-link token
+- `frontend/src/schema-forms/SchemaFormDemo.tsx` -- Start Fresh button clears form state + onboarding selection, deliberately preserves the client-link token
+- `frontend/src/schema-forms/SchemaFormDemo.startFreshPreservesClientLinkToken.test.tsx` -- behavioral pin: Start Fresh clears form state but PRESERVES the client-link token
 - `frontend/src/shared/audioManager.ts` -- worklet URL resolves to an absolute path on every route
 - `frontend/src/shared/audioManager.workletUrl.test.ts` -- new: pins the URL across 4 routes under localhost and a stubbed deployed hostname
-- `frontend/src/shared/wipeSitesReload.test.ts` -- self-test count updated 4 -> 7 wipe sites
+- `frontend/src/shared/wipeSitesReload.test.ts` -- self-test count confirms exactly 4 wipe sites (the three manual buttons are correctly excluded)
 - `tests/test_purge_test_artifacts_cli.py` -- `KNOWN_CHANNELS` drift test now discovers the route file set by globbing
