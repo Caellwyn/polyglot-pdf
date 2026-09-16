@@ -1,4 +1,6 @@
-"""POST/GET /admin/deploys (bd polyglot-pdf-tb3kp, Epic 4 bead 4.3).
+"""POST/GET /admin/deploys (bd polyglot-pdf-tb3kp, Epic 4 bead 4.3; GET
+/admin/deploys/targets and GET /admin/deploys/promotable added by bd
+polyglot-pdf-ryx86, E4.7, for the console's Deploys page).
 
 Pins the bead's exit criterion 1:
 
@@ -19,6 +21,26 @@ Pins the bead's exit criterion 1:
   5. test_unknown_target_is_422 / test_malformed_sha_is_422.
   6. test_list_deploys_filters_by_channel_and_target /
      test_get_one_deploy_by_id / test_get_unknown_deploy_is_404.
+
+bd polyglot-pdf-ryx86 (E4.7) adds:
+
+  7. test_list_deploy_targets_returns_the_closed_set_with_gated_flags --
+     GET /admin/deploys/targets restates deploy/targets.py's TARGETS/
+     GATED_TARGETS/CHANNEL_BY_TARGET, derived off those same constants (not
+     a hand-typed expected list) so a future target addition cannot drift
+     the two apart silently.
+  8. test_promotable_true_after_staging_success /
+     test_promotable_false_without_staging_success -- GET /admin/deploys/
+     promotable for a GATED_TARGETS entry computes the SAME predicate the
+     POST route's own early 409 uses.
+  9. test_promotable_is_always_true_for_a_non_gated_target -- the preview
+     must not invent a stricter rule than POST's own early check applies.
+  10. test_promotable_requires_target_and_sha / test_promotable_target_and_
+      sha_are_validated -- same 422 shapes as POST's own body validation.
+  11. test_targets_and_promotable_routes_are_reachable_ahead_of_the_deploy_id_
+      route -- mutation-verified registration-order guard: a literal
+      "targets"/"promotable" request must reach the new handlers, not fall
+      through to GET /admin/deploys/{deploy_id} as an attempted id lookup.
 
 THE FAKE FIRESTORE extends test_sweep_routes.py's own _FakeDb/_Collection/
 _Query shape with order_by()/limit() (this route's list endpoint is the
@@ -373,8 +395,130 @@ def test_route_auth_and_audit_coverage_include_all_four_routes():
     expected = {
         (("POST",), "/admin/deploys"),
         (("GET",), "/admin/deploys"),
+        (("GET",), "/admin/deploys/targets"),
+        (("GET",), "/admin/deploys/promotable"),
         (("GET",), "/admin/deploys/{deploy_id}"),
     }
     assert expected <= paths, (
-        "one or more of the three /admin/deploys routes is missing from "
+        "one or more of the five /admin/deploys routes is missing from "
         "the live app -- did a route get renamed or dropped?")
+
+
+def test_list_deploy_targets_returns_the_closed_set_with_gated_flags(admin_client):
+    """bd polyglot-pdf-ryx86 (E4.7): GET /admin/deploys/targets restates
+    deploy/targets.py's own TARGETS/CHANNEL_BY_TARGET/GATED_TARGETS,
+    DERIVED off those same constants -- a hand-typed expected list here
+    would happily agree with a stale route and never catch a real drift.
+    Mutation: drop the "gated" key computation (always False) -- red.
+    """
+    from deploy.targets import CHANNEL_BY_TARGET, GATED_TARGETS, TARGETS, target_family
+
+    resp = admin_client.get("/admin/deploys/targets")
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["targets"]
+    assert [r["target"] for r in rows] == list(TARGETS)
+    for row in rows:
+        t = row["target"]
+        assert row["target_family"] == target_family(t)
+        assert row["channel"] == CHANNEL_BY_TARGET[t]
+        assert row["gated"] == (t in GATED_TARGETS)
+    # At least one gated and one non-gated row actually exist in the fixture
+    # -- otherwise the per-row equality checks above could all pass on an
+    # accidentally-constant "gated" value.
+    assert any(r["gated"] for r in rows)
+    assert any(not r["gated"] for r in rows)
+
+
+def test_promotable_false_without_staging_success(fake_db, admin_client):
+    """bd polyglot-pdf-ryx86 (E4.7): a GATED_TARGETS entry with no matching
+    staging success is NOT promotable. Mutation: hard-code `promotable =
+    True` -- red."""
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "backend-demo", "sha": VALID_SHA_A},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body == {
+        "target": "backend-demo", "sha": VALID_SHA_A,
+        "target_family": "backend", "gated": True, "promotable": False,
+    }
+
+
+def test_promotable_true_after_staging_success(fake_db, admin_client):
+    """bd polyglot-pdf-ryx86 (E4.7): the SAME predicate POST's own early
+    409 uses -- a matching staging success flips this to True. Mutation:
+    swap `staging_verified` for a constant -- red (this and the test above
+    together pin both branches)."""
+    fake_db.docs[("deployments", "staging-row")] = {
+        "target": "backend-staging", "target_family": "backend",
+        "channel": "staging", "sha": VALID_SHA_A, "status": "success",
+    }
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "backend-demo", "sha": VALID_SHA_A},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["promotable"] is True
+
+
+def test_promotable_is_always_true_for_a_non_gated_target(admin_client):
+    """bd polyglot-pdf-ryx86 (E4.7): a target outside GATED_TARGETS (POST's
+    own early check applies no gate to it either) must never be reported
+    as blocked, even with an EMPTY deployments collection. Mutation: run
+    the staging_verified check unconditionally -- red."""
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "editor", "sha": VALID_SHA_A},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["gated"] is False
+    assert body["promotable"] is True
+
+
+def test_promotable_requires_target_and_sha(admin_client):
+    resp = admin_client.get("/admin/deploys/promotable")
+    assert resp.status_code == 422
+    resp = admin_client.get(
+        "/admin/deploys/promotable", params={"target": "editor"})
+    assert resp.status_code == 422
+    resp = admin_client.get(
+        "/admin/deploys/promotable", params={"sha": VALID_SHA_A})
+    assert resp.status_code == 422
+
+
+def test_promotable_target_and_sha_are_validated(admin_client):
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "nonexistent", "sha": VALID_SHA_A})
+    assert resp.status_code == 422
+
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "editor", "sha": "short"})
+    assert resp.status_code == 422
+
+
+def test_targets_and_promotable_routes_are_reachable_ahead_of_the_deploy_id_route(
+        fake_db, admin_client):
+    """bd polyglot-pdf-ryx86 (E4.7): a literal "targets"/"promotable"
+    request must reach the new handlers, never fall through to GET
+    /admin/deploys/{deploy_id} as an attempted id lookup (module
+    docstring's registration-order note). Mutation: register the two new
+    routes AFTER get_deploy on the router -- red (both would 404 as "No
+    such deployment" instead of returning their real shape)."""
+    resp = admin_client.get("/admin/deploys/targets")
+    assert resp.status_code == 200, resp.text
+    assert "targets" in resp.json()
+
+    resp = admin_client.get(
+        "/admin/deploys/promotable",
+        params={"target": "editor", "sha": VALID_SHA_A})
+    assert resp.status_code == 200, resp.text
+    assert "promotable" in resp.json()
+
+    # A REAL unknown deploy id still 404s -- the guard above did not simply
+    # disable the {deploy_id} route.
+    resp = admin_client.get("/admin/deploys/some-other-id")
+    assert resp.status_code == 404

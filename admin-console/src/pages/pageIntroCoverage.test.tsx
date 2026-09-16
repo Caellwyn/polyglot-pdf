@@ -16,11 +16,13 @@
  * right; see each page's own test or the module docstring), only that the
  * tag is present exactly once.
  *
- * MOCKS EVERY NETWORK CALL the nine pages make on mount, with responses
+ * MOCKS EVERY NETWORK CALL the ten pages make on mount, with responses
  * shaped so nothing throws and nothing stays stuck on a permanent loading
  * spinner before the assertion runs -- this test is a structural coverage
  * check, not a re-test of any one page's data rendering (each page's own
- * *.test.tsx already covers that). FirmDetailPage is the one page whose
+ * *.test.tsx already covers that). DeploysPage's target fixture's first
+ * (and only) row is NOT gated, so its promotable-preview effect never
+ * fires here -- getPromotable needs no mock. FirmDetailPage is the one page whose
  * PageIntro is conditional on its firm having loaded (it sits inside the
  * `{firm && (...)}` block, since the intro belongs next to the firm's own
  * name heading, not above a "loading" state) -- so its case below awaits
@@ -41,6 +43,7 @@ import { UsagePage } from './UsagePage';
 import { CostReportsPage } from './CostReportsPage';
 import { AlertsPage } from './AlertsPage';
 import { ErrorsPage } from './ErrorsPage';
+import { DeploysPage } from './DeploysPage';
 
 vi.mock('../utils/adminApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/adminApi')>();
@@ -64,13 +67,16 @@ vi.mock('../utils/adminApi', async (importOriginal) => {
     getIncomeReport: vi.fn(),
     listAlerts: vi.fn(),
     getChannelErrors: vi.fn(),
+    getDeployTargets: vi.fn(),
+    getPromotable: vi.fn(),
+    listDeploys: vi.fn(),
   };
 });
 
 import {
   listUsers, listFirms, getFirm, listFirmLinks, listKits, getKitCommercial,
   getChannelHealth, getFirmUsage, getCostReport, getIncomeReport, listAlerts,
-  getChannelErrors,
+  getChannelErrors, getDeployTargets, listDeploys,
 } from '../utils/adminApi';
 
 const noAuthExpired = () => false;
@@ -121,6 +127,10 @@ beforeEach(() => {
   });
   vi.mocked(listAlerts).mockResolvedValue({ alerts: [] });
   vi.mocked(getChannelErrors).mockResolvedValue({ channel: 'demo', service: 'polyglot-backend', groups: [] });
+  vi.mocked(getDeployTargets).mockResolvedValue([
+    { target: 'editor', target_family: 'editor', channel: 'demo', gated: false },
+  ]);
+  vi.mocked(listDeploys).mockResolvedValue([]);
 });
 
 describe('every page under src/pages renders exactly one purpose header', () => {
@@ -133,6 +143,7 @@ describe('every page under src/pages renders exactly one purpose header', () => 
     expect(files.sort()).toEqual([
       'AlertsPage.tsx',
       'CostReportsPage.tsx',
+      'DeploysPage.tsx',
       'ErrorsPage.tsx',
       'FirmDetailPage.tsx',
       'FirmsPage.tsx',
@@ -186,6 +197,11 @@ describe('every page under src/pages renders exactly one purpose header', () => 
 
   it('ErrorsPage', async () => {
     render(<ErrorsPage onAuthExpired={noAuthExpired} />);
+    expect(await screen.findAllByTestId('page-intro')).toHaveLength(1);
+  });
+
+  it('DeploysPage', async () => {
+    render(<DeploysPage onAuthExpired={noAuthExpired} />);
     expect(await screen.findAllByTestId('page-intro')).toHaveLength(1);
   });
 });
