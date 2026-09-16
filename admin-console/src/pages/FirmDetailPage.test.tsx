@@ -8,7 +8,7 @@
  * The "alerts" describe block below (bd polyglot-pdf-362nk) pins this
  * page's own exit criteria: the alerts section renders through the SAME
  * shared AlertRow component AlertsPage.test.tsx asserts (a separate test,
- * `AlertRow.sharedImport.test.tsx`, checks BOTH pages import it), lists
+ * `AlertRow.test.tsx`, checks BOTH pages import it), lists
  * unacknowledged alerts before acknowledged ones, calls the acknowledge
  * PATCH exactly once per click and re-reads on success only, and a fetch
  * error there never blanks the rest of the already-loaded page.
