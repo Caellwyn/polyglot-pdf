@@ -121,11 +121,13 @@ refusal NAMES the offending argument separated them.
   places that described the old inline env assembly. Stamped.
 - `docs/technical_guide.md` -- contracts 12, 22 and 31b updated; NEW contract
   36 records the `polyglot-<target>` trigger-name contract from the wrappers'
-  side (no stamp by design).
+  side. Stamped (it tracks the deploy scripts, and was already stale).
 - `CLAUDE.md` -- the one-line "Deploy is local/manual" claim and the
   "Deployment / promotion" flow bullet.
-- Other docs `check_doc_freshness.py` reports stale track files this bead
-  never touched; left alone.
+- The other docs `check_doc_freshness.py` still reports STALE track files this
+  bead never touched (`context-compression`, `jit-schema`, `tool-call-flow`,
+  `voice-ai`, `websocket-routing`, and nine `standards/*`): reviewed the list,
+  left alone -- none of their tracked files is in this diff.
 
 Review outcomes recorded in the closeout ping.
 
