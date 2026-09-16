@@ -5,10 +5,12 @@ criterion 1's "a test proves it with a deliberately unpatched call").
 project through a developer's gcloud ADC -- see the bead body for the
 149-plus-document inventory. backend/tests/conftest.py's autouse
 _no_real_firestore fixture (and admin_backend/tests/conftest.py's copy of
-it) now patches firebase_admin.initialize_app and
-google.cloud.firestore.Client to raise RealFirestoreReachedInTest instead of
-touching anything real. This file proves that guard actually fires, on
-BOTH named targets, rather than trusting the conftest wiring by inspection.
+it) now patches firebase_admin.initialize_app, google.cloud.firestore.Client,
+and firebase_admin.firestore.client (the round-2 addition that closes the
+warm-cache gap the first two targets miss) to raise
+RealFirestoreReachedInTest instead of touching anything real. This file
+proves that guard actually fires, on ALL THREE named targets, rather than
+trusting the conftest wiring by inspection.
 
 Each test's docstring names the mutation that must turn it red.
 
@@ -70,15 +72,28 @@ def test_get_db_never_returns_a_working_client_with_no_app_pre_existing():
 
     Mutation: remove BOTH patches from install_no_real_firestore_guard --
     get_db() then returns a real (or real-attempting) client object instead
-    of raising, and this goes red. Verified 2026-09-15."""
+    of raising, and this goes red. Verified 2026-09-15.
+
+    The `db is None` check runs AFTER pytest.raises, not inside it
+    (bd polyglot-pdf-uyoi4): an AssertionError raised INSIDE that block is
+    itself an Exception, so the old `with pytest.raises(Exception): db =
+    get_db(); assert db is None` swallowed its own assertion failure and
+    passed regardless of what get_db() returned -- a fully defeated guard
+    that returns a real, truthy client made this test pass, not fail."""
     from backend.services.auth import get_db
 
-    with pytest.raises(Exception):
+    # No app exists yet in this test's process state, so a fully-defeated
+    # guard resolves via get_app() -> ValueError (no default app) rather
+    # than actually returning a client; a working guard raises its own
+    # named sentinel first. Either is an acceptable "did not succeed"
+    # outcome -- a return value never is, which is why the check below runs
+    # unconditionally rather than inside the pytest.raises block.
+    db = None
+    try:
         db = get_db()
-        # Defense in depth in case some future firebase_admin version makes
-        # get_app() itself lenient: a returned object must not be a usable
-        # client either.
-        assert db is None
+    except (RealFirestoreReachedInTest, ValueError):
+        pass
+    assert db is None, f"get_db() must never return successfully here; got {db!r}"
 
 
 def test_a_real_app_already_present_is_still_caught_at_the_client_patch():

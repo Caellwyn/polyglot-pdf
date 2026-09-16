@@ -424,11 +424,22 @@ def test_collection_constants_match_service_constants():
 
 
 def test_known_channels_matches_every_admin_route_copy():
-    """admin_backend/routes/{config,firm,link}_routes.py each carry their own
-    literal KNOWN_CHANNELS = ("demo", "staging") tuple (a pre-existing
-    repo-wide duplication this diff does not introduce -- see
-    docs/standards/testing.md). purge.py's copy must match all three, or a
-    channel added in one place and not here silently stops being purged.
+    """Every admin_backend/routes/*.py module that carries its own literal
+    KNOWN_CHANNELS = ("demo", "staging") tuple (a pre-existing repo-wide
+    duplication this diff does not introduce -- see docs/standards/testing.md)
+    must match purge.py's copy, or a channel added in one place and not here
+    silently stops being purged.
+
+    The route file SET is DISCOVERED by globbing admin_backend/routes/*.py
+    for the KNOWN_CHANNELS literal, not hand-listed (CLAUDE.md scar #8 --
+    "enumerate the block, don't hand-list it"): a hand-typed three-file list
+    (config/firm/link_routes.py) silently missed ops_routes.py and
+    report_routes.py, both of which carry the identical literal and whose own
+    comments already say "matching every other admin route module's own
+    copy" -- so a SIXTH copy added later would have passed CI unpinned too.
+    The >=5 floor below is a gross-undercount tripwire (a broken glob or
+    regex silently matching zero files must fail loudly, not vacuously pass
+    on an empty loop) -- not a claim that exactly 5 is the final count.
 
     Read the route files' SOURCE TEXT rather than importing them: importing
     admin_backend.routes.config_routes pulls in admin_backend.services.
@@ -437,22 +448,33 @@ def test_known_channels_matches_every_admin_route_copy():
     hazard purge.py's own module comment documents for its literals.
 
     Mutation: change purge.KNOWN_CHANNELS to a different tuple -- this goes
-    red. Verified 2026-09-15."""
+    red. Also mutation-verified per this bead's own exit criterion: changing
+    ops_routes.py's or report_routes.py's KNOWN_CHANNELS tuple alone (leaving
+    purge.py and the other three route files untouched) now turns this red,
+    which the old three-file hand-list could not have caught. Verified
+    2026-09-15."""
     import re
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parent.parent
-    route_files = [
-        repo_root / "admin_backend" / "routes" / "config_routes.py",
-        repo_root / "admin_backend" / "routes" / "firm_routes.py",
-        repo_root / "admin_backend" / "routes" / "link_routes.py",
-    ]
+    routes_dir = repo_root / "admin_backend" / "routes"
     pattern = re.compile(r'^KNOWN_CHANNELS\s*=\s*(\(.*\))\s*$', re.MULTILINE)
+
+    route_files = []
+    for route_file in sorted(routes_dir.glob("*.py")):
+        text = route_file.read_text(encoding="utf-8")
+        if pattern.search(text):
+            route_files.append(route_file)
+
+    assert len(route_files) >= 5, (
+        "expected KNOWN_CHANNELS in at least 5 admin_backend/routes/*.py "
+        "modules (found {}: {}) -- a broken glob/regex would silently pass "
+        "on zero matches otherwise".format(
+            len(route_files), [f.name for f in route_files]))
+
     for route_file in route_files:
         text = route_file.read_text(encoding="utf-8")
         match = pattern.search(text)
-        assert match, "no KNOWN_CHANNELS literal found in {}".format(
-            route_file)
         route_channels = eval(match.group(1))  # noqa: S307 -- literal tuple
         assert route_channels == purge.KNOWN_CHANNELS, (
             "{} KNOWN_CHANNELS {} != purge.py's {}".format(
