@@ -296,6 +296,17 @@ describe('DeploysPage -- exit criterion 2: polling table + status chips', () => 
       expect.objectContaining({ channel: 'demo', target: 'editor' }),
     ));
   });
+
+  it('renders "--" for a table row with a null sha (a foreign Cloud Build row) instead of throwing', async () => {
+    mockListDeploys({
+      table: () => [baseRow({ id: 'd-foreign', sha: null, target: null, channel: null, triggered_by: null, ts: null })],
+    });
+
+    render(<DeploysPage onAuthExpired={noAuthExpired} />);
+
+    const row = await screen.findByTestId('deploy-row-d-foreign');
+    expect(row).toHaveTextContent('--');
+  });
 });
 
 describe('DeploysPage -- exit criterion 3: live-SHA panel', () => {
@@ -357,5 +368,26 @@ describe('DeploysPage -- exit criterion 3: live-SHA panel', () => {
     expect(backendEntry).not.toHaveTextContent(SHA_C.slice(0, 12));
     const editorEntry = await screen.findByTestId('latest-family-editor');
     expect(editorEntry).toHaveTextContent(SHA_B.slice(0, 12));
+  });
+
+  it('a foreign Cloud Build row (null sha/target_family -- deploy_webhook.py\'s own shape for a build with no _SHA/_TARGET substitution) renders "--" instead of throwing', async () => {
+    mockListDeploys({
+      panel: [
+        baseRow({
+          id: 'd-foreign', target: null, target_family: null, channel: null,
+          sha: null, triggered_by: null, ts: null, status: 'success',
+        }),
+        baseRow({ id: 'd1', target_family: 'backend', channel: 'demo', sha: SHA_A, status: 'success', ts: 200 }),
+      ],
+    });
+
+    render(<DeploysPage onAuthExpired={noAuthExpired} />);
+
+    // '(unknown)' mirrors DeploysPage.tsx's own UNKNOWN_FAMILY fallback key
+    // for a row whose target_family is null.
+    const unknownEntry = await screen.findByTestId('latest-family-(unknown)');
+    expect(unknownEntry).toHaveTextContent('--');
+    const backendEntry = await screen.findByTestId('latest-family-backend');
+    expect(backendEntry).toHaveTextContent(SHA_A.slice(0, 12));
   });
 });

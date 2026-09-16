@@ -97,6 +97,45 @@ Confirm button is disabled); the other asserts the channel filter's option
 list equals `['', ...DEPLOY_CHANNELS]`. Admin-console suite: 201/201
 (199 baseline + 2 new); `tsc --noEmit` clean.
 
+**Second cross-surface review round (GAPS-FOUND (1), adopted; 2 more filed
+as beads).** A second Opus outer pass traced the new `adminApi.ts` exports
+and page fields out into their untouched producers:
+
+- *Adopted* -- `DeploymentRow`'s `sha`/`target`/`target_family`/`channel`/
+  `triggered_by`/`ts` were typed non-nullable, but the actual producer
+  (`deploy_routes.py`'s `_public_view`, via plain `data.get(field)`) can
+  put `null` in any of them -- concretely, `deploy_webhook.py`'s "no
+  console row exists yet" upsert branch stores exactly that shape for a
+  Cloud Build the console never triggered (no `_SHA`/`_TARGET`/`_CHANNEL`
+  substitution, e.g. a bare `gcloud builds submit`). The table's
+  `row.sha.slice(0, 12)` and the live panel's per-family sort
+  (`a.localeCompare(b)` over a possibly-null `target_family` key) both
+  throw on that row, and with no error boundary anywhere in
+  `admin-console/src`, one foreign build blanks the whole console. Fixed
+  by widening `DeploymentRow` to match the producer's real (nullable)
+  shape, adding a `shortSha()` helper (`'--'` for `null`) at both render
+  sites, and folding a null `target_family` into a shared `'(unknown)'`
+  Map key so the family list's sort never sees a null itself. Two new
+  tests reproduce the reviewer's exact foreign-build row shape (`sha`,
+  `target`, `target_family`, `channel`, `triggered_by`, `ts` all `null`)
+  in both the table and the live panel; mutation-verified by reverting the
+  three fixes together, which reproduces the reviewer's exact
+  `TypeError: Cannot read properties of null (reading 'slice')` in both
+  new tests, then restoring.
+- *Deferred, filed as beads, not fixed here* -- two findings the reviewer
+  correctly scoped as out of this diff: `polyglot-pdf-89rbq` (pre-existing:
+  `deploy_webhook.py` maps Cloud Build's `PENDING`/`STATUS_UNKNOWN`
+  statuses to `failure` via `_mapped_status`'s default, which the new page
+  is the first *consumer* to visibly act on -- a red chip and a poll that
+  never starts for an in-flight-but-not-yet-QUEUED build) and
+  `polyglot-pdf-bwsii` (nit: the promotable route returns no reason
+  string, so the console's refusal prose is a hand-typed second copy of
+  POST's 409 detail).
+
+Admin-console suite: 203/203 (201 baseline + 2 new); `tsc --noEmit` clean.
+Backend (`backend/tests/`): 3819 passed, 195 skipped, 4 deselected.
+`admin_backend/tests/`: 712 passed. Root `tests/`: 1937 passed, 92 skipped.
+
 ## Lessons
 
 - **A page reachable only through registration order needs a

@@ -1272,19 +1272,28 @@ export async function getPromotable(target: string, sha: string): Promise<Promot
  * the console does not recognize (a future server-side addition this
  * console has not yet been taught) still round-trips as a plain string,
  * so a status-chip renderer must handle an unrecognized value rather than
- * assume the type guarantees membership at runtime. */
+ * assume the type guarantees membership at runtime.
+ *
+ * `target`/`target_family`/`channel`/`sha`/`triggered_by`/`ts` are
+ * nullable, matching deploy_routes.py's `_public_view` (`data.get(field)`,
+ * never a required key) and deploy_webhook.py's own row shape for a
+ * foreign Cloud Build (one submitted without this pipeline's `_TARGET`/
+ * `_SHA`/`_CHANNEL` substitutions still lands a `deployments` row, via the
+ * webhook's "no console row exists yet" upsert branch) -- every consumer
+ * of these fields must handle null rather than assume this pipeline is
+ * the only writer. */
 export interface DeploymentRow {
   id: string;
-  target: string;
-  target_family: string;
-  channel: DeployChannel;
-  sha: string;
+  target: string | null;
+  target_family: string | null;
+  channel: DeployChannel | null;
+  sha: string | null;
   ref: string | null;
-  triggered_by: string;
+  triggered_by: string | null;
   build_id: string | null;
   status: DeployStatus;
   log_url: string | null;
-  ts: number;
+  ts: number | null;
   finished_at: number | null;
 }
 

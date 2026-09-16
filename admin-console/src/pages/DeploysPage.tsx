@@ -31,6 +31,14 @@ function formatTs(ts: number | null): string {
   return new Date(ts * 1000).toISOString();
 }
 
+/** A `DeploymentRow.sha` is nullable (a foreign Cloud Build with no
+ * `_SHA` substitution lands a row with `sha: null` -- see DeploymentRow's
+ * own doc comment in adminApi.ts): never call `.slice` on it directly. */
+function shortSha(sha: string | null): string {
+  if (sha === null) return '--';
+  return sha.slice(0, 12);
+}
+
 /** Tailwind classes per status -- covers every DEPLOY_STATUSES entry
  * (derived off that same closed set below, never a second hand list), plus
  * a neutral fallback for a status value this console has not been taught
@@ -67,6 +75,14 @@ interface ChannelCardState {
 
 const INITIAL_CARD_STATE: ChannelCardState = { loading: true, error: null, health: null };
 
+/** The Map key `latestSuccessByFamily` groups under when a row's own
+ * `target_family` is null (a foreign Cloud Build's row -- see
+ * DeploymentRow's doc comment in adminApi.ts). Keeping this a plain string
+ * (never the null itself) means every consumer of the Map's keys, e.g. the
+ * family list's `.sort((a, b) => a.localeCompare(b))`, can keep assuming a
+ * string without its own null check. */
+const UNKNOWN_FAMILY = '(unknown)';
+
 /** One target family's latest SUCCESSFUL deployment, or none seen in the
  * fetched window. Derived client-side from an unfiltered GET /admin/deploys
  * read (rows already come back newest-first) -- the route itself documents
@@ -76,7 +92,8 @@ function latestSuccessByFamily(rows: DeploymentRow[]): Map<string, DeploymentRow
   const byFamily = new Map<string, DeploymentRow>();
   for (const row of rows) {
     if (row.status !== 'success') continue;
-    if (!byFamily.has(row.target_family)) byFamily.set(row.target_family, row);
+    const family = row.target_family ?? UNKNOWN_FAMILY;
+    if (!byFamily.has(family)) byFamily.set(family, row);
   }
   return byFamily;
 }
@@ -180,7 +197,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
     setTableError(null);
     try {
       const rows = await listDeploys({
-        channel: (filters.channel || undefined) as DeploymentRow['channel'] | undefined,
+        channel: (filters.channel || undefined) as DeployChannel | undefined,
         target: filters.target || undefined,
       });
       setTableRows(rows);
@@ -435,7 +452,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
                   <div key={family} data-testid={`latest-family-${family}`}>
                     <dt className="text-gray-500 text-xs uppercase tracking-wide">{family}</dt>
                     <dd>
-                      <code className="text-xs">{row.sha.slice(0, 12)}</code> on {row.channel}
+                      <code className="text-xs">{shortSha(row.sha)}</code> on {row.channel}
                       {' -- '}{formatTs(row.ts)}
                     </dd>
                   </div>
@@ -607,7 +624,7 @@ export const DeploysPage: React.FC<DeploysPageProps> = ({ onAuthExpired }) => {
                 <td className="py-1 pr-4"><StatusChip status={row.status} /></td>
                 <td className="py-1 pr-4">{row.target}</td>
                 <td className="py-1 pr-4">{row.channel}</td>
-                <td className="py-1 pr-4"><code className="text-xs">{row.sha.slice(0, 12)}</code></td>
+                <td className="py-1 pr-4"><code className="text-xs">{shortSha(row.sha)}</code></td>
                 <td className="py-1 pr-4">{row.triggered_by}</td>
                 <td className="py-1 pr-4">
                   {row.build_id ? (
