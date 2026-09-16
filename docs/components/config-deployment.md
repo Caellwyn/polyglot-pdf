@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-j29z1, sprint 23 E2: the "Hosting security headers" section -- one header block on all five Hosting targets, the CSP in report-only mode with its connect-src inventory, and self-hosted fonts via scripts/fetch_fonts.py.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-3bsyv: `frontend/vite.config.schema.ts`'s
@@ -833,6 +835,37 @@ holds PDFs in memory + tmpfs). **Contractor round trip:**
 (index.json excluded; local-only kits preserved) so contractor work is
 git-reviewable before the normal deploy republishes -- without it, a
 bucket-only kit silently drops from the manifest on the next deploy.
+
+### Hosting security headers (all five sites, bd `polyglot-pdf-j29z1`)
+
+Every Hosting target in `firebase.json` carries one `headers` block on `**`:
+HSTS (`max-age=31536000; includeSubDomains; preload`), `X-Frame-Options: DENY`,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, a
+`Permissions-Policy` that allows the microphone to the site itself and denies
+camera/geolocation/payment/usb/interest-cohort, and a Content Security Policy.
+
+The CSP is **one policy shared by all five sites** and ships as
+`Content-Security-Policy-Report-Only`: `firebase.json` is a single file for
+every site, so the staging soak cannot be staging-only, and enforcing on the
+demo without a soak is the wrong risk. Browsers write violations to the devtools
+console; the staging test-drive reads it, and renaming the header to
+`Content-Security-Policy` is a separate, reviewed change. The policy's
+`connect-src` is built from what the apps actually contact: the three Cloud Run
+services (demo backend, staging backend, admin; https + wss, project-hashed
+hostnames), Firebase Auth (`identitytoolkit`, `securetoken`,
+`www.googleapis.com`), Firestore (https + wss) and the installations endpoint.
+`script-src` is exactly `'self'`; `style-src` allows inline (React style
+attributes); `worker-src` and `media-src` allow `blob:` (pdf.js, spellback
+audio); `frame-src` names the auth domain and Google's account chooser;
+`frame-ancestors 'none'`. A new Cloud Run hostname or a new external endpoint
+MUST be added here or the app breaks silently under report-only and loudly once
+enforced. Pinned by `tests/test_hosting_headers.py` (every target, every header,
+every required origin, no `'unsafe-eval'`/`http:`/wildcard host).
+
+Fonts are self-hosted: `scripts/fetch_fonts.py` regenerates
+`frontend/public/fonts/` (Inter + Outfit, latin/latin-ext woff2 + `fonts.css`)
+and `frontend/index.html` links that stylesheet, so the browser contacts no
+third-party font host.
 
 ### Admin console (two more Hosting sites, bd `b6943`)
 
