@@ -228,8 +228,18 @@ def test_get_db_is_still_caught_when_the_client_is_already_cached():
     try:
         from backend.services.auth import get_db
 
+        # The isinstance check runs AFTER pytest.raises, not inside it (bd
+        # polyglot-pdf-t0kjj): a line inside the `with` block never executes
+        # once get_db() has already raised (the expected path), and if
+        # get_db() instead returned successfully, pytest.raises itself fails
+        # with "DID NOT RAISE" before the assert is reached either way -- so
+        # the in-block form was dead code in both directions, not a real
+        # defense-in-depth check.
+        db = None
         with pytest.raises(RealFirestoreReachedInTest):
             db = get_db()
-            assert not isinstance(db, _FakeCachedClient)
+        assert not isinstance(db, _FakeCachedClient), (
+            f"get_db() must never return the warm-cached client; got {db!r}"
+        )
     finally:
         fb._apps.pop("[DEFAULT]", None)

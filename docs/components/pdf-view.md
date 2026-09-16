@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-09-15 (bd polyglot-pdf-sagh6: the overlay's fill state and value now reach assistive tech through the accessible name -- colour alone reached nothing, and a read-only overlay had no name at all.) (bd polyglot-pdf-c9dfo: a FIFTH fill state, `skipped` -- purple dotted, checked before the empty test, and colour-preserved while dimmed, because a deliberately-skipped required field used to paint identically to an untouched blank.) See [the c9dfo journal entry](../journal/entries/2026-09-15-bd-c9dfo-skipped-overlay-state.md) for closeout details.*
+*Last updated: 2026-09-16. See [the c9dfo journal entry](../journal/entries/2026-09-15-bd-c9dfo-skipped-overlay-state.md) for prior closeout details; this pass corrected a stale "known gap" claim for bd polyglot-pdf-1utg, which is closed.*
 
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
@@ -135,12 +135,13 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   fan-out itself lives one level down, at the
   `SchemaFormStateManager.updateField` chokepoint, so every write path gets it
   -- bd polyglot-pdf-gpaed) -- overlays repaint
-  live while typing. **Known gap (bd `polyglot-pdf-1utg`, open):** the popover's
-  incoming value is read via a bare `fieldValues[editingHere.id]`, not the
-  alias-aware `readFieldEntryWithAlias` the overlay itself uses -- if a
-  field's value is stored only under the OTHER `[]`-bracket variant, the
-  overlay paints it filled/confirmed but clicking to edit opens the popover
-  blank. Dismissal: Esc, click-outside, the X button, a voice
+  live while typing. The popover's incoming value is read through the same
+  `[]`-alias-aware `readFieldEntryWithAlias` the overlay itself uses (bd
+  `polyglot-pdf-1utg`, closed) -- a bare `fieldValues[editingHere.id]` would
+  open the popover blank for a field whose only surviving `fieldValues`
+  entry (post-got6 dedup) sits under the OTHER bracket variant than
+  `editingHere.id`, even though the overlay already paints it
+  filled/confirmed. Dismissal: Esc, click-outside, the X button, a voice
   advance (`currentFieldId` change), zoom (scale change), and the edited
   field's `show_if` flipping false mid-edit (no chrome-only popover over a
   now-dimmed field). PreviewPane owns the editing state; without the edit
@@ -218,10 +219,12 @@ approximation for feedback; this modal (and download) is the ground truth.
   fields. None of the named field ids still exist. (No I-90 is git-tracked --
   kits are bucket-canonical, CLAUDE.md scar #10 -- so this cannot be
   re-measured from a checkout; pull the kit first.)
-- Known gap (bd `polyglot-pdf-1utg`, open): see the click-to-edit paragraph
-  above -- the edit popover's value read is exact-key-only, so a value
-  stored under the other `[]`-bracket variant opens the popover blank even
-  though the overlay shows the field filled/confirmed.
+- Retired gap (bd `polyglot-pdf-1utg`): see the click-to-edit paragraph
+  above -- the edit popover's value read used to be exact-key-only, so a
+  value stored under the other `[]`-bracket variant opened the popover
+  blank even though the overlay showed the field filled/confirmed. Fixed by
+  routing the popover's read through the same alias-aware helper the
+  overlay itself uses.
 - `signature` fields with a usable `pdf_position` DO get overlays: a
   signature is not paintable as text, so if one ever carried a string value
   it would render as raw text in its rect. (Coverage varies by kit -- a kit
