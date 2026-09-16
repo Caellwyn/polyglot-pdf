@@ -1,6 +1,12 @@
 #!/bin/bash
-# deploy-editor.sh - Build + deploy the HOSTED schema editor to its own
-# Firebase Hosting site (bd polyglot-pdf-92qe.4).
+# deploy-editor.sh - Deploy the HOSTED schema editor to its own Firebase
+# Hosting site (bd polyglot-pdf-92qe.4).
+#
+# A THIN WRAPPER OVER CLOUD BUILD (bd polyglot-pdf-oqtm7, Epic 4 bead 4.6).
+# The build/deploy itself is cloudbuild.yaml's `editor` target: it resolves
+# the live backend URL, builds schema-editor in hosted mode, and deploys the
+# `editor` Hosting target. This script refuses a dirty or unpushed tree, then
+# runs that target's trigger at the current commit and streams its log.
 #
 # The voice app and the editor are separate Hosting SITES in the same Firebase
 # project: the voice app keeps its /api rewrite; the editor has NO rewrite (it
@@ -47,12 +53,12 @@
 #        Firebase console -> Authentication -> Settings -> Authorized domains
 #      Confirm "$EDITOR_SITE.web.app" is listed (and any custom domain).
 #      The sign-in screen names this case explicitly if it fires.
-#      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy env
-#      (deploy-demo.sh exports them via BACKEND_EXTRA_ENV).
+#      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy
+#      config (deploy/channels/<channel>.env).
 #   4. Bucket WRITE access for the editor surface (reads work today; saves 403
 #      until granted). Resolve the service's RUNTIME identity first (on the
 #      demo it is polyglot-backend-sa@...; a project that never set
-#      BACKEND_SERVICE_ACCOUNT runs on the default compute SA,
+#      SERVICE_ACCOUNT in its channel file runs on the default compute SA,
 #      <PROJECT_NUMBER>-compute@developer.gserviceaccount.com):
 #        SA=$(gcloud run services describe polyglot-backend --region us-central1 \
 #          --project "$PROJECT" --format='value(spec.template.spec.serviceAccountName)')
@@ -61,118 +67,29 @@
 #          --role=roles/storage.objectAdmin --project "$PROJECT"
 #
 # Usage:
-#   PROJECT=polyglot-demo-aa709 EDITOR_SITE=polyglot-editor-demo ./deploy-editor.sh
+#   ./deploy-editor.sh
+#   EDITOR_SITE=polyglot-editor-demo ./deploy-editor.sh   # banner URL only
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT="${PROJECT:-polyglot-demo-aa709}"
 EDITOR_SITE="${EDITOR_SITE:-polyglot-editor-demo}"
-BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"
-REGION="${REGION:-us-central1}"
 
-# Verify a just-deployed Cloud Run service is PUBLICLY REACHABLE, and abort if
-# it is not (bd polyglot-pdf-pidtg, extended to this script by bd
-# polyglot-pdf-6oi9s).
-#
-# THE GATE ITSELF LIVES IN scripts/verify_service_reachable.py NOW (bd
-# polyglot-pdf-ywxoh, 4.2). Four bash scripts used to each carry a
-# byte-identical copy of this function's BODY (deploy-all.sh, backend/deploy-
-# new.sh, deploy-editor.sh, deploy-admin-console.sh) -- pinned equal by
-# tests/test_deploy_reachability_gate.py. cloudbuild.yaml's build steps need
-# the SAME check and cannot source a bash function, so rather than add a
-# FIFTH hand copy for the build, the check itself moved to one python module
-# that both the build and every bash wrapper call. This function is now a
-# THIN SHELL WRAPPER around that module -- kept so every call site below
-# reads exactly as it always has (`verify_service_publicly_reachable "$SVC"
-# "$REGION" "$PROJECT" [warn]`), with its bare-command shape (no pipe, no
-# subshell, no `if`) still load-bearing: `exit 1` inside this function must
-# still terminate the CALLING script, which a subshell would swallow.
-#
-# ${BASH_SOURCE[0]} here is THIS FILE (the function is defined inline, not
-# sourced from elsewhere), so the module path resolves correctly regardless
-# of the caller's own cwd or SCRIPT_DIR/REPO_ROOT naming.
-#
-# find_manifest_python-STYLE interpreter resolution, inlined rather than
-# shared: python3 is not guaranteed on Windows Git Bash, and a python3
-# App-Execution-Alias stub can exist on PATH without being able to run.
-#
-# Args: $1 service name, $2 region, $3 project id, $4 severity ("fatal"
-# default, or "warn").
-verify_service_publicly_reachable() {
-    local svc="$1" region="$2" project="$3" severity="${4:-fatal}"
-    local self_dir module py cand rc
-    self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    # This function is defined inline in FOUR files at two different repo
-    # depths (the three root-level wrappers, and backend/deploy-new.sh one
-    # directory down), so the module is looked up at both candidate paths
-    # relative to THIS file rather than assuming the repo root.
-    if [ -f "$self_dir/scripts/verify_service_reachable.py" ]; then
-        module="$self_dir/scripts/verify_service_reachable.py"
-    else
-        module="$self_dir/../scripts/verify_service_reachable.py"
-    fi
-    for cand in ${MANIFEST_PYTHON_CANDIDATES:-python3 python py}; do
-        if "$cand" -c "pass" >/dev/null 2>&1; then py="$cand"; break; fi
-    done
-    if [ -z "$py" ]; then
-        echo "[ERROR] No python interpreter found -- cannot run the reachability gate; aborting deploy." >&2
-        exit 1
-    fi
-    "$py" "$module" "$svc" "$region" "$project" --severity "$severity"
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-        exit 1
-    fi
-    return 0
-}
+# DEPLOY PREFLIGHT (bd polyglot-pdf-1s3ko): a build runs from a COMMIT and
+# build_checks/{sha} vouches for that commit's test run, so a dirty or
+# unpushed tree makes both claims false.
+source "$SCRIPT_DIR/scripts/deploy_preflight.sh"
+deploy_preflight "$SCRIPT_DIR"
 
-# Resolve the LIVE backend URL at deploy time and inject it, instead of trusting
-# the committed VITE_API_BASE_URL literal in .env.hosted (bd polyglot-pdf-emm7).
-# The Cloud Run auto-URL hash is NOT stable -- it changed (d3mhrrkwfq ->
-# won24rgefq) on a service recreate and every editor access-code entry then hit a
-# 404'd backend, looking like a wrong password. A shell VITE_* overrides the
-# .env.hosted value (standard Vite precedence), so the committed literal becomes a
-# documented fallback, not a landmine. Let a caller-provided VITE_API_BASE_URL win
-# (e.g. a local full-stack test pointing at http://localhost:8000).
-if [ -z "$VITE_API_BASE_URL" ]; then
-    RESOLVED_BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$PROJECT" --format 'value(status.url)' 2>/dev/null || true)
-    if [ -n "$RESOLVED_BACKEND_URL" ]; then
-        export VITE_API_BASE_URL="$RESOLVED_BACKEND_URL"
-        echo "Injecting live backend URL into build: VITE_API_BASE_URL=$VITE_API_BASE_URL"
+source "$SCRIPT_DIR/scripts/deploy_build_targets.sh"
 
-        # REACHABILITY WARNING (bd polyglot-pdf-dldwb). Resolving a URL
-        # proves the service EXISTS, not that anyone may call it --
-        # `describe` answers whether or not an allUsers invoker binding was
-        # ever granted. Without this the editor could ship pinned to a
-        # backend that 403s every request while the deploy reports success,
-        # and because schema-editor/src/utils/remoteKitStore.ts routes EVERY
-        # editor call through VITE_API_BASE_URL (kit list, draft save,
-        # publish, the editing lock), a contractor would see what looks like
-        # an access-code failure and report an auth problem.
-        #
-        # WARN, not abort -- same reasoning as deploy-all.sh's frontend
-        # stage: this backend is PRE-EXISTING and possibly mid-fix by
-        # someone else, so refusing to ship the editor over its IAM state
-        # would be the gate crying wolf. The backend stage aborts because
-        # there the deploy had just created the service itself.
-        verify_service_publicly_reachable \
-            "$BACKEND_SERVICE_NAME" "$REGION" "$PROJECT" warn
-    else
-        echo "WARN: could not resolve live backend URL; build falls back to VITE_API_BASE_URL in .env.hosted (may be stale -- bd polyglot-pdf-emm7)" >&2
-    fi
-fi
+SHA=$(deploy_build_sha "$SCRIPT_DIR")
 
-echo "Building the hosted editor (mode hosted -> .env.hosted)..."
-cd "$SCRIPT_DIR/schema-editor"
-if [ ! -d node_modules ]; then npm install; fi
-npm run build:hosted
-
-echo "Deploying ONLY the editor hosting target to $PROJECT..."
-cd "$SCRIPT_DIR"
-firebase deploy --only "hosting:editor" --project "$PROJECT"
+echo "Deploying the hosted schema editor at $SHA..."
+run_build_targets "$SHA" editor
 
 echo ""
 echo "Hosted editor deployed: https://$EDITOR_SITE.web.app"
-echo "Share that URL plus an access code with a contractor:"
-echo "  - editor code  -> polish the provided forms"
-echo "  - author code  -> also upload PDFs + run extraction"
+echo "Share that URL with a contractor whose account carries an editor or"
+echo "author role (scripts/bootstrap_editor_user.py):"
+echo "  - editor role  -> polish the provided forms"
+echo "  - author role  -> also upload PDFs + run extraction"

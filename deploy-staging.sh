@@ -3,13 +3,22 @@
 #
 # Usage: ./deploy-staging.sh [--backend] [--frontend] [--form-kits] [--all]
 #
-# WHY THIS EXISTS (bd polyglot-pdf-9qn64). Some bugs only appear once deployed
-# -- the Cloud Run WebSocket timeout, the Vertex model-id resolution, the IAM
-# envelope, the Hosting rewrite, the per-mode Vite build. Before this channel
-# existed, the ONLY way to find them was to deploy to the demo, which is the
-# same URL shown to investors and pilot firms. Staging is a second, disposable
-# copy of the deployed surface so a broken deploy can no longer take the demo
-# down.
+# A THIN WRAPPER OVER CLOUD BUILD (bd polyglot-pdf-oqtm7, Epic 4 bead 4.6).
+# This script no longer builds or deploys anything itself: it refuses a dirty
+# or unpushed tree, then runs the Cloud Build triggers for the staging
+# targets at the current commit and streams their logs. The build is the
+# engine -- for the human path and for the admin console alike -- so the
+# per-SHA verify record, the reachability gate and the manifest validation
+# cannot be skipped by running this script instead of that one. See
+# docs/doctrine/promotion-tiers.md.
+#
+# WHY THIS CHANNEL EXISTS (bd polyglot-pdf-9qn64). Some bugs only appear once
+# deployed -- the Cloud Run WebSocket timeout, the Vertex model-id
+# resolution, the IAM envelope, the Hosting rewrite, the per-mode Vite build.
+# Before this channel existed, the ONLY way to find them was to deploy to the
+# demo, which is the same URL shown to investors and pilot firms. Staging is a
+# second, disposable copy of the deployed surface so a broken deploy can no
+# longer take the demo down.
 #
 # WHAT IS SEPARATE, AND WHAT IS NOT. Staging and demo live in the SAME GCP /
 # Firebase project (polyglot-demo-aa709), deliberately -- a whole second project
@@ -41,16 +50,23 @@
 #   for a NEW site.) Then add the staging site to Firebase Auth's authorized
 #   domains -- Authentication > Settings > Authorized domains -- or sign-in
 #   fails at a human's first attempt with the whole config present and valid.
+#   Cloud Build's own one-time setup (the GitHub connection and one manual
+#   trigger per target) lives in scripts/setup-cloud-build.sh.
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # DEPLOY PREFLIGHT (bd polyglot-pdf-1s3ko). Runs BEFORE anything else: a build
 # runs from a COMMIT and build_checks/{sha} vouches for that commit's test run,
 # so a dirty or unpushed tree makes both claims false. Refuses with the reason
 # and the remedy; see scripts/deploy_preflight.sh for the full rationale.
-PREFLIGHT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$PREFLIGHT_DIR/scripts/deploy_preflight.sh"
-deploy_preflight "$PREFLIGHT_DIR"
+source "$SCRIPT_DIR/scripts/deploy_preflight.sh"
+deploy_preflight "$SCRIPT_DIR"
+
+# The trigger runner: one function per target, log streamed, non-zero on a
+# failed build. See scripts/deploy_build_targets.sh.
+source "$SCRIPT_DIR/scripts/deploy_build_targets.sh"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -65,28 +81,18 @@ NC='\033[0m'
 echo -e "${GREEN}[INFO]${NC} Reminder: voice accounts need firm_id or a dev claim."
 echo -e "${GREEN}[INFO]${NC}   check with: python scripts/bootstrap_voice_dev.py --list"
 
-# Verify account (same identity as the demo -- one project)
-echo -e "${GREEN}[INFO]${NC} 👀 Checking gcloud account..."
+# Verify account (same identity as the demo -- one project). Still needed with
+# the build as the engine: `gcloud builds triggers run` is authenticated as
+# whoever this shell is logged in as.
+echo -e "${GREEN}[INFO]${NC} Checking gcloud account..."
 CURRENT_ACCOUNT=$(gcloud config get-value account)
 if [[ "$CURRENT_ACCOUNT" != *"gmail.com"* ]]; then
   echo -e "${YELLOW}[WARN]${NC} Current account is $CURRENT_ACCOUNT. Need caellwyn@gmail.com."
   gcloud auth login --update-adc
 fi
 
-# Configuration. Same project as the demo; the SERVICE and SITE are what differ.
-CONSOLIDATED_PROJECT="polyglot-demo-aa709"
-GCP_PROJECT="$CONSOLIDATED_PROJECT"
-FIREBASE_PROJECT="$CONSOLIDATED_PROJECT"
-BUCKET_NAME="$CONSOLIDATED_PROJECT-form-kits"
-
-STAGING_SERVICE_NAME="polyglot-backend-staging"
 STAGING_SITE="polyglot-app-staging"
-STAGING_HOSTING_TARGET="app-staging"
-# The runtime service account and the Secret Manager bindings moved to
-# deploy/channels/<channel>.env (bd polyglot-pdf-1s3ko) -- they were
-# constants here, and a constant that two files must keep in step is the
-# drift the channel files exist to end. deploy-all.sh reads them from the
-# file; so does cloudbuild.yaml's backend target.
+DEMO_SITE="polyglot-demo-aa709"
 
 # Determine which components to deploy.
 #
@@ -121,8 +127,7 @@ if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
                 # printed its success banner and exited 0. The operator then
                 # believes they verified a change they never deployed -- and on
                 # the staging channel that is exactly the false confidence the
-                # tier exists to remove. Mirrors deploy-all.sh, which has always
-                # errored on an unknown argument.
+                # tier exists to remove.
                 echo -e "${RED}[ERROR]${NC} Unknown argument: $arg" >&2
                 echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]" >&2
                 exit 1
@@ -133,79 +138,56 @@ elif [ "$1" = "--all" ]; then
     DEPLOY_FORM_KITS=true
 fi
 
-echo -e "${GREEN}[INFO]${NC} 🚧 Deploying to STAGING Channel (test deploy)..."
-echo -e "${GREEN}[INFO]${NC}    service: $STAGING_SERVICE_NAME   site: $STAGING_SITE"
+SHA=$(deploy_build_sha "$SCRIPT_DIR")
+
+echo -e "${GREEN}[INFO]${NC} Deploying to the STAGING channel (test deploy) at $SHA..."
 if [ "$DEPLOY_FORM_KITS" = true ]; then
     echo -e "${YELLOW}[WARN]${NC} Form kits are SHARED with the demo -- publishing here"
     echo -e "${YELLOW}[WARN]${NC} also changes the demo's form list."
 fi
 
-# 1. Deploy Backend (+ optionally form kits) to the staging Cloud Run service
-if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
-    echo -e "${GREEN}[INFO]${NC} 🛠️  Stage 1: Deploying to GCP ($GCP_PROJECT / $STAGING_SERVICE_NAME)..."
-    export POLYGLOT_PROJECT_NAME="$GCP_PROJECT"
-    export FORM_KITS_BUCKET="$BUCKET_NAME"
+# THE TARGET ORDER IS THE OLD STAGE ORDER. Backend first, so the frontend
+# build resolves a Cloud Run URL that already serves this commit; form kits
+# before the frontend for the same reason the old script uploaded them in
+# stage 1.
+#
+# Firestore rules are deliberately NOT in this list. They are PROJECT-wide,
+# not per-site: deploying them from staging would apply the staging branch's
+# rules to the live demo, which is exactly the blast radius this channel is
+# meant to remove. Rules ship with the demo deploy (deploy-demo.sh), after the
+# change has been reviewed.
+TARGETS=()
 
-    GCP_ARGS=()
-    [ "$DEPLOY_GCP" = true ] && GCP_ARGS+=("--backend")
-    [ "$DEPLOY_FORM_KITS" = true ] && GCP_ARGS+=("--form-kits")
-
-    # CHANNEL CONFIG LIVES IN A FILE NOW (bd polyglot-pdf-1s3ko).
-    #
-    # Everything this block used to spell out inline -- VERTEXAI, the LINK_*
-    # set, CORS_EXTRA_ORIGINS, the secret binding, the runtime SA -- is in
-    # deploy/channels/staging.env, which deploy-all.sh reads and cloudbuild.yaml's
-    # backend-staging target reads too. ONE source, two consumers: a Cloud Build
-    # step cannot read a bash string, and a restated config is exactly the drift
-    # tests/test_deploy_channel_parity.py exists to catch.
-    #
-    # The mirror contract is unchanged and now mechanical: staging.env and
-    # demo.env must agree LINE FOR LINE except for the CHANNEL_SPECIFIC keys
-    # (LINK_BASE_URL, LINK_CHANNEL, GIT_SHA). Change staging.env FIRST, verify
-    # on staging, then promote to demo.env.
-    DEPLOY_CHANNEL="staging" \
-        BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \
-        ./deploy-all.sh "${GCP_ARGS[@]}"
+# VERIFY FIRST, ONCE PER COMMIT. Every deploy target's first build step
+# REFUSES without a build_checks/{sha} success record, so a commit that has
+# never been verified cannot deploy by any route. Running verify here when the
+# record is missing is what makes a first staging deploy of a new commit a
+# single command instead of two; when the record already exists (a second
+# target for the same SHA, or a verify run from the console) it is skipped, so
+# five targets for one commit still pay for one test run.
+if build_check_recorded "$SCRIPT_DIR" "$SHA"; then
+    echo -e "${GREEN}[INFO]${NC} build_checks record found for $SHA -- skipping verify."
+else
+    echo -e "${GREEN}[INFO]${NC} No build_checks record for $SHA -- running verify first."
+    TARGETS+=("verify")
 fi
 
-# 2. Deploy Frontend to the staging Hosting site
-if [ "$DEPLOY_FIREBASE" = true ]; then
-    export POLYGLOT_PROJECT_NAME="$FIREBASE_PROJECT"
+[ "$DEPLOY_GCP" = true ] && TARGETS+=("backend-staging")
+[ "$DEPLOY_FORM_KITS" = true ] && TARGETS+=("form-kits")
+[ "$DEPLOY_FIREBASE" = true ] && TARGETS+=("frontend-staging")
 
-    # Firestore rules are deliberately NOT deployed here. They are PROJECT-wide,
-    # not per-site: deploying them from staging would apply the staging branch's
-    # rules to the live demo, which is exactly the blast radius this channel is
-    # meant to remove. Rules ship with the demo deploy (deploy-demo.sh), after
-    # the change has been reviewed. If a staging test genuinely needs new rules,
-    # that is a rules change to land on the demo deliberately -- not a side
-    # effect of a test deploy.
-    echo -e "${GREEN}[INFO]${NC} 🌐 Stage 2: Deploying Frontend to $STAGING_SITE..."
-
-    # Build in demo mode: .env.demo carries the Firebase config for
-    # polyglot-demo-aa709, which is the SAME project staging lives in, so the
-    # client-side Firebase keys are correct for both channels. The backend URL
-    # baked into the build does NOT come from that file -- deploy-all.sh
-    # resolves the LIVE Cloud Run URL for BACKEND_SERVICE_NAME at deploy time
-    # and passes it as VITE_WS_URL, so exporting the staging service name here
-    # is what points the staging build at the staging backend.
-    #
-    # VITE_APP_CHANNEL=staging (bd polyglot-pdf-z4ljj, C0): since the Vite MODE
-    # itself is "demo" for this build (see above -- staging reuses the demo
-    # mode for its Firebase keys), config.ts's getAppChannel() cannot derive
-    # the channel from MODE. This is the ONLY signal that tells the built
-    # firm-console pages which channel's `?channel=` to send the admin
-    # service -- required on every firm-scoped admin route (sprint_22_admin-
-    # console_plan.md "Architecture"). Omitting it would silently claim
-    # 'demo' (getAppChannel()'s default), sending staging's traffic against
-    # the DEMO's Firestore data through the admin service.
-    FRONTEND_BUILD_CMD="npm run build:schema:demo" \
-        BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \
-        FRONTEND_HOSTING_TARGET="$STAGING_HOSTING_TARGET" \
-        FRONTEND_SITE_NAME="$STAGING_SITE" \
-        VITE_APP_CHANNEL="staging" \
-        ./deploy-all.sh --frontend
+# A run that would deploy NOTHING must say so rather than print a success
+# banner -- the same false-confidence failure the unknown-argument arm above
+# exists to stop (bd polyglot-pdf-7aez9), reached here by a flag combination
+# rather than a typo.
+if [ ${#TARGETS[@]} -eq 0 ]; then
+    echo -e "${RED}[ERROR]${NC} Nothing selected to deploy." >&2
+    echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]" >&2
+    exit 1
 fi
 
-echo -e "${GREEN}[INFO]${NC} ✅ Staging Deployment Complete!"
+run_build_targets "$SHA" "${TARGETS[@]}"
+
+echo -e "${GREEN}[INFO]${NC} Staging deployment complete."
 echo -e "${GREEN}[INFO]${NC} Staging URL: https://$STAGING_SITE.web.app"
-echo -e "${GREEN}[INFO]${NC} Demo (untouched): https://$FIREBASE_PROJECT.web.app"
+echo -e "${GREEN}[INFO]${NC} Demo (untouched): https://$DEMO_SITE.web.app"

@@ -685,6 +685,21 @@ steps:
         set -euo pipefail
         if [ "${_TARGET}" != "firestore-rules" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
         npx --yes firebase-tools deploy --only firestore:rules --project "$PROJECT_ID"
+        # COMPOSITE INDEXES SHIP WITH THE RULES (firestore.indexes.json, wired
+        # via firebase.json). deploy-demo.sh deployed both, as two stages, for
+        # as long as it had a Firestore stage at all; when that script became
+        # a thin wrapper (bd polyglot-pdf-oqtm7) this target became the only
+        # path that ships either, so dropping indexes here would silently
+        # retire them. A Firestore query combining an equality filter with an
+        # order_by on a DIFFERENT field is served ONLY from a composite index
+        # -- without one it fails at runtime with FAILED_PRECONDITION, and no
+        # local test catches it because a fake query object filters and sorts
+        # in Python (CLAUDE.md scar #7, applied to indexes rather than IAM).
+        # GET /admin/audit emits exactly that shape for each of its four
+        # filters. Index builds are ASYNCHRONOUS: this command returns before
+        # a new index is READY, so a freshly added filter can still fail for a
+        # few minutes after the build reports success.
+        npx --yes firebase-tools deploy --only firestore:indexes --project "$PROJECT_ID"
 
   # --------------------------------------------------------------------
   # admin-service -- tagged no-traffic revision, verified at its own stable
