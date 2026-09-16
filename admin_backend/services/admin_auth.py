@@ -710,7 +710,7 @@ def require_google_oidc(audience, allowed_caller_emails):
                 or email not in resolved_allowed_emails:
             _log.warning(
                 "google_oidc_caller_not_allowed",
-                email=email, audience=resolved_audience,
+                email_length=len(email or ""), audience=resolved_audience,
             )
             raise HTTPException(
                 status_code=403,

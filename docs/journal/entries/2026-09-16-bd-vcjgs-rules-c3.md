@@ -36,6 +36,9 @@ email. This change moves the check behind the backend and closes the rule.
   directions; its "NOT LISTED, deliberately" note now says why `users`
   stays out (owner-only read/write; a per-uid rule also denies listing)
   and that the allowlist moved in.
+- Merging B1b (its sweep of `admin_backend/`) with this bead's `email` kwarg
+  caught one admin sign-in log line carrying the address
+  (`admin_backend/services/admin_auth.py`); it logs the length now.
 - Docs: the allowlist section of `docs/components/auth.md` (server-side
   check, full deny, the deploy note no longer ties signup to a
   client-readable rule), the route row in `technical_guide.md`.
