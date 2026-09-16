@@ -191,7 +191,7 @@ def run_target(
         # the real exception text server-side before translating it.
         _log.error(
             "cloud_build_run_trigger_failed",
-            target=target, trigger_name=trigger_name, error=str(exc),
+            target=target, trigger_name=trigger_name, error_type=type(exc).__name__,
         )
         raise CloudBuildUnavailable(
             "could not run trigger {!r}: {}".format(trigger_name, exc)

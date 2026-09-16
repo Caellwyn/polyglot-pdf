@@ -273,7 +273,7 @@ def _apply_kit_commercial_write(
         raise
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_kit_commercial_write_failed", kit_id=kit_id,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="kit commercial write failed") from exc
 
@@ -376,7 +376,7 @@ async def list_kits(
     try:
         kit_ids = await store.list_kit_ids()
     except FormKitStoreError as exc:
-        _log.error("admin_list_kits_failed", error=str(exc))
+        _log.error("admin_list_kits_failed", error_type=type(exc).__name__)
         raise HTTPException(
             status_code=502, detail="Unable to load form kit list") from exc
 

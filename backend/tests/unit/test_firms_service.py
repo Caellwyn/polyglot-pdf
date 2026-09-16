@@ -396,7 +396,11 @@ def test_firms_store_status_reports_error(monkeypatch):
         raise RuntimeError("iam drift")
 
     monkeypatch.setattr("backend.services.auth.get_db", _boom)
-    assert firms.firms_store_status().startswith("error:")
+    status = firms.firms_store_status()
+    # Class only: /health returns this verbatim to any unauthenticated caller
+    # (sprint 23 B1b). Mutation: f"error: {e}" -- red.
+    assert status == "error: RuntimeError", status
+    assert len(status) < 40, status
 
 def test_firms_store_status_caches_within_max_age(fake_db):
     """A second call inside the window does NOT hit Firestore again.

@@ -207,8 +207,11 @@ def _to_epoch(value: object) -> float:
                 parsed = parsed.replace(tzinfo=timezone.utc)
             return parsed.timestamp()
         except ValueError:
+            # Length + type only: the string is external (Pub/Sub) input and the
+            # PII guard sweeps this service too (sprint 23 B1b).
             _log.warning(
-                "admin_deploy_webhook_unparsable_timestamp", value=value)
+                "admin_deploy_webhook_unparsable_timestamp",
+                value_length=len(value), value_type=type(value).__name__)
     return time.time()
 
 
@@ -411,7 +414,7 @@ async def deploy_status_webhook(
     try:
         build = _decode_build_message(body)
     except ValueError as exc:
-        _log.warning("admin_deploy_webhook_malformed_message", error=str(exc))
+        _log.warning("admin_deploy_webhook_malformed_message", error_type=type(exc).__name__)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     db = _db()

@@ -185,11 +185,11 @@ class TextAIGemini(ITextAI):
             try:
                 structlog.get_logger().warning(
                     "text_ai_no_api_key_on_ai_studio_path",
-                    detail=(
-                        "vertexai=False (AI Studio) but no API key; client will "
-                        "fall back to ADC and likely fail. Set GEMINI_API_KEY or "
-                        "VERTEXAI=true."
-                    ),
+                    # The literal opens on the kwarg line: the PII guard reads a
+                    # kwarg's value from that line (sprint 23 B1b).
+                    detail="vertexai=False (AI Studio) but no API key; client will "
+                           "fall back to ADC and likely fail. Set GEMINI_API_KEY or "
+                           "VERTEXAI=true.",
                 )
             except Exception:
                 pass

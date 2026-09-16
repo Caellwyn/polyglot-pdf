@@ -691,7 +691,7 @@ def require_google_oidc(audience, allowed_caller_emails):
         try:
             claims = _verify_google_id_token(token, resolved_audience)
         except OidcVerificationUnavailable as exc:
-            _log.error("google_oidc_verification_unavailable", error=str(exc))
+            _log.error("google_oidc_verification_unavailable", error_type=type(exc).__name__)
             raise HTTPException(
                 status_code=503,
                 detail="identity verification unavailable") from exc

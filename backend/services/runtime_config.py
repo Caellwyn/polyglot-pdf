@@ -320,7 +320,7 @@ def _fetch_fresh(channel: str) -> dict[str, Any]:
     try:
         doc = _read_channel_doc(channel)
     except Exception as exc:  # noqa: BLE001 -- any store failure is a miss
-        _log.error("runtime_config_read_failed", channel=channel, error=str(exc))
+        _log.error("runtime_config_read_failed", channel=channel, error_type=type(exc).__name__)
         return {}
     for key, value in doc.items():
         _last_known_good[(channel, key)] = value

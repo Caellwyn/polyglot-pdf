@@ -323,8 +323,12 @@ def test_pii_safe_exception_info_survives_a_chained_cause():
         "origin: " + info["stack_trace"])
 
 
+_EXCEPTION_SWEEP_ROOTS = ("backend", "admin_backend")
+
+
 def _ast_exception_sites():
-    """Every `.exception(...)` call and `exc_info=` kwarg under backend/.
+    """Every `.exception(...)` call and `exc_info=` kwarg under backend/ and
+    admin_backend/.
 
     Derived from the AST rather than a grep so a multi-line call (the shape
     backend/services/validation_handler.py actually uses) is not missed, and
@@ -337,13 +341,18 @@ def _ast_exception_sites():
     backend/utils/logging.py itself is excluded -- it DEFINES the processor
     rather than calling a logger through it.
     """
-    backend = REPO_ROOT / "backend"
     sites = set()
-    for path in sorted(backend.rglob("*.py")):
+    # BOTH services (sprint 23 B1b): the admin service logs through the same
+    # processor, and a hand-maintained register that only watched backend/
+    # would let an admin .exception() site ship unregistered.
+    paths = []
+    for root in _EXCEPTION_SWEEP_ROOTS:
+        paths += sorted((REPO_ROOT / root).rglob("*.py"))
+    for path in paths:
         rel = path.relative_to(REPO_ROOT).as_posix()
         if "/tests/" in rel or rel == "backend/utils/logging.py":
             continue
-        if rel.startswith("backend/scripts/"):
+        if "scripts" in rel.split("/"):  # operator probes, either service
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -431,3 +440,11 @@ def test_stock_format_exc_info_is_not_in_the_processor_chain():
             "Chain: " + repr(names))
     finally:
         structlog.reset_defaults()
+
+
+def test_the_exception_site_walk_covers_the_admin_service():
+    """The register's completeness backstop must walk both services, so an
+    admin .exception()/exc_info site cannot ship unregistered (sprint 23 B1b
+    widened the sibling PII sweep the same way)."""
+    assert set(_EXCEPTION_SWEEP_ROOTS) == {"backend", "admin_backend"}
+    assert all((REPO_ROOT / r).is_dir() for r in _EXCEPTION_SWEEP_ROOTS)

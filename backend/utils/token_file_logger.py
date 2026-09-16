@@ -167,7 +167,7 @@ class TokenFileLogger:
                 f.flush()  # Force write to disk immediately
         except Exception as e:
             # Silently fail - don't crash the app over logging
-            print(f"[TokenFileLogger] Failed to write event: {e}")
+            print(f"[TokenFileLogger] Failed to write event: {type(e).__name__}")
 
     def clear_log(self) -> None:
         """Clear the token usage log file."""

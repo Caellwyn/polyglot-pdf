@@ -432,7 +432,7 @@ async def _handle_fill_session(
 						# Close WebSocket with idle timeout code
 						await websocket.close(code=1000, reason="Idle timeout")
 					except Exception as e:
-						log.warning("idle_timeout_cleanup_error", error=str(e))
+						log.warning("idle_timeout_cleanup_error", error_type=type(e).__name__)
 					break
 		
 		watchdog = asyncio.create_task(watchdog_task())
@@ -760,7 +760,7 @@ async def _handle_fill_session(
 							await websocket.send_json({"type": "disclaimer_read_initiated", "language": spoken_language})
 							_log.info("disclaimer_read_initiated", session_id=session_id, language=spoken_language)
 						except Exception as e:
-							_log.error("read_disclaimer_failed", session_id=session_id, error=str(e))
+							_log.error("read_disclaimer_failed", session_id=session_id, error_type=type(e).__name__)
 							await websocket.send_json({"type": "error", "code": "disclaimer_read_failed", "message": str(e)})
 					continue
 				elif mtype == "completion_message":
@@ -789,7 +789,7 @@ async def _handle_fill_session(
 							await service.send_recovery_prompt(level, next_field_hint)
 							await websocket.send_json({"type": "recovery_prompt_ack"})
 						except Exception as e:
-							_log.error("recovery_prompt_failed", error=str(e), level=level)
+							_log.error("recovery_prompt_failed", error_type=type(e).__name__, level=level)
 							await websocket.send_json({"type": "error", "code": "recovery_prompt_failed", "message": str(e)})
 					continue
 				elif mtype == "voice_mode":
@@ -874,7 +874,7 @@ async def _handle_fill_session(
 							         session_id=session_id,
 							         spoken_language=spoken_language)
 						except Exception as e:
-							_log.error("change_spoken_language_failed", session_id=session_id, error=str(e))
+							_log.error("change_spoken_language_failed", session_id=session_id, error_type=type(e).__name__)
 							await websocket.send_json({"type": "error", "code": "spoken_language_change_failed", "message": str(e)})
 					continue
 				elif mtype == "end_gemini_session":
@@ -898,7 +898,7 @@ async def _handle_fill_session(
 						await websocket.send_json({"type": "gemini_session_restarted"})
 						_log.info("gemini_session_restarted", session_id=session_id)
 					except Exception as e:
-						_log.error("restart_gemini_session_failed", session_id=session_id, error=str(e))
+						_log.error("restart_gemini_session_failed", session_id=session_id, error_type=type(e).__name__)
 						await websocket.send_json({"type": "error", "code": "restart_failed", "message": str(e)})
 					continue
 				elif mtype == "section_info_response":
@@ -944,9 +944,9 @@ async def _handle_fill_session(
 							drop_audio = False  # Resume audio processing
 						except Exception as e:
 							drop_audio = False  # Resume audio even on error
-							_log.error("manual_section_switch_failed", identifier=identifier, session_id=session_id, error=str(e))
-							import traceback
-							_log.error("manual_section_switch_traceback", traceback=traceback.format_exc())
+							# exc_info, never format_exc(): the processor keeps frames + type
+							# and drops the message, which can embed a field value.
+							_log.error("manual_section_switch_failed", identifier=identifier, session_id=session_id, error_type=type(e).__name__, exc_info=True)
 							await websocket.send_json({"type": "error", "code": "section_switch_failed", "message": str(e)})
 					else:
 						drop_audio = False  # Resume audio if invalid request
@@ -1154,7 +1154,7 @@ async def _handle_fill_session(
 					kit_id=kit_id,
 				)
 			except Exception as e:
-				log.error("session_end_telemetry_failed", error=str(e))
+				log.error("session_end_telemetry_failed", error_type=type(e).__name__)
 
 			# Usage rollup (Epic 3 bead E3.4, bd polyglot-pdf-w828m): one
 			# batched firm+kit increment per connection teardown, same gate
@@ -1204,7 +1204,7 @@ async def _handle_fill_session(
 
 				await asyncio.to_thread(_resolve_kind_and_record_rollup)
 			except Exception as e:
-				log.error("usage_rollup_telemetry_failed", error=str(e))
+				log.error("usage_rollup_telemetry_failed", error_type=type(e).__name__)
 
 		# BURN THE LINK -- but only on a real completion (bd polyglot-pdf-ugm6,
 		# fresh-eyes r1 finding 2). Nothing called complete_link before this,
@@ -1224,7 +1224,7 @@ async def _handle_fill_session(
 			try:
 				await asyncio.to_thread(complete_link, link_jti)
 			except Exception as e:
-				log.error("link_complete_failed", jti=link_jti, error=str(e))
+				log.error("link_complete_failed", jti=link_jti, error_type=type(e).__name__)
 
 		# BANK THIS CONNECTION'S SPEND against the link (bd polyglot-pdf-ik7e).
 		# On EVERY teardown, not only a completed one: the expensive case is
@@ -1311,7 +1311,7 @@ def _mirror_budget_exhausted(jti) -> None:
 			{"status": _links_store.STATUS_BUDGET_EXHAUSTED}, merge=True)
 	except Exception as exc:  # noqa: BLE001 -- telemetry only, never raises
 		_log.error("link_budget_exhausted_mirror_failed", jti=jti,
-					error=str(exc))
+					error_type=type(exc).__name__)
 
 
 def _rollup_language_key(service) -> str | None:
@@ -1362,7 +1362,7 @@ def _session_cost_usd(service, *, log=None, jti=None) -> float:
 			return float(ai.session_cost_usd() or 0.0)
 	except Exception as exc:
 		if log is not None:
-			log.error("link_spend_record_failed", jti=jti, error=str(exc))
+			log.error("link_spend_record_failed", jti=jti, error_type=type(exc).__name__)
 	return 0.0
 
 
@@ -1399,7 +1399,7 @@ async def _bank_link_spend(link_jti, service, log) -> float:
 			return cost
 		return 0.0
 	except Exception as e:
-		log.error("link_spend_record_failed", jti=link_jti, error=str(e))
+		log.error("link_spend_record_failed", jti=link_jti, error_type=type(e).__name__)
 		return 0.0
 
 
@@ -1572,7 +1572,7 @@ async def fill_form_from_schema(
 			# (scripts/bootstrap_voice_dev.py). Same 401-vs-403 distinction the
 			# HTTP side draws, carried onto the surface where it actually bites.
 			not_enrolled = getattr(e, "status_code", None) == 403
-			log.warning("websocket_auth_failed", error=str(e),
+			log.warning("websocket_auth_failed", error_type=type(e).__name__,
 						not_enrolled=not_enrolled)
 			reason = ("This account is not enrolled for the voice application"
 					  if not_enrolled else "Authentication failed")
@@ -1584,7 +1584,7 @@ async def fill_form_from_schema(
 		await websocket.accept()
 	except RuntimeError as e:
 		# WebSocket already in wrong state (likely already accepted/closed)
-		log.error("websocket_accept_failed", error=str(e))
+		log.error("websocket_accept_failed", error_type=type(e).__name__)
 		return
 	
 	try:
@@ -1592,7 +1592,7 @@ async def fill_form_from_schema(
 	except WebSocketDisconnect:
 		return
 	except Exception as e:
-		log.error("handshake_failed", error=str(e))
+		log.error("handshake_failed", error_type=type(e).__name__)
 		try:
 			await websocket.send_json({"type": "error", "code": "invalid_handshake", "reason": "text_required"})
 			await _close_ws(websocket, 1003, "handshake_not_text")
@@ -1603,7 +1603,7 @@ async def fill_form_from_schema(
 	try:
 		handshake = json.loads(first_frame)
 	except json.JSONDecodeError as e:
-		log.error("json_decode_failed", error=str(e))
+		log.error("json_decode_failed", error_type=type(e).__name__)
 		await websocket.send_json({"type": "error", "code": "invalid_handshake", "reason": "json_decode"})
 		await _close_ws(websocket, 1007, "handshake_json_decode")
 		return
@@ -1668,7 +1668,7 @@ async def fill_form_from_schema(
 			# socket's paid gate could not be left admitting a revoked
 			# link by an omission at this one call site.
 			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
-						error=str(exc))
+						error_type=type(exc).__name__)
 			await _close_ws(websocket, 1008, "link_redeem_refused",
 							reason="Authentication failed")
 			return
@@ -1747,7 +1747,7 @@ async def fill_form_from_schema(
 			await asyncio.to_thread(_resolve_ceiling_and_check_budget)
 		except LinkBudgetExhausted as exc:
 			log.warning("ws_link_budget_exhausted", jti=claims.get("jti"),
-						firm_id=claims.get("firm_id"), error=str(exc))
+						firm_id=claims.get("firm_id"), error_type=type(exc).__name__)
 			# Best-effort TELEMETRY mirror only (bd polyglot-pdf-1op3g / A5) --
 			# no ledger entry, no refund. Off the event loop for the same
 			# reason every other Firestore call on this route is: a sync
@@ -1764,7 +1764,7 @@ async def fill_form_from_schema(
 			# tell how much this link has spent, we do not start an unbounded
 			# paid session on it.
 			log.warning("ws_link_budget_unavailable", jti=claims.get("jti"),
-						error=str(exc))
+						error_type=type(exc).__name__)
 			await _close_ws(websocket, 1013, "budget_unavailable",
 							reason="budget_unavailable",
 							form_session_id=form_session_id)

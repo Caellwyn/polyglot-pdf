@@ -298,7 +298,7 @@ def _do_list_links(
         link_snaps = list(query.stream())
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_link_list_failed", firm_id=firm_id,
-                   channel=channel, error=str(exc))
+                   channel=channel, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="link store unavailable") from exc
 
@@ -330,7 +330,7 @@ def _do_list_links(
             # sink the whole list; the link's mint fields still show, just
             # without spend/opened/completed detail for this one row.
             _log.error("admin_link_redemption_read_failed", jti=jti,
-                       channel=channel, error=str(exc))
+                       channel=channel, error_type=type(exc).__name__)
             redemption_doc = None
         employee_label = identity_labels.label_for_actor(
             link_doc.get("employee_id"), link_doc.get("employee_email"),
@@ -469,7 +469,7 @@ def _do_revoke_link(
         raise
     except Exception as exc:  # noqa: BLE001
         _log.error("admin_link_revoke_failed", jti=jti, channel=channel,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=500,
                             detail="link revoke failed") from exc
 

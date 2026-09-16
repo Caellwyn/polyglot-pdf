@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: `vertexai` is no longer surfaced on `/health`; the startup refusal is the enforcement.)*
+
 *Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: Vertex-only production enforced; 3.1 A/B remains local-only until Vertex GA).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
@@ -124,7 +126,8 @@ of 2026-06.
   below). A/B-ing 3.1 requires the AI-Studio path (`VERTEXAI=false`,
   `USE_PREMIUM_MODEL=true`), so it is a **LOCAL-ONLY** exercise -- a deployed
   service refuses to start on that path (see the Vertex-only rule above).
-  Surfaced on `/health` as `vertexai`.
+  Not surfaced on `/health` (which reports no configuration at all since
+  sprint 23 B1b); the startup refusal IS the enforcement.
 
 `backend/dependencies.py` is the **one** place models reach adapters:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,

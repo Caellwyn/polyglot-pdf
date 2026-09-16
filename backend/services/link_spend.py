@@ -100,7 +100,7 @@ def spend_so_far(jti: str) -> float:
     try:
         snap = _collection().document(jti).get()
     except Exception as exc:  # noqa: BLE001 -- any store failure refuses
-        _log.error("link_spend_read_failed", jti=jti, error=str(exc))
+        _log.error("link_spend_read_failed", jti=jti, error_type=type(exc).__name__)
         raise RedemptionUnavailable(str(exc)) from exc
     if not snap.exists:
         return 0.0
@@ -191,5 +191,5 @@ def record_spend(
             "link_spend_write_failed",
             jti=jti,
             cost_usd=round(cost_usd, 6),
-            error=str(exc),
+            error_type=type(exc).__name__,
         )

@@ -12,11 +12,12 @@ import { UsagePage } from './pages/UsagePage';
 import { CostReportsPage } from './pages/CostReportsPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ErrorsPage } from './pages/ErrorsPage';
+import { DeploysPage } from './pages/DeploysPage';
 import { signOutAdmin } from './utils/adminAuth';
 import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
 type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits' | 'firms'
-  | 'monitoring' | 'usage' | 'reports' | 'alerts' | 'errors';
+  | 'monitoring' | 'usage' | 'reports' | 'alerts' | 'errors' | 'deploys';
 
 /**
  * Admin console shell (bd polyglot-pdf-b6943, extended by polyglot-pdf-z4y91,
@@ -28,7 +29,9 @@ type Tab = 'whoami' | 'audit' | 'config' | 'users' | 'kits' | 'firms'
  * the five monitoring pages (bd polyglot-pdf-i6dlb, E3.11b): Monitoring
  * (per-channel health), Usage (a firm's month rollup), Cost & income
  * (BigQuery reports over a month range), Alerts (list + acknowledge), and
- * Errors (Cloud Error Reporting group stats per channel).
+ * Errors (Cloud Error Reporting group stats per channel), and Deploys (bd
+ * polyglot-pdf-ryx86, E4.7: what is live per channel, a gated trigger
+ * form, and a polling deployments table).
  *
  * Deliberately NO ROUTER: a handful of tabs behind a boolean "signed in"
  * state is simple enough that a router would be pure ceremony for this
@@ -117,6 +120,7 @@ export const App: React.FC = () => {
             { id: 'reports', label: 'Cost & income' },
             { id: 'alerts', label: 'Alerts' },
             { id: 'errors', label: 'Errors' },
+            { id: 'deploys', label: 'Deploys' },
           ] as const
         ).map((item) => (
           <button
@@ -157,6 +161,7 @@ export const App: React.FC = () => {
         {tab === 'reports' && <CostReportsPage onAuthExpired={handleAuthExpired} />}
         {tab === 'alerts' && <AlertsPage onAuthExpired={handleAuthExpired} />}
         {tab === 'errors' && <ErrorsPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'deploys' && <DeploysPage onAuthExpired={handleAuthExpired} />}
       </main>
     </div>
   );

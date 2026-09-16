@@ -190,7 +190,7 @@ async def _require_account_in_firm(uid: str, firm_id: str) -> dict:
     except user_admin.UserNotFound:
         raise HTTPException(status_code=404, detail="No such account")
     except user_admin.UserAdminError as exc:
-        _log.error("admin_user_lookup_failed", error=str(exc))
+        _log.error("admin_user_lookup_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=502,
                             detail="user directory unavailable") from exc
     if claims.get("firm_id") != firm_id:
@@ -251,7 +251,7 @@ async def create_user(
     except user_admin.UserAdminError as exc:
         audit_log.mark_failed(ref, error=str(exc))
         _log.error("admin_user_create_failed", firm_id=firm_id,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=502,
                             detail="could not create the account") from exc
 
@@ -297,7 +297,7 @@ async def set_user_disabled(
         raise HTTPException(status_code=404, detail="No such account") from exc
     except user_admin.UserAdminError as exc:
         audit_log.mark_failed(ref, error=str(exc))
-        _log.error("admin_user_disable_failed", uid=uid, error=str(exc))
+        _log.error("admin_user_disable_failed", uid=uid, error_type=type(exc).__name__)
         raise HTTPException(status_code=502,
                             detail="could not update the account") from exc
 
@@ -356,7 +356,7 @@ async def set_user_role(
         raise HTTPException(status_code=404, detail="No such account") from exc
     except user_admin.UserAdminError as exc:
         audit_log.mark_failed(ref, error=str(exc))
-        _log.error("admin_user_role_failed", uid=uid, error=str(exc))
+        _log.error("admin_user_role_failed", uid=uid, error_type=type(exc).__name__)
         raise HTTPException(status_code=502,
                             detail="could not update the account") from exc
 
@@ -394,7 +394,7 @@ async def list_users(
     try:
         result = await asyncio.to_thread(user_admin.list_firm_users, resolved)
     except user_admin.UserAdminError as exc:
-        _log.error("admin_user_list_failed", firm_id=resolved, error=str(exc))
+        _log.error("admin_user_list_failed", firm_id=resolved, error_type=type(exc).__name__)
         raise HTTPException(status_code=502,
                             detail="user directory unavailable") from exc
     return {

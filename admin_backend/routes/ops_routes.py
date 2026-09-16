@@ -108,7 +108,7 @@ async def get_channel_errors(
             error_stats.channel_error_stats, channel)
     except error_stats.ErrorReportingUnavailable as exc:
         _log.error("admin_errors_read_failed", channel=channel,
-                   error=str(exc))
+                   error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="error reporting unavailable") from exc
 
@@ -168,7 +168,7 @@ def _fetch_backend_probe(base_url: str) -> dict[str, Any]:
         import requests
     except ImportError as exc:  # pragma: no cover -- pinned dependency
         _log.warning("admin_health_fetch_failed", base_url=base_url,
-                     probe="import", error=str(exc))
+                     probe="import", error_type=type(exc).__name__)
         return {"health": None, "version": None, "reachable": False}
 
     health_body = None
@@ -181,7 +181,7 @@ def _fetch_backend_probe(base_url: str) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 -- one channel's outage must
         # not fail the whole /admin/health response (module docstring).
         _log.warning("admin_health_fetch_failed", base_url=base_url,
-                     probe="health", error=str(exc))
+                     probe="health", error_type=type(exc).__name__)
     try:
         resp = requests.get(
             "{}/version".format(base_url), timeout=_HEALTH_FETCH_TIMEOUT_S)
@@ -189,7 +189,7 @@ def _fetch_backend_probe(base_url: str) -> dict[str, Any]:
         version_body = resp.json()
     except Exception as exc:  # noqa: BLE001
         _log.warning("admin_health_fetch_failed", base_url=base_url,
-                     probe="version", error=str(exc))
+                     probe="version", error_type=type(exc).__name__)
 
     return {
         "health": health_body,

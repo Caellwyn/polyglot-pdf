@@ -432,7 +432,7 @@ async def mint_link(
         # No such firm, or an unreachable store. A deployment/data fault, not
         # a caller error -- and NOTHING was committed, so nothing is signed.
         _log.error("link_mint_reserve_failed", firm_id=firm_id,
-                   kit_id=body.kit_id, error=str(exc))
+                   kit_id=body.kit_id, error_type=type(exc).__name__)
         raise HTTPException(
             status_code=503,
             detail="Link minting is temporarily unavailable") from exc
@@ -457,7 +457,7 @@ async def mint_link(
         )
     except Exception as exc:  # noqa: BLE001 -- best-effort, never fail the mint
         _log.error("link_mint_usage_rollup_failed", firm_id=firm_id,
-                  jti=jti, error=str(exc))
+                  jti=jti, error_type=type(exc).__name__)
 
     # --- SIGN (only now, from the jti the reservation committed) ---------
     try:
@@ -481,7 +481,7 @@ async def mint_link(
         # deadline with no operator action. Logged loudly so it is visible
         # before then.
         _log.error("link_mint_failed_after_reserve", firm_id=firm_id,
-                   jti=jti, error=str(exc))
+                   jti=jti, error_type=type(exc).__name__)
         raise HTTPException(status_code=503,
                             detail="Link minting is not configured") from exc
 
@@ -544,7 +544,7 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
     try:
         payload = verify_link_token(body.token)
     except LinkTokenError as exc:
-        _log.info("link_open_refused", reason=str(exc))
+        _log.info("link_open_refused", reason_type=type(exc).__name__)
         raise generic from exc
 
     firm_id, kit_id = payload["firm_id"], payload["kit_id"]
@@ -596,7 +596,7 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
         # FAIL CLOSED: unable to confirm the link is unredeemed means we must
         # not admit it -- the failure being guarded is a replayed link
         # starting a second paid session.
-        _log.error("link_open_unavailable", jti=payload["jti"], error=str(exc))
+        _log.error("link_open_unavailable", jti=payload["jti"], error_type=type(exc).__name__)
         raise generic from exc
 
     deadline = completion_deadline(payload, record["opened_at"])

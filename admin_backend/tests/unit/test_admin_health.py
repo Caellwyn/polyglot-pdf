@@ -125,3 +125,12 @@ def test_health_and_version_are_the_only_UNGATED_routes():
             f"{path} must stay gate-free -- it is the unauthenticated "
             "liveness/identity probe"
         )
+
+
+def test_admin_health_is_identity_only():
+    """The admin /health names the service and the ASGI module it runs --
+    identity a deploy must confirm -- and nothing else (sprint 23 B1b): no
+    model id, rate, limit or flag. EXACT key set."""
+    with TestClient(app) as client:
+        body = client.get("/health").json()
+    assert set(body) == {"status", "service", "app_module"}, sorted(body)

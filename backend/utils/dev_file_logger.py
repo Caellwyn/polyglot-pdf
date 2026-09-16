@@ -110,7 +110,7 @@ class DevFileLogger:
                 f.write("\n")
         except Exception as e:
             # If file logging fails, output to terminal
-            print(f"[warn] Dev file logger error: {e}", file=sys.stderr)
+            print(f"[warn] Dev file logger error: {type(e).__name__}", file=sys.stderr)
 
     def _write_to_terminal(self, message: str, severity: str = "INFO") -> None:
         """Write a message to terminal (always, regardless of file logging)."""

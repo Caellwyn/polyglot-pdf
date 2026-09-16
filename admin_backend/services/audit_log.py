@@ -278,7 +278,7 @@ def mark_committed(ref, *, after: Any = None, ts: Optional[float] = None) -> Non
     try:
         ref.update(payload)
     except Exception as exc:  # noqa: BLE001 -- see the docstring
-        _log.error("admin_audit_commit_failed", error=str(exc))
+        _log.error("admin_audit_commit_failed", error_type=type(exc).__name__)
 
 
 def mark_failed(ref, *, error: str, ts: Optional[float] = None) -> None:
@@ -298,4 +298,4 @@ def mark_failed(ref, *, error: str, ts: Optional[float] = None) -> None:
     try:
         ref.update(payload)
     except Exception as exc:  # noqa: BLE001 -- see the docstring
-        _log.error("admin_audit_fail_mark_failed", error=str(exc))
+        _log.error("admin_audit_fail_mark_failed", error_type=type(exc).__name__)
