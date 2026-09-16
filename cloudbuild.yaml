@@ -188,7 +188,7 @@ steps:
       - |
         set -euo pipefail
         if [ "${_TARGET}" != "verify" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
-        pip install --quiet -r backend/requirements.txt
+        pip install --quiet -r backend/requirements-dev.txt
         # -m "not external" matches CI's flaky live-Gemini exclusion (those
         # tests need real Gemini credentials the build does not have).
         #

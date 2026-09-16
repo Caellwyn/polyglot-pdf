@@ -82,6 +82,7 @@ from backend.services.link_tokens import (
 )
 from backend.services.runtime_config import credits_enforced as _rc_credits_enforced
 from backend.services.runtime_config import minting_enabled as _rc_minting_enabled
+from backend.services.usage_rollups import record_link_minted
 
 _log = structlog.get_logger().bind(module="link_routes")
 
@@ -159,6 +160,7 @@ def _reserve_mint(
     channel: str,
     enforced: bool,
     now: Optional[float] = None,
+    employee_email: Optional[str] = None,
 ) -> dict:
     """Reserve one link's credit, ATOMICALLY, before any token is signed.
 
@@ -188,6 +190,15 @@ def _reserve_mint(
     `enforced` is passed IN rather than read here so the route resolves it
     once, off the event loop, alongside the minting flag -- and so a test
     can drive both settings without patching runtime_config's cache.
+
+    employee_email (bd polyglot-pdf-cpsi0): the minting account's email
+    claim, when the verified token carries one. Threaded to BOTH the mint
+    record (`employee_email`, via build_mint_record) and the ledger entry
+    (`actor_email`, via append_entry) so the two records the console reads
+    -- the links table and the ledger table -- agree on the same label for
+    the same mint. Optional: a token with no email claim (should not
+    happen for a real Firebase account, but is not assumed) leaves both
+    fields None, exactly as they were before this bead.
     """
     db = get_db()
     if db is None:
@@ -220,6 +231,7 @@ def _reserve_mint(
             cap_usd=cap_usd,
             open_deadline=open_deadline,
             now=now,
+            employee_email=employee_email,
         )
         tx.set(links_store.mint_record_ref(db, jti, channel), record)
 
@@ -230,6 +242,7 @@ def _reserve_mint(
             entry_type=TYPE_MINT_DEBIT,
             amount=-int(credit_cost),
             actor=employee_id,
+            actor_email=employee_email,
             channel=channel,
             link_jti=jti,
             kit_id=kit_id,
@@ -338,6 +351,14 @@ async def mint_link(
 
     firm_id = user.get("firm_id") if isinstance(user, dict) else None
     employee_id = user.get("uid") if isinstance(user, dict) else None
+    # bd polyglot-pdf-cpsi0: the verified token's email claim, purely a
+    # human-readable label riding alongside employee_id -- never validated,
+    # never required (an absent claim leaves the label None, exactly the
+    # prior behavior), and never used for identity: employee_id (the uid)
+    # remains the only value any gate or query keys on.
+    employee_email = user.get("email") if isinstance(user, dict) else None
+    if not isinstance(employee_email, str) or not employee_email:
+        employee_email = None
     if not isinstance(firm_id, str) or not firm_id:
         raise HTTPException(status_code=403, detail="Not a firm account")
     if not isinstance(employee_id, str) or not employee_id:
@@ -399,6 +420,7 @@ async def mint_link(
             channel,
             enforced,
             issued,
+            employee_email=employee_email,
         )
     except MintRefused as exc:
         _log.info("link_mint_refused", firm_id=firm_id, kit_id=body.kit_id,
@@ -414,6 +436,28 @@ async def mint_link(
         raise HTTPException(
             status_code=503,
             detail="Link minting is temporarily unavailable") from exc
+
+    # USAGE ROLLUP (bd polyglot-pdf-he3lt), AFTER the reservation has
+    # committed -- never inside it (see usage_rollups.record_link_minted's
+    # own docstring). Wrapped in its OWN try/except here, on top of
+    # record_link_minted's own never-raises contract -- defense in depth,
+    # mirroring websocket_routes.py's own record_session_end call site: a
+    # rollup failure must leave the mint successful, and this guards against
+    # an unexpected exception raised BEFORE record_link_minted's own
+    # internal try/except is reached (or a future edit that removes it),
+    # not just the write itself failing.
+    try:
+        await asyncio.to_thread(
+            record_link_minted,
+            firm_id=firm_id,
+            kit_id=body.kit_id,
+            employee_id=employee_id,
+            channel=channel,
+            now=issued,
+        )
+    except Exception as exc:  # noqa: BLE001 -- best-effort, never fail the mint
+        _log.error("link_mint_usage_rollup_failed", firm_id=firm_id,
+                  jti=jti, error=str(exc))
 
     # --- SIGN (only now, from the jti the reservation committed) ---------
     try:

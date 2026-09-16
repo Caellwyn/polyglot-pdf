@@ -37,6 +37,17 @@ import sys
 import time
 from pathlib import Path
 
+# Suppress the child console window every subprocess opens on Windows
+# (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
+# imported from swarm_config because importing that module mutates PATH and
+# loads a config file -- side effects this script must not take on.
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
 
 def _read_events(path: Path) -> list:
     if not path.exists():
@@ -70,6 +81,7 @@ def _kill_port(port: int) -> bool:
     """Kill whatever is LISTENING on `port` (Windows netstat + taskkill)."""
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True,
+            creationflags=windowless_creationflags(),
                              timeout=20).stdout
     except Exception:
         return False
@@ -83,6 +95,7 @@ def _kill_port(port: int) -> bool:
     for pid in pids:
         try:
             subprocess.run(["taskkill", "/F", "/PID", pid],
+                creationflags=windowless_creationflags(),
                            capture_output=True, timeout=20)
             killed = True
         except Exception:

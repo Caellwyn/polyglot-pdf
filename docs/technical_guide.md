@@ -132,7 +132,7 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. After the reservation commits, bumps the `links_minted` usage-rollup counter (bd `polyglot-pdf-he3lt`, Surface contract 26) best-effort -- never able to fail the mint. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -141,7 +141,7 @@ insertion point.
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. The ADMIN service serves a different `/health` at its own hostname -- see "Admin service routes" below. |
 | GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`) -- `git_sha` reads the `GIT_SHA` runtime env var, `"unknown"` when unset or empty. The admin service serves its own `/version` at its own hostname. |
-| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
+| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (the marker half of `/dev/console-log`'s gate; unlike that route they do not yet also fail closed on `K_SERVICE` -- bead C2, `polyglot-pdf-bwevj`, adds it; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
 
 ## Admin service routes
@@ -163,9 +163,9 @@ its own table).
 | GET | `/admin/alerts` | List `alerts/{id}` docs, newest first, page-capped (bd `polyglot-pdf-mpebj`, E3.11a; docs: bd `polyglot-pdf-bo95a`, Surface contract 21). Optional `?acknowledged=`/`?firm_id=`/`?kind=` filters (422 on an unrecognized `kind`), filtered in Python over a full collection stream (mirrors `/admin/audit`'s own no-composite-index reasoning). Response rows are an explicit key allowlist. A read, so no audit row. `admin_backend/routes/alert_routes.py` |
 | PATCH | `/admin/alerts/{alert_id}/acknowledge` | Acknowledge one telemetry alert (bd `polyglot-pdf-mpebj`, E3.11a; gate WIDENED by bd `polyglot-pdf-62o4d`; docs: Surface contracts 21, 32). Sets `acknowledged_by` (the ACTOR's own uid, never a request body value) and `acknowledged_at`, in ONE `@firestore.transactional` body with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape) -- a forced audit failure leaves `acknowledged_at` unset. 404 for an unknown alert id OR one belonging to a firm the caller (a manager or employee) does not own (the same 404 either way); 409 (naming who acknowledged it first) for one already acknowledged. Gate: `require_app_admin_or_owning_manager_or_employee` -- an app admin may acknowledge any firm's alert (or a firm-less one); a manager only their OWN firm's; an EMPLOYEE is refused with a 403 INSIDE THE ROUTE BODY (not the dependency, which lets an employee actor through for the sibling read route) -- see alert_routes.py's own docstring for why. `admin_backend/routes/alert_routes.py` |
 | GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
-| GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
+| GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. Also returns `schema` (bd `polyglot-pdf-wxcj0`), `{key: {type, default}}` for every known key derived from `runtime_config.config_schema()` -- the console's only source for a key's type (bool/int/float), so it never hand-lists key types itself. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
-| POST | `/admin/credits/monthly-topup` | The monthly firm-plan credit top-up (bd `polyglot-pdf-0euzk`, maintainer pricing decision 2026-09-14: "35 credits/month cap as a starting place"). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the SAME shape as the sweep route below, a SEPARATE Cloud Scheduler identity (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`) and a SEPARATE env-var-set audience (this route's own path). For every `status == active` firm carrying a `plan` (`{tier, monthly_credits, rollover}`, `backend/services/plans.py`), writes ONE `subscription_grant` through `credit_ledger.append_entry` with `usd_amount=None` ("no money moved" -- the credits are the product a flat recurring fee already covers outside this ledger) and a new `period="YYYY-MM"` field on the entry. `rollover=false` brings the balance UP TO `monthly_credits` (skipped, writing nothing, when already at or over the cap -- a negative balance from the metered soft-launch is brought up to the cap too); `rollover=true` ADDS `monthly_credits` regardless of the current balance. IDEMPOTENT BY MONTH: before writing, queries the firm's ledger for an existing `subscription_grant` with the SAME `period` and skips the firm entirely if one exists -- a retried Scheduler call or a second manual run writes nothing. Mock firms are topped up too (no `kind` filter -- staging needs credits to test). A per-firm failure (a malformed plan, a Firestore hiccup) is logged and skipped, never aborting the whole monthly pass. Audited via `append_entry`'s `extra_writes` hook, the SAME extra_writes-delegated shape the sweep route below and the grant/adjust routes above use. Returns per-outcome firm_id lists (`topped_up`/`skipped_at_cap`/`skipped_already_run`/`skipped_no_plan`/`failed`) -- counts derivable from list lengths; the ledger entry and audit row are the durable record. `admin_backend/routes/credit_routes.py` |
+| POST | `/admin/credits/monthly-topup` | The monthly firm-plan credit top-up (bd `polyglot-pdf-0euzk`, maintainer pricing decision 2026-09-14: "35 credits/month cap as a starting place" -- see bd `polyglot-pdf-hnlj3`, 2026-09-15, for why `rollover` now defaults True and "cap" no longer describes the common case). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the SAME shape as the sweep route below, a SEPARATE Cloud Scheduler identity (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`) and a SEPARATE env-var-set audience (this route's own path). **THIS TRIGGER IS INTERIM** (bd `polyglot-pdf-hnlj3`): the per-firm grant logic lives in its own function, `topup_firm(db, firm_id, firm, *, period, actor=None)`, this route just loops it over every active firm -- Epic 5's Stripe webhook (invoice.paid / subscription renewal) will call the SAME function directly for the one firm a payment event names, once that lands. For every `status == active` firm carrying a `plan` (`{tier, monthly_credits, rollover}`, `backend/services/plans.py`; `rollover` defaults True as of bd `polyglot-pdf-hnlj3`), `topup_firm` writes ONE `subscription_grant` through `credit_ledger.append_entry` with `usd_amount=None` ("no money moved" -- the credits are the product a flat recurring fee already covers outside this ledger) and a new `period="YYYY-MM"` field on the entry. `rollover=false` brings the balance UP TO `monthly_credits` (skipped, writing nothing, when already at or over the cap -- a negative balance from the metered soft-launch is brought up to the cap too); `rollover=true` ADDS `monthly_credits` regardless of the current balance. IDEMPOTENT BY MONTH: before writing, queries the firm's ledger for an existing `subscription_grant` with the SAME `period` and skips the firm entirely if one exists -- a retried Scheduler call or a second manual run writes nothing. Mock firms are topped up too (no `kind` filter -- staging needs credits to test). A per-firm failure (a malformed plan, a Firestore hiccup) is logged and skipped, never aborting the whole monthly pass. Audited via `append_entry`'s `extra_writes` hook, the SAME extra_writes-delegated shape the sweep route below and the grant/adjust routes above use. Returns per-outcome firm_id lists (`topped_up`/`skipped_at_cap`/`skipped_already_run`/`skipped_no_plan`/`failed`) -- counts derivable from list lengths; the ledger entry and audit row are the durable record. `admin_backend/routes/credit_routes.py` |
 | GET | `/admin/deploys` | List `deployments/{id}` rows, newest first (bd `polyglot-pdf-tb3kp`, E4.3). Optional `?channel=`/`?target=` filters (422 on an unrecognized `target`); `?limit=` (default 50, max 200). Filtered CLIENT-SIDE over a `ts`-ordered, `limit`-capped fetch rather than a second composite index per filter (this collection is low-volume: one row per deploy, not per request). Response rows are an EXPLICIT key allowlist. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
 | POST | `/admin/deploys` | Trigger a Cloud Build for `{target, sha}` (bd `polyglot-pdf-tb3kp`, E4.3). `target` validated against `deploy/targets.py`'s closed `TARGETS`; `sha` validated as exactly 40 lowercase hex characters -- both 422 otherwise. For a target in `GATED_TARGETS` (`backend-demo`, `frontend-demo`), refuses EARLY with 409 when `admin_backend/services/promotion_gate.py`'s `staging_verified()` finds no successful staging deployment for the same target family and sha -- the build's own in-build gate repeats the identical check, so a bash-triggered build cannot bypass it either. Writes `deployments/{id}` (status `queued`, no `build_id` yet) BEFORE calling Cloud Build, audits pending-then-committed (EXTERNAL form -- the mutation is a Cloud Build API call, not a Firestore write), then calls `admin_backend/services/cloud_build.py::run_target()` (`CloudBuildClient.run_build_trigger`, dispatched with `asyncio.to_thread`). On failure, the audit row is marked failed and the deployment row's status is corrected to `failure` with no `build_id` -- the row is never erased, but it can never be mistaken for a build that is actually running. `admin_backend/routes/deploy_routes.py`, `admin_backend/services/cloud_build.py`, `admin_backend/services/promotion_gate.py` |
 | GET | `/admin/deploys/{deploy_id}` | Read one `deployments/{id}` row (bd `polyglot-pdf-tb3kp`, E4.3), the same explicit key allowlist as the list route. 404 for an unknown id. A read, so no audit row. `admin_backend/routes/deploy_routes.py` |
@@ -179,7 +179,7 @@ its own table).
 | POST | `/admin/firms/{firm_id}/credits/grant` | Grant credits (bd `polyglot-pdf-zopqq`). Body `{type, amount, usd_amount?, kit_id?}` -- `type` in `subscription_grant`\|`purchase`\|`promo_grant`; `usd_amount` REQUIRED for the first two and REFUSED otherwise (422), exactly as `append_entry`'s own validation enforces. Grants to `kind=mock` firms are allowed (staging needs credits to test); `firm_kind` is snapshotted onto the entry by `append_entry` itself. Same in-transaction audit form as `adjust`. `admin_backend/routes/credit_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/kind` | Reclassify a firm `mock`<->`live` (bd `polyglot-pdf-zopqq`). Body `{kind, reason}` -- `reason` is REQUIRED (422 if blank); the UI's confirm-twice is a console-side control this route cannot see or enforce. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/firms/{firm_id}/links` | The firm's client links (bd `polyglot-pdf-jmiys`, Track B bead B4), joining `links[_<channel>]` mint records (bd A1) with `link_redemptions[_<channel>]` detail (`opened_at`, `completed_at`, bead ik7e's `spend_usd`/`turns`) by `jti`. `?channel=` REQUIRED (422 if missing/unknown -- the admin service has no channel of its own); `?status=` an optional equality filter, `?employee_id=` optional for a manager/app admin but FORCED to the caller's own uid for an employee actor (bd `polyglot-pdf-scaig`). Gate: `require_app_admin_or_owning_manager_or_employee` (bd `polyglot-pdf-scaig` widened this from the two-actor `require_app_admin_or_owning_manager` -- a FIFTH, route-scoped dependency, NOT a widening of the shared one, since that gate also guards the four `/admin/users` routes where an employee must stay refused) -- a manager or employee reaches only their OWN `firm_id` (404 for any other, the SAME 404 an unknown firm would get -- NOT `resolve_target_firm`'s body-field 403 rule, since `firm_id` here is a URL path segment a manager/employee must name to reach a GET at all; see Surface contract 22); an app admin reaches any. Response rows are an EXPLICIT key allowlist, built by hand rather than `**doc`. A read, so no audit row. `admin_backend/routes/link_routes.py`, `admin_backend/services/admin_auth.py`, `backend/services/firms.py` |
-| PATCH | `/admin/firms/{firm_id}/plan` | Set a firm's plan -- `tier`, `monthly_credits`, `rollover` (bd `polyglot-pdf-0euzk`). Body `{tier, monthly_credits, rollover}`, validated by `backend/services/plans.py::validate_plan` BEFORE any write: an unknown tier (outside the closed `PLAN_TIERS` list, today just `"starter"`) or a non-positive `monthly_credits` is a 422. No confirm-twice (unlike `kind` below) -- a plan change only affects a monthly top-up amount, not minting eligibility, so one write per save is enough. Audited in-transaction, same shape as the other firm PATCH routes. `GET /admin/firms/{firm_id}` and `POST /admin/firms` both now return/write `plan`, defaulting to `plans.DEFAULT_PLAN` (`{tier: "starter", monthly_credits: 35, rollover: false}`) for a firm with none stored yet. `admin_backend/routes/firm_routes.py` |
+| PATCH | `/admin/firms/{firm_id}/plan` | Set a firm's plan -- `tier`, `monthly_credits`, `rollover` (bd `polyglot-pdf-0euzk`). Body `{tier, monthly_credits, rollover}`, validated by `backend/services/plans.py::validate_plan` BEFORE any write: an unknown tier (outside the closed `PLAN_TIERS` list, today just `"starter"`) or a non-positive `monthly_credits` is a 422. No confirm-twice (unlike `kind` below) -- a plan change only affects a monthly top-up amount, not minting eligibility, so one write per save is enough. Audited in-transaction, same shape as the other firm PATCH routes. `GET /admin/firms/{firm_id}` and `POST /admin/firms` both now return/write `plan`, defaulting to `plans.DEFAULT_PLAN` (`{tier: "starter", monthly_credits: 35, rollover: true}` -- flipped from false by bd `polyglot-pdf-hnlj3`, 2026-09-15) for a firm with none stored yet. `admin_backend/routes/firm_routes.py` |
 | PATCH | `/admin/firms/{firm_id}/status` | Set a firm `active`\|`suspended` (bd `polyglot-pdf-zopqq`). Body `{status}`. Audited in-transaction. `admin_backend/routes/firm_routes.py` |
 | GET | `/admin/firms/{firm_id}/usage` | This firm's usage rollup for one month (bd `polyglot-pdf-mpebj`, E3.11a) -- `firms/{firm_id}/usage/{month}` (Surface contract 26), an explicit key allowlist. `?month=YYYY-MM` and `?channel=` are both REQUIRED (422 if missing/malformed). Gate: `require_app_admin_or_owning_manager` -- a manager reaches only their own firm (404 for any other, mirroring bead B4's rule); an app admin reaches any. A missing rollup doc is an EMPTY reading, not a 404 (only a nonexistent `firm_id` 404s). A read, so no audit row. `admin_backend/routes/usage_routes.py` |
 | GET | `/admin/health` | Fans out to one channel's PUBLIC backend `/health` + `/version` over a short-timeout HTTP call, plus this service's own `/version` (bd `polyglot-pdf-mpebj`, E3.11a). `?channel=` REQUIRED. `configured: false` when `BACKEND_URLS_JSON` has no entry for this channel; `reachable: false` (never a 500) when the entry exists but the HTTP calls themselves fail -- `reachable` requires BOTH `/health` and `/version` to succeed. `admin_backend/routes/ops_routes.py` |
@@ -1278,7 +1278,10 @@ change to one side's contract usually needs a matching change on the other.
   `{uid, email}`), `admin_backend/routes/audit_routes.py` (`GET /admin/audit`
   -> `{rows, next_cursor}`), `admin_backend/routes/config_routes.py`
   (`GET /admin/config/{channel}` -> `{channel, values, known_keys,
-  unknown_keys}`; `PUT /admin/config/{channel}` body `{key, value}` ->
+  unknown_keys, schema}` -- `schema` is `{key: {type, default}}` for every
+  known key, derived from `runtime_config.config_schema()` (bd
+  polyglot-pdf-wxcj0) so the console never hand-lists a key's type itself;
+  `PUT /admin/config/{channel}` body `{key, value}` ->
   `{channel, key, before, after, request_id}`). All four gated by
   `require_app_admin` (`admin_backend/services/admin_auth.py`): 401 on a
   missing/invalid token, 403 with the `NO_ADMIN_ACCESS:` prefix on a valid
@@ -2169,10 +2172,10 @@ a deploy script.
   them -- `test_admin_sa_project_role_pin_matches_the_setup_script` subtracts
   that constant out before comparing against `setup-admin-service.sh` alone.
 
-### 26. Session-end usage rollups: `firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (Epic 3 bead E3.4, bd polyglot-pdf-w828m)
+### 26. Session-end usage rollups: `firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}` (Epic 3 bead E3.4, bd polyglot-pdf-w828m; extended by bd polyglot-pdf-he3lt)
 
-**Two entry points, new `backend/services/usage_rollups.py`, write into the
-SAME per-month rollup documents from three call sites.**
+**Three entry points, `backend/services/usage_rollups.py`, write into the
+SAME per-month rollup documents from four call sites.**
 
 - **`record_session_end(firm_id, kit_id, employee_id, language, channel,
   kind, completion_status, cost_usd, now=None)`** -- called from the SAME
@@ -2208,6 +2211,36 @@ SAME per-month rollup documents from three call sites.**
   only on the public backend, which has exactly one channel of its own, so
   the month id resolves through `link_channel()`, same as
   `record_session_end`'s default-resolution sibling.
+- **`record_link_minted(*, firm_id, kit_id, employee_id, channel, now=None)`**
+  (bd polyglot-pdf-he3lt) -- the missing FIRST link-lifecycle event: called
+  from `backend/routes/link_routes.py`'s `mint_link` route right after
+  `_reserve_mint`'s reservation transaction has already committed the
+  debit, the ledger entry, and the `links/{jti}` mint record -- NEVER from
+  inside that transaction, so a rollup write can never slow down or fail
+  the reservation it merely observes. Wrapped in the ROUTE'S OWN
+  try/except at the call site, on top of this function's own
+  never-raises contract (defense in depth, mirroring the
+  `record_session_end` call site's own wrapper in `websocket_routes.py`):
+  an exception raised before this function's internal guard is even
+  reached (or a future edit removing that guard) still cannot fail an
+  otherwise-successful mint. ONE BATCHED update, same "both docs or
+  neither" shape as `record_session_end`: `firms/{firm_id}/usage/
+  {YYYY-MM[_channel]}.links_minted` + `.by_employee.{employee_id}.
+  links_minted`, and `kits/{kit_id}/usage/{YYYY-MM[_channel]}.links_minted`.
+  `by_employee` here keys on the MINTING employee's uid unconditionally --
+  unlike `record_session_end`'s by_employee (staff uid OR link employee_id,
+  caller-resolved), every mint is a staff action by definition, so there is
+  no ambiguity to resolve. `kit_id` re-validates through `_safe_kit_id` even
+  though the route's own caller already checked it against the firm's
+  allowlist (this module assumes nothing about a caller's own validation);
+  an invalid or absent `kit_id` degrades to a firm-only write, never a
+  failure. `employee_id` absent (should not happen -- the route already
+  refuses an unidentified caller with a 403 before reservation) skips only
+  the `by_employee` nesting, not the top-level counter. `admin_backend/
+  routes/usage_routes.py`'s `_FIRM_USAGE_KEYS`/`_KIT_USAGE_KEYS` response
+  allowlists gain `links_minted` so the console read side actually surfaces
+  it (an allowlist omission would silently drop a written field, same
+  reasoning as every other key in that allowlist).
 - **The month DOCUMENT ID is channel-suffixed, not the collection.** Staging
   and demo share one Firestore project (see "Deployment / promotion" in
   CLAUDE.md), and these rollup docs are shared AGGREGATE counters each
@@ -2736,7 +2769,7 @@ exactly one place instead of drifting per caller.
   `record_deployment.target_family()` stripping a trailing `-staging`/`-demo`
   suffix (`backend-staging` and `backend-demo` share the family `backend`;
   `admin-service` has no suffix and is its own family), `triggered_by` is
-  always `"build"` here (contract 34's own `deployments/{id}` producers --
+  always `"build"` here (contract 35's own `deployments/{id}` producers --
   bead 4.3's `POST /admin/deploys` and its Pub/Sub webhook -- carry the
   actor's uid or `"external"` instead, for an admin-triggered or
   bash-triggered build respectively). This is deliberately NOT
@@ -2813,7 +2846,7 @@ bead 4.3's admin route also enforces.**
   TWO real callers, neither able to drift from the other since both call the
   SAME function: the build-side gate here (`scripts/promotion_gate.py`), and
   bead 4.3's `POST /admin/deploys` (`admin_backend/routes/deploy_routes.py`,
-  contract 34's own early, friendly 409 for a `GATED_TARGETS` entry). Bead
+  contract 35's own early, friendly 409 for a `GATED_TARGETS` entry). Bead
   4.4 (bd polyglot-pdf-jub5f) is expected to extend this module further (a
   richer test suite), not replace it.
 - **Build-side caller:** `scripts/promotion_gate.py` -- a thin CLI that
@@ -2971,20 +3004,32 @@ than an imperative ref API, matching the "bump a value, effect re-runs"
 idiom already used throughout this file for `firmId`/`isManager`.
 
 
-### 33. Firm plan + monthly credit top-up (bd polyglot-pdf-0euzk)
+### 33. Firm plan + monthly credit top-up (bd polyglot-pdf-0euzk; rollover
+default flipped True by bd polyglot-pdf-hnlj3, 2026-09-15)
 
 Maintainer pricing decision (2026-09-14): "35 credits per month cap as a
 starting place; leave room for tiered subscription levels with different
 allotments, and pay-as-you-go or overage later." Modeled as DATA on the
 firm plus ONE scheduled top-up route, so a second tier or overage is a new
-row/writer later, never a new code path today.
+row/writer later, never a new code path today. **"CAP" IS NO LONGER THE
+RIGHT WORD FOR monthly_credits** (bd polyglot-pdf-hnlj3, maintainer decision
+2026-09-15: "credits roll over -- no real reason not to"): with rollover
+now the DEFAULT for a new or backfilled firm, `monthly_credits` means "how
+much is added every month" for the common case, not "the most a firm can
+hold" -- `rollover: False` (still settable via the plan editor below) is
+what makes it a cap; the maintainer's original 35-credit NUMBER is
+unchanged, only which behavior it defaults to.
 
 - **`firms/{firm_id}` gains `plan: {tier, monthly_credits, rollover}`.**
   Producer, NEW module `backend/services/plans.py`: `PLAN_TIERS` (a closed
   tuple, today `("starter",)`), `DEFAULT_PLAN` (`{tier: "starter",
-  monthly_credits: 35, rollover: False}` -- the maintainer's own starting
-  numbers) and `validate_plan(plan)` (raises `ValueError` on an unknown
-  tier, a non-positive `monthly_credits`, or a non-bool `rollover`).
+  monthly_credits: 35, rollover: True}` -- the maintainer's own starting
+  numbers, `rollover` flipped True by bd polyglot-pdf-hnlj3 2026-09-15
+  (was False at this bead's own 2026-09-14 launch); the one existing firm
+  at the time, staging-mock, was switched to rollover by hand the same day,
+  ahead of the code change) and `validate_plan(plan)` (raises `ValueError`
+  on an unknown tier, a non-positive `monthly_credits`, or a non-bool
+  `rollover`).
   Consumers: `admin_backend/routes/firm_routes.py`'s `create_firm` (writes
   `dict(DEFAULT_PLAN)` on FIRST CREATE only, alongside the existing
   `balance_credits` 0-init), `_public_firm_view` (falls back to
@@ -3035,8 +3080,22 @@ row/writer later, never a new code path today.
   SEPARATE Cloud Scheduler caller identity
   (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, never the sweep job's own
   `SWEEP_SCHEDULER_SA_EMAIL`) and a SEPARATE audience (this route's own
-  path). For every `firms/{firm_id}` with `status == active` and a stored
-  `plan`, computes `period = "YYYY-MM"` (UTC, from the request time) and:
+  path). **THE CLOUD SCHEDULER TRIGGER IS INTERIM** (bd
+  polyglot-pdf-hnlj3, 2026-09-15): the per-firm grant logic is factored
+  into its own function, `topup_firm(db, firm_id, firm, *, period,
+  actor=None)`, precisely so Epic 5's Stripe webhook (invoice.paid /
+  subscription renewal) can call the SAME helper for the one firm a
+  payment event names, instead of waiting for the monthly cron pass --
+  `actor` defaults to this route's own `MONTHLY_TOPUP_ACTOR` so this
+  route's call site needed no change; a webhook caller will pass its own
+  actor string. This route (`run_monthly_topup` /
+  `_run_monthly_topup`) is now just the Scheduler-specific LOOP over
+  every active firm, calling `topup_firm` once per firm -- no behavior
+  change from the extraction itself, pinned by the existing
+  `test_monthly_topup.py` suite (unchanged in outcome) plus a new test
+  seeding `plans.DEFAULT_PLAN` directly. For every `firms/{firm_id}`
+  with `status == active` and a stored `plan`, `topup_firm` computes
+  `period = "YYYY-MM"` (UTC, from the request time) and:
   1. Queries `firms/{firm_id}/ledger` for an existing `subscription_grant`
      entry with THAT `period` -- if found, skips the firm entirely
      (`skipped_already_run`). This is the WHOLE idempotency mechanism: a
@@ -3092,7 +3151,86 @@ row/writer later, never a new code path today.
   `FirmPlan`, `PLAN_TIERS`, `DEFAULT_PLAN`, `setFirmPlan`, and `plan:
   FirmPlan` on both `FirmRow` and `FirmDetail`.
 
-### 34. Deploy trigger + build-status webhook: the console-side writers of `deployments/{id}` (Epic 4 bead E4.3, bd polyglot-pdf-tb3kp)
+### 34. Actor/employee email labels: write-side stamp + read-side batched resolution (bd polyglot-pdf-cpsi0)
+
+Maintainer feedback (2026-09-15) after the first live mint on staging: the
+firm overview's ledger showed `actor` as a raw Firebase uid, "not really
+useful as is -- show which account produced the link." Two halves, write
+and read, because most rows that exist TODAY were written before this bead
+and carry no email at all.
+
+- **WRITE SIDE: `credit_ledger.append_entry()` gains a new OPTIONAL
+  `actor_email: Optional[str] = None` parameter and entry field**, joining
+  `ENTRY_FIELDS` the same way `period` (Surface contract 33) did -- stored
+  alongside `actor` (the uid), never instead of it. `actor` remains the
+  ledger's one attribution key for every existing consumer (audit, the
+  balance-invariant replay, every query); `actor_email` is purely a
+  human-readable label a caller may attach when it already knows one at
+  write time. Two producers pass it: `backend/routes/link_routes.py`'s
+  mint reservation (`_reserve_mint`, from the verified staff token's
+  `email` claim, `user.get("email")`) and `admin_backend/routes/
+  credit_routes.py`'s `_run_append_entry` (from `AdminActor.email`, the
+  SAME field its audit-row call already passed to `audit_log.
+  record_in_transaction` -- Surface contract 15). Every SYSTEM actor
+  (`"system:<origin>"` -- the sweep, the monthly top-up, the reconcile
+  pass) passes none; there is no email to attach to a scheduled job.
+  **NEVER REACHES THE `ledger_export` LOG LINE** (docs/standards/
+  hipaa-pii-policy.md: uids only in logs) -- `LEDGER_EXPORT_FIELDS` has no
+  email slot, and the `_log.info` call in `append_entry()` never passes
+  `actor_email`; `test_ledger_export_line_never_carries_an_at_sign` pins
+  this by asserting no `"@"` anywhere in the emitted payload's values.
+- **The SAME field, one name over, on the mint record: `links_store.
+  build_mint_record()` gains `employee_email: Optional[str] = None`**,
+  joining the mint-record schema (`backend/tests/unit/test_store_shapes.py`
+  `LINKS_MINT_RECORD_ALLOWED_KEYS`; `scripts/audit/inventory_stores.py`'s
+  `links`/`links_staging` allowlists). `backend/routes/link_routes.py`'s
+  `mint_link` route reads the SAME verified-token email claim ONCE and
+  threads it to BOTH the ledger call (`actor_email`) and the mint-record
+  builder (`employee_email`) -- one read, two writes that never disagree
+  about who minted.
+- **READ SIDE, for every row written before this bead (uid, no stored
+  email): NEW `admin_backend/services/identity_labels.py::
+  labels_for_uids(uids)`.** ONE BATCHED `firebase_admin.auth.get_users()`
+  call per request (never one call per uid -- a caller collects every
+  DISTINCT uid a page's rows need resolved first), backed by a per-uid,
+  per-process TTL cache (`TTL_SECONDS = 600`, longer than
+  `runtime_config`'s 45s -- see Surface contract 15's neighbor -- since a
+  staff email changes far less often than a config flag). An unknown or
+  deleted uid, or a store failure (Auth unreachable, `get_users` itself
+  raises), falls back to the UID ITSELF for every uid not already
+  resolved -- fail-soft, so a page always renders something, never a
+  blank cell or a 500. `label_for_actor(actor, actor_email, labels)` is
+  the ONE place the three-way precedence is decided (a row's own stored
+  email wins; the batch map is the fallback for a legacy row; the raw
+  actor/uid is the last resort), shared by every consumer below so they
+  cannot independently drift on which value wins.
+- **Consumers, both existing GET routes, unchanged surface otherwise:**
+  `admin_backend/routes/firm_routes.py`'s `_do_get_firm` (Surface contract
+  18's ledger-read half) resolves every distinct `actor` uid on the
+  returned ledger page through ONE `labels_for_uids` call and adds
+  `actor_label` to each row (the uid `actor` field is UNCHANGED -- an
+  additional field, never a replacement); `admin_backend/routes/
+  link_routes.py`'s `_do_list_links` (Surface contract 22) does the same
+  over `employee_id`, adding `employee_label` to `_ALLOWLISTED_KEYS` the
+  same by-hand way every other key joined that allowlist. Both routes read
+  labels ONLY, never write one back -- resolving a legacy row's label does
+  not backfill `actor_email`/`employee_email` onto the stored document.
+- **Console:** `admin-console/src/pages/FirmDetailPage.tsx`'s ledger table
+  renders `actor_label` (prettified client-side for a `"system:<origin>"`
+  string into `"system: <origin>"` with underscores turned to spaces --
+  display-only; the backend never invents a label for a system actor) with
+  the raw uid as a `title` tooltip; its links table does the same for
+  `employee_label`. `frontend/src/console/LinkHistoryPage.tsx` (Surface
+  contract 27) gains a MANAGER-ONLY Employee column (an employee's own
+  view already scopes to just their own links, so repeating their own
+  label on every row adds nothing) showing `employee_label` with the same
+  uid-as-tooltip convention. `adminApi.ts`'s `LedgerEntry.actor_label` and
+  `LinkRow.employee_label` are the new typed fields; both are non-optional
+  strings from the backend's own guarantee (`label_for_actor` always
+  returns something for a non-null actor) except `employee_label`, which
+  is `string | null` to match a null `employee_id`.
+
+### 35. Deploy trigger + build-status webhook: the console-side writers of `deployments/{id}` (Epic 4 bead E4.3, bd polyglot-pdf-tb3kp)
 
 Contract 31a already covers `deployments/{id}` as the BUILD's own success
 record (`scripts/record_deployment.py`, written by the last step of every

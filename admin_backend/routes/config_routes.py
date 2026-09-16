@@ -118,6 +118,12 @@ async def get_channel_config(
     broken setting invisible on the one screen meant to diagnose it.
     `unknown_keys` names entries no backend reads, for the same reason.
 
+    `schema` is {key: {type, default}} for every known key (bd
+    polyglot-pdf-wxcj0), from runtime_config.config_schema() -- the console's
+    ONLY source for a key's type (bool/int/float), so it renders a select for
+    a bool key and a number input for a numeric one without ever hand-listing
+    key types itself (CLAUDE.md scar #8).
+
     A READ, so it writes no audit row. The log records MUTATIONS; auditing
     reads would bury them.
     """
@@ -136,6 +142,12 @@ async def get_channel_config(
         "known_keys": sorted(runtime_config.RUNTIME_CONFIG_KEYS),
         "unknown_keys": sorted(
             k for k in doc if k not in runtime_config.RUNTIME_CONFIG_KEYS),
+        # {key: {type, default}} for every known key (bd polyglot-pdf-wxcj0)
+        # -- derived from runtime_config.config_schema(), never a second
+        # hand-typed list of key types (CLAUDE.md scar #8), so the console
+        # renders a bool key as a select and a numeric key as a number input
+        # without this route ever declaring a type of its own.
+        "schema": runtime_config.config_schema(),
     }
 
 

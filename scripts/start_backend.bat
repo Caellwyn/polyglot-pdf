@@ -49,7 +49,7 @@ REM Check if requirements are installed
 python -c "import fastapi" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo Installing dependencies...
-    pip install -r backend\requirements.txt
+    pip install -r backend\requirements-dev.txt
 )
 
 REM Start backend server

@@ -36,6 +36,15 @@ def _project_python() -> str:
         common = subprocess.run(
             ["git", "-C", here, "rev-parse", "--path-format=absolute",
              "--git-common-dir"],
+            # Inlined, NOT the module-level windowless_creationflags():
+            # this runs at IMPORT time (_require_project_python() below),
+            # before that helper is defined, and `subprocess` here is
+            # function-local. Calling the helper raised NameError, which
+            # the except-Exception below silently swallowed -- skipping the
+            # git resolution and reintroducing the exact worktree bug this
+            # function's docstring exists to describe (bd polyglot-pdf-rdftu).
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            if sys.platform == "win32" else 0,
             capture_output=True, text=True, timeout=10)
         if common.returncode == 0 and common.stdout.strip():
             root = os.path.dirname(common.stdout.strip())
@@ -81,6 +90,7 @@ _require_project_python()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.services.auth import VOICE_DEV_CLAIM  # noqa: E402
+
 
 
 def _init_firebase():

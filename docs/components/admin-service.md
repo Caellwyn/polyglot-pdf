@@ -1,7 +1,5 @@
 # Admin service + console
 
-**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/routes/deploy_routes.py admin_backend/routes/deploy_webhook.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py admin_backend/services/cloud_build.py admin_backend/services/promotion_gate.py deploy/targets.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
-
 *Last updated: 2026-09-15 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
 route, Pub/Sub build-status webhook, and the `deployments` collection.
 POST/GET `/admin/deploys` + GET `/admin/deploys/{deploy_id}`
@@ -18,7 +16,7 @@ now shared by this route and `tests/test_cloudbuild_yaml.py`, replacing what
 was three independent copies of the target list (cloudbuild.yaml's own
 comment, `scripts/setup-cloud-build.sh`'s `TARGETS` array, and this test
 file). For a target in `deploy/targets.py::GATED_TARGETS` (`backend-demo`,
-`frontend-demo`, `admin-service` -- a hand-listed subset, deliberately NOT
+`frontend-demo` -- a hand-listed subset, deliberately NOT
 every "demo channel" target: `form-kits`/`firestore-rules`/`editor` have no
 staging counterpart to gate against), the route calls
 `admin_backend/services/promotion_gate.py::staging_verified()` -- this
@@ -60,6 +58,108 @@ commit as `cloud_build.py`'s first real call to it (`DEFERRED_ROLES` is now
 EMPTY, kept as a set rather than deleted for the next epic that defers a
 role). See [technical_guide.md](../technical_guide.md)'s Admin service
 routes table and Surface contract 34 for the full four-route wire contract.)*
+
+**Tracks:** admin_backend/main.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py admin_backend/routes/user_routes.py admin_backend/routes/firm_routes.py admin_backend/routes/credit_routes.py admin_backend/routes/link_routes.py admin_backend/routes/sweep_routes.py admin_backend/routes/kit_routes.py admin_backend/routes/usage_routes.py admin_backend/routes/report_routes.py admin_backend/routes/alert_routes.py admin_backend/routes/ops_routes.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/identity_labels.py admin_backend/services/user_admin.py admin_backend/services/bigquery_reports.py admin_backend/services/error_stats.py scripts/bootstrap_admin_user.py scripts/setup-admin-service.sh deploy-admin.sh deploy-admin-console.sh admin-console/
+
+*Last updated: 2026-09-16 (bd `polyglot-pdf-he3lt`: maintainer observation
+after the first live mint on staging -- "usage was not updated." A mint
+touched no rollup document, so the Usage page stayed on "no data" until a
+client opened the link and a session later completed. NEW
+`backend/services/usage_rollups.py::record_link_minted(firm_id, kit_id,
+employee_id, channel, now)`, called from `backend/routes/link_routes.py`'s
+`mint_link` route right after `_reserve_mint`'s transaction commits --
+NEVER inside it, and wrapped in its own try/except at the call site (on top
+of the function's own never-raises contract) so a rollup failure can never
+fail an otherwise-successful mint. Writes ONE BATCHED update, same "both
+docs or neither" shape as `record_session_end`: `firms/{firm_id}/usage/
+{month}.links_minted` + `.by_employee.{employee_id}.links_minted`, and
+`kits/{kit_id}/usage/{month}.links_minted`. `admin_backend/routes/
+usage_routes.py`'s `_FIRM_USAGE_KEYS`/`_KIT_USAGE_KEYS` allowlists gain
+`links_minted` so the new counter actually reaches the console (an
+allowlist omission would have silently dropped it). Console:
+`UsagePage.tsx` renders `links_minted` in the summary stats row and as a
+fourth column on the by-employee breakdown table only (by_kit/by_language
+never carry it). Also on that page: a missing rollup doc now checks a
+SECOND signal before claiming "no data" -- a best-effort `getFirm(firm_id)`
+read (the same route `FirmDetailPage.tsx` already uses) checking whether
+any of the firm's ledger rows fall in the selected month (UTC, matching
+`_month_key`'s own convention); if so, the page shows "no sessions yet this
+month" instead, since a mint's ledger entry commits synchronously in the
+same transaction as the debit even on the rare chance its own rollup write
+did not land. A failed or empty ledger check silently degrades to the
+plain "no data" message -- never a wrong claim of activity, and never a
+second error banner.)*
+
+*Last updated: 2026-09-15 (bd `polyglot-pdf-cpsi0`: maintainer feedback after
+the first live mint on staging -- the firm overview's ledger showed `actor`
+as a raw Firebase uid, "not really useful as is." NEW `admin_backend/
+services/identity_labels.py::labels_for_uids(uids)` resolves a batch of
+uids to human-readable labels in ONE `firebase_admin.auth.get_users()` call
+per request (TTL-cached per uid, fail-soft to the uid itself on an unknown
+account or a store failure), and `label_for_actor(actor, actor_email,
+labels)` is the one place the precedence between a row's own stored email,
+the batch-resolved map, and the raw uid is decided. `GET /admin/firms/
+{firm_id}` (Surface contract 18) and `GET /admin/firms/{firm_id}/links`
+(Surface contract 22) each resolve their page's distinct uids through ONE
+such call and add `actor_label` / `employee_label` to their response rows
+-- the uid itself stays on the row unchanged. The WRITE-side half (`credit_
+ledger.append_entry`'s new `actor_email` kwarg, `links_store.
+build_mint_record`'s new `employee_email`, and the two admin-service
+writers -- grant/adjust via `credit_routes.py`'s `_run_append_entry` --
+that now pass the operator's verified-token email alongside the uid) lives
+in `backend/services/`, not this service, but is the write side of the
+SAME feature; see Surface contract 34 in `docs/technical_guide.md` for the
+full write+read shape. Console: `FirmDetailPage.tsx`'s ledger and links
+tables render the label with the uid as a `title` tooltip, prettifying a
+`"system:<origin>"` label into `"system: <origin>"` client-side; `frontend/
+src/console/LinkHistoryPage.tsx` (Surface contract 27) gains a manager-only
+Employee column doing the same. No new route, IAM grant, or env var --
+`admin-backend-sa` already holds `roles/firebaseauth.admin` from bd
+polyglot-pdf-dmjl5's staff-account work, which is what `get_users()` needs.)*
+
+*Last updated: 2026-09-15 (bd `polyglot-pdf-hnlj3`: maintainer decision
+2026-09-15, "credits roll over -- no real reason not to."
+`backend/services/plans.py`'s `DEFAULT_PLAN.rollover` flips from False
+to True -- a firm created or backfilled today now ACCUMULATES its
+monthly credit allotment by default rather than being topped up TO a
+cap; the one existing firm, staging-mock, was switched to rollover by
+hand the same day, ahead of this code change. `rollover: False` is
+still a valid, settable value on the plan editor (`PATCH
+/admin/firms/{firm_id}/plan`) for a firm that should keep the
+use-it-or-lose-it cap behavior -- only the DEFAULT changed. The
+per-firm top-up logic inside `POST /admin/credits/monthly-topup`
+(`admin_backend/routes/credit_routes.py`) is factored out of its
+Scheduler-driven loop into its own function, `topup_firm(db, firm_id,
+firm, *, period, actor=None)`, with NO behavior change beyond the
+extraction -- this is what lets Epic 5's later Stripe webhook
+(invoice.paid / subscription renewal) call the same per-firm helper
+for one firm the moment its payment clears, instead of only running
+once a month; the route's own docstring now states the Cloud
+Scheduler trigger is INTERIM pending that webhook. Since rollover is
+now the default, `technical_guide.md`'s Surface contract 33 gains a
+note that "cap" describes only the non-default `rollover: False`
+case; the maintainer's own quoted 2026-09-14 words ("35 credits per
+month cap as a starting place") are left as a direct quotation, not
+edited.)*
+
+*Last updated: 2026-09-15. See [2026-09-15-bd-c92sa-admin-import-guards.md](../journal/entries/2026-09-15-bd-c92sa-admin-import-guards.md) for closeout details.*
+
+*Last updated: 2026-09-15 (bd polyglot-pdf-uaxt5: the credit-adjust `reason` is bounded to 500 characters and no longer logged -- the `admin_credits_adjusted` line carries ids and the amount only; every route that writes `admin_audit_log` now has an exact before/after key pin in `test_audit_log_shapes.py`; `scripts/audit/inventory_stores.py` is the read-only store inventory.)*
+
+*Last updated: 2026-09-15 (bd `polyglot-pdf-wxcj0`: maintainer feedback after
+first console sign-in -- "in config, true/false flags should be select
+fields, not text fields." `GET /admin/config/{channel}` gains a `schema`
+field, `{key: {type, default}}` for every `RUNTIME_CONFIG_KEYS` key, derived
+from a NEW `backend/services/runtime_config.py::KEY_TYPES` dict (the single
+place a key's type -- `bool`/`int`/`float` -- is spelled out, CLAUDE.md scar
+#8) via a new `config_schema()` helper; `default` is the SAME live
+`_legacy_env_default()` read a real fallback uses, not a frozen constant.
+`ConfigEditorPage.tsx` consumes `schema` to render a `<select>` for a bool
+key and a `step`-aware number input for an int/float key, sending the PUT a
+typed JSON value instead of the raw draft string; an unrecognized type keeps
+the original text input. No new route, IAM grant, or Firestore shape --
+`app_config/{channel}`'s stored values and `coerce_value`'s validation are
+unchanged.)*
 
 *Last updated: 2026-09-14 (bd `polyglot-pdf-362nk`: Epic 3 follow-up (b) to the maintainer's 2026-09-14 alerts decision -- FirmDetailPage.tsx gains an Alerts section over the SAME operator-wide `GET /admin/alerts?firm_id=<id>` route (bd `polyglot-pdf-mpebj`, E3.11a; NOT the separate firm-console route bd `polyglot-pdf-62o4d` added), listing this firm's alerts unacknowledged-first (a client-side stable sort -- the route's own ordering is newest-ts-first with no acknowledged-aware ordering) and Acknowledge (`PATCH /admin/alerts/{id}/acknowledge`, exactly once per click, re-reading on success only). Both this section and AlertsPage.tsx (E3.11b) now render through ONE new shared row component, `admin-console/src/components/AlertRow.tsx`, extracted byte-for-byte from AlertsPage.tsx's own inline row markup so the kind/level/plain-text rendering cannot drift into two copies; `showFirm` toggles the Firm column AlertsPage needs (cross-firm view) and FirmDetailPage does not (already scoped to one firm). A failed alerts fetch on FirmDetailPage sets its OWN isolated error state, never the page's shared `error`/`firm` state -- a fetch error there never blanks the profile/plan/ledger/links already rendered above it. No new route, IAM grant, or `adminApi.ts` function -- `listAlerts`/`acknowledgeAlert` already existed from E3.11b.)*
 
@@ -172,7 +272,13 @@ requested channel's PUBLIC backend `/health` + `/version` over a
 short-timeout HTTP call, plus this service's own `/version` (an
 in-process read, not a second hop); `reachable` is true only when BOTH
 calls succeed, and one channel's outage yields a PARTIAL result
-(`reachable: false`), never a 500. The per-channel backend base URLs come
+(`reachable: false`), never a 500 -- including a missing `requests` module
+itself: both `_fetch_backend_probe` (health) and `error_stats._fetch_group_
+stats` (errors) guard their lazy `import requests` the way `bigquery_
+reports.py` already guards `from google.cloud import bigquery`, so an
+ImportError degrades to the same documented shape (`reachable: false` /
+503) instead of an uncaught 500 (bd polyglot-pdf-c92sa). The per-channel
+backend base URLs come
 from a new admin-service-only env var, `BACKEND_URLS_JSON` -- despite the
 name, its WIRE FORMAT is `"channel=url;channel=url"`, not literal JSON:
 `deploy-admin.sh` builds it via two `gcloud run services describe` calls
@@ -437,7 +543,7 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/whoami` | GET | `require_app_admin` | `{uid, email}` for the calling account. The FIRST business route (bd polyglot-pdf-7w17m); the console's sign-in gate calls it to confirm a signed-in Firebase account actually holds admin access. |
 | `/admin/config/{channel}` | GET | `require_app_admin` | The channel's stored `app_config/{channel}` doc, raw (uncoerced), plus `known_keys`/`unknown_keys`. A read; writes no audit row. |
 | `/admin/config/{channel}` | PUT | `require_app_admin` | Set ONE runtime-config key for one channel (`{key, value}` body), validated against `runtime_config.RUNTIME_CONFIG_KEYS` and `coerce_value` before any write, then written and audited in ONE Firestore transaction. See [config-deployment.md](config-deployment.md). |
-| `/admin/audit` | GET | `require_app_admin` | One page of `admin_audit_log` rows, newest first, cursor-paginated (`{rows, next_cursor}`); filterable by `action`/`actor_uid`/`channel`/`state`. |
+| `/admin/audit` | GET | `require_app_admin` | One page of `admin_audit_log` rows, newest first, cursor-paginated (`{rows, next_cursor}`); filterable by `action`/`actor_uid`/`channel`/`state`. A Firestore `FAILED_PRECONDITION` (most often a missing composite index) or `INVALID_ARGUMENT` maps to 400 with an `AUDIT_QUERY_ERROR:` detail prefix carrying the underlying message; any OTHER Firestore failure still maps to 503 "audit store unavailable" -- the distinction exists because the two call for opposite operator actions (bd polyglot-pdf-xdbqm). |
 | `/admin/users` | POST | `require_app_admin_or_owning_manager` | Create a staff account (bd polyglot-pdf-dmjl5). Body `{email, firm_role, firm_id?, display_name?}`. Creates the Firebase account with an unguessable random password nobody sees, stamps ONLY `firm_id` + `firm_role` (merged over existing claims), and returns a password-**reset link** for the console to display -- no outbound email in this epic. 409 on a duplicate address, 422 on a bad role or firm slug. Audited pending-then-committed. |
 | `/admin/users/{uid}/disable` | PATCH | `require_app_admin_or_owning_manager` | Disable or re-enable a staff account (`{disabled, firm_id?}`). An explicit value, not a toggle, so a retry is idempotent. Claims are untouched -- disabling is not deleting, and the account keeps its audit history. 404 for a uid outside the resolved firm, the SAME 404 as a uid that does not exist. |
 | `/admin/users/{uid}/role` | PATCH | `require_app_admin_or_owning_manager` | Move an account between `manager` and `employee` (`{firm_role, firm_id?}`), merging over every other claim. Same 404 scoping rule as disable. |
@@ -449,7 +555,7 @@ exception (unauthenticated liveness/identity, matching the public backend's
 | `/admin/firms/{firm_id}/allowed_kits` | PATCH | `require_app_admin` | Replace the private-kit allowlist (`{allowed_kits}`, full replace). Audited in-transaction. |
 | `/admin/firms/{firm_id}/kind` | PATCH | `require_app_admin` | Reclassify `mock`<->`live` (`{kind, reason}`) -- `reason` REQUIRED; the confirm-twice UI control is the console's job, not this route's. Audited in-transaction. |
 | `/admin/firms/{firm_id}/credits/grant` | POST | `require_app_admin` | Grant credits (`{type, amount, usd_amount?, kit_id?}`; `type` in `subscription_grant`\|`purchase`\|`promo_grant`, `usd_amount` required for the first two and refused otherwise). Calls `backend/services/credit_ledger.py::append_entry` -- the ONE writer of a firm's balance. Grants to `kind=mock` firms are allowed. Audited via `append_entry`'s `extra_writes` hook, joined to its own transaction. |
-| `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED, `amount` may be either sign). Same writer and audit form as `grant`. |
+| `/admin/firms/{firm_id}/credits/adjust` | POST | `require_app_admin` | The operator's signed adjustment (`{amount, reason}`; `reason` REQUIRED and at most 500 characters -- it is operator free text, so it lands in the ledger entry and the audit row but NEVER in the `admin_credits_adjusted` log line, which carries ids and the amount only; `amount` may be either sign). Same writer and audit form as `grant`. |
 | `/admin/firms/{firm_id}/links` | GET | `require_app_admin_or_owning_manager_or_employee` | The firm's links (bd polyglot-pdf-jmiys, Track B bead B4; gate widened to a firm EMPLOYEE by bd polyglot-pdf-scaig), joining `links[_<channel>]` mint records with `link_redemptions[_<channel>]` detail. `?channel=` REQUIRED (422 if missing/unknown); `?status=` an optional equality filter; `?employee_id=` is an optional filter for a manager/app admin but is FORCED to the caller's own uid (from the verified token) for an employee actor, overriding whatever the query names. A manager or employee reaches only their own firm (404 for any other `firm_id`); an app admin reaches any. Response rows are an explicit key allowlist. A read, so no audit row. |
 | `/admin/links/{jti}/revoke` | POST | `require_app_admin_or_owning_manager` | Revoke a minted link (bd polyglot-pdf-jmiys). `?channel=` REQUIRED. Sets `status=revoked` with `revoked_by`/`revoked_at` in one transaction with an in-transaction audit row; only a `minted` link may be revoked (409 otherwise, naming the current status). A manager may revoke only a jti belonging to their own firm (404 otherwise, same as an unknown jti). |
 | `/admin/links/sweep-expired` | POST | `require_google_oidc` | The hourly expired-link refund sweep (bd polyglot-pdf-8vgfh). Optional `?channel=` sweeps one channel (404 on an unknown value); omitted, sweeps every `KNOWN_CHANNELS` channel. Per channel, queries `links[_<channel>]` for `status == minted AND open_deadline < now` and calls bead A5's `credit_ledger.refund_expired_link()` once per hit -- see Surface contract 18 in [technical_guide.md](../technical_guide.md) for that helper. Returns counts only (`{results, total_refunded, total_skipped}`); the ledger entry and the extra_writes-delegated audit row (joined via the same `_EXTRA_WRITES_TRANSACTION_OPENERS` shape as the credit routes above) are the durable record. |
@@ -824,7 +930,18 @@ one.
   console's own build SHA), Audit log (`components/AuditLogPage.tsx` --
   lists/filters `GET /admin/audit`), Runtime config
   (`components/ConfigEditorPage.tsx` -- reads/writes `GET`/`PUT
-  /admin/config/{channel}`), Users (`pages/UsersPage.tsx`, bd
+  /admin/config/{channel}`; SCHEMA-DRIVEN controls, bd polyglot-pdf-wxcj0:
+  the GET response's `schema` map, `{key: {type, default}}` derived
+  server-side from `backend/services/runtime_config.py`'s new `KEY_TYPES`
+  dict via its `config_schema()` helper, is the ONLY thing this page
+  consults to pick a control -- never a key-name pattern or a second
+  hand-typed list (CLAUDE.md scar #8). A `bool` key renders a `<select>`
+  (true/false, plus an "unset -- use the fallback" placeholder option); an
+  `int`/`float` key renders a number input (`step="1"` or `step="any"`);
+  any other/unrecognized type falls back to the original text input. The PUT
+  body always sends a TYPED JSON value -- a real boolean or JS number, never
+  the string `"true"` -- so `runtime_config.coerce_value` on the server sees
+  the type it expects), Users (`pages/UsersPage.tsx`, bd
   polyglot-pdf-z4y91 -- the FIRST page under `pages/` rather than
   `components/`: it drives four routes and two mutations with a re-read
   each, past the point a single-file "page" component was the more natural

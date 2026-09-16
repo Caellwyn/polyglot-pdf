@@ -49,7 +49,7 @@ fi
 # Check if requirements are installed
 if ! python -c "import fastapi" 2>/dev/null; then
     echo "Installing dependencies..."
-    pip install -r backend/requirements.txt
+    pip install -r backend/requirements-dev.txt
 fi
 
 # Start backend server

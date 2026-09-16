@@ -89,22 +89,31 @@ _OPS = {
 
 
 class _Query:
-    """Supports the ONE query shape credit_ledger.reconcile_expired_for_firm
-    issues: chained equality/less-than .where() filters, no order_by/limit
-    (that combination belongs to read_entries, handled separately above).
+    """Supports the query shapes credit_ledger issues against a firm's
+    ledger: reconcile_expired_for_firm's chained equality/less-than
+    .where() filters (no order_by/limit), and read_recent_entries'
+    order_by(..., direction=DESCENDING).limit(n) (bd polyglot-pdf-y1t68) --
+    tracked with a real .limit() and a query_count so a test can assert
+    read_recent_entries streamed at most `limit + 1` documents regardless of
+    how many the firm actually has.
     """
 
-    def __init__(self, store, path, order_field=None, filters=None):
+    def __init__(self, store, path, order_field=None, direction="ASCENDING",
+                 filters=None, limit=None):
         self._store = store
         self._path = path
         self._order = order_field
+        self._direction = direction
         self._filters = list(filters or [])
+        self._limit = limit
 
     def order_by(self, field, direction="ASCENDING"):
-        return _Query(self._store, self._path, field, self._filters)
+        return _Query(self._store, self._path, field, direction,
+                      self._filters, self._limit)
 
     def limit(self, n):
-        return self  # unused by this file's routes; read_entries takes None
+        return _Query(self._store, self._path, self._order,
+                      self._direction, self._filters, n)
 
     def where(self, *args, filter=None):
         if filter is not None:
@@ -113,8 +122,8 @@ class _Query:
         else:
             field, op, value = args
         return _Query(
-            self._store, self._path, self._order,
-            self._filters + [(field, op, value)])
+            self._store, self._path, self._order, self._direction,
+            self._filters + [(field, op, value)], self._limit)
 
     def stream(self):
         rows = [
@@ -125,7 +134,11 @@ class _Query:
             fn = _OPS[op]
             rows = [(p, d) for p, d in rows if fn(d.get(field), value)]
         if self._order:
-            rows.sort(key=lambda kv: kv[1].get(self._order))
+            rows.sort(key=lambda kv: kv[1].get(self._order),
+                     reverse=self._direction == "DESCENDING")
+        if self._limit is not None:
+            rows = rows[:self._limit]
+        self._store.stream_counts.append(len(rows))
         return [_Snap(path, data) for path, data in rows]
 
 
@@ -140,8 +153,8 @@ class _Collection:
             doc_id = "auto{}".format(self._store.auto_id_counter)
         return _DocRef(self._store, self._path + (doc_id,))
 
-    def order_by(self, field):
-        return _Query(self._store, self._path).order_by(field)
+    def order_by(self, field, direction="ASCENDING"):
+        return _Query(self._store, self._path).order_by(field, direction)
 
     def where(self, *args, filter=None):
         return _Query(self._store, self._path).where(*args, filter=filter)
@@ -174,6 +187,10 @@ class _FakeDb:
         self.read_error = None
         self.audit_write_error = None
         self.auto_id_counter = 0
+        # Documents streamed per query.stream() call, in call order -- lets a
+        # test assert read_recent_entries never reads more than limit + 1
+        # docs (bd polyglot-pdf-y1t68), regardless of the firm's real count.
+        self.stream_counts: list[int] = []
 
     def collection(self, name):
         return _Collection(self, (name,))
@@ -220,6 +237,12 @@ def fake_db(monkeypatch):
     import firebase_admin
     monkeypatch.setattr(firebase_admin, "firestore", _FakeFirestoreModule(),
                         raising=False)
+    # bd polyglot-pdf-cpsi0: identity_labels.labels_for_uids caches by uid
+    # across the whole process -- clear before each test so a fail-soft
+    # "uid as its own label" outcome from one test cannot leak into another
+    # that reuses the same uid.
+    import admin_backend.services.identity_labels as identity_labels
+    identity_labels.clear_cache()
     return db
 
 
@@ -443,6 +466,163 @@ def test_get_firm_returns_profile_balance_and_ledger(client, fake_db):
     assert len(body["ledger"]) == 1
     assert body["ledger"][0]["type"] == "promo_grant"
     assert body["ledger_truncated"] is False
+
+
+def test_get_firm_ledger_row_prefers_its_own_stored_actor_email(
+        client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the no-lookup-needed half: a row written AFTER bd
+    polyglot-pdf-cpsi0 already carries actor_email -- actor_label must use
+    it directly, with NO Auth call at all (a real Auth call from this test
+    would fail against the fake firebase_admin app, which would surface as
+    an identity_labels_lookup_failed log line, not a wrong label -- so this
+    test also proves no such call is attempted).
+
+    Mutation: swap label_for_actor's precedence in firm_routes.py's
+    _do_get_firm to prefer `labels` over the row's own actor_email -- red
+    (the label would fall back to the uid instead)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "mint_debit", "amount": -1, "usd_amount": None,
+        "firm_kind": "live", "channel": "demo", "balance_after": 99,
+        "actor": "uid-staff-1", "actor_email": "staffer@example.com",
+        "reason": None, "link_jti": "jti-1", "kit_id": "w7", "ts": 1.0,
+    }
+
+    def _boom(uids):
+        raise AssertionError(
+            "labels_for_uids must not be called for a uid whose row "
+            "already carries actor_email")
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(identity_labels, "labels_for_uids",
+                        lambda uids: {} if not uids else _boom(uids))
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor"] == "uid-staff-1"
+    assert row["actor_label"] == "staffer@example.com"
+
+
+def test_get_firm_ledger_row_never_leaks_raw_actor_email(client, fake_db):
+    """bd polyglot-pdf-cpsi0 fresh-eyes finding: _do_get_firm's ledger rows
+    are built by allowlisting to credit_ledger.ENTRY_FIELDS (minus
+    actor_email) plus the resolved actor_label -- NOT a bare **row spread --
+    so the raw actor_email a row stores never itself rides onto the wire,
+    mirroring link_routes.py's hand-built _public_link_view allowlist for
+    the identical employee_email/employee_label pair. actor_label is the
+    ONLY actor-identifying field this response exposes.
+
+    Mutation: revert to `{**row, "actor_label": ...}` in _do_get_firm -- red
+    (actor_email would appear in the response verbatim)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "mint_debit", "amount": -1, "usd_amount": None,
+        "firm_kind": "live", "channel": "demo", "balance_after": 99,
+        "actor": "uid-staff-1", "actor_email": "staffer@example.com",
+        "reason": None, "link_jti": "jti-1", "kit_id": "w7", "ts": 1.0,
+    }
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert "actor_email" not in row
+    assert row["actor_label"] == "staffer@example.com"
+
+
+def test_get_firm_ledger_row_falls_back_to_the_batch_lookup(
+        client, fake_db, monkeypatch):
+    """EXIT CRITERION 2, the legacy-row half: a row written BEFORE this
+    bead has no actor_email -- actor_label resolves through the batched
+    identity_labels.labels_for_uids lookup instead.
+
+    Mutation: never call labels_for_uids in _do_get_firm (leave actor_label
+    as the raw uid always) -- red (the label would be the uid, not the
+    resolved email)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "promo_grant", "amount": 10, "usd_amount": None,
+        "firm_kind": "live", "channel": None, "balance_after": 110,
+        "actor": "uid-legacy-1", "reason": None, "link_jti": None,
+        "kit_id": None, "ts": 1.0,
+    }
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(
+        identity_labels, "labels_for_uids",
+        lambda uids: {u: "resolved@example.com" for u in uids})
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor"] == "uid-legacy-1"
+    assert row["actor_label"] == "resolved@example.com"
+
+
+def test_get_firm_ledger_row_falls_back_to_the_uid_when_lookup_cannot_resolve(
+        client, fake_db, monkeypatch):
+    """A uid the batch lookup could not resolve (deleted account, or the
+    fail-soft path when Auth itself is unreachable) falls back to the uid
+    itself -- the row must still render, never blank or 500.
+
+    Mutation: return None instead of the uid from label_for_actor's final
+    fallback -- red (actor_label would be null, not the uid string)."""
+    _seed_firm(fake_db, "acme")
+    fake_db.docs[("firms", "acme", "ledger", "e1")] = {
+        "type": "promo_grant", "amount": 10, "usd_amount": None,
+        "firm_kind": "live", "channel": None, "balance_after": 110,
+        "actor": "uid-unresolvable", "reason": None, "link_jti": None,
+        "kit_id": None, "ts": 1.0,
+    }
+
+    import admin_backend.services.identity_labels as identity_labels
+    monkeypatch.setattr(
+        identity_labels, "labels_for_uids",
+        lambda uids: {u: u for u in uids})
+
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["ledger"][0]
+    assert row["actor_label"] == "uid-unresolvable"
+
+
+def test_get_firm_ledger_read_is_BOUNDED_not_the_whole_collection(
+        client, fake_db):
+    """bd polyglot-pdf-y1t68. Seed far more ledger entries than ledger_limit
+    and assert the fake Firestore only ever streamed ledger_limit + 1
+    documents for THIS route -- not one per entry the firm has ever
+    accumulated. Also pins the page CONTENT: newest-first, truncated=True.
+
+    Mutation: revert _do_get_firm to `credit_ledger.read_entries(db,
+    firm_id, limit=None)` -- this test goes red on the stream-count
+    assertion (the fake would stream all 30 entries, not <=6), proving the
+    unbounded-read regression it exists to catch.
+    """
+    _seed_firm(fake_db, "acme")
+    n = 30
+    for i in range(n):
+        fake_db.docs[("firms", "acme", "ledger", "e{}".format(i))] = {
+            "type": "promo_grant", "amount": 1, "usd_amount": None,
+            "firm_kind": "live", "channel": None, "balance_after": i + 1,
+            "actor": "system:seed", "reason": None, "link_jti": None,
+            "kit_id": None, "ts": float(i),
+        }
+    before = len(fake_db.stream_counts)
+    resp = client.get("/admin/firms/acme?ledger_limit=5")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ledger_truncated"] is True
+    assert len(body["ledger"]) == 5
+    # Newest first: ts=29 down to ts=25.
+    assert [row["balance_after"] for row in body["ledger"]] == [30, 29, 28, 27, 26]
+
+    ledger_stream_counts = fake_db.stream_counts[before:]
+    # The reconcile-expired-links pass also streams (0 docs, no links seeded
+    # here); the ledger read itself must be the only large one, and it must
+    # be <= ledger_limit + 1 (6), never anywhere near n (30).
+    assert max(ledger_stream_counts) <= 6, (
+        "a query streamed {} docs; expected at most ledger_limit + 1 (6) -- "
+        "the ledger read is not bounded".format(max(ledger_stream_counts)))
 
 
 def test_get_firm_reconciles_a_real_expired_mint_record_end_to_end(

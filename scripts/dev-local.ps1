@@ -149,7 +149,7 @@ Write-Host "Model         : $Model"
 if (-not (Test-Path $VenvPython)) {
     Write-Host "ERROR: backend venv not found at $VenvPython" -ForegroundColor Red
     Write-Host "Create it in the MAIN repo: python -m venv backend/.venv; " -NoNewline
-    Write-Host "backend/.venv/Scripts/pip install -r backend/requirements.txt"
+    Write-Host "backend/.venv/Scripts/pip install -r backend/requirements-dev.txt"
     exit 1
 }
 

@@ -2077,3 +2077,155 @@ class TestModuleDocstringCheckCountMatchesMain:
             "polyglot-pdf-nlbck), matching the rest of this docstring "
             "(bd polyglot-pdf-82rzp)."
         )
+
+
+class TestBatchedCommitTimes:
+    """git_commit_time() resolves from ONE git walk, not one spawn per file.
+
+    WHY (bd polyglot-pdf-rdftu). The original implementation shelled out
+    `git log -1` per path, inside a nested per-doc/per-tracked-file loop: a
+    real run spawned 263 git.exe processes and took 48.7s. On Windows each is
+    a visible console window, which is the terminal cascade the maintainer
+    reported. These tests pin the two properties that fix has to keep:
+    the spawn count stays O(1), and the ANSWERS stay identical to what the
+    per-file `git log -1` gave -- including for DIRECTORY tokens, which a
+    naive filename map gets silently wrong (a **Tracks:** line may name a
+    directory, and `git log -1 -- <dir>` means "newest commit under it").
+    """
+
+    @staticmethod
+    def _git(repo, *args):
+        return subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True,
+            check=True, encoding="utf-8", errors="replace",
+        ).stdout.strip()
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        """A throwaway git repo with a nested dir and staggered commits.
+
+        Deliberately a REAL repo, not a mocked git: the whole point of the
+        change is how the script talks to git, so a mock would pin nothing
+        (CLAUDE.md scar #7 -- a mock cannot tell you the real thing behaves
+        differently).
+        """
+        r = tmp_path / "repo"
+        (r / "pkg" / "sub").mkdir(parents=True)
+        self._git(r.parent, "init", "-q", str(r))
+        self._git(r, "config", "user.email", "t@t")
+        self._git(r, "config", "user.name", "t")
+        # Commits on successive days, so "newest" is unambiguous.
+        def commit(rel, day, body):
+            (r / rel).write_text(body, encoding="utf-8")
+            self._git(r, "add", rel)
+            when = f"2026-01-{day:02d}T12:00:00+00:00"
+            env = dict(os.environ, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
+            subprocess.run(["git", "commit", "-q", "-m", f"{rel}@{day}"], cwd=r,
+                           check=True, env=env, capture_output=True)
+
+        paths = ["old.md", "pkg/mid.py", "pkg/sub/new.py"]
+        for i, rel in enumerate(paths):
+            commit(rel, i + 1, f"content {i}\n")
+        # EVERY file is then touched a SECOND time, in the REVERSE order. Two
+        # commits per path is load-bearing: with only one, a path's first and
+        # last appearance in the newest-first walk are the same entry, so a
+        # setdefault -> overwrite regression -- which makes the OLDEST commit
+        # win and silently UNDER-reports staleness -- survives the suite.
+        # Reversing the order also means the two orderings disagree, so the
+        # test cannot pass by coincidence.
+        for i, rel in enumerate(reversed(paths)):
+            commit(rel, 10 + i, f"content {i} revised\n")
+        stamps = {
+            rel: int(self._git(r, "log", "-1", "--format=%ct", "--", rel))
+            for rel in paths
+        }
+        return r, stamps
+
+    def _rebind(self, monkeypatch, repo_root):
+        """Point the module at the throwaway repo and clear its caches."""
+        monkeypatch.setattr(freshness, "REPO_ROOT", repo_root)
+        monkeypatch.setattr(freshness, "_COMMIT_TIME_CACHE", None)
+        monkeypatch.setattr(freshness, "_DIR_TIME_CACHE", {})
+
+    def test_file_times_match_per_file_git_log(self, repo, monkeypatch):
+        """Every FILE resolves to exactly what `git log -1 -- <file>` reports."""
+        r, stamps = repo
+        self._rebind(monkeypatch, r)
+        for rel, expected in stamps.items():
+            assert freshness.git_commit_time(r / rel) == expected, rel
+
+    def test_directory_token_reports_newest_commit_under_it(self, repo, monkeypatch):
+        """A DIRECTORY resolves to the newest commit beneath it.
+
+        This is the case a flat filename map silently gets wrong -- and wrong
+        in the DANGEROUS direction: the directory looks like it has no commit
+        time, so its doc is never flagged stale and the check quietly passes.
+        """
+        r, stamps = repo
+        self._rebind(monkeypatch, r)
+        # Compare against git itself rather than a hardcoded expectation: the
+        # fixture commits each path twice, so which file is newest under a
+        # given directory is a property of the fixture, not something worth
+        # restating here (an earlier version hardcoded it and broke the moment
+        # the fixture's commit order changed, while the code stayed correct).
+        for d in ("pkg", "pkg/sub"):
+            expected = int(self._git(r, "log", "-1", "--format=%ct", "--", d))
+            assert freshness.git_commit_time(r / d) == expected, d
+        # pkg/ spans a subdirectory, so it must be at least as new as its
+        # deepest file -- the property that fails if the prefix scan only
+        # looks one level down.
+        assert freshness.git_commit_time(r / "pkg") >= stamps["pkg/sub/new.py"]
+
+    def test_untracked_and_outside_repo_return_none(self, repo, monkeypatch):
+        """Unknown paths stay None -- callers rely on that to skip comparison."""
+        r, _ = repo
+        self._rebind(monkeypatch, r)
+        (r / "untracked.md").write_text("x\n", encoding="utf-8")
+        assert freshness.git_commit_time(r / "untracked.md") is None
+        assert freshness.git_commit_time(r / "does_not_exist.md") is None
+        # A path outside REPO_ROOT must not raise (relative_to would).
+        assert freshness.git_commit_time(pathlib.Path(r.anchor)) is None
+
+    def test_resolves_many_paths_in_one_git_invocation(self, repo, monkeypatch):
+        """THE cascade guard: N lookups must not mean N spawns.
+
+        Counts real subprocess.run calls while resolving every path plus two
+        directories. The old per-file implementation would spawn one per
+        lookup; the batched one spawns a single history walk.
+        """
+        r, stamps = repo
+        self._rebind(monkeypatch, r)
+        calls = []
+        real_run = subprocess.run
+
+        def counting(*args, **kwargs):
+            calls.append(args[0] if args else kwargs.get("args"))
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(freshness.subprocess, "run", counting)
+        for rel in stamps:
+            freshness.git_commit_time(r / rel)
+        for d in ("pkg", "pkg/sub"):
+            freshness.git_commit_time(r / d)
+        assert len(calls) == 1, (
+            f"expected ONE git walk for {len(stamps) + 2} lookups, got "
+            f"{len(calls)} spawns -- the per-file shape is back, and with it "
+            f"the Windows console-window cascade (bd polyglot-pdf-rdftu): {calls}"
+        )
+
+    def test_every_spawn_suppresses_the_console_window(self, repo, monkeypatch):
+        """The git walk must pass creationflags, or it pops a window itself."""
+        r, _ = repo
+        self._rebind(monkeypatch, r)
+        seen = []
+        real_run = subprocess.run
+
+        def capturing(*args, **kwargs):
+            seen.append(kwargs.get("creationflags"))
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(freshness.subprocess, "run", capturing)
+        freshness.git_commit_time(r / "old.md")
+        assert seen and all(f is not None for f in seen), (
+            f"the batched git walk spawned without creationflags=: {seen}"
+        )

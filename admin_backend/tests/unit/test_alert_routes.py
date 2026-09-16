@@ -299,6 +299,21 @@ def test_list_alerts_unknown_kind_is_422(client, fake_db):
     assert resp.status_code == 422
 
 
+def test_list_alerts_a_missing_ts_sorts_LAST_not_first(client, fake_db):
+    """bd polyglot-pdf-xq3nb. The sort key must put a missing ts BEHIND
+    every real timestamp, not ahead of them -- the previous key
+    ((ts is None, ts), reverse=True) put missing-ts rows FIRST, the exact
+    opposite of the comment directly above it. Mutation: swap `is not None`
+    back to `is None` -- goes red (order flips)."""
+    _seed_alert(fake_db, "newest", ts=2000.0)
+    _seed_alert(fake_db, "no_ts", ts=None)
+    _seed_alert(fake_db, "oldest", ts=1000.0)
+    resp = client.get("/admin/alerts")
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["alerts"]
+    assert [r["id"] for r in rows] == ["newest", "oldest", "no_ts"]
+
+
 # --------------------------------------------------------------------------
 # Firm-scoped list (GET /admin/firms/{firm_id}/alerts) -- bd
 # polyglot-pdf-62o4d, exit criterion 1.
@@ -330,6 +345,19 @@ def test_employee_reads_own_firm_alerts(employee_client, fake_db):
     resp = employee_client.get("/admin/firms/acme/alerts")
     assert resp.status_code == 200, resp.text
     assert [r["id"] for r in resp.json()["alerts"]] == ["a1"]
+
+
+def test_firm_alerts_a_missing_ts_sorts_LAST_not_first(
+        manager_client, fake_db):
+    """bd polyglot-pdf-xq3nb, the firm-scoped list's own copy of the same
+    sort. Mutation: swap `is not None` back to `is None` -- goes red."""
+    _seed_alert(fake_db, "newest", firm_id="acme", ts=2000.0)
+    _seed_alert(fake_db, "no_ts", firm_id="acme", ts=None)
+    _seed_alert(fake_db, "oldest", firm_id="acme", ts=1000.0)
+    resp = manager_client.get("/admin/firms/acme/alerts")
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["alerts"]
+    assert [r["id"] for r in rows] == ["newest", "oldest", "no_ts"]
 
 
 def test_manager_reading_another_firm_is_404_not_403(

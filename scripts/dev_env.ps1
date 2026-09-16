@@ -14,7 +14,7 @@ if (-not (Test-Path .venv)) {
 
 . .\.venv\Scripts\Activate.ps1
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip | Out-Null
-& .\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt | Out-Null
+& .\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt | Out-Null
 
 $env:VITE_API_URL = "http://localhost:8000"
 

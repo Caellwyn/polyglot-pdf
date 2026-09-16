@@ -166,6 +166,20 @@ export async function listAuditRows(filters: AuditFilters = {}): Promise<AuditPa
   return (await res.json()) as AuditPage;
 }
 
+/** One runtime-config key's type + fallback default, from GET
+ * /admin/config/{channel}'s `schema` map (admin_backend/routes/
+ * config_routes.py, derived from backend/services/runtime_config.py's
+ * KEY_TYPES -- bd polyglot-pdf-wxcj0). `type` is one of these three; any
+ * other string (there is none today, but a future runtime_config key type
+ * this console does not yet know) falls back to a text input. */
+export const CONFIG_KEY_TYPES = ['bool', 'int', 'float'] as const;
+export type ConfigKeyType = (typeof CONFIG_KEY_TYPES)[number];
+
+export interface ConfigKeySchema {
+  type: string;
+  default: unknown;
+}
+
 /** GET /admin/config/{channel}'s response shape (admin_backend/routes/
  * config_routes.py). */
 export interface ChannelConfig {
@@ -173,6 +187,11 @@ export interface ChannelConfig {
   values: Record<string, unknown>;
   known_keys: string[];
   unknown_keys: string[];
+  /** {key: {type, default}} for every known key -- the ONE source this
+   * console uses to decide whether a key renders as a bool select, a
+   * number input, or (unknown type) a text input. Never hand-list a key's
+   * type in the console itself (CLAUDE.md scar #8). */
+  schema: Record<string, ConfigKeySchema>;
 }
 
 /** The channel's stored runtime-config doc, raw (not coerced). */
@@ -472,9 +491,14 @@ export interface FirmPlan {
 /** The maintainer's 2026-09-14 starting numbers
  * (backend/services/plans.py::DEFAULT_PLAN) -- what GET /admin/firms/
  * {firm_id} and GET /admin/firms both return for a firm with no plan of
- * its own yet (firm_routes.py's _public_firm_view fallback). */
+ * its own yet (firm_routes.py's _public_firm_view fallback). rollover
+ * flipped True by bd polyglot-pdf-hnlj3, 2026-09-15 (maintainer decision:
+ * "credits roll over -- no real reason not to") -- was false at this
+ * constant's original 2026-09-14 launch; kept byte-identical to the Python
+ * DEFAULT_PLAN it mirrors so a console fallback can never disagree with
+ * what the backend actually defaults a new/backfilled firm to. */
 export const DEFAULT_PLAN: FirmPlan = {
-  tier: "starter", monthly_credits: 35, rollover: false,
+  tier: "starter", monthly_credits: 35, rollover: true,
 };
 
 /** The two firm statuses (backend/services/firms.py's FIRM_STATUS_ACTIVE /
@@ -554,6 +578,13 @@ export interface LedgerEntry {
   channel: string | null;
   balance_after: number;
   actor: string;
+  /** bd polyglot-pdf-cpsi0: a human-readable label for `actor` -- the
+   * row's own stored actor_email when present, else a batched Auth
+   * lookup's result, else `actor` itself. Never absent from the response
+   * (identity_labels.label_for_actor always returns something for a
+   * non-null actor); prefer this over `actor` for display, and keep
+   * `actor` around (e.g. as a title/tooltip) for the raw uid. */
+  actor_label: string;
   reason: string | null;
   link_jti: string | null;
   kit_id: string | null;
@@ -770,6 +801,11 @@ export interface LinkRow {
   jti: string;
   kit_id: string | null;
   employee_id: string | null;
+  /** bd polyglot-pdf-cpsi0: a human-readable label for `employee_id` --
+   * same resolution rule as LedgerEntry.actor_label, one field over. Null
+   * only when employee_id itself is null (identity_labels.label_for_actor
+   * returns None for a null actor); otherwise always a string. */
+  employee_label: string | null;
   status: string | null;
   minted_at: number | null;
   open_deadline: number | null;
@@ -921,15 +957,21 @@ export async function getChannelErrors(channel: MonitoringChannel): Promise<Chan
  * as stored maps, keyed by kit id / uid / language code respectively, each
  * value itself `{sessions, cost_usd}`-shaped (usage_rollups.py's own
  * increments), read here as loosely-typed records since this client does
- * not interpret them further. */
+ * not interpret them further. `links_minted` (bd polyglot-pdf-he3lt,
+ * usage_rollups.record_link_minted) is the third link-lifecycle counter,
+ * alongside links_opened/links_completed; unlike those two it ALSO appears
+ * nested under by_employee (keyed on the MINTING employee's uid -- every
+ * mint is a staff action, so there is no link-vs-staff ambiguity there the
+ * way sessions/cost_usd's by_employee has). */
 export interface FirmUsageRollup {
   connections_ended: number | null;
   sessions_completed: number | null;
   cost_usd_total: number | null;
   links_opened: number | null;
   links_completed: number | null;
+  links_minted: number | null;
   by_kit: Record<string, { sessions?: number; cost_usd?: number }> | null;
-  by_employee: Record<string, { sessions?: number; cost_usd?: number }> | null;
+  by_employee: Record<string, { sessions?: number; cost_usd?: number; links_minted?: number }> | null;
   by_language: Record<string, { sessions?: number; cost_usd?: number }> | null;
   kind: string | null;
   channel: string | null;

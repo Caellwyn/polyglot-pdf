@@ -2,13 +2,20 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-09-03 (no kit measured to date exercises the widget-name
-suffix fallback -- w7 47/47, f1040 167/167, and the bucket's
-I-90 79/79, all resolve EXACTLY as measured 2026-09-02 (w7 was still tracked
-then; it was untracked 2026-09-11, which does not change the measurement); the fallback stays
-because a kit MAY map the bare leaf. Kit deletion remains GRADUATED, not a
-permanent refusal: risk decides how firmly the author is asked, never whether
-the door exists.)*
+*Last updated: 2026-09-15 (bd polyglot-pdf-6088m, sprint 23 C4: `/api/fill-pdf`
+and `/api/resume-form` refuse an over-cap body BYTE-ACCURATELY before FastAPI
+parses it -- the router's `_BodyCapRoute` wrapper consumes `request.stream()`
+counting bytes, answers 413 the instant the total exceeds the route's cap
+(`MAX_UPLOAD_MB` for `/fill-pdf`, read at call time; `_MAX_RESUME_BODY_BYTES` for
+`/resume-form`, since base64 inflates a legitimate few-MB saved form past
+MAX_UPLOAD_MB), and caches the accepted bytes where Starlette's `body()` looks
+for them so the normal parse replays them; a Content-Length header is only a
+fast pre-check, never the guard, because it is caller-controlled and optional.
+`/resume-form` also checks the base64 STRING LENGTH before decoding, and its
+`fitz.open` + structural-comparison parse runs in a small dedicated thread pool
+bounded by `RESUME_FORM_PARSE_TIMEOUT_S` (default 8s), returning 408 on timeout.
+Pinned by `backend/tests/unit/test_upload_caps.py`, which drives the app through
+`httpx.ASGITransport` because `TestClient` buffers a streaming body.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the

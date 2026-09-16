@@ -1,8 +1,17 @@
-"""POST /admin/credits/monthly-topup (bd polyglot-pdf-0euzk).
+"""POST /admin/credits/monthly-topup (bd polyglot-pdf-0euzk; DEFAULT_PLAN's
+rollover default flipped True by bd polyglot-pdf-hnlj3, 2026-09-15,
+maintainer decision: credits roll over, no real reason not to).
 
 Pins the bead's exit criterion 1: "three firms (balance 10 no-rollover,
 balance 40 no-rollover, balance 10 rollover=true) get exactly [+25, nothing,
 +35] with period stamped; a second run in the same month writes nothing."
+Every scenario below still constructs its OWN explicit plan dict (never
+plans.DEFAULT_PLAN) so a future default change cannot silently alter what
+these prove -- test_a_firm_on_the_actual_default_plan_rolls_over below is
+the ONE test that reads plans.DEFAULT_PLAN directly, pinning that the
+DEFAULT is now the rollover=True row of this same scenario table (bd
+polyglot-pdf-hnlj3 exit criterion 1: "the top-up scenario table's default
+row adds the full amount").
 
 IDEMPOTENCY IS TWO LAYERS, SEQUENTIAL AND CONCURRENT (fresh-eyes finding
 added post-review): _already_topped_up_this_period is a pre-transaction
@@ -35,6 +44,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import backend.services.credit_ledger as credit_ledger
+import backend.services.plans as plans
 from admin_backend.main import app
 from admin_backend.routes import credit_routes
 from admin_backend.services import admin_auth, audit_log
@@ -303,6 +313,11 @@ def test_three_firms_get_exactly_the_bead_scenarios_amounts(
     assert a_rows[0]["amount"] == 25
     assert a_rows[0]["period"] == "2026-09"
     assert a_rows[0]["usd_amount"] is None
+    # bd polyglot-pdf-cpsi0: a scheduled job is a system actor with no
+    # human behind it at write time -- actor stays the "system:" string,
+    # and actor_email stays None, exactly as before this bead.
+    assert a_rows[0]["actor"] == credit_routes.MONTHLY_TOPUP_ACTOR
+    assert a_rows[0]["actor_email"] is None
 
     c_rows = [r for r in fake_db.ledger_rows("firm-c")
               if r["type"] == "subscription_grant"]
@@ -313,6 +328,30 @@ def test_three_firms_get_exactly_the_bead_scenarios_amounts(
     # firm-b got NO subscription_grant row at all -- already at the cap.
     assert [r for r in fake_db.ledger_rows("firm-b")
             if r["type"] == "subscription_grant"] == []
+
+
+def test_a_firm_on_the_actual_default_plan_rolls_over(
+        client, fake_db, scheduler_env, monkeypatch):
+    """bd polyglot-pdf-hnlj3 exit criterion 1: "the top-up scenario table's
+    default row adds the full amount." Every other scenario in this file
+    hand-writes its own plan dict; this is the one test that seeds a firm
+    with plans.DEFAULT_PLAN ITSELF (the object admin_backend/routes/
+    firm_routes.py's create route and scripts/backfill_firm_kind.py's
+    backfill both actually apply to a real firm with no stored plan), so a
+    firm that gets no plan editor visit at all -- the common case -- rolls
+    over, exactly like firm-c above.
+
+    Mutation: flip plans.DEFAULT_PLAN["rollover"] back to False -- this
+    goes red (firm-a would land at 35, the no-rollover to-the-cap amount,
+    instead of 45). Verified 2026-09-15."""
+    monkeypatch.setattr(
+        credit_routes, "_current_period", lambda now: "2026-09")
+    _seed_firm(fake_db, "firm-a", balance=10, plan=dict(plans.DEFAULT_PLAN))
+
+    resp = _post_topup(client)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["topped_up"] == ["firm-a"]
+    assert fake_db.firm("firm-a")["balance_credits"] == 45  # 10 + 35
 
 
 def test_a_second_run_the_same_month_writes_nothing(
@@ -364,7 +403,7 @@ def test_dropping_the_fast_path_check_alone_does_not_double_grant(
     layer for a plain sequential re-run, not that it is the only thing
     standing between here and a double grant: with ONLY the fast path
     disabled, a second run still writes nothing, because
-    _topup_one_firm catches the transactional layer's
+    topup_firm catches the transactional layer's
     DuplicatePeriodEntry and reports skipped_already_run.
 
     Uses rollover=True (which always grants monthly_credits regardless of
@@ -473,13 +512,13 @@ def test_no_rollover_exactly_at_the_cap_is_skipped_not_failed(
     At exactly the cap there is nothing to grant: amount would compute to
     monthly_credits - balance == 0, and credit_ledger._validate rejects a
     zero amount with LedgerError("amount must be non-zero") -- a
-    LedgerError, not DuplicatePeriodEntry, which _topup_one_firm does not
+    LedgerError, not DuplicatePeriodEntry, which topup_firm does not
     catch, so it would propagate to _run_monthly_topup's generic
     except Exception and silently misclassify this firm as "failed"
     instead of "skipped_at_cap".
 
     Mutation: change `if balance >= monthly_credits:` to
-    `if balance > monthly_credits:` in _topup_one_firm -- this goes red:
+    `if balance > monthly_credits:` in topup_firm -- this goes red:
     firm-a moves from skipped_at_cap/no ledger row to failed/(still) no
     ledger row, both assertions below flip. Verified 2026-09-14."""
     monkeypatch.setattr(

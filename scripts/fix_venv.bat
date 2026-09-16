@@ -30,7 +30,7 @@ echo.
 echo [4/4] Installing dependencies...
 echo       (This may take a few minutes...)
 python -m pip install --upgrade pip >nul 2>&1
-python -m pip install -r backend\requirements.txt
+python -m pip install -r backend\requirements-dev.txt
 echo       Done
 
 echo.

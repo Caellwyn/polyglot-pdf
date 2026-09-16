@@ -423,6 +423,58 @@ def test_period_defaults_to_none_and_round_trips_when_given(fake_db):
     assert stamped[0]["type"] == "subscription_grant"
 
 
+def test_actor_email_is_optional_and_round_trips_when_given(fake_db):
+    """bd polyglot-pdf-cpsi0: actor_email is nullable like period/link_jti --
+    every existing caller that never passes it gets None on the stored row
+    (not a KeyError), and a caller that DOES pass one gets it back verbatim
+    on both the returned entry and the stored document.
+
+    Mutation: drop the `actor_email=actor_email` pass-through in
+    append_entry's _apply_entry_writes() call -- the second assertion goes
+    red (the field stays None even though an email was passed)."""
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type="promo_grant", amount=5,
+        actor="system:seed",
+    )
+    assert result["actor_email"] is None
+    row = fake_db.ledger_rows("acme")[0]
+    assert row["actor_email"] is None
+
+    result2 = credit_ledger.append_entry(
+        fake_db, "acme", entry_type="mint_debit", amount=-1,
+        actor="uid-staff", actor_email="staffer@example.com",
+        channel="demo", link_jti="jti-cpsi0", kit_id="w7",
+    )
+    assert result2["actor_email"] == "staffer@example.com"
+    rows = fake_db.ledger_rows("acme")
+    stamped = [r for r in rows if r.get("link_jti") == "jti-cpsi0"]
+    assert len(stamped) == 1
+    assert stamped[0]["actor_email"] == "staffer@example.com"
+    assert stamped[0]["actor"] == "uid-staff"
+
+
+def test_ledger_export_line_never_carries_an_at_sign(fake_db, monkeypatch):
+    """docs/standards/hipaa-pii-policy.md: uids only in logs. actor_email may
+    now ride on the ENTRY, but the ledger_export log line must never carry
+    one -- this is the exact regression the bead's own description names
+    ("a test asserts the ledger_export log line never contains an '@'").
+
+    Mutation: add actor_email=actor_email to the _log.info(...) call in
+    append_entry -- red (the payload gains an '@example.com' value)."""
+    lines = _capture_export(monkeypatch)
+    credit_ledger.append_entry(
+        fake_db, "acme", entry_type="mint_debit", amount=-1,
+        actor="uid-staff", actor_email="staffer@example.com",
+        channel="demo", link_jti="jti-cpsi0b", kit_id="w7",
+    )
+    exports = [kw for event, kw in lines
+               if event == credit_ledger.LEDGER_EXPORT_EVENT]
+    assert len(exports) == 1
+    payload = exports[0]
+    assert "actor_email" not in payload
+    assert not any("@" in str(v) for v in payload.values())
+
+
 @pytest.mark.parametrize("entry_type", sorted(credit_ledger.ENTRY_TYPES))
 def test_every_declared_type_can_be_written(fake_db, entry_type):
     """Derived from ENTRY_TYPES, not hand-listed: a type added to the tuple
@@ -634,6 +686,35 @@ def test_an_adjustment_REQUIRES_a_non_blank_reason(fake_db, entry_type, reason):
             fake_db, "acme", entry_type=entry_type, amount=-5,
             actor="uid-ops", reason=reason)
     assert fake_db.ledger_rows("acme") == []
+
+
+def test_reason_over_the_bound_is_refused_before_any_write(fake_db):
+    """bd polyglot-pdf-uaxt5, Opus cross-surface review finding (bd bnkuv):
+    append_entry() itself must bound `reason`, not just
+    admin_backend/routes/credit_routes.py's Pydantic model -- scripts/
+    grant_credits.py's `adjust` subcommand calls append_entry() directly
+    with an operator-supplied --reason that had NO length check before this
+    bound, a second, unbounded door into the same ledger.
+
+    Mutation: drop the REASON_MAX_LENGTH check from credit_ledger._validate
+    -- this goes red, since the oversized reason would then be accepted and
+    written."""
+    too_long = "x" * (credit_ledger.REASON_MAX_LENGTH + 1)
+    with pytest.raises(credit_ledger.LedgerError):
+        credit_ledger.append_entry(
+            fake_db, "acme", entry_type=credit_ledger.TYPE_ADJUSTMENT,
+            amount=-5, actor="uid-ops", reason=too_long)
+    assert fake_db.ledger_rows("acme") == []
+
+
+def test_reason_at_the_bound_is_accepted(fake_db):
+    """Pin both directions (scar #9): the bound must not also refuse a
+    reason exactly at the limit."""
+    at_bound = "x" * credit_ledger.REASON_MAX_LENGTH
+    result = credit_ledger.append_entry(
+        fake_db, "acme", entry_type=credit_ledger.TYPE_ADJUSTMENT,
+        amount=-5, actor="uid-ops", reason=at_bound)
+    assert result["reason"] == at_bound
 
 
 @pytest.mark.parametrize("actor", [None, "", "   ", 7])

@@ -28,7 +28,7 @@ echo "      ✓ Activated"
 echo ""
 echo "[4/4] Installing dependencies..."
 pip install --upgrade pip > /dev/null 2>&1
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-dev.txt
 echo "      ✓ Installed"
 
 echo ""

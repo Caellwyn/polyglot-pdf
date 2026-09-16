@@ -151,7 +151,7 @@ start_backend() {
   if [ ! -x "$VENV_PY" ]; then
     echo "ERROR: backend venv python not found at $VENV_PY" >&2
     echo "Create it in the MAIN repo: python -m venv backend/.venv && \\" >&2
-    echo "  backend/.venv/Scripts/pip install -r backend/requirements.txt" >&2
+    echo "  backend/.venv/Scripts/pip install -r backend/requirements-dev.txt" >&2
     exit 1
   fi
   # Credential preflight (bd polyglot-pdf-6les). The DEFAULT arm runs on Vertex

@@ -54,6 +54,18 @@ export function fillStateFor(
   currentFieldId?: string | null
 ): FillState {
   if (fieldId === currentFieldId) return 'current';
+  // SKIPPED IS CHECKED BEFORE EMPTY, and that order is the whole fix.
+  // markFieldSkipped stores {value: null, skipped: true, confirmed: true}, so
+  // the empty check below fires on the null and returned 'empty' -- painting a
+  // deliberate skip identically to a field the user never touched, which
+  // schemaFormState.ts's own docstring says must never happen ("NOT a silent
+  // blank"). bd polyglot-pdf-c9dfo.
+  //
+  // It stays BELOW 'current': the field the assistant is asking about right now
+  // matters more than the fact it was skipped earlier, and a skipped field can
+  // be re-offered (navigation treats skipped as settled, but switch_to_field
+  // can still pin it).
+  if (wrapped && typeof wrapped === 'object' && wrapped.skipped) return 'skipped';
   // An empty array counts as empty (a cleared checkbox_group selection) --
   // same convention as validation.ts's required-check.
   const isEmpty =

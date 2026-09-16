@@ -44,11 +44,22 @@ from backend.tests.unit._fake_firestore import _FakeDb, _FakeFirestoreModule
 _SECRET = "s" * 40
 
 _TOKENS = {
-    "emp-a": {"uid": "u-emp-a", "firm_id": "firm-a", "firm_role": "employee"},
+    # emp-a carries an email claim (bd polyglot-pdf-cpsi0): every REAL
+    # Firebase account has one, so this is the representative case the
+    # existing (pre-cpsi0) tests already exercise unchanged -- none of them
+    # assert on the claims dict's exact key set, only on the fields they
+    # name.
+    "emp-a": {"uid": "u-emp-a", "firm_id": "firm-a", "firm_role": "employee",
+              "email": "emp-a@firm-a.example.com"},
     "mgr-a": {"uid": "u-mgr-a", "firm_id": "firm-a", "firm_role": "manager"},
     "emp-b": {"uid": "u-emp-b", "firm_id": "firm-b", "firm_role": "employee"},
     "nofirm": {"uid": "u-solo"},
     "nouid": {"firm_id": "firm-a", "firm_role": "employee"},
+    # No email claim at all -- the degraded-but-real case (bd
+    # polyglot-pdf-cpsi0): a token missing the claim must not crash the
+    # mint, and both new fields must simply come back None.
+    "emp-noemail": {"uid": "u-emp-noemail", "firm_id": "firm-a",
+                    "firm_role": "employee"},
 }
 
 _ALLOWED = {"firm-a": ["firm-a-intake"], "firm-b": ["firm-b-intake"]}
@@ -208,6 +219,52 @@ def test_the_link_is_attributed_to_the_MINTING_EMPLOYEE_from_the_token(client):
 
     assert payload["employee_id"] == "u-emp-a"
     assert payload["firm_id"] == "firm-a"
+
+
+def test_a_mint_stamps_actor_email_on_the_ledger_and_employee_email_on_the_record(
+        client):
+    """EXIT CRITERION 1: a mint on staging writes actor_email on the
+    mint_debit ledger entry AND employee_email on the links/{jti} mint
+    record -- both from the verified token's email claim, never the
+    request body (there is nowhere in MintLinkRequest to put one).
+
+    Mutation: drop `actor_email=employee_email` from the append_entry() call
+    in _reserve_mint -- the ledger assertion goes red. Mutation: drop
+    `employee_email=employee_email` from the build_mint_record() call --
+    the mint-record assertion goes red. Verified 2026-09-15."""
+    c, store = client
+
+    resp = _mint(c, token="emp-a")
+
+    assert resp.status_code == 200
+    jti = resp.json()["jti"]
+    rows = _ledger(store)
+    assert len(rows) == 1
+    assert rows[0]["actor"] == "u-emp-a"
+    assert rows[0]["actor_email"] == "emp-a@firm-a.example.com"
+    records = store.db.link_rows()
+    assert records[jti]["employee_id"] == "u-emp-a"
+    assert records[jti]["employee_email"] == "emp-a@firm-a.example.com"
+
+
+def test_a_mint_with_no_email_claim_leaves_both_fields_none(client):
+    """A token missing the email claim (should not happen for a real
+    Firebase account, but is not assumed) must not crash the mint, and must
+    not invent a placeholder -- both new fields come back None, exactly the
+    pre-cpsi0 shape.
+
+    Mutation: default employee_email to "" instead of None when the claim
+    is absent -- red (the stored value is "" instead of None)."""
+    c, store = client
+
+    resp = _mint(c, token="emp-noemail")
+
+    assert resp.status_code == 200
+    jti = resp.json()["jti"]
+    rows = _ledger(store)
+    assert rows[0]["actor_email"] is None
+    records = store.db.link_rows()
+    assert records[jti]["employee_email"] is None
 
 
 def test_minting_a_kit_the_firm_does_not_hold_is_a_404(client):
@@ -595,6 +652,67 @@ def test_a_funded_mint_debits_the_ledger_and_writes_the_record(client):
     assert records[jti]["firm_id"] == "firm-a"
 
 
+def test_a_mint_increments_the_links_minted_usage_rollup(client):
+    """EXIT CRITERION 1 (bd polyglot-pdf-he3lt): a mint through the real
+    route bumps links_minted on BOTH the firm-month and kit-month usage
+    rollup docs, plus the by_employee breakdown, right after the reservation
+    commits.
+
+    Mutation: drop the record_link_minted call in mint_link -- red (the
+    usage doc never appears at all).
+    """
+    c, store = client
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    from backend.services import usage_rollups
+    import time as _t
+    # link_channel() with LINK_CHANNEL unset defaults to "demo" -- the fake
+    # firm here is "mock", not gated by the live-channel check, so the
+    # mint's own channel resolution matches _month_key's own demo default.
+    month = usage_rollups._month_key(_t.time(), "demo")
+    firm_usage = store.db.docs.get(("firms", "firm-a", "usage", month))
+    assert firm_usage is not None, "no usage rollup doc was written at all"
+    assert firm_usage["links_minted"] == 1
+    # This fake's apply_set() only resolves a top-level Increment (see
+    # _WriteBatch's own docstring); the NESTED by_employee.{uid}.links_minted
+    # shape is proven correct against a faithful recursive-merge fake in
+    # test_usage_rollups.py, so here it is enough to confirm the write
+    # reached the right nested key at all, unresolved sentinel included.
+    nested = firm_usage["by_employee"]["u-emp-a"]["links_minted"]
+    assert nested.delta == 1
+
+    kit_usage = store.db.docs.get(("kits", "firm-a-intake", "usage", month))
+    assert kit_usage is not None
+    assert kit_usage["links_minted"] == 1
+
+
+def test_a_ROLLUP_WRITE_FAILURE_leaves_the_mint_successful(client, monkeypatch):
+    """EXIT CRITERION 1: the rollup write is best-effort and must never turn
+    a successful reservation into a failed mint.
+
+    Mutation: let record_link_minted's exception propagate instead of being
+    caught -- red (the route would 500 instead of returning 200).
+    """
+    c, store = client
+
+    def _broken(*args, **kwargs):
+        raise RuntimeError("firestore hiccup")
+
+    monkeypatch.setattr(lr, "record_link_minted", _broken)
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200, (
+        "a broken usage rollup must not fail an otherwise-successful mint"
+    )
+    assert "jti" in resp.json()
+    # The reservation itself is untouched: the debit and record still stand.
+    assert _balance(store) == _START_BALANCE - 1
+    assert len(_ledger(store)) == 1
+
+
 def test_mint_refuses_at_zero_balance(client):
     """EXIT CRITERION 1. A firm with nothing left cannot mint: 402, the
     staff-facing status (this door is authenticated, so it may say why --
@@ -851,6 +969,11 @@ def test_the_mint_record_shape_matches_links_store(client):
         cap_usd=written["cap_usd"],
         open_deadline=written["open_deadline"],
         now=written["minted_at"],
+        # emp-a's token carries an email claim (bd polyglot-pdf-cpsi0) --
+        # see _TOKENS' own comment. Omitting this here would fail for the
+        # SAME reason the docstring names: a drift between the transactional
+        # writer and this builder.
+        employee_email="emp-a@firm-a.example.com",
     )
     assert written == expected
 
