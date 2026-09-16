@@ -116,9 +116,13 @@ described.
 
 ## Doc freshness
 
-Bumped `docs/components/pdf-view.md` (9utmk fix) and
-`docs/technical_guide.md` (hkmnq fix) -- both files this branch's changes
-directly touch. `closeout_prep.py`'s doc-freshness pass also flagged
+Bumped `docs/components/pdf-view.md`'s stamp (9utmk fix).
+`docs/technical_guide.md` (hkmnq fix) had its prose corrected but carries
+NO `*Last updated:*` stamp to bump by design (bd `polyglot-pdf-abn4o` --
+see the closeout skill's own note: re-adding one would revert that fix),
+so `check_doc_freshness.py` will keep reporting it STALE by its git-commit-
+time fallback regardless; that is expected, not a gap.
+`closeout_prep.py`'s doc-freshness pass also flagged
 numerous OTHER stale docs (`admin-service.md`, `config-deployment.md`,
 `context-compression.md`, `jit-schema.md`, `tool-call-flow.md`,
 `voice-ai.md`, `websocket-routing.md`, and most of `docs/standards/*.md`) --
