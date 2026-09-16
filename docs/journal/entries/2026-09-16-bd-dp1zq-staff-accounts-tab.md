@@ -69,6 +69,36 @@ No backend change: this bead is entirely `admin-console/` presentation and
 consumes the existing `GET /admin/firms` response shape (`FirmRow`)
 unchanged. No new route, env var, or wire shape.
 
+### Fresh-eyes round 1 (adopt/reject/defer)
+
+The reviewer scored exit criterion 2 ("every console page has a purpose
+header") a partial FAIL: the literal test (enumerate `src/pages`, assert
+each renders one) passed, but `admin-console/src/components/WhoAmIPage.tsx`
+-- a real, listed tab (`App.tsx`'s nav, first item) -- had no `PageIntro`
+while its two sibling `src/components/` shell pages (`AuditLogPage.tsx`,
+`ConfigEditorPage.tsx`) got one in this same diff. The bead's own
+description item 3 says "the same intro pattern is applied to every tab,"
+so this was a real gap, not a nit.
+
+- **Adopted:** added `PageIntro` to `WhoAmIPage.tsx` (same markup/placement
+  pattern as `AuditLogPage.tsx`/`ConfigEditorPage.tsx` -- `<h2>` then
+  `<PageIntro>` immediately after), and wrote
+  `admin-console/src/components/WhoAmIPage.test.tsx` (the page previously
+  had no test file at all), pinning the identity rendering, the null-email
+  fallback, and the new purpose header. Mutation-verified by reverting the
+  `PageIntro` render and watching the new header test go red, then
+  restoring it.
+- **Rejected (refuted, no code change):** the "fallback form renders for
+  one tick before `listFirms()` resolves" observation in `UsersPage.tsx` --
+  the reviewer confirmed this is a harmless loading flash already covered
+  by the existing `findBy*` async queries, not a rubric gap; no fix needed.
+- **Deferred (pre-existing, out of scope, already filed):** the dated
+  "Last updated" chronological-entry chain in
+  `docs/components/admin-service.md` reproduces unchanged on `origin/dev`
+  and is a pre-existing tier-2 doc convention issue, not something this
+  bead introduced. The reviewer filed `polyglot-pdf-gpu4v` for it; no
+  further bead needed here.
+
 ## Lessons
 
 The coverage-test approach (enumerate a directory from disk, assert a
@@ -104,7 +134,10 @@ or cross-surface contract; it only consumes the existing documented
 - `admin-console/src/pages/{AlertsPage,CostReportsPage,ErrorsPage,
   FirmDetailPage,FirmsPage,KitCommercialsPage,MonitoringPage,
   UsagePage}.tsx` -- added a `PageIntro` import + one-sentence header each.
-- `admin-console/src/components/{AuditLogPage,ConfigEditorPage}.tsx` --
-  same, for the two shell tabs.
+- `admin-console/src/components/{AuditLogPage,ConfigEditorPage,WhoAmIPage}.tsx`
+  -- same, for the three shell tabs (`WhoAmIPage.tsx` added in fresh-eyes
+  round 1 after review found it missing).
+- `admin-console/src/components/WhoAmIPage.test.tsx` -- new (fresh-eyes
+  round 1): the page had no test file before this fix.
 - `docs/components/admin-service.md` -- dated current-state entry for this
   bead.

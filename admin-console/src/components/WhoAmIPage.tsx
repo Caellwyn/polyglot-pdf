@@ -1,5 +1,6 @@
 import React from 'react';
 import type { WhoAmI } from '../utils/adminApi';
+import { PageIntro } from './PageIntro';
 
 interface WhoAmIPageProps {
   who: WhoAmI;
@@ -23,6 +24,10 @@ export const WhoAmIPage: React.FC<WhoAmIPageProps> = ({ who }) => {
   return (
     <div data-testid="whoami-page" className="max-w-xl">
       <h2 className="text-lg font-semibold text-gray-900">Who am I</h2>
+      <PageIntro>
+        Confirms which account you are signed in as and which build of the
+        console you are running.
+      </PageIntro>
       <dl className="mt-4 grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-gray-500">Signed in as</dt>
         <dd className="text-gray-900">{who.email ?? '(no email on this account)'}</dd>
