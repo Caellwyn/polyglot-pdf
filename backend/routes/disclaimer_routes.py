@@ -7,7 +7,9 @@ Creates audit trail for legal protection and compliance tracking.
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from ..utils.rate_limit import TOO_MANY, rate_limited
 from pydantic import BaseModel, Field, field_validator
 import structlog
 
@@ -114,6 +116,9 @@ class DisclaimerAcceptanceRequest(BaseModel):
 @router.post("/disclaimer-acceptance")
 async def log_disclaimer_acceptance(
 	data: DisclaimerAcceptanceRequest,
+	# Sprint 23 PF-5 (bd o2fub): no oracle to protect here, so an over-budget
+	# caller gets a plain 429 rather than a look-alike refusal.
+	_limit: None = Depends(rate_limited("disclaimer_acceptance", status_code=429, detail=TOO_MANY)),
 ) -> dict:
 	"""
 	Log user's acceptance of disclaimer modal.

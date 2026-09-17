@@ -360,6 +360,42 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > which documents this correctly (it explicitly calls out `VFF_DEV_LOGGING`
 > as dead config and points back here).
 
+## Rate limiting on the unauthenticated doors (sprint 23 PF-5, bd `polyglot-pdf-o2fub`)
+
+Two controls, decided by the maintainer on 2026-09-17 with Cloud Armor deferred
+until abuse is observed:
+
+- **A per-instance limiter** (`backend/utils/rate_limit.py`) on the three
+  unauthenticated write doors: `POST /api/links/open`, `POST /api/signup/check`
+  and `POST /api/disclaimer-acceptance`. Two token buckets per door, both
+  keyed from the END of the `X-Forwarded-For` chain (a caller can seed the
+  front of that list; every proxy appends the address it saw, so only the
+  tail is trustworthy). In production every browser call reaches Cloud Run
+  through the Hosting `/api/**` rewrite, so the chain ends
+  `..., browser, hosting-egress`; a direct call to the run.app host ends
+  `..., caller`. The CLIENT bucket is keyed on the last two hops
+  (`RATE_LIMIT_BUDGET`, default 30, per `RATE_LIMIT_WINDOW_SEC`, default 60):
+  per browser through Hosting, unforgeable by the browser. The CONNECTION
+  bucket is keyed on the last hop alone (`RATE_LIMIT_SHARED_BUDGET`, default
+  600): shared by everyone behind one Hosting egress, and the backstop that
+  caps a direct caller who rotates forged hops. A call the client bucket
+  refuses never draws on the connection bucket, so one abuser behind
+  Hosting cannot drain it for everyone. `RATE_LIMIT_ENABLED=false` turns the
+  limiter off (the test suite does). The per-door maps are LRU-bounded.
+  An over-budget caller on the two oracle-sensitive doors gets the door's own
+  404 phrase, byte-identical to a wrong token or a miss; on the disclaimer door
+  a plain 429. The refusal log line (`rate_limited`) carries the door and the
+  budget, never the address. Pinned by `backend/tests/unit/test_rate_limit.py`,
+  whose set test derives the door list from the access matrix's deliberately-
+  ungated routes so a new unauthenticated write door fails CI until it is
+  limited. Known weakness, accepted in the decision: the bucket lives in one
+  instance, resets on autoscale, and a distributed caller spreads around it.
+- **A spend ceiling**: `--max-instances=10` on the backend deploys and
+  `--max-instances=3` on the admin service in `cloudbuild.yaml`, pinned by
+  `tests/test_cloudbuild_yaml.py`. A ceiling is not a limiter -- it bounds the
+  worst-case bill, not one abuser -- but with the limiter above it closes the
+  unbounded-cost hole.
+
 ## Deployment (Cloud Build, from a pushed commit)
 
 **ONE ENGINE behind the `deploy-*.sh` wrappers and the admin console.** Every

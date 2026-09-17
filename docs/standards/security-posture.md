@@ -99,12 +99,12 @@ claimless Firebase token, app admin) are asserted per route.
 | `GET /api/form-kits/{kit_id}/archive[/{marker}/schema]` | `require_auth` | 403 claimless/editor; 404 other firm |
 | `POST /api/form-kits/{kit_id}/retire` | `require_auth` + manager + owner + private | 404 employee / other firm / claimless |
 | `POST /api/links/mint` | `require_auth` | 403 client link (no uid), claimless, editor |
-| `POST /api/links/open` | none; the token IS the credential | uniform 404 on any refusal |
-| `POST /api/signup/check` | none; answers 204 or the uniform 404 | never lists; logs the address length only |
+| `POST /api/links/open` | none; the token IS the credential; per-address rate limit (`o2fub`) | uniform 404 on any refusal, including over budget |
+| `POST /api/signup/check` | none; answers 204 or the uniform 404; per-address rate limit | never lists; over budget is the same 404; logs the address length only |
 | `POST /api/fill-pdf`, `POST /api/resume-form` | `require_auth`; byte-accurate body caps; parse timeout | 403 claimless/editor; 413 over cap; 408 on a hung parse |
 | `POST /api/tts/notice` | `require_auth` (free door, no redemption) | 403 |
 | `POST /api/tts/spellback`, `POST /api/tts/intro` | `require_paid_client_work` (redeems the client link) | 403 / 404 |
-| `POST /api/disclaimer-acceptance` | none (durable metadata write; bounded timestamp; value-free 422) | 422 out of bounds |
+| `POST /api/disclaimer-acceptance` | none (durable metadata write; bounded timestamp; value-free 422); per-address rate limit | 422 out of bounds; 429 over budget |
 | `POST /dev/console-log` | `backend/.env.DEV` marker AND not `K_SERVICE` | 404 on Cloud Run |
 | `WS /ws/fill` | credential verified before any Gemini session; link: kit match. **With C2 (PR #834, in PR):** browser Origin allowlist before accept, the credential in the first frame (`token`), staff: publish + visibility gates. Until it merges the credential is the `?token=` query parameter and a staff token's `kit_id` is not scoped to its firm (the C1 finding) | 1008 before any session; after C2, `?token=` is honoured one more deploy with a warning (`0j8e5`) |
 | `WS /ws/echo`, `WS /ws/audio` | `backend/.env.DEV` marker (the image never carries it); with C2 (in PR) also not `K_SERVICE` | 1008 |
@@ -212,10 +212,14 @@ Recorded here so they are not rediscovered as findings.
 - **A hung or OOM-killed extraction subprocess can leave uploaded PDF bytes
   on a warm instance's disk** until the instance is recycled; the parse
   itself is timed out and the temp files are cleaned in `finally`.
-- **Rate limiting is absent until `polyglot-pdf-o2fub` ships**, and after it
-  is a per-instance limiter plus an instance ceiling, not a network-edge
-  control: it resets on autoscale and a distributed caller spreads around it.
-  Cloud Armor is deferred until abuse is observed.
+- **Rate limiting is a per-instance limiter plus an instance ceiling**, not a
+  network-edge control: the buckets reset on autoscale and a distributed
+  caller spreads around them. The keys are the tail of the forwarded chain
+  (per browser behind Hosting; per connecting address as the backstop), so a
+  forged `X-Forwarded-For` prefix buys nothing, but everyone behind one
+  Hosting egress shares the wide connection bucket. Cloud Armor is deferred
+  until abuse is observed (`config-deployment.md`, "Rate limiting on the
+  unauthenticated doors").
 - **Two project Owners are the same person's two accounts** (a sole
   operator, 2026-09-17). The posture check keeps reporting it so a third
   Owner is noticed.
@@ -231,7 +235,7 @@ named bead or in the journal.
 
 | Decision | Options | Where |
 |----------|---------|-------|
-| Rate limiting on the unauthenticated doors (PF-5, P1) | DECIDED 2026-09-17: the in-process per-instance limiter on the three write doors plus a Cloud Run max-instances ceiling; Cloud Armor + load balancer deferred until abuse is observed | `polyglot-pdf-o2fub` (implementation) |
+| Rate limiting on the unauthenticated doors (PF-5, P1) | DECIDED 2026-09-17 and SHIPPED: the per-instance limiter on the three write doors plus `--max-instances` on both services; Cloud Armor + load balancer deferred until abuse is observed | `polyglot-pdf-o2fub` |
 | Data retention (`confirmation_events` and `link_redemptions` TTL, Logging bucket retention, BigQuery expiration, deleted Firebase users) | per store | `polyglot-pdf-t5v83`, with `pol2`'s legal input |
 | The CI `security` job: informational or required | keep non-blocking (the workflow's doctrine) or make it a required check | `polyglot-pdf-ikdnd` notes |
 | The voice app's Firebase persistence mode | `browserSessionPersistence` for the voice app only (recommended), local for editor/admin | `polyglot-pdf-8v8i7` notes |

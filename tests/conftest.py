@@ -19,3 +19,10 @@ VFF_DISABLE_AUTH guard's ValidationError (reproduced).
 import os
 
 os.environ.pop("K_SERVICE", None)
+
+# Sprint 23 PF-5 (bd o2fub): the backend's per-address limiter is OFF for the
+# suite (TestClient is one address). Set here too, not only in
+# backend/tests/conftest.py, so this suite never depends on a sibling
+# having been collected first (the incidental-ordering hazard this file's
+# own docstring describes).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
