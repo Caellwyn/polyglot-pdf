@@ -77,6 +77,11 @@ EXPECTED_BUILD_SA_PROJECT_ROLES = {
     # it: firebaserules.admin is rules-only and datastore.user holds
     # datastore.schemas.list but not create/update/delete.
     "roles/datastore.indexAdmin",
+    # Read an API's enablement: firebase-tools checks firestore.googleapis.com
+    # via serviceusage.services.get before `deploy --only firestore:rules`
+    # or `:indexes`; no other role here carries it (bd polyglot-pdf-8e812:
+    # the first wrapper deploy 403'd on exactly that call).
+    "roles/serviceusage.serviceUsageViewer",
 }
 
 # PRIVILEGED BUILD STEPS -> the role each one needs. The pin above says what
@@ -93,6 +98,12 @@ EXPECTED_BUILD_SA_PROJECT_ROLES = {
 # short of what the deploy needed (outer cross-surface review, round 1).
 BUILD_STEP_ROLE_REQUIREMENTS = {
     "firebase-tools deploy --only firestore:rules": "roles/firebaserules.admin",
+    # The same command's pre-flight ("ensuring required API firestore.googleapis.com
+    # is enabled", a serviceusage.services.get) needs a second role; keyed on
+    # the rules line's tail so the dict key stays unique and still matches.
+    'deploy --only firestore:rules --project "$PROJECT_ID"': "roles/serviceusage.serviceUsageViewer",
+    # The indexes half runs the same pre-flight.
+    'deploy --only firestore:indexes --project "$PROJECT_ID"': "roles/serviceusage.serviceUsageViewer",
     "firebase-tools deploy --only firestore:indexes": "roles/datastore.indexAdmin",
     "firebase-tools deploy --only hosting": "roles/firebasehosting.admin",
     "gcloud run deploy": "roles/run.admin",

@@ -1193,7 +1193,9 @@ write forms BIND the row to the mutation rather than firing it alongside.
   for staging too, and index builds are asynchronous (a freshly added index
   is not READY the moment the command returns). That build step is why
   `polyglot-cloudbuild-sa` holds `roles/datastore.indexAdmin` alongside
-  `roles/firebaserules.admin` (rules-only) -- pinned by
+  `roles/firebaserules.admin` (rules-only), plus
+  `roles/serviceusage.serviceUsageViewer` for the API-enabled check
+  `firebase-tools deploy` runs first -- pinned by
   `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py`.
   `admin_backend/tests/unit/test_firestore_indexes.py` derives the filter
   set from the route's own AST and pins it against the shipped artifact in
