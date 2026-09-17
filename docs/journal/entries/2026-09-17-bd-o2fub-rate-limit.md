@@ -67,7 +67,7 @@ and a door limited but not classified fails too.
   links/open refusal changed to a 429 (the byte-identical pin); the
   address added to the refusal log kwargs (the kwarg pin); `_take` made to
   never refuse (every limit case).
-- Full suite: SUITE_RESULT
+- Full suite (both services + repo-level, on the stacked branch): 6604 passed, 289 skipped.
 
 REVIEW_RECORD
 
