@@ -94,11 +94,11 @@ def test_signup_check_over_budget_is_the_uniform_404(client, tiny_budget, monkey
 
 
 def test_disclaimer_acceptance_over_budget_is_429(client, tiny_budget, monkeypatch):
-    monkeypatch.setattr(disclaimer_routes, "record_disclaimer_acceptance", MagicMock(), raising=False)
+    monkeypatch.setattr(disclaimer_routes, "write_durable_acceptance_record", MagicMock())
     import time as _time
     body = {"form_session_id": "fss_rl", "language": "English", "timestamp": int(_time.time() * 1000)}
     codes = [client.post("/api/disclaimer-acceptance", json=body).status_code for _ in range(4)]
-    assert codes[:3] != [429, 429, 429] and codes[3] == 429, codes
+    assert codes == [200, 200, 200, 429], codes
     assert client.post("/api/disclaimer-acceptance", json=body).json() == {"detail": "Too many requests"}
 
 

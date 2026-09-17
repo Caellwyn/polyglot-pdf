@@ -17,8 +17,8 @@ Posture, deliberately the same as POST /api/links/open:
   one bit a signup attempt already reveals. The cause is logged, never
   returned, and the address itself is never logged (it is staff PII).
 - 204 on success: nothing to say but "go ahead".
-- Not rate-limited yet: that is the sprint's PF-5 decision (rate limiting is
-  new infrastructure or a cost call), tracked separately.
+- Rate-limited per caller address (sprint 23 PF-5, bd polyglot-pdf-o2fub):
+over budget answers the same uniform 404, so a limited caller learns nothing.
 """
 import asyncio
 
