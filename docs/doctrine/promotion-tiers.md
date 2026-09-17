@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: form kits are no longer selected implicitly by ANY wrapper -- a bare or `--all` run of either channel script skipped `firestore-rules` and the frontend when the unbuildable `form-kits` target failed ahead of them; plus the Cloud Build SA's new `datastore.indexAdmin` grant and the re-run it needs.) (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.) (bd polyglot-pdf-oqtm7, E4.6: deploy is no longer local and manual -- every deploy-*.sh is a thin wrapper that runs Cloud Build triggers at a pushed commit, the inline stages are deleted, and the promotion gate's "nothing deploys through this yet" caveat is retired. The per-instance deploy ask is unchanged.)*
+*Last updated: 2026-09-17 (bd polyglot-pdf-wobtv: the preflight no longer refuses on untracked files -- a Cloud Build trigger run fetches only the named commit from GitHub, so an untracked file can never reach it; untracked paths are now a `[NOTE]`, not a refusal. The three tracked `.firebase/hosting.*.cache` files that firebase's own CLI regenerates on every deploy are untracked and `.firebase/` is now gitignored, since a TRACKED regenerated file dirties the tree the other way regardless of the untracked-file fix. A fresh detached worktree at `origin/dev` (with a `node_modules` junction) is recorded below as the valid workaround for a dirty main checkout.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: form kits are no longer selected implicitly by ANY wrapper -- a bare or `--all` run of either channel script skipped `firestore-rules` and the frontend when the unbuildable `form-kits` target failed ahead of them; plus the Cloud Build SA's new `datastore.indexAdmin` grant and the re-run it needs.) (bd polyglot-pdf-p4ale, E4.5: the Cloud Build pipeline's own identity, `polyglot-cloudbuild-sa`, is now provisioned by `scripts/setup-cloud-build.sh` -- role list, resource-scoped actAs on both runtime SAs, and the Pub/Sub service agent's OIDC-minting role, all pinned. `admin-backend-sa` gains the mirror-image actAs grant.) (bd polyglot-pdf-1s3ko: the two wrappers now REFUSE a dirty or unpushed tree before anything else runs, and the declarative half of the Cloud Build pipeline exists -- a root `cloudbuild.yaml` with a per-SHA `verify` gate every deploy target reads, plus `deploy/channels/*.env` as the one config source bash and the build share.) (bd polyglot-pdf-jecrl: firm-billing isolation between staging and the demo no longer rests on staging using its own mock firm -- the mint route refuses a live (or kindless) firm unless the raw `LINK_CHANNEL` is exactly `demo`, and a credit is reserved before any token is signed.) (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.) (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo promotion gate is now finished end to end -- the pure predicate, the build-step enforcement, and the route's early refusal are all documented in a new section below, with the no-recency decision recorded as the maintainer-reversible call the plan flagged it as.) (bd polyglot-pdf-oqtm7, E4.6: deploy is no longer local and manual -- every deploy-*.sh is a thin wrapper that runs Cloud Build triggers at a pushed commit, the inline stages are deleted, and the promotion gate's "nothing deploys through this yet" caveat is retired. The per-instance deploy ask is unchanged.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -256,24 +256,24 @@ live channels. Reviving a real prod channel is a maintainer decision requiring a
 reachable project, a full `scripts/setup-gcp-project.sh` bootstrap, real
 `VITE_FIREBASE_*` values in `.env.production`, and its own Auth user set.
 
-## Deploy preflight: a dirty or unpushed tree is refused
+## Deploy preflight: dirty TRACKED state or an unpushed commit is refused
 
 Since bd `polyglot-pdf-1s3ko`, EVERY `deploy-*.sh` wrapper sources
 `scripts/deploy_preflight.sh` and refuses BEFORE anything else runs when:
 
-- **the working tree is dirty** -- `git status --porcelain` is non-empty,
-  untracked files included; or
+- **a tracked path is modified or staged** -- `git status --porcelain
+  --untracked-files=no` is non-empty; or
 - **no remote branch contains `HEAD`** -- the commit exists only in this
   checkout.
 
 Both protect the same claim. A Cloud Build build runs from a COMMIT, and
 `build_checks/{sha}` records that that commit's suites passed. Deploying from a
-dirty tree would ship a commit the operator never looked at while believing
-they shipped what is on their screen -- the record would not be wrong about the
-commit, it would simply be about a different tree than the one they meant. And
-a SHA that exists only on one laptop cannot be fetched by the build at all, nor
-re-built later by the admin service, which triggers builds by SHA against the
-connected repository.
+tree with uncommitted changes to tracked files would ship a commit the
+operator never looked at while believing they shipped what is on their screen
+-- the record would not be wrong about the commit, it would simply be about a
+different tree than the one they meant. And a SHA that exists only on one
+laptop cannot be fetched by the build at all, nor re-built later by the admin
+service, which triggers builds by SHA against the connected repository.
 
 The unpushed check asks which REMOTE branches contain the commit, not whether
 it is an ancestor of `dev`: a commit on a pushed feature branch is perfectly
@@ -281,9 +281,34 @@ deployable, and that is the normal shape of a staging deploy. A refusal that
 names a branch you know you pushed means your remote refs are stale -- run
 `git fetch origin` and retry.
 
+**Untracked files are noted, not refused** (bd `polyglot-pdf-wobtv`). Deploy
+runs `gcloud builds triggers run --sha=<sha>`, which fetches ONLY the named
+commit from the connected GitHub repository -- an untracked file can never
+reach that build, so it cannot cause the tree/commit mismatch this guard
+exists to catch. The preflight still prints every untracked path as a `[NOTE]`
+so the operator sees what is lying around uncommitted, but it does not block
+the deploy over it. This matters in practice: this repo's checkouts are
+essentially never free of untracked scratch (`Claude outputs/`, `*.bak.py`,
+`prep-*.txt` left by other sessions), and refusing over those made the guard
+refuse every real deploy attempt. A **tracked** file that firebase's own CLI
+regenerates on every run hits the same problem from the other side --
+`.firebase/hosting.<target>.cache` was tracked until bd `polyglot-pdf-wobtv`
+untracked it and added `.firebase/` to `.gitignore`; a tracked, regenerated
+cache file dirties the tree on every Hosting deploy no matter how the
+untracked case is handled, so both halves needed fixing together.
+
 This is a mechanical guard, not a new gate: it does not replace the
 per-instance permission ask below, it only removes a class of deploy that was
 never valid.
+
+**Deploying from a fresh detached worktree is a valid workaround for a dirty
+main checkout.** When the main checkout accumulates uncommitted changes that
+are not yours to commit or discard, `git worktree add` a throwaway checkout at
+`origin/dev` (or the commit you intend to deploy) instead of touching the main
+checkout's tree. The frontend build needs `node_modules`; a junction
+(`mklink /J`) into the main checkout's copy avoids a full reinstall. This is
+what an orchestrator did around bd `polyglot-pdf-1s3ko`'s early days before
+this preflight existed to name the problem cleanly.
 
 ## Deploy runs on Cloud Build, from a pushed commit
 
