@@ -12,7 +12,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // DERIVED from the shipped script store, never hand-listed: the language set
 // is growing toward ~90 and a typed list rots silently (repo scar tissue).
-const SPOKEN_LANGUAGES = Object.keys(
+//
+// NAMED for its SOURCE, not `SPOKEN_LANGUAGES` (bd polyglot-pdf-cnwz). It used
+// to shadow that real export, which made this file read as though it were
+// anchored to the canonical language list when it was anchored to introScript
+// -- and every assertion below that pairs it with DISCLAIMER_TRANSLATIONS was
+// self-referential in the same way. The canonical anchor now lives in
+// shared/translationMapLockstep.test.ts, which asserts DISCLAIMER_TRANSLATIONS
+// (and every sibling map) covers exactly SPOKEN_LANGUAGES. This constant keeps
+// its narrower job: the languages the intro SCRIPT ships.
+const INTRO_SCRIPT_LANGUAGES = Object.keys(
     (introScript as { languages: Record<string, unknown> }).languages,
 );
 
@@ -356,7 +365,7 @@ describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia, nsb4y)', () =
         },
     );
 
-    it.each(SPOKEN_LANGUAGES)(
+    it.each(INTRO_SCRIPT_LANGUAGES)(
         '%s: the modal renders the SHARED script, not its own copy',
         (lang) => {
             // REGISTER, settled by the maintainer 2026-08-19 (bd
