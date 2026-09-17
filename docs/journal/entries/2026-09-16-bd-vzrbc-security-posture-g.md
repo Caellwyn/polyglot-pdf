@@ -36,10 +36,12 @@ depth; **P3** hygiene.
   lesson) must equal the set derived from the script's SOURCE
   (`PINNED_ALLOWLISTS` keys minus the four subcollection allowlist keys,
   plus the four subcollection report names, the bucket, and every default
-  BigQuery view); every unscripted row must name a covering check; every
-  row carries six non-empty cells. Mutations, each red: the `alerts` row
-  deleted; a `bigquery:made_up` row added; the Firebase Auth row's
-  `infra_posture.sh` pointer dropped.
+  BigQuery view); every key in a store's pinned allowlist must appear in
+  that row's Key-set cell (an `as \`other\`` cell resolves to the other row);
+  every unscripted row must name a covering check; every row carries six
+  non-empty cells. Mutations, each red: the `alerts` row deleted; a
+  `bigquery:made_up` row added; the Firebase Auth row's `infra_posture.sh`
+  pointer dropped; `actor_email` dropped from the ledger row.
 - `docs/INDEX.md`: the standards row. `docs/standards/hipaa-pii-policy.md`:
   the two per-surface rows the plan reserved for G (the ledger `reason`,
   the audit log's `before`/`after`) and the Enforcement section's pointer
@@ -94,7 +96,7 @@ open for the maintainer's merge at the time of writing: C3 (#833), C2
 | A | P2 | No retention decision for any store | FILED `t5v83`. |
 | B1a (`wfgjz`) reviews | P2/P3 | The editor's schema-validation 422 is a separate sink; the pydantic error-type catalogue unpinned; the adapter's remaining `print()` blocks | `giebe` (P2), `jbb44` (P3), `l9zsf` (P3; its headline `str(exc)` print was fixed by B1b) FILED. |
 | B1b (`2kbo0`) reviews | P2/P3 | The `reason=` kwarg family (12 non-literal sites); five WS error envelopes send `str(e)` to the client; a Firestore message logged as `unverifiable=`; `mark_failed` stores the raw message; three precision gaps in the guard; a stale rationale sentence | `6inaj` (P2), `x7685`, `h5529`, `lvwvy`, `o2uyn`, `68shs` (P3) FILED. |
-| B2 (`v8l6m`) | P0 (pre-fix) | 79 demo + 14 staging request-log rows with `?token=` (73 + 13 of them Firebase ID tokens), all before the fix timestamps; four post-fix hits were the orchestrator's own bogus-token probes | ACCEPTED residue (maintainer, 2026-09-14); zero real post-fix hits; zero app-stream or BigQuery hits. `k7h3l` (P3, RECORD/REPEATED columns unswept) FILED. |
+| B2 (`v8l6m`) | P0 (pre-fix) | 93 raw `?token=` hits in the request logs (79 demo, 14 staging; 73 + 13 of them Firebase ID tokens): 88 real rows before the fix timestamps (75 demo, 13 staging) plus 4 post-fix hits that were the orchestrator's own bogus-token probes | ACCEPTED residue (maintainer, 2026-09-14); zero real post-fix hits; zero app-stream or BigQuery hits. `k7h3l` (P3, RECORD/REPEATED columns unswept) FILED. |
 | C2 (`bwevj`) reviews | P2/P3 | The deprecated `?token=` removal set (~54 test sites + the B0 filter); binary frames uncapped; a policy refusal had no on-screen message and the translated-schema size will one day cross the frame cap; the 1013 metric now also counts kit-store failures; a status-classifier test pins neither terminal status | `0j8e5` (P2), `4uub0` (P2), `nb9tx`, `5bbj1`, `6jezt` (P3) FILED. Fixed in C2 itself before the PR: a transient store error refused as a permanent denial; policy refusals retried five times and skipped the client save prompt (a dedicated terminal status now). |
 | C3 (`vcjgs`) | P2/P3 | Emulator-backed rules tests need Java (none locally or in CI); `users/{uid}` write has no shape validation (rules auditor score 4, minor); one admin sign-in log line carried the email | `34y4y` (P2), `wnkky` (P3) FILED; the log line FIXED in C3. |
 | C4 (`6088m`) reviews | P2 | Four editor schema-body routes accept unbounded JSON; the 5 MB fill-pdf cap is ~2x a large translated schema; wrong client messages for 413/408 | `07vpc`, `ij9ue`, `lhrln` FILED. |

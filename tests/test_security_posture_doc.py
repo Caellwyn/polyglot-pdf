@@ -13,7 +13,7 @@ must name the check that covers it instead.
 
 Mutations (each RED): delete the `alerts` row; add a row for a store the
 script does not iterate (`bigquery:made_up`); drop the `infra_posture.sh`
-pointer from the Firebase Auth row.
+pointer from the Firebase Auth row; drop `actor_email` from the ledger row.
 """
 from __future__ import annotations
 
@@ -102,3 +102,49 @@ def test_every_row_carries_all_six_columns():
     for cells in doc_rows():
         assert len(cells) == 6, (cells[0][:60], len(cells))
         assert all(cells), cells[0][:60]
+
+
+# --- keys, not only store names (fresh-eyes round 1: three rows omitted a staff-email key) ---
+
+
+def script_allowlists() -> dict:
+    """{store-as-the-doc-names-it: frozenset(keys)} for every store with a
+    pinned key set, parsed from the script's source."""
+    src = SCRIPT.read_text(encoding="utf-8")
+    block = src[src.index("PINNED_ALLOWLISTS"):]
+    block = block[: block.index("\n}\n") + 3]
+    sets = {}
+    for m in re.finditer(r'^    "([a-z_]+)": frozenset\(\{(.*?)\}\)', block, flags=re.S | re.M):
+        keys = frozenset(re.findall(r'"([A-Za-z_]+)"', m.group(2)))
+        if keys:
+            sets[m.group(1)] = keys
+    subs = re.findall(
+        r'\("([a-z_/*]+)", "([a-z_]+)", "([a-z_]+)", "([a-z_]+)"\)', src)
+    for report_name, _parent, _sub, allowlist_key in subs:
+        if allowlist_key in sets:
+            sets[report_name] = sets.pop(allowlist_key)
+    assert len(sets) >= 10, sorted(sets)
+    return sets
+
+
+def _key_cells() -> dict:
+    cells = {}
+    for row in doc_rows():
+        m = re.match(r"^`([^`]+)`", row[0])
+        if m:
+            cells[m.group(1)] = row[1]
+    # "as `other`" resolves to the other row's cell (one hop).
+    for name, cell in list(cells.items()):
+        m = re.match(r"^as `([^`]+)`", cell)
+        if m:
+            cells[name] = cells[m.group(1)]
+    return cells
+
+
+def test_every_pinned_key_appears_in_its_rows_key_set_cell():
+    cells = _key_cells()
+    for store, keys in script_allowlists().items():
+        assert store in cells, store
+        words = set(re.findall(r"[A-Za-z_]+", cells[store]))
+        missing = sorted(keys - words)
+        assert not missing, "%s row omits pinned keys: %s" % (store, missing)
