@@ -137,7 +137,12 @@ fi
 PROJECT_ROLES=(
     # Deploy Cloud Run revisions (backend-staging, backend-demo,
     # admin-service targets) and shift traffic on the admin tagged-revision
-    # gate.
+    # gate. PROJECT-WIDE, unlike the resource-scoped actAs bindings below:
+    # Cloud Run IAM has no role narrower than run.admin for managing
+    # revisions across multiple named services, so there is no per-service
+    # grant to scope this down to -- project-wide is the only option here,
+    # not a relaxation of the narrow-scoping principle used elsewhere in
+    # this section.
     "roles/run.admin"
     # Publish the Hosting site targets (frontend-*, admin-console,
     # admin-console-candidate, editor).
