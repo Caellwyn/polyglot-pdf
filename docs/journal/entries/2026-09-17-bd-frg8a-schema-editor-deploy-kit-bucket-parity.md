@@ -40,10 +40,12 @@ all anymore.
 comment to explain why (the old comment claimed `deploy-demo.sh` /
 `deploy-production.sh` "export it explicitly before delegating to
 deploy-all.sh" -- also stale, since neither delegates to it that way
-anymore; corrected to describe only `deploy-production.sh`'s own explicit
-export before its dead-script early exit). This was a mechanical,
-one-file, test-and-comment-only change -- no production script logic
-touched.
+anymore; corrected to describe `deploy-production.sh`'s own explicit
+export as unreachable dead code, coming AFTER its unconditional
+dead-script `exit 1`, not before it -- fresh-eyes caught a first attempt
+at this correction that stated the ordering backwards). This was a
+mechanical, one-file, test-and-comment-only change -- no production
+script logic touched.
 
 Considered and rejected: restoring a bare `FORM_KITS_BUCKET` default
 inside `deploy-all.sh` to keep the enumeration unchanged. Rejected because
