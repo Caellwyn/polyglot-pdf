@@ -115,17 +115,42 @@ def test_a_modified_tracked_file_is_refused(clean_pushed_repo):
     assert "not clean" in result.stderr
 
 
-def test_an_untracked_file_is_refused(clean_pushed_repo):
-    """Untracked counts too.
+def test_an_untracked_file_alone_does_not_refuse(clean_pushed_repo):
+    """Untracked files never reach the build, so they cannot dirty a deploy.
 
-    A tarball build uploads untracked files (subject to .gcloudignore) while
-    the commit does not contain them -- so a porcelain check narrowed to
-    tracked changes would miss a whole class of tree/commit mismatch.
+    bd polyglot-pdf-wobtv: deploy runs `gcloud builds triggers run --sha=<sha>`,
+    which fetches ONLY the named commit from the connected GitHub repository --
+    an untracked file is never part of that commit, so its presence cannot
+    make the build ship anything the operator did not see. Refusing over it
+    anyway made every real deploy fail on scratch files other sessions leave
+    at the repo root (Claude outputs/, *.bak.py, prep-*.txt) and, before this
+    bead's own fix, three now-untracked .firebase/*.cache files.
     """
     (clean_pushed_repo / "scratch.py").write_text("x = 1\n", encoding="utf-8")
     result = _run_preflight(clean_pushed_repo)
+    assert result.returncode == 0, (
+        f"an untracked-only tree was refused:\n{result.stdout}\n{result.stderr}"
+    )
+    # Still surfaced, just not fatal -- the operator should see it either way.
+    assert "scratch.py" in result.stderr
+    assert "NOTE" in result.stderr
+
+
+def test_an_untracked_file_alongside_a_dirty_tracked_file_still_refuses(
+    clean_pushed_repo,
+):
+    """The untracked carve-out must not swallow a real tracked-file refusal.
+
+    Without this, a preflight that (bugged) ignored ALL of --porcelain's
+    output whenever anything untracked was present would pass this case for
+    the wrong reason.
+    """
+    (clean_pushed_repo / "scratch.py").write_text("x = 1\n", encoding="utf-8")
+    (clean_pushed_repo / "a.txt").write_text("edited\n", encoding="utf-8")
+    result = _run_preflight(clean_pushed_repo)
     assert result.returncode == 1, (
-        f"an untracked file was allowed to deploy:\n{result.stdout}"
+        "a dirty tracked file was allowed to deploy alongside an untracked "
+        f"one:\n{result.stdout}"
     )
     assert "not clean" in result.stderr
 
@@ -319,4 +344,60 @@ def test_the_helper_does_not_swallow_its_own_failure():
     assert "|| true" not in body, (
         "deploy_preflight swallows a failure, so a refusal would not abort "
         "the calling wrapper"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE .firebase/ CACHE: untrack it AND keep it untracked (bd polyglot-pdf-wobtv)
+# ---------------------------------------------------------------------------
+#
+# The other half of the same bug report: three `.firebase/hosting.*.cache`
+# files were tracked, so a Firebase Hosting deploy dirtied the tree on every
+# run -- the untracked-files carve-out above does not help a TRACKED cache
+# file at all, since a modified tracked file still (correctly) refuses. The
+# fix is to untrack the cache and keep it out for good; both halves are
+# pinned here so a future `firebase deploy` re-adding one under `git add -A`
+# fails CI instead of a review round.
+
+
+def test_no_path_under_dot_firebase_is_tracked():
+    """The cache directory itself must carry nothing in git.
+
+    `firebase deploy` regenerates `.firebase/hosting.<target>.cache` on every
+    run; the moment even one is tracked, that regeneration dirties the tree
+    and the next deploy_preflight run refuses it. `git ls-files` is the
+    ground truth for "tracked" -- a glob over the filesystem would not
+    distinguish a tracked cache file from an untracked one sitting right next
+    to it.
+    """
+    result = subprocess.run(
+        [GIT, "-C", str(REPO_ROOT), "ls-files", ".firebase"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    tracked = [line for line in result.stdout.splitlines() if line.strip()]
+    assert tracked == [], (
+        "path(s) under .firebase/ are tracked, which will dirty the tree on "
+        f"every firebase deploy and make deploy_preflight refuse it: {tracked}"
+    )
+
+
+def test_gitignore_covers_dot_firebase():
+    """The untrack alone is not durable -- .gitignore is what stops it coming
+    back. Without an ignore rule, the NEXT `firebase deploy` followed by a
+    `git add -A` re-tracks the cache and reintroduces the exact bug this bead
+    fixes.
+    """
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    check = subprocess.run(
+        [GIT, "-C", str(REPO_ROOT), "check-ignore", "-q", ".firebase/probe.cache"],
+        capture_output=True,
+        text=True,
+    )
+    assert check.returncode == 0, (
+        ".firebase/ is not covered by .gitignore (git check-ignore found no "
+        f"matching rule); .gitignore contents:\n{gitignore}"
     )

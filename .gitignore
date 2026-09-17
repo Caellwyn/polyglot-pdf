@@ -213,3 +213,10 @@ tmpfile
 *service-account*.json
 *credentials*.json
 .beads.gate.lock
+
+# Firebase CLI writes hosting-target cache files here on every `firebase
+# deploy` (bd polyglot-pdf-wobtv). Three of these ended up tracked, which
+# meant every Hosting deploy dirtied the tree that deploy_preflight.sh's next
+# run then refused. The cache is machine/run-local and reproducible from
+# .firebaserc + a deploy; it belongs in neither git nor a deploy artifact.
+.firebase/
