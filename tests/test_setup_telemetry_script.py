@@ -590,3 +590,41 @@ def test_no_billing_arg_path_does_not_read_as_unqualified_success():
         "the final line printed before exit 0 in the no-billing-arg path "
         "does not say views were NOT created: {!r}".format(final_line)
     )
+
+
+def test_every_sql_placeholder_has_a_corresponding_sed_substitution():
+    """Exit criterion 1: the script substitutes EVERY ${...} placeholder
+    sql/telemetry_views.sql actually declares -- enumerated mechanically
+    from the SQL file (CLAUDE.md scar #8: enumerate the set, don't hand-list
+    it), not a fixed list of the four placeholders known today. A future
+    view that introduces a fifth placeholder without a matching sed clause
+    would otherwise ship a SQL statement with a literal, unsubstituted
+    ${...} string reaching `bq query` -- a guaranteed query failure, but one
+    this test catches at review time instead of at the operator's terminal.
+    Mutation: remove any one of the sed -e clauses -- red."""
+    sql_text = SQL_FILE.read_text(encoding="utf-8")
+    declared_placeholders = set(re.findall(r"\$\{[A-Z_]+\}", sql_text))
+    assert declared_placeholders, (
+        "sql/telemetry_views.sql declares no ${...} placeholders at all -- "
+        "this test would pass vacuously; check the SQL file is being read "
+        "correctly")
+
+    script_text = _script_text()
+    # Every sed clause is `-e "s|\${PLACEHOLDER}|...|g"` -- the script
+    # backslash-escapes the leading $ so the shell does not expand it
+    # before sed sees it.
+    substituted_names = set(
+        re.findall(r'-e "s\|\\\$\{([A-Z_]+)\}\|', script_text)
+    )
+    substituted_placeholders = set(
+        "${{{}}}".format(name) for name in substituted_names
+    )
+    assert substituted_placeholders == declared_placeholders, (
+        "the sed pipeline's substituted placeholders {} do not match "
+        "sql/telemetry_views.sql's declared placeholders {} -- every "
+        "placeholder the SQL file declares must have a matching sed clause, "
+        "and the script must not substitute a placeholder the SQL no longer "
+        "uses".format(
+            sorted(substituted_placeholders), sorted(declared_placeholders)
+        )
+    )
