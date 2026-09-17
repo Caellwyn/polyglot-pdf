@@ -57,8 +57,8 @@ echo -e "${GREEN}[INFO]${NC} Project: $POLYGLOT_PROJECT_NAME"
 
 # Decide whether to deploy Firestore rules: only when the frontend is in scope
 # (deploy-all.sh ships hosting only, and a project left on default-deny breaks
-# email signup -- the unauth authorized_emails read -- and the users/{uid}
-# profile sync on login). Skip on backend/form-kits-only runs, which do not touch
+# the users/{uid} profile sync on login; email signup's allowlist check is
+# server-side and needs no client-readable rule). Skip on backend/form-kits-only runs, which do not touch
 # the frontend.
 DEPLOY_RULES=false
 if [ $# -eq 0 ]; then

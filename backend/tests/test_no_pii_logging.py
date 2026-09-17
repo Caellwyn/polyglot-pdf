@@ -89,6 +89,10 @@ _SENSITIVE_KWARGS = (
     # exception MESSAGE line, so it is the same class; exc_info=True is the
     # sanctioned shape (e4dt8's processor renders frames + type, no message).
     "traceback", "tb", "stack", "stacktrace",
+    # A raw address is staff PII (sprint 23 C3: POST /api/signup/check promises
+    # never to log it). email_length=len(...) stays safe; actor_email= on the
+    # admin audit lines is a different kwarg name and does not match.
+    "email",
 )
 
 # Per-site allowlist for the error-class kwargs: EXACT (file, kwarg text)
@@ -422,6 +426,11 @@ def test_guard_catches_known_leaks():
     assert not _scan_leaks('_log.error("X", error_type=type(exc).__name__)')
     assert not _scan_leaks('_log.error("X", exc_info=True)')
     assert not _scan_leaks('_log.warning("X", error_count=len(errs), err_id=eid)')
+    # email (sprint 23 C3): raw is a leak; the length form and the actor_email
+    # audit kwarg are not.
+    assert _scan_leaks('_log.info("X", email=body.email)')
+    assert not _scan_leaks('_log.info("X", email_length=len(body.email))')
+    assert not _scan_leaks('_log.info("X", actor_email=actor.email)')
     # spoken_name: the raw value is a leak; the redacted length form is safe (bd t1c).
     assert _scan_leaks('_log.info("X", spoken_name=spoken_name, found=f)')
     assert not _scan_leaks('_log.info("X", spoken_name_length=len(spoken_name), found=f)')

@@ -71,7 +71,7 @@ where we prove it first.
 
 ### Working Features
 - ✅ Firebase Authentication (Google sign-in + email/password)
-- ✅ Authorized-email gating for sign-up (Firestore `authorized_emails` collection)
+- ✅ Authorized-email gating for sign-up (server-side check against the Admin-SDK-only `authorized_emails` collection)
 - ✅ Gemini Live API voice integration (native audio-to-audio); default 2.5
   native-audio (backend-aware id: `gemini-live-2.5-flash-native-audio` on Vertex,
   `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio), with
@@ -520,14 +520,14 @@ For each project:
 
 ### Firestore Security Rules
 
-See `firestore.rules` (wired into `firebase.json`) — users can only read/write their own profile document, and the `authorized_emails` collection is readable by unauthenticated users (required for the pre-signup check) but not writable from the client. **`deploy-demo.sh` ships these rules** (`firebase deploy --only firestore:rules`) on any frontend/full deploy — `deploy-staging.sh` deliberately does not, because rules are project-wide and a staging rules deploy would apply to the live demo; a project left on default-deny breaks both email signup and the profile-doc sync.
+See `firestore.rules` (wired into `firebase.json`) — users can only read/write their own profile document, and every other collection, including the `authorized_emails` signup allowlist, is closed to browsers (the pre-signup check runs server-side, `POST /api/signup/check`). **`deploy-demo.sh` ships these rules** (`firebase deploy --only firestore:rules`) on any frontend/full deploy — `deploy-staging.sh` deliberately does not, because rules are project-wide and a staging rules deploy would apply to the live demo; a project left on default-deny breaks the profile-doc sync (email signup's allowlist check is server-side and needs no client-readable rule).
 
 ### Deployment Checklist
 
 - [ ] `GOOGLE_CLOUD_PROJECT` set in Cloud Run (done by `deploy-new.sh`). Leave `VERTEXAI` at its `true` default — a deployed service refuses to start on the AI Studio path (Vertex-only production, bd `polyglot-pdf-5e6a`)
 - [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
 - [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
-- [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync
+- [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks the profile sync (email signup no longer depends on a client-readable rule)
 - [ ] `authorized_emails` collection populated for email sign-up users
 - [ ] `.env.demo` / `.env.production` contain correct `VITE_WS_URL` and Firebase config
 - [ ] Verify WebSocket connects after deploy (check Cloud Run logs for `ws_connect`)
