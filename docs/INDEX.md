@@ -1,6 +1,6 @@
 # Doc index -- polyglot-pdf
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-uijam: sprint 23 security + data-leak audit plan added to the active sprint plans row; no code changed in this edit).*
+*Last updated: 2026-09-16 (bd polyglot-pdf-uijam: sprint 23 security + data-leak audit plan added to the active sprint plans row; no code changed in this edit).*
 
 The canonical map of this project's docs. Tier 1 (this file + CLAUDE.md) is
 always loaded; everything else is reached on demand. See

@@ -126,7 +126,18 @@ each.
 
 ## Review record
 
-REVIEW_RECORD
+Fresh-eyes (Sonnet, read-only): round 1 found three inventory rows omitting
+a staff-email key the script pins (`actor_email`, `employee_email`), C2's
+socket changes stated as present fact while #834 is unmerged, the B2
+count misquoted, the four undeployed BigQuery views presented as live, and
+that the test pinned store names only -- all fixed (every scripted row now
+carries the script's keys verbatim and the test pins them; C2 is hedged
+everywhere; the views say so). Round 2: no gaps; it found the B2 entry's
+own summary (75 demo) disagreeing with its itemised post-fix list (76) by
+one -- pre-existing, now stated as 88-89 here rather than resolved from
+prose. Docs-reviewer (Haiku, adversarial): NO-GAPS; its one borderline
+note (the INDEX stamp) taken. No process other than git was started by
+any reviewer.
 
 ## Lessons
 
