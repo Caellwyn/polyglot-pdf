@@ -1,6 +1,6 @@
 # Doc index -- polyglot-pdf
 
-*Last updated: 2026-09-11 (bd polyglot-pdf-uijam: sprint 23 security + data-leak audit plan added to the active sprint plans row; no code changed in this edit).*
+*Last updated: 2026-09-16 (bd polyglot-pdf-uijam: sprint 23 security + data-leak audit plan added to the active sprint plans row; no code changed in this edit).*
 
 The canonical map of this project's docs. Tier 1 (this file + CLAUDE.md) is
 always loaded; everything else is reached on demand. See
@@ -50,6 +50,7 @@ ground truth -- fix the doc first as a separate commit.
 | AI models + pricing (swappable, A/B) | [`standards/ai-models.md`](standards/ai-models.md) |
 | Voice + VAD (manual activity signals) | [`standards/voice-and-vad.md`](standards/voice-and-vad.md) |
 | HIPAA / PII policy | [`standards/hipaa-pii-policy.md`](standards/hipaa-pii-policy.md) |
+| Security posture (threat model, store inventory, route/gate matrix, credentials, third-party processors, live checks, accepted risks) | [`standards/security-posture.md`](standards/security-posture.md) |
 | Confirmation + audit trail | [`standards/confirmation-and-audit.md`](standards/confirmation-and-audit.md) |
 | Stateless architecture (client owns state) | [`standards/stateless-architecture.md`](standards/stateless-architecture.md) |
 | Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
