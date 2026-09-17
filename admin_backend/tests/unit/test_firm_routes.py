@@ -34,8 +34,9 @@ from backend.services import firms, plans
 # A minimal Firestore stand-in with REAL transaction semantics AND nested
 # subcollection support (test_config_routes.py's _FakeDb/_Transaction,
 # generalized to the tuple-path shape test_credit_ledger.py's fake uses --
-# get_firm() reads firms/{id}/ledger via credit_ledger.read_entries(), which
-# a flat (collection, doc_id) path cannot address).
+# get_firm() reads firms/{id}/ledger via
+# credit_ledger.read_recent_entries(), which a flat (collection, doc_id)
+# path cannot address).
 # --------------------------------------------------------------------------
 
 class _Snap:
