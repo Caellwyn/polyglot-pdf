@@ -1305,6 +1305,22 @@ def _mirror_budget_exhausted(jti) -> None:
 	pre-A3, and is a plain "nothing to mirror" case even after) when there
 	is no existing doc to update.
 
+	NEVER OVERWRITES A TERMINAL STATUS (bd polyglot-pdf-b554d). `revoked` and
+	`refunded` are TERMINAL money states (links_store.OPEN_BLOCKING_STATUSES,
+	the same set link_redemptions.enforce_link_redemption refuses an open
+	on) -- once bead A3's admin revoke route (bd polyglot-pdf-jecrl) lands as
+	the first non-mint writer of this field, an unconditional .set(merge=True)
+	here would stomp a `revoked` record back to `budget_exhausted`, which is
+	NOT in OPEN_BLOCKING_STATUSES, silently re-opening a link a human staff
+	member explicitly revoked. This mirror's own docstring already reasoned
+	about a bad value confusing the A3 gate on CREATE; the same reasoning
+	applies on OVERWRITE, so the read this function already does before
+	writing (to avoid creating an orphan doc) doubles as the terminal-state
+	check: read the existing status, and skip the write -- exactly like the
+	no-such-doc case above -- whenever it is already in
+	links_store.OPEN_BLOCKING_STATUSES. Mirrors links_store.mark_opened()'s own
+	rule ("a record already... revoked or refunded is left alone").
+
 	NEVER RAISES, and never blocks the close it runs alongside. A failure to
 	write a status label used only for a listing must not affect the socket
 	teardown that is already in flight for a real reason (the client hit
@@ -1320,6 +1336,9 @@ def _mirror_budget_exhausted(jti) -> None:
 		doc_ref = _links_store._collection().document(jti)
 		snap = doc_ref.get()
 		if not snap.exists:
+			return
+		current_status = (snap.to_dict() or {}).get("status")
+		if current_status in _links_store.OPEN_BLOCKING_STATUSES:
 			return
 		doc_ref.set(
 			{"status": _links_store.STATUS_BUDGET_EXHAUSTED}, merge=True)

@@ -2,6 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
+*Last updated: 2026-09-17 (bd polyglot-pdf-b554d: the internal `_mirror_budget_exhausted()` helper -- the socket teardown's best-effort telemetry write on a CLIENT LINK's mint record, not a WS protocol change -- no longer overwrites a `revoked`/`refunded` status on that record; see auth.md's link-lifecycle section for the full writer-set contract.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the credential in the first frame, the Origin allowlist, the auth timeout, the text-frame cap, the staff kit-scope gate; `?token=` deprecated.)*
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-e4dt8: every close on `/fill`
