@@ -32,7 +32,10 @@ Three beads closed with real fixes, one closed as already-satisfied:
   just not caught by the mechanical checker (which only regexes for
   stamp-line chains, not narrative embedded in prose). Dropped the
   historical clause, kept the current-state rationale (the 30-char
-  service-account-id cap).
+  service-account-id cap). The excision itself introduced a paren-balance
+  defect (the removed clause's closing paren had been reused to close a
+  DIFFERENT, still-needed nesting level) -- caught by the outer Opus
+  cross-surface review, fixed inline before merge.
 - **`qmdc2`** -- `docs/technical_guide.md`'s credit-ledger "Readers" bullet
   enumerated only `read_balance` and `read_entries`, omitting
   `read_recent_entries` (added by bd `polyglot-pdf-y1t68` in batch 2) --
@@ -50,9 +53,24 @@ Three beads closed with real fixes, one closed as already-satisfied:
   PR #823 merged. Closed with no diff.
 
 Fresh-eyes triage (Sonnet, routed by diff size): no gaps found; no
-out-of-scope findings surfaced.
+out-of-scope findings surfaced. Outer review (Opus cross-surface, one
+round): GAPS-FOUND (1) -- the mcqc0 excision left an unbalanced
+parenthesis in the same bullet (fixed inline, bd `polyglot-pdf-yg7fy`).
+Also filed one pre-existing out-of-scope finding (bd `polyglot-pdf-wb1v4`,
+a stale `read_entries` comment in `test_firm_routes.py` predating this
+branch). Second round: NO-GAPS.
 
 ## Lessons
+
+- **Deleting a clause from the MIDDLE of a parenthetical needs a
+  paren-balance check, not just a re-read for sense.** Removing "bd
+  polyglot-pdf-l3kqc shortened it from the original ... (32 chars)" from
+  `technical_guide.md`'s Surface-contract-32 bullet also removed the `(`
+  that opened it, but the sentence's LATER closing `)` (for a still-needed
+  "SEPARATE identity from BOTH..." clause) survived -- leaving the bullet
+  at paren-depth -1. The prose still read as grammatically plausible
+  English, which is exactly why a re-read alone missed it; only counting
+  parens (or the outer cross-surface reviewer, which did) caught it.
 
 - A "bead X did Y to the old value" clause embedded in tier-1/2 body prose
   is the same current-state-only violation as a `Previously:` stamp chain
