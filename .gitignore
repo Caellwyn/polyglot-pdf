@@ -212,3 +212,4 @@ tmpfile
 *.key
 *service-account*.json
 *credentials*.json
+.beads.gate.lock
