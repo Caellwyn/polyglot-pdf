@@ -116,7 +116,7 @@ EXPECTED_ADMIN_SA_ROLES = {
     # trigger route, bead 4.3, calls `builds.create`). Granted by
     # scripts/setup-admin-service.sh's CLOUD_BUILD_SA_ROLES array, scoped to
     # that ONE service account -- see
-    # test_admin_sa_actas_role_is_scoped_to_the_cloud_build_sa below for why
+    # test_the_actas_role_is_scoped_to_the_cloud_build_sa_not_the_project below for why
     # the scope, not just the name, is pinned. This is the role CLAUDE.md's
     # scar #7 example is about: a project-wide grant here would let a
     # compromised admin-backend-sa credential impersonate every service
