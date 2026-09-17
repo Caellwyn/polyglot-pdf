@@ -96,9 +96,85 @@ if [ -z "$PROJECT_ID" ]; then
     exit 1
 fi
 
+# BILLING_EXPORT_TABLE is read HERE, before the dataset is created, not down
+# at the view-application step -- LOCATION derivation (below) needs it, and a
+# BigQuery dataset's location is fixed at creation time, so this cannot be
+# deferred to where the script used to first look at this argument.
+BILLING_EXPORT_TABLE=$2
+
 DATASET="polyglot_telemetry"
-LOCATION="us-central1"
 SINK_NAME="polyglot-telemetry-sink"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Resolve a python interpreter for scripts/telemetry_bq_setup.py (location
+# derivation + the dataset-scoped IAM grants below). That script imports
+# google-cloud-bigquery, a backend/requirements.txt dependency, NOT a
+# stdlib one -- a candidate that merely RUNS (-c pass) is not enough, since
+# the library is installed only inside backend/.venv on a normal checkout.
+# Reproduced directly on the maintainer's machine (bd polyglot-pdf-vzvio,
+# cross-surface review round 5): `python` passes a bare `-c pass` probe but
+# has no google-cloud-bigquery installed, so telemetry_bq_setup.py aborted
+# with "ModuleNotFoundError: No module named 'google'" -- BEFORE the
+# dataset, sink, or grants were even created, i.e. strictly earlier and
+# broader than the bug this bead was filed to fix.
+#
+# Mirrors scripts/audit/infra_posture.sh's _python_candidates -- the
+# repo's other operator script with a real dependency on backend/.venv --
+# which puts an explicit override and the venv candidates FIRST, ahead of
+# bare python3/python/py: an operator running this from a plain shell,
+# without having activated the venv, still gets a working interpreter. A
+# worktree (which has no backend/.venv of its own -- CLAUDE.md scar #3)
+# just falls through those candidates to the bare ones, same as
+# infra_posture.sh.
+#
+# The probe checks `import google.cloud.bigquery`, not just `-c pass`, so
+# a python that merely runs but lacks the dependency is correctly skipped
+# instead of being selected and failing deeper into the script.
+find_telemetry_python() {
+    local cand
+    for cand in ${TELEMETRY_PYTHON_CANDIDATES:-${TELEMETRY_PYTHON_OVERRIDE:-} "$REPO_ROOT/backend/.venv/Scripts/python.exe" "$REPO_ROOT/backend/.venv/bin/python" backend/.venv/Scripts/python.exe backend/.venv/bin/python python3 python py}; do
+        [ -z "$cand" ] && continue
+        if "$cand" -c "import google.cloud.bigquery" >/dev/null 2>&1; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! PYTHON_BIN=$(find_telemetry_python); then
+    echo -e "${RED}[ERROR]${NC} No python interpreter with google-cloud-bigquery installed found (tried: TELEMETRY_PYTHON_OVERRIDE, ${REPO_ROOT}/backend/.venv/{Scripts,bin}/python{.exe,}, backend/.venv/{Scripts,bin}/python{.exe,}, python3, python, py) -- cannot run scripts/telemetry_bq_setup.py; aborting. Activate backend/.venv first, or set TELEMETRY_PYTHON_OVERRIDE=<path> to an interpreter with google-cloud-bigquery installed."
+    exit 1
+fi
+
+# LOCATION: derived from the billing dataset when BILLING_EXPORT_TABLE is
+# given (bd polyglot-pdf-vzvio) -- BigQuery refuses to create a view
+# (hosting_cost_by_service_month) that reads a table in a DIFFERENT location
+# than its own dataset, so hard-coding us-central1 here silently breaks that
+# view the moment the maintainer's Cloud Billing export dataset happens to
+# live in the US multi-region (or any other location) instead. Falls back to
+# us-central1 only when no BILLING_EXPORT_TABLE is given at all -- there is
+# nothing to match locations against yet, and the dataset/sink/IAM setup
+# below still needs SOME location to create the dataset in on a first run.
+# scripts/telemetry_bq_setup.py resolve-location refuses (non-zero, message
+# on stderr, caught by `set -e`) if the telemetry dataset already exists,
+# already holds tables, AND its location differs from the billing dataset's
+# -- BigQuery cannot move a populated dataset between locations, so this
+# script must not paper over that with a location it cannot actually apply.
+if [ -n "$BILLING_EXPORT_TABLE" ]; then
+    echo -e "${GREEN}[INFO]${NC} Deriving telemetry dataset location from billing table $BILLING_EXPORT_TABLE..."
+    if ! LOCATION=$("$PYTHON_BIN" "$SCRIPT_DIR/telemetry_bq_setup.py" resolve-location \
+        --project "$PROJECT_ID" --dataset "$DATASET" \
+        --billing-table "$BILLING_EXPORT_TABLE"); then
+        exit 1
+    fi
+    echo -e "${GREEN}[INFO]${NC} Using location $LOCATION (from the billing dataset)."
+else
+    LOCATION="us-central1"
+    echo -e "${YELLOW}[NOTE]${NC} No BILLING_EXPORT_TABLE given -- defaulting the telemetry dataset location to $LOCATION. Pass BILLING_EXPORT_TABLE to derive the location from the billing dataset instead."
+fi
 
 echo -e "${GREEN}[INFO]${NC} Setting up telemetry (BigQuery) for project: $PROJECT_ID"
 
@@ -200,19 +276,27 @@ fi
 #    dataset stays empty while the sink itself reports healthy (the same
 #    "mock cannot tell you the real dependency is forbidden" trap as
 #    CLAUDE.md scar #7, just on the WRITE side instead of a read).
+#
+# Granted via scripts/telemetry_bq_setup.py (the BigQuery API's
+# Dataset.access_entries), NOT `bq add-iam-policy-binding` (bd
+# polyglot-pdf-vzvio) -- on at least one maintainer machine `bq` itself
+# exits non-zero here because its shim needs CLOUDSDK_PYTHON pointed at an
+# installed Python, which aborted this script (via `set -e`) before the
+# views below were ever applied. See that script's own module docstring for
+# why the API path is equivalent, not merely a workaround.
 if [ -n "$WRITER_IDENTITY" ]; then
     echo -e "${GREEN}[INFO]${NC} Granting bigquery.dataEditor on $DATASET to sink writer $WRITER_IDENTITY..."
-    bq add-iam-policy-binding \
-        --project_id="$PROJECT_ID" \
-        --member="serviceAccount:$WRITER_IDENTITY" \
-        --role="roles/bigquery.dataEditor" \
-        "$DATASET" > /dev/null
+    "$PYTHON_BIN" "$SCRIPT_DIR/telemetry_bq_setup.py" grant-dataset-role \
+        --project "$PROJECT_ID" \
+        --dataset "$DATASET" \
+        --member "serviceAccount:$WRITER_IDENTITY" \
+        --role "roles/bigquery.dataEditor"
 else
     echo -e "${YELLOW}[NOTE]${NC} Could not resolve the sink's writer identity."
     echo -e "${YELLOW}[NOTE]${NC} Run 'gcloud logging sinks describe $SINK_NAME --project=$PROJECT_ID'"
     echo -e "${YELLOW}[NOTE]${NC} and grant roles/bigquery.dataEditor on $DATASET to its writerIdentity by hand:"
-    echo -e "${YELLOW}[NOTE]${NC}   bq add-iam-policy-binding --project_id=$PROJECT_ID \\"
-    echo -e "${YELLOW}[NOTE]${NC}     --member=serviceAccount:<writerIdentity> --role=roles/bigquery.dataEditor $DATASET"
+    echo -e "${YELLOW}[NOTE]${NC}   python scripts/telemetry_bq_setup.py grant-dataset-role --project $PROJECT_ID \\"
+    echo -e "${YELLOW}[NOTE]${NC}     --dataset $DATASET --member serviceAccount:<writerIdentity> --role roles/bigquery.dataEditor"
 fi
 
 # 5. Grant admin-backend-sa the two BigQuery roles Epic 1's
@@ -232,11 +316,13 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --condition=None > /dev/null
 
 echo -e "${GREEN}[INFO]${NC} Granting roles/bigquery.dataViewer (dataset-scoped) to $ADMIN_SA_EMAIL on $DATASET..."
-bq add-iam-policy-binding \
-    --project_id="$PROJECT_ID" \
-    --member="serviceAccount:$ADMIN_SA_EMAIL" \
-    --role="roles/bigquery.dataViewer" \
-    "$DATASET" > /dev/null
+# Via scripts/telemetry_bq_setup.py, not `bq add-iam-policy-binding` --
+# same reason as the sink-writer dataEditor grant above (bd polyglot-pdf-vzvio).
+"$PYTHON_BIN" "$SCRIPT_DIR/telemetry_bq_setup.py" grant-dataset-role \
+    --project "$PROJECT_ID" \
+    --dataset "$DATASET" \
+    --member "serviceAccount:$ADMIN_SA_EMAIL" \
+    --role "roles/bigquery.dataViewer"
 
 # 6. Apply the view definitions (sql/telemetry_views.sql), substituting the
 #    dataset, the sink's TWO destination tables, and the Cloud Billing
@@ -265,8 +351,8 @@ bq add-iam-policy-binding \
 # bead) and requires knowing the destination project/dataset chosen there,
 # so it is an OPTIONAL second argument rather than guessed -- omitting it
 # skips view creation below (this script's sink/dataset/IAM setup still runs
-# either way).
-BILLING_EXPORT_TABLE=$2
+# either way). Already read into $BILLING_EXPORT_TABLE near the top of this
+# script (LOCATION derivation needs it before the dataset is even created).
 if [ -z "$BILLING_EXPORT_TABLE" ]; then
     echo -e "${YELLOW}[NOTE]${NC} No BILLING_EXPORT_TABLE argument given -- skipping view creation."
     echo -e "${YELLOW}[NOTE]${NC} Re-run once the Cloud Billing export is enabled (Epic 3 bead 7):"
@@ -292,7 +378,6 @@ if [ -z "$TELEMETRY_TABLE_STDOUT" ] || [ -z "$TELEMETRY_TABLE_STDERR" ]; then
 fi
 
 echo -e "${GREEN}[INFO]${NC} Applying sql/telemetry_views.sql (stdout table: $DATASET.$TELEMETRY_TABLE_STDOUT, stderr table: $DATASET.$TELEMETRY_TABLE_STDERR)..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sed \
     -e "s|\${DATASET}|$PROJECT_ID.$DATASET|g" \
     -e "s|\${TELEMETRY_TABLE_STDOUT}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDOUT|g" \

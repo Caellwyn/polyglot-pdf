@@ -1,5 +1,7 @@
 # Technical guide -- polyglot-pdf
 
+*Last updated: 2026-09-17 (bd polyglot-pdf-vzvio: Surface contract 25 -- scripts/setup-telemetry.sh derives the telemetry dataset LOCATION from the Cloud Billing export dataset via new scripts/telemetry_bq_setup.py instead of a hard-coded us-central1, and the two dataset-scoped BigQuery IAM grants move to that script's grant-dataset-role subcommand instead of `bq add-iam-policy-binding`; BILLING_EXPORT_TABLE's producer row corrected from REQUIRED to OPTIONAL to match the shipped script.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the `/ws/fill` and dev-socket rows.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the `POST /api/signup/check` route row.)*
 
@@ -2121,7 +2123,7 @@ operator-run infrastructure: nothing in this contract executes against GCP from
 a deploy script.
 
 - **Producer:** `scripts/setup-telemetry.sh` creates the `polyglot_telemetry`
-  BigQuery dataset (`us-central1`) and a Cloud Logging sink over THREE Cloud Run
+  BigQuery dataset and a Cloud Logging sink over THREE Cloud Run
   services -- the public backend, its staging twin, AND the admin service
   (`polyglot-admin`, since `ledger_export` is emitted only from
   `admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never from the
@@ -2136,9 +2138,28 @@ a deploy script.
   never overrides to stdout, so those land on stderr instead -- the three
   cost views read `${TELEMETRY_TABLE_STDOUT}` and `income_month` reads
   `${TELEMETRY_TABLE_STDERR}`; see bd polyglot-pdf-ih428) and
-  `${BILLING_EXPORT_TABLE}` (a required second script argument; the Cloud
-  Billing export itself is a separate maintainer console step, Epic 3
-  bead 7).
+  `${BILLING_EXPORT_TABLE}` (an OPTIONAL second script argument -- omitting it
+  skips view creation entirely; the Cloud Billing export itself is a separate
+  maintainer console step, Epic 3 bead 7). **The dataset LOCATION is derived
+  from the billing dataset, not hard-coded** (bd polyglot-pdf-vzvio): when
+  `BILLING_EXPORT_TABLE` is given, new `scripts/telemetry_bq_setup.py
+  resolve-location` (the `google-cloud-bigquery` API) reads that table's own
+  dataset location and the telemetry dataset is created there instead of a
+  fixed `us-central1` -- BigQuery refuses a view
+  (`hosting_cost_by_service_month`) that reads a table in a different
+  location than its own dataset, so a fixed location silently breaks that
+  view whenever the maintainer's billing export lives elsewhere (observed:
+  the US multi-region). It refuses (aborting the script) rather than
+  guessing if the telemetry dataset already exists, already holds tables, and
+  its location conflicts -- a populated dataset cannot be moved. The no-
+  argument path still defaults to `us-central1`. The same script's
+  `grant-dataset-role` subcommand also replaces `bq add-iam-policy-binding`
+  for the two dataset-scoped IAM grants below (the sink writer's
+  `dataEditor` and `admin-backend-sa`'s `dataViewer`), via
+  `Dataset.access_entries` -- `bq` itself was exiting non-zero on this call
+  on at least one maintainer machine (a `CLOUDSDK_PYTHON` shim issue).
+  `admin-backend-sa`'s project-level `roles/bigquery.jobUser` is unaffected,
+  still granted via `gcloud projects add-iam-policy-binding`.
 - **Consumers:** `GET /admin/reports/cost` + `GET /admin/reports/income`
   (bd polyglot-pdf-mpebj, E3.11a, `admin_backend/services/bigquery_reports.py`)
   -- the admin console's cost/income dashboards, the FIRST real readers of

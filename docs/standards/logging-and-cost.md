@@ -1,6 +1,8 @@
 # Logging & cost tracking
 
-**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh
+**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
+
+*Last updated: 2026-09-17 (bd polyglot-pdf-vzvio: scripts/setup-telemetry.sh derives the telemetry dataset LOCATION from the Cloud Billing export dataset via new scripts/telemetry_bq_setup.py, instead of a hard-coded us-central1, and the sink-writer dataEditor + admin-backend-sa dataViewer grants move to that script's grant-dataset-role subcommand -- the BigQuery API's Dataset.access_entries -- instead of `bq add-iam-policy-binding`, which was exiting non-zero on at least one maintainer machine.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: the `/health` payload is status + the two probes and nothing else.)*
 
@@ -256,7 +258,7 @@ bound per module — not through `StructuredLogger`.)
 ## BigQuery telemetry sink + cost/income views (bd polyglot-pdf-rd3s8, E3.6)
 
 Declarative, operator-run infrastructure -- `scripts/setup-telemetry.sh` creates
-the `polyglot_telemetry` dataset (`us-central1`), a Cloud Logging sink over
+the `polyglot_telemetry` dataset, a Cloud Logging sink over
 THREE Cloud Run services -- the public backend, its staging twin, AND the admin
 service (`polyglot-admin`; `ledger_export` is emitted only by
 `admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never by the
@@ -317,6 +319,24 @@ columns are pinned by `backend/tests/unit/test_telemetry_views.py` as a
 onto a column its source event does not emit fails there instead of shipping
 a silently-null dashboard column.
 
+**The dataset location is DERIVED from the Cloud Billing export dataset, not
+hard-coded** (bd polyglot-pdf-vzvio). BigQuery refuses to create a view that
+reads a table in a different location than its own dataset --
+`hosting_cost_by_service_month` does exactly that, reading the maintainer's
+billing export table -- so a fixed `us-central1` silently breaks that view
+the moment the billing export happens to live elsewhere (observed 2026-09-15:
+the maintainer's export is in the US multi-region). When
+`BILLING_EXPORT_TABLE` is given, `scripts/setup-telemetry.sh` calls
+`scripts/telemetry_bq_setup.py resolve-location` (the `google-cloud-bigquery`
+API, already a backend dependency) to read that table's own dataset location
+and uses it for the telemetry dataset; that helper refuses (aborting the
+script) if the telemetry dataset already exists, already holds tables, and
+its location differs from the billing dataset's -- a populated dataset cannot
+be moved between locations, so the script must not paper over the conflict
+with a location it cannot actually apply. Only the no-`BILLING_EXPORT_TABLE`
+path still defaults to `us-central1`, since there is nothing to derive a
+location from yet.
+
 **The sink step is create-or-update, not create-only** (bd polyglot-pdf-f7f0h):
 `scripts/setup-telemetry.sh` runs `gcloud logging sinks describe` first to
 decide between `sinks create` (first run) and `sinks update` (the sink
@@ -335,7 +355,20 @@ queries) and dataset-scoped `roles/bigquery.dataViewer` -- both moved out of
 set into `EXPECTED_ADMIN_SA_ROLES`, granted by `scripts/setup-telemetry.sh`
 rather than `scripts/setup-admin-service.sh`'s `PROJECT_ROLES` array (that
 script grants the admin service's non-BigQuery roles; this dataset-adjacent
-pair travels with the script that creates the dataset).
+pair travels with the script that creates the dataset). **The two
+dataset-scoped grants (the sink writer's `dataEditor` and
+`admin-backend-sa`'s `dataViewer`) go through `scripts/telemetry_bq_setup.py
+grant-dataset-role`, not `bq add-iam-policy-binding`** (bd
+polyglot-pdf-vzvio): on at least one maintainer machine `bq` itself exits
+non-zero on this call because its shim needs `CLOUDSDK_PYTHON` pointed at an
+installed Python, which aborted the whole script (via `set -e`) before the
+views were ever applied. The helper grants the role through
+`google-cloud-bigquery`'s `Dataset.access_entries` + `Client.update_dataset`
+-- the same mechanism `bq add-iam-policy-binding` itself uses on a dataset
+target -- and is idempotent (an access entry already granting the exact
+role/member pair is left alone). `admin-backend-sa`'s project-level
+`roles/bigquery.jobUser` is unaffected: it was always granted via `gcloud
+projects add-iam-policy-binding`, which never used `bq`.
 
 ## Errors, close events, and monitoring (bd polyglot-pdf-e4dt8, E3.8)
 
