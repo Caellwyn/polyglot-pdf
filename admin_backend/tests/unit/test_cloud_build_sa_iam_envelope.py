@@ -102,6 +102,8 @@ BUILD_STEP_ROLE_REQUIREMENTS = {
     # is enabled", a serviceusage.services.get) needs a second role; keyed on
     # the rules line's tail so the dict key stays unique and still matches.
     'deploy --only firestore:rules --project "$PROJECT_ID"': "roles/serviceusage.serviceUsageViewer",
+    # The indexes half runs the same pre-flight.
+    'deploy --only firestore:indexes --project "$PROJECT_ID"': "roles/serviceusage.serviceUsageViewer",
     "firebase-tools deploy --only firestore:indexes": "roles/datastore.indexAdmin",
     "firebase-tools deploy --only hosting": "roles/firebasehosting.admin",
     "gcloud run deploy": "roles/run.admin",

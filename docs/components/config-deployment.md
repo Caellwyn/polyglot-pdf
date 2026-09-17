@@ -573,7 +573,9 @@ be the gate crying wolf.
   to write `build_checks`/`deployments`, and `roles/serviceusage.serviceUsageViewer`
   because `firebase-tools deploy` first reads whether `firestore.googleapis.com`
   is enabled -- without it the `firestore-rules` target 403s before deploying
-  anything, bd `polyglot-pdf-8e812`), and grants `roles/storage.
+  anything, bd `polyglot-pdf-8e812`; like `datastore.indexAdmin` it is a grant
+  the live identity holds only once the script has been re-run since the role
+  was added), and grants `roles/storage.
   objectAdmin` on the form-kits bucket ONLY (same scope, same role, as
   `admin-backend-sa`'s own grant). Every trigger the same script creates
   passes `--service-account` naming this identity, never the legacy default

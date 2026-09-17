@@ -348,7 +348,9 @@ The pieces:
   default Cloud Build SA, holding `run.admin`, `firebasehosting.admin`,
   `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter`,
   `datastore.user`, `datastore.indexAdmin` and `serviceusage.serviceUsageViewer`
-  (the API-enabled pre-flight `firebase-tools deploy` runs) project-wide,
+  (the API-enabled pre-flight `firebase-tools deploy` runs; like
+  `indexAdmin` below, the live identity holds it only after the script is
+  re-run) project-wide,
   `storage.objectAdmin` on the form-kits
   bucket only, and resource-scoped actAs (`roles/iam.serviceAccountUser`)
   on BOTH `polyglot-backend-sa` and `admin-backend-sa` -- deploying a
