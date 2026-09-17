@@ -16,7 +16,7 @@ import type { FormSchema, FormSection, FormField, FormPart, FieldValue, Validato
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 import { isBlankFieldValue, isConfirmedButBlank } from "../utils/fieldValue";
-import { readFieldEntryWithAlias } from "../utils/fieldValue";
+import { readFieldEntryWithAlias, findFieldWithAlias } from "../utils/fieldValue";
 import { loadOnboardingState, clearOnboardingState } from "../onboardingStorage";
 import { clearClientLinkToken } from "../../shared/sessionCredential";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
@@ -480,11 +480,7 @@ export class SchemaFormStateManager {
     // bracket-variant write of a format_preset field (a_number etc.) stores the raw
     // value, and a later same-answer canonical write normalizes and compares
     // unequal, spuriously re-arming the marker (W4 fresh-eyes finding).
-    const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
-    const field =
-      state.schema.fields.find((f) => f.id === fieldId) ??
-      state.schema.fields.find((f) => f.id === baseId) ??
-      state.schema.fields.find((f) => f.id === baseId + '[]');
+    const field = findFieldWithAlias(state.schema.fields, fieldId);
 
     // The B5 `steered` marker (bd polyglot-pdf-jnjj.17, Codex PR #275) rides the
     // FieldValue. The normal edit/fill path REPLACES the FieldValue object, which
@@ -747,11 +743,7 @@ export class SchemaFormStateManager {
     // paged the UI to this section for it.
     return section.fields
       .map((fieldId) => {
-        const exact = state.schema.fields.find((f) => f.id === fieldId);
-        if (exact) return exact;
-        const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
-        const aliasId = baseId + '[]';
-        return state.schema.fields.find((f) => f.id === baseId || f.id === aliasId);
+        return findFieldWithAlias(state.schema.fields, fieldId);
       })
       .filter((f): f is FormField => f !== undefined);
   }
@@ -991,8 +983,14 @@ export class SchemaFormStateManager {
     const section = state.schema.sections.find((s) => s.id === sectionId);
     if (!section) return false;
 
+    // []-alias-aware, matching getFieldsForSection / findSectionIdForField (bd
+    // polyglot-pdf-una9): a section.fields entry and the matching field.id can
+    // carry DIFFERENT bracket forms of the same field, so an exact-only match
+    // silently DROPS a field from the validity check -- a required, unfilled
+    // checkbox group would vanish from sectionFields and the section would
+    // report VALID with that answer missing.
     const sectionFields = section.fields
-      .map((fieldId) => state.schema.fields.find((f) => f.id === fieldId))
+      .map((fieldId) => findFieldWithAlias(state.schema.fields, fieldId))
       .filter((f): f is FormField => f !== undefined);
 
     for (const field of sectionFields) {
@@ -1143,8 +1141,11 @@ export class SchemaFormStateManager {
       if (!section) continue;
 
       // Collect spoken names from all fields in this section
+      // []-alias-aware for the same reason as isSectionValid above (bd
+      // polyglot-pdf-una9): an exact-only miss drops a field's spoken name (and
+      // its aliases) from the already-answered list handed to the model.
       section.fields.forEach(fieldId => {
-        const field = state.schema.fields.find(f => f.id === fieldId);
+        const field = findFieldWithAlias(state.schema.fields, fieldId);
         if (field?.spoken_name) {
           spokenNames.push(field.spoken_name);
           // Also include spoken aliases

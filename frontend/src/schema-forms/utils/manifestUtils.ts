@@ -11,6 +11,7 @@
 
 import type { FormSchema, FormPart, FormSection, FormField } from '../types/schema';
 import type { SchemaFormState } from '../state/schemaFormState';
+import { findFieldWithAlias } from './fieldValue';
 
 /**
  * Manifest entry for a single field (minimal representation)
@@ -59,8 +60,13 @@ export function generateSectionManifest(
 
   // Extract fields from the section
   for (const fieldId of section.fields) {
-    // Find the field definition in schema
-    const field = schema.fields.find(f => f.id === fieldId);
+    // Find the field definition in schema -- []-alias-aware (bd
+    // polyglot-pdf-una9), matching getFieldsForSection / isSectionValid. A
+    // section.fields entry and the matching field.id can carry DIFFERENT
+    // bracket forms of the same field, and an exact-only match here silently
+    // DROPS the field from the manifest -- which is the payload the model is
+    // given, so the field would simply not exist as far as the model knows.
+    const field = findFieldWithAlias(schema.fields, fieldId);
 
     if (field) {
       fields.push({

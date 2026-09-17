@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-16. See [2026-09-16-bd-ylokf-clear-form-buttons-clear-client-link-token.md](../journal/entries/2026-09-16-bd-ylokf-clear-form-buttons-clear-client-link-token.md) for closeout details.*
+*Last updated: 2026-09-17. See [2026-09-17-bd-una9-field-schema-alias-lookup.md](../journal/entries/2026-09-17-bd-una9-field-schema-alias-lookup.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -269,6 +269,36 @@ confirm as `no_value`, and the loop-breaker would tell Gemini to stop trying —
 stranding a field that holds the user's answer. `markFieldSkipped` additionally
 deletes the stale variant — it was the last remaining producer of the both-variants
 state the reconcile then had to arbitrate (bd `polyglot-pdf-8c97`).
+
+The `[]`-alias has a **second, independent side: the SCHEMA lookup**, and it needs
+the same treatment for the same reason (bd `polyglot-pdf-una9`). Resolving the
+VALUE through the alias while resolving the FIELD exact-only leaves a handler that
+finds the answer and then loses the field -- `handleConfirmFieldRequest` read
+`validation.required` off an `undefined` schema, silently defaulting a REQUIRED
+field to optional so its blank passed the usable-value gate, and fell back to the
+raw bracketed id as the spoken name in the re-prompt. Use
+**`findFieldWithAlias(fields, id)`** (`schema-forms/utils/fieldValue.ts`, beside
+`readFieldEntryWithAlias`) for ANY schema lookup keyed on an id that can arrive
+from the model. `handleSwitchFieldRequest`'s own `fields.find` is legitimately
+exact-only, because it re-reads by the schema's OWN id AFTER
+`resolveFieldForNavigation` has resolved the model's identifier.
+
+**But `resolveFieldForNavigation` itself is NOT alias-aware** (bd
+`polyglot-pdf-mwgim`, pre-existing): its first lookup is an exact
+`fields.find(f => f.id === identifier)` on a model-supplied identifier, and its
+fallbacks match `spoken_name` / `name` / `spoken_aliases` -- none of which is the
+bracket variant. So a `switch_field` naming `race` against a schema declaring
+`race[]` resolves only if a spoken name happens to match. Do not read the
+exact-only lookup in `handleSwitchFieldRequest` as evidence that the navigation
+path as a whole handles the alias.
+
+That set is pinned mechanically by `schema-forms/utils/fieldAliasLookup.test.ts`,
+which scans source for exact-only lookups on a model-supplied id and asserts the
+complete allowlist -- so a new one fails CI rather than a review round. Note the
+same fallback applies to ids read off **`section.fields`**, whose bracket form can
+differ from the `field.id` it names: an exact-only match there dropped a required
+group from `isSectionValid` (the section reported VALID with the answer missing)
+and dropped a field's spoken name from `getPreviousSpokenNames`.
 
 `handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
 wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.

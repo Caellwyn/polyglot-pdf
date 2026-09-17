@@ -11,12 +11,14 @@
  * The language set is anchored to SPOKEN_LANGUAGES because that is where a new
  * language actually gets added, and cross-checked against OVERLAY_TRANSLATIONS.
  *
- * NOT covered here: DISCLAIMER_TRANSLATIONS is never compared to
- * SPOKEN_LANGUAGES by any test -- DisclaimerModal.test.tsx derives its audit set
- * from that map's OWN keys, so a language added to SPOKEN_LANGUAGES and missed
- * in the disclaimer map still renders English with CI green. All three maps hold
- * the same 18 languages today, so the gap is latent; closing it is bd
- * polyglot-pdf-cnwz.
+ * CLOSED (bd polyglot-pdf-cnwz): the cross-map lockstep this file used to
+ * disclaim now lives in shared/translationMapLockstep.test.ts, which asserts
+ * EVERY language-keyed map -- DISCLAIMER, BUTTON, OVERLAY, RESUME,
+ * VERIFY_FIELD and this one -- covers exactly SPOKEN_LANGUAGES, and proves
+ * that list of maps is COMPLETE by scanning source for exported
+ * *_TRANSLATIONS. Enumerating the set found FOUR unanchored maps, not just
+ * the disclaimer one this file named. The checks below stay as this map's
+ * own per-key/per-value detail.
  */
 
 import { describe, it, expect } from 'vitest';

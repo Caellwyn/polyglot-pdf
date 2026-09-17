@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence. bd polyglot-pdf-5j3im: and a session SURVIVES that gap -- measured to 180s, 6/6 arms, no close, so gap-fill's removal was correct. bd polyglot-pdf-wurj8: the Pause button is a sticky manual/voice mode toggle, suppressed at the ADAPTER, re-asserted on every reconnect.)*
+*Last updated: 2026-09-17. See [2026-09-17-bd-una9-field-schema-alias-lookup.md](../journal/entries/2026-09-17-bd-una9-field-schema-alias-lookup.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -108,6 +108,13 @@ playback clock **without setting `playbackBlocked`** (the model speaks a NEW
 generation on the same connection, so an unpaired block would kill it -- the
 nm7z trap; `flushAudioQueue` keeps the blocking behavior for the
 pause/section-switch paths and delegates the drain).
+A drain -- either path -- does NOT fire `window.vffOnAudioPlaybackEnd`: that event
+means "the model finished its turn naturally", and a barge-in is not a natural end
+(consumers such as the E2E harness's turn-detection waiter would otherwise be woken
+by an interruption). The suppression works by swapping a NARROWED `onended` onto
+each source BEFORE `stop()`, because `onended` is dispatched on a later task and no
+synchronously-cleared flag can suppress it (bd polyglot-pdf-8np5).
+
 See [voice-ai.md](../components/voice-ai.md#barge-in).
 **Push-to-talk** (`setPushToTalkMode(true)`) is the ONLY mode -- there is no
 alternative to be the default against (bd polyglot-pdf-v1m8g) -- and it disables

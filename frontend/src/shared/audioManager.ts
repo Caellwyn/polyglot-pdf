@@ -200,8 +200,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// of discards) but makes a runaway discard loop visible.
 	let blockedDiscardCount = 0
 
-	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
-
 	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
 
