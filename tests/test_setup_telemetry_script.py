@@ -71,18 +71,84 @@ def test_script_is_idempotent_by_construction():
         "scripts/setup-telemetry.sh must declare 'set -e'")
 
 
-def test_dataset_name_and_location_are_pinned():
-    """The dataset name and location the bead's contract names literally.
-    Mutation: change DATASET or LOCATION's value -- red."""
+def test_dataset_name_is_pinned():
+    """The dataset name the bead's contract names literally.
+    Mutation: change DATASET's value -- red."""
     text = _script_text()
     assert re.search(r'DATASET="polyglot_telemetry"', text), (
         "the dataset must be named polyglot_telemetry")
-    assert re.search(r'LOCATION="us-central1"', text), (
-        "the dataset location must be us-central1")
-    # And the dataset-create call actually uses these variables, not a
+    # And the dataset-create call actually uses this variable, not a
     # hardcoded literal that could drift from the pinned name above.
     assert re.search(r'--location="\$LOCATION"', text)
     assert re.search(r'"\$DATASET"', text)
+
+
+def test_location_falls_back_to_us_central1_only_without_billing_table():
+    """bd polyglot-pdf-vzvio: LOCATION must no longer be a bare hard-coded
+    literal -- it is derived from the billing dataset (via
+    telemetry_bq_setup.py resolve-location) whenever BILLING_EXPORT_TABLE
+    is given, and only DEFAULTS to us-central1 on the no-argument path.
+    Mutation: make LOCATION an unconditional literal again (delete the
+    if/else and the resolve-location call) -- red.
+    """
+    text = _script_text()
+    # There must be exactly one top-level LOCATION=... literal assignment
+    # (the us-central1 fallback), not the unconditional single assignment
+    # the bug report found.
+    location_assignments = re.findall(r'^\s*LOCATION="[^"]*"', text, re.MULTILINE)
+    assert len(location_assignments) == 1, (
+        "expected exactly one top-level LOCATION=... assignment (the "
+        "us-central1 fallback in the else branch); got: "
+        "{}".format(location_assignments)
+    )
+    assert location_assignments[0].strip() == 'LOCATION="us-central1"'
+    # That assignment must sit in an else branch keyed on
+    # BILLING_EXPORT_TABLE, not at top level unconditionally.
+    fallback_block = re.search(
+        r'if \[ -n "\$BILLING_EXPORT_TABLE" \]; then'
+        r'(?:.*?\n){1,20}?else\n\s*LOCATION="us-central1"',
+        text, re.DOTALL,
+    )
+    assert fallback_block, (
+        'LOCATION="us-central1" is not inside the else branch of an '
+        'if [ -n "$BILLING_EXPORT_TABLE" ] check'
+    )
+
+
+def test_location_is_derived_via_telemetry_bq_setup_resolve_location():
+    """The BILLING_EXPORT_TABLE-given branch must call
+    telemetry_bq_setup.py resolve-location with the project, the pinned
+    DATASET, and the billing table, and must abort the script (exit 1) if
+    that call fails -- a location the operator cannot see is silently
+    wrong is worse than an aborted run. Mutation: drop the `exit 1` on
+    failure, or stop passing --billing-table -- red."""
+    text = _script_text()
+    assert 'telemetry_bq_setup.py" resolve-location' in text, (
+        "setup-telemetry.sh does not call telemetry_bq_setup.py "
+        "resolve-location")
+    call_block = re.search(
+        r'resolve-location \\\n(?:[^\n]*\n){0,4}?[^\n]*--billing-table '
+        r'"\$BILLING_EXPORT_TABLE"',
+        text,
+    )
+    assert call_block, (
+        "resolve-location is not called with --billing-table "
+        '"$BILLING_EXPORT_TABLE"'
+    )
+    assert re.search(
+        r'if ! LOCATION=\$\("\$PYTHON_BIN" "\$SCRIPT_DIR/telemetry_bq_setup\.py" '
+        r'resolve-location',
+        text,
+    ), "LOCATION is not assigned from the resolve-location call's stdout"
+    # Failure must abort the script.
+    abort_block = re.search(
+        r'if ! LOCATION=\$\([^)]*resolve-location.*?\n(?:.*?\n){0,4}?\s*exit 1',
+        text, re.DOTALL,
+    )
+    assert abort_block, (
+        "a failed resolve-location call does not `exit 1` -- the script "
+        "would continue with an empty/stale LOCATION"
+    )
 
 
 def test_bigquery_api_is_enabled():
@@ -270,21 +336,39 @@ def test_sink_uses_partitioned_tables():
 def test_writer_identity_gets_dataeditor_on_the_dataset():
     """The sink's own writer identity (printed by `gcloud logging sinks
     create`, parsed at runtime -- not a hardcoded principal) must be granted
-    bigquery.dataEditor on the dataset, via `bq add-iam-policy-binding`
-    (dataset-scoped), not `gcloud projects add-iam-policy-binding`
-    (project-wide). Mutation: change dataEditor to a different role, or move
-    the grant onto `gcloud projects add-iam-policy-binding` -- red."""
+    bigquery.dataEditor on the dataset, via scripts/telemetry_bq_setup.py's
+    grant-dataset-role subcommand (the BigQuery API's Dataset.access_entries),
+    NOT `bq add-iam-policy-binding` (bd polyglot-pdf-vzvio: on at least one
+    maintainer machine `bq` itself exits non-zero here) and not `gcloud
+    projects add-iam-policy-binding` (project-wide). Mutation: change
+    dataEditor to a different role, or move the grant onto `gcloud projects
+    add-iam-policy-binding`, or revert to `bq add-iam-policy-binding` -- red.
+    """
     text = _script_text()
     assert "roles/bigquery.dataEditor" in text
-    # The grant is issued via `bq add-iam-policy-binding`, not the
-    # project-level gcloud command.
+    # The grant is issued via telemetry_bq_setup.py grant-dataset-role, not
+    # `bq add-iam-policy-binding`.
     editor_block_match = re.search(
-        r'bq add-iam-policy-binding \\(?:[^\n]*\n){0,6}?[^\n]*'
-        r'--role="roles/bigquery\.dataEditor"',
+        r'telemetry_bq_setup\.py" grant-dataset-role \\(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--role "roles/bigquery\.dataEditor"',
         text)
     assert editor_block_match, (
-        "roles/bigquery.dataEditor is not granted via `bq "
-        "add-iam-policy-binding`")
+        "roles/bigquery.dataEditor is not granted via telemetry_bq_setup.py "
+        "grant-dataset-role")
+    # `bq add-iam-policy-binding` must not appear anywhere in the script any
+    # more -- both dataset-scoped grants moved to the API helper.
+    # The old invocation shape (line-start `bq add-iam-policy-binding`, not
+    # a backtick-quoted mention inside an explanatory comment) must be gone
+    # entirely -- both dataset-scoped grants moved to the API helper.
+    invocation_lines = [
+        line for line in text.splitlines()
+        if line.strip().startswith("bq add-iam-policy-binding")
+    ]
+    assert not invocation_lines, (
+        "scripts/setup-telemetry.sh still INVOKES `bq add-iam-policy-binding` "
+        "-- both dataset-scoped BigQuery grants must go through "
+        "telemetry_bq_setup.py grant-dataset-role instead (bd "
+        "polyglot-pdf-vzvio): {}".format(invocation_lines))
     # And the negative half: dataEditor must never appear on a
     # project-level gcloud add-iam-policy-binding invocation.
     project_binding_blocks = re.findall(
@@ -297,10 +381,14 @@ def test_writer_identity_gets_dataeditor_on_the_dataset():
 
 
 def test_admin_sa_gets_jobuser_and_dataviewer():
-    """admin-backend-sa gets roles/bigquery.jobUser (project-level) and
-    roles/bigquery.dataViewer (dataset-scoped) -- the third and fourth of
-    the bead's four IAM grants (writer-identity dataEditor and the two
-    admin-sa roles). Mutation: drop either grant -- red."""
+    """admin-backend-sa gets roles/bigquery.jobUser (project-level, via
+    `gcloud projects add-iam-policy-binding`, unaffected by this bead) and
+    roles/bigquery.dataViewer (dataset-scoped, via telemetry_bq_setup.py
+    grant-dataset-role, NOT `bq add-iam-policy-binding` -- bd
+    polyglot-pdf-vzvio) -- the third and fourth of the bead's four IAM
+    grants (writer-identity dataEditor and the two admin-sa roles).
+    Mutation: drop either grant, or revert dataViewer to `bq
+    add-iam-policy-binding` -- red."""
     text = _script_text()
     assert 'ADMIN_SA_EMAIL="admin-backend-sa@' in text
     assert "roles/bigquery.jobUser" in text
@@ -310,14 +398,24 @@ def test_admin_sa_gets_jobuser_and_dataviewer():
         r'gcloud projects add-iam-policy-binding "\$PROJECT_ID"[^\n]*\n'
         r'(?:[^\n]*\n){0,4}?\s*--role="roles/bigquery\.jobUser"',
         text), "bigquery.jobUser must be granted project-wide via gcloud projects add-iam-policy-binding"
-    # dataViewer via the dataset-scoped bq command, targeting $DATASET.
+    # dataViewer via telemetry_bq_setup.py grant-dataset-role, targeting
+    # $DATASET.
     dataviewer_block = re.search(
-        r'bq add-iam-policy-binding \\(?:[^\n]*\n){0,6}?[^\n]*'
-        r'--role="roles/bigquery\.dataViewer"(?:[^\n]*\n){0,3}?[^\n]*"\$DATASET"',
+        r'telemetry_bq_setup\.py" grant-dataset-role \\(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--role "roles/bigquery\.dataViewer"',
         text)
     assert dataviewer_block, (
-        "roles/bigquery.dataViewer must be granted via `bq "
-        "add-iam-policy-binding ... \"$DATASET\"` (dataset-scoped)")
+        "roles/bigquery.dataViewer must be granted via telemetry_bq_setup.py "
+        "grant-dataset-role")
+    dataset_arg = re.search(
+        r'telemetry_bq_setup\.py" grant-dataset-role \\(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--dataset "\$DATASET"(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--role "roles/bigquery\.dataViewer"',
+        text)
+    assert dataset_arg, (
+        "the dataViewer grant-dataset-role call does not pass "
+        '--dataset "$DATASET" -- it must be scoped to the telemetry '
+        "dataset, not the whole project")
 
 
 def test_all_four_iam_grants_are_present():
@@ -327,9 +425,11 @@ def test_all_four_iam_grants_are_present():
     prose count is the sink creation itself, which is not a role binding).
     Enumerated here as a single set-based pin so a future edit that drops
     one is caught by name, not just by the individual tests above drifting
-    green for the wrong reason."""
+    green for the wrong reason. Roles are granted either via `--role=` on a
+    gcloud/bq call or `--role ` on the telemetry_bq_setup.py helper (bd
+    polyglot-pdf-vzvio moved the two dataset-scoped grants to the latter)."""
     text = _script_text()
-    role_grants = re.findall(r'--role="(roles/bigquery\.\w+)"', text)
+    role_grants = re.findall(r'--role[= ]"(roles/bigquery\.\w+)"', text)
     assert set(role_grants) == {
         "roles/bigquery.dataEditor",
         "roles/bigquery.jobUser",

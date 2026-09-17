@@ -399,10 +399,15 @@ def test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset(
 
     jobUser must be granted with `gcloud projects add-iam-policy-binding`
     (running a query job is not a per-dataset action); dataViewer must be
-    granted with `bq add-iam-policy-binding ... $DATASET` -- scoped to the
-    polyglot_telemetry dataset only, never project-wide, which would hand
-    the admin service read access to every dataset in the project. Mutation:
-    swap dataViewer onto `gcloud projects add-iam-policy-binding` -- red."""
+    granted dataset-scoped, on the polyglot_telemetry dataset only, never
+    project-wide (which would hand the admin service read access to every
+    dataset in the project). bd polyglot-pdf-vzvio moved the dataViewer
+    grant from `bq add-iam-policy-binding` to
+    scripts/telemetry_bq_setup.py's grant-dataset-role subcommand (the
+    BigQuery API's Dataset.access_entries) -- `bq` itself was exiting
+    non-zero on at least one maintainer machine. Mutation: swap dataViewer
+    onto `gcloud projects add-iam-policy-binding`, or drop the --dataset
+    scoping from the grant-dataset-role call -- red."""
     text = _telemetry_script_text()
     assert re.search(
         r'gcloud projects add-iam-policy-binding\b(?:[^\n]*\n){1,5}?\s*'
@@ -413,15 +418,18 @@ def test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset(
         "add-iam-policy-binding` -- it should be project-level, matching "
         "every other PROJECT_ROLES grant.")
     assert re.search(
-        r'bq add-iam-policy-binding\b(?:[^\n]*\n){1,5}?\s*'
-        r'--role="roles/bigquery\.dataViewer"',
+        r'telemetry_bq_setup\.py" grant-dataset-role \\(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--dataset "\$DATASET"(?:[^\n]*\n){0,6}?[^\n]*'
+        r'--role "roles/bigquery\.dataViewer"',
         text,
     ), (
-        "roles/bigquery.dataViewer is not granted via `bq "
-        "add-iam-policy-binding` -- it should be scoped to the "
-        "polyglot_telemetry dataset, not the whole project.")
+        "roles/bigquery.dataViewer is not granted via telemetry_bq_setup.py "
+        'grant-dataset-role with --dataset "$DATASET" -- it should be '
+        "scoped to the polyglot_telemetry dataset, not the whole project.")
     # And the negative half: dataViewer must never appear on a
-    # `gcloud projects add-iam-policy-binding` invocation.
+    # `gcloud projects add-iam-policy-binding` invocation, and `bq
+    # add-iam-policy-binding` must not be INVOKED anywhere any more (a
+    # backtick-quoted mention inside an explanatory comment is fine).
     project_binding_blocks = re.findall(
         r'gcloud projects add-iam-policy-binding.*?(?=\n\n|\Z)', text,
         re.DOTALL)
@@ -429,6 +437,15 @@ def test_telemetry_script_grants_jobuser_project_wide_and_dataviewer_on_dataset(
         assert "bigquery.dataViewer" not in block, (
             "roles/bigquery.dataViewer appears in a project-level "
             "add-iam-policy-binding call -- it must be dataset-scoped.")
+    invocation_lines = [
+        line for line in text.splitlines()
+        if line.strip().startswith("bq add-iam-policy-binding")
+    ]
+    assert not invocation_lines, (
+        "scripts/setup-telemetry.sh still INVOKES `bq "
+        "add-iam-policy-binding` for a grant this test expects via the "
+        "API helper: {}".format(invocation_lines))
+
 
 
 def _monitoring_script_text() -> str:
