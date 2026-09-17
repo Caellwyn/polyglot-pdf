@@ -1182,8 +1182,10 @@ def _client_free_text_log_sites(root):
     body. Walks both services' routes dirs (scar #8: the set, not the site)."""
     import pathlib
     hits = []
+    walked = {"modules": 0, "log_calls": 0}
     for base in ("backend/routes", "admin_backend/routes"):
         for path in sorted((root / base).glob("*.py")):
+            walked["modules"] += 1
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
@@ -1191,13 +1193,14 @@ def _client_free_text_log_sites(root):
                 fn = node.func
                 if not (isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS):
                     continue
+                walked["log_calls"] += 1
                 for kw in node.keywords:
                     v = kw.value
                     if (kw.arg in _FREE_TEXT_KWARGS and isinstance(v, ast.Attribute)
                             and isinstance(v.value, ast.Name) and v.value.id in _BODY_NAMES):
                         hits.append("{}:{} {}={}.{}".format(
                             path.name, node.lineno, kw.arg, v.value.id, v.attr))
-    return hits
+    return hits, walked
 
 
 def test_no_log_line_in_either_backend_carries_client_supplied_free_text():
@@ -1209,5 +1212,11 @@ def test_no_log_line_in_either_backend_carries_client_supplied_free_text():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[3]
     assert (root / "backend" / "routes").is_dir() and (root / "admin_backend" / "routes").is_dir()
-    hits = _client_free_text_log_sites(root)
+    hits, walked = _client_free_text_log_sites(root)
+    # Guard the guard (the outer review on e8wzz): an empty hit list must mean
+    # "clean", never "walked nothing" -- the sibling sweep in
+    # test_no_pii_logging.py carries the same floor. 26 route modules and
+    # several hundred log calls today.
+    assert walked["modules"] >= 20, walked
+    assert walked["log_calls"] >= 100, walked
     assert hits == [], "client-supplied free text reaches a log line at: {}".format(hits)

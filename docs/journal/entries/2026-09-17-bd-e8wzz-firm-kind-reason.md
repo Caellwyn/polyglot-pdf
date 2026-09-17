@@ -51,9 +51,24 @@ acceptance; the maintainer chose the fix on 2026-09-17.
   log line (the per-route pin AND the set pin, which names
   `firm_routes.py:<line> reason=body.reason`); the `Field(max_length=...)`
   dropped (the bound pin). Both red as stated (2 failed with the site named; 1 failed), green restored.
-- Full suite: SUITE_RESULT
+- Full suite (both services + repo-level): 6594 passed, 289 skipped.
 
-REVIEW_RECORD
+## Review record
+
+Fresh-eyes (Sonnet, read-only): one gap -- the set pin watched the terminal
+log levels but not structlog's `bind`/`new`, which this codebase uses to
+attach context earlier; widened, and a `log.bind(reason=body.reason)`
+mutation reddens it. Opus cross-surface round 1: three gaps, all
+docs/test-durability -- `technical_guide.md`'s kind row did not state the
+new bound (fixed, and the credit row with it, closing `g2wib`); the set pin
+had no walked-something floor (it now asserts >= 20 modules and >= 100 log
+calls examined, the sibling sweep's shape); `security-posture.md`'s
+decisions framing, stamp and processor intro contradicted the rows the
+first commit changed (fixed). Nits: the admin console's kind dialog has no
+`maxLength` and renders a 422 as an opaque status (folded into `uanl9`,
+which already covers the credit dialog on the same code path); the hipaa
+sentence now says exactly which syntactic shape the pin proves. Round 2:
+OPUS_RECORD2
 
 ## Files
 

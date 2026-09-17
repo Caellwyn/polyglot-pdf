@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/audit/inventory_stores.py scripts/audit/log_pii_sweep.py scripts/audit/infra_posture.sh backend/tests/integration/test_access_matrix.py admin_backend/tests/unit/test_access_matrix.py firestore.rules firebase.json backend/routes/websocket_routes.py backend/services/link_tokens.py
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-vzrbc: created -- sprint 23's closing doc).*
+*Last updated: 2026-09-17 (bd polyglot-pdf-e8wzz: the maintainer's decisions of 2026-09-17 recorded; the firm-kind reason closed).*
 
 The current-state home for how this app keeps client data in and
 unauthorised parties out: the threat model, every persistent store, every
@@ -146,8 +146,9 @@ reports any secret-shaped env value by NAME).
 
 What leaves the project boundary, to whom, and under what terms. The
 "live setting" column is what `infra_posture.sh` could read on
-2026-09-15; where it says console-only, the maintainer reads it in the
-Cloud Console and the answer is recorded in the journal.
+2026-09-15, updated with the maintainer's 2026-09-17 actions; where it says
+console-only, the maintainer reads it in the Cloud Console and the answer
+is recorded in the journal.
 
 | Processor | Data sent | Governing terms | Retention / use | Live setting |
 |-----------|-----------|-----------------|-----------------|--------------|
@@ -223,8 +224,10 @@ Recorded here so they are not rediscovered as findings.
 
 ## Decisions handed to the maintainer
 
-Open as of 2026-09-16; each is a product, cost or legal call, not an
-engineering one. The answer is recorded on the named bead or in the journal.
+Each is a product, cost or legal call, not an engineering one. A row marked
+DECIDED, DONE, DEFERRED, ACCEPTED or FIXED is closed (the maintainer's
+2026-09-17 answers); the others are open. The answer is recorded on the
+named bead or in the journal.
 
 | Decision | Options | Where |
 |----------|---------|-------|
