@@ -205,4 +205,52 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
     await mgr.playAudio(pcmChunk())
     expect(ctx.sources.length).toBe(2)
   })
+
+  // bd polyglot-pdf-8np5. The suppression above is pinned only for
+  // resetPlaybackClock, but the path the bead reports is the BARGE-IN one --
+  // flushAudioQueue. It delegates the drain, so it inherits the narrowed
+  // onended; that inheritance is the thing worth pinning, because a future
+  // change that stops delegating (or re-introduces a synchronously-cleared
+  // isFlushing flag, which is what originally failed here) would silently
+  // restore the spurious end event with every other test still green.
+  it('flushAudioQueue (barge-in) also suppresses the playback-end event', async () => {
+    const mgr = createAudioManager()
+    await mgr.playAudio(pcmChunk())
+    const ctx = FakeAudioContext.instances[0]
+
+    mgr.flushAudioQueue()
+
+    const endSpy = vi.fn()
+    ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
+    try {
+      // The browser delivers the stop()-triggered onended on a LATER task --
+      // which is precisely why a synchronous flag cannot suppress it. Firing it
+      // here reproduces that deferred delivery.
+      ctx.sources[0].onended?.()
+      expect(endSpy).not.toHaveBeenCalled()
+    } finally {
+      delete (globalThis as any).window.vffOnAudioPlaybackEnd
+    }
+  })
+
+  // The POSITIVE control for both suppression tests above. Without it, the two
+  // `not.toHaveBeenCalled()` assertions are satisfied just as well by an
+  // audioManager that never fires the event at all -- so they would survive
+  // deleting the callback outright, and would be pinning nothing.
+  it('a NATURAL playback end DOES fire the event (suppression is not blanket)', async () => {
+    const mgr = createAudioManager()
+    await mgr.playAudio(pcmChunk())
+    const ctx = FakeAudioContext.instances[0]
+
+    const endSpy = vi.fn()
+    ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
+    try {
+      // No drain: the source carries its ORIGINAL onended, and it is the last
+      // active source, so this is the all-chunks-finished-naturally branch.
+      ctx.sources[0].onended?.()
+      expect(endSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      delete (globalThis as any).window.vffOnAudioPlaybackEnd
+    }
+  })
 })
