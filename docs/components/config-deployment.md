@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: the form-kits rows say what the target actually does -- it reads the BUILD's checkout, no kit is tracked there, so it cannot succeed and no wrapper selects it implicitly any more (bd polyglot-pdf-wm7ga owns the source question); the contractor round-trip note no longer claims a local pull feeds the next deploy.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 4: the ONE ENGINE claim is scoped to the `deploy-*.sh` wrappers and the admin console, and the two surviving LOCAL engines -- `npm run deploy:demo` and `scripts/deploy-form-kit.sh` -- are named as the ungated exceptions (bd polyglot-pdf-1qzr8 owns their fate); `--set-secrets` no longer claims a caller-side `BACKEND_SECRETS` override, which the bash engine took with it.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: the form-kits rows say what the target actually does -- it reads the BUILD's checkout, no kit is tracked there, so it cannot succeed and no wrapper selects it implicitly any more (bd polyglot-pdf-wm7ga owns the source question); the contractor round-trip note no longer claims a local pull feeds the next deploy.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
 now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
 deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
 and `scripts/deploy_build_targets.sh` is the shared runner. `deploy-all.sh`
@@ -353,15 +353,34 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 
 ## Deployment (Cloud Build, from a pushed commit)
 
-**ONE ENGINE.** Every deploy is a Cloud Build build of `cloudbuild.yaml` at an
-explicit commit, selected by the `_TARGET` substitution, started through a
-manual trigger named `polyglot-<target>`. The `deploy-*.sh` scripts and the
-admin console are two ways to press the same button; nothing builds or deploys
-locally any more. What that buys: the gates live in the BUILD, so no route
-around them exists. The per-SHA `verify` record, the reachability check, the
-kits manifest validation and the staging-before-demo promotion gate are all
-build steps -- a bash-started build is gated exactly like a console-started
-one.
+**ONE ENGINE behind the `deploy-*.sh` wrappers and the admin console.** Every
+deploy started from either of those is a Cloud Build build of `cloudbuild.yaml`
+at an explicit commit, selected by the `_TARGET` substitution, started through a
+manual trigger named `polyglot-<target>`. The wrappers and the console are two
+ways to press the same button; neither builds or deploys locally any more. What
+that buys: the gates live in the BUILD, so neither of those two routes can skip
+them. The per-SHA `verify` record, the reachability check, the kits manifest
+validation and the staging-before-demo promotion gate are all build steps -- a
+bash-started build is gated exactly like a console-started one.
+
+**Two LOCAL engines survive outside that, and they are NOT gated.** Read the
+paragraph above as a statement about the wrappers and the console, not about
+the repo as a whole:
+
+- `frontend/package.json`'s `npm run deploy:demo` (and `npm run deploy`, aimed
+  at the dead prod project) still runs `firebase deploy --only hosting:app`
+  against the DEMO Hosting site from whatever is in the working tree. It skips
+  `scripts/deploy_preflight.sh`'s dirty/unpushed refusal, the per-SHA `verify`
+  record, the staging-before-demo gate, the `deployments` row, and the build's
+  live `VITE_WS_URL` / `VITE_APP_CHANNEL` injection.
+- `scripts/deploy-form-kit.sh` uploads kits straight into the shared,
+  project-wide form-kits bucket with no build and no gate. It is currently the
+  only working kit-publish path (the `form-kits` build target reads
+  `form-kits/` from git, where no kit is tracked -- bd `polyglot-pdf-wm7ga`).
+
+Whether these are removed, made to refuse, or kept as sanctioned exceptions is
+decided for all three sites together in bd `polyglot-pdf-1qzr8` (open). Until then,
+prefer the wrappers or the console for anything that reaches a live surface.
 
 **Running a wrapper is still a maintainer-gated deploy.** Only the engine
 changed: each wrapper keeps its flags and still needs its own per-instance
@@ -540,8 +559,9 @@ be the gate crying wolf.
   awaits bead 4.3. See [admin-service.md](admin-service.md)'s IAM table for
   the admin-SA side of this same pin.
 
-  **`--set-secrets`** comes from the channel file's `[SET_SECRETS]` section (an
-  explicit `BACKEND_SECRETS` from the caller still wins); a channel that sets
+  **`--set-secrets`** comes from the channel file's `[SET_SECRETS]` section and
+  from nowhere else -- the build reads that section into `CHANNEL_SECRETS` and
+  passes it verbatim; there is no caller-side override. A channel that sets
   none produces an invocation identical to before the flag existed. It
   **REPLACES the service's entire secret block** — gcloud's own help says "All
   existing secrets will be removed first" — so a channel must list every

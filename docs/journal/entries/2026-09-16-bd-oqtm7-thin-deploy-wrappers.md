@@ -398,6 +398,65 @@ is fixed here.
 Suites re-run from the worktree after the fix: root 1972 passed / 94 skipped,
 backend 3818 passed / 195 skipped, admin 706 passed.
 
+### Outer cross-surface round 4 (adopt / reject / defer)
+
+**Adopted -- the safety claim was broader than the change that earned it.**
+The reviewer's first blocker: `docs/components/config-deployment.md`'s "ONE
+ENGINE ... nothing builds or deploys locally any more ... so no route around
+them exists" is this diff's own sentence, and it is false. `npm run
+deploy:demo` (`frontend/package.json:41`) is still a complete local
+`firebase deploy --only hosting:app` at the PROTECTED demo Hosting site, run
+from whatever is in the working tree: it never touches `cloudbuild.yaml`, so it
+skips the preflight dirty/unpushed refusal, the per-SHA verify record, the
+staging-before-demo gate, the `deployments` row and the build's live
+`VITE_WS_URL` / `VITE_APP_CHANNEL` injection. `scripts/deploy-form-kit.sh` is a
+second such engine straight into the shared kits bucket. Both are byte-identical
+to `origin/dev`, so the CODE gap is pre-existing (bd `polyglot-pdf-1qzr8` owns
+whether they are removed, made to refuse, or sanctioned); what this bead
+introduced is a tier-2, surface-authoritative doc telling the next session that
+a bypass cannot exist while two of them are two keystrokes away. Fixed by
+scoping the claim to what actually changed -- the `deploy-*.sh` wrappers and the
+admin console -- and then NAMING both survivors, with what each one skips and
+the bead that decides their fate. The failure shape is CLAUDE.md scar #8 read
+from the other end: the code fix covered the wrappers (the instance), the prose
+generalised to every local deploy path (the set), and the two members outside
+the wrapper glob were never enumerated.
+
+**Adopted -- a documented override the diff deleted.** Second blocker: the same
+doc said `--set-secrets` comes from the channel file's `[SET_SECRETS]` section
+"(an explicit `BACKEND_SECRETS` from the caller still wins)". `origin/dev`'s
+`deploy-all.sh:568-571` honoured that variable; the build reads only
+`CHANNEL_SECRETS` from the file (`cloudbuild.yaml:338,376` and `:751,806`), and
+after this diff `BACKEND_SECRETS` survives nowhere in the repo except that one
+sentence. A current-state-only tier-2 doc promising an operator a caller-side
+override that the only live path silently ignores is exactly the failure mode
+the doc-freshness rule exists to prevent, so the parenthetical is gone and the
+sentence now says the section is the only source.
+
+**Rejected:** nothing. Both blockers reproduced against the code on the first
+check.
+
+**Deferred -- the reviewer's nits, already filed by the reviewer.** Finding 3
+(the live `polyglot-cloudbuild-sa` does not hold `roles/datastore.indexAdmin`
+until a maintainer re-runs `scripts/setup-cloud-build.sh`, and `firestore-rules`
+runs before `frontend-demo`, so the first demo deploy that touches
+`firestore.indexes.json` stops the whole run) is an operational precondition
+this entry and `docs/doctrine/promotion-tiers.md` already record, not a code
+defect -- run the setup script before the next demo deploy. Finding 4 (the
+grant's justification comment names `datastore.schemas.*` where index writes
+need `datastore.indexes.*`; the ROLE chosen is correct) is bd
+`polyglot-pdf-9jcwf`. Finding 5 (`cloudbuild.yaml:792`'s comment undercounts
+`admin.env`'s `[SET_ENV_VARS]` keys) is inside bd `polyglot-pdf-qsswl`. Finding
+6 (the untracked `Dockerfile.oqtm7.bak` and `grant_credits.bak.py` strays in the
+MAIN checkout) is bd `polyglot-pdf-qk2pf`, filed in round 2; main's `Dockerfile`
+was re-confirmed clean, and nothing is deleted from under whichever session owns
+that checkout. The reviewer also filed `polyglot-pdf-1qzr8`,
+`polyglot-pdf-imso5` and `polyglot-pdf-89ucm` this round; none is fixed here.
+
+Docs-only round -- no code, no test and no behaviour changed, so no
+mutation-verification applies. Suites re-run from the worktree anyway: root
+1972 passed / 94 skipped, backend 3818 passed / 195 skipped, admin 706 passed.
+
 ## Lessons
 
 **Deleting a stage is a migration, not a deletion.** Both behaviour losses
@@ -429,10 +488,13 @@ refusal NAMES the offending argument separated them.
   preflight, reachability, admin-tier and channel-specifics sections updated.
   Stamped.
 - `docs/components/config-deployment.md` -- the Deployment section leads with
-  the one engine and a per-wrapper target table; the four-bash-callers
-  reachability paragraph and the two completeness sets are gone; every
-  "local/manual, no CI deploy" claim removed. Stamped, and
-  `scripts/deploy_build_targets.sh` added to **Tracks:**.
+  the one engine (scoped in outer round 4 to the `deploy-*.sh` wrappers and the
+  admin console, with `npm run deploy:demo` and `scripts/deploy-form-kit.sh`
+  named as the two surviving ungated LOCAL engines) and a per-wrapper target
+  table; the four-bash-callers reachability paragraph and the two completeness
+  sets are gone; every "local/manual, no CI deploy" claim removed; the
+  `--set-secrets` paragraph no longer offers a caller-side `BACKEND_SECRETS`
+  override. Stamped, and `scripts/deploy_build_targets.sh` added to **Tracks:**.
 - `docs/components/admin-service.md` -- the deploy section plus four other
   places that described the old inline env assembly. Stamped.
 - `docs/technical_guide.md` -- contracts 12, 22, 29a, 30 and 31b updated; NEW
@@ -454,6 +516,11 @@ refusal NAMES the offending argument separated them.
   post-deploy reachability check is named by its module
   (`scripts/verify_service_reachable.py`), not by the deleted
   `verify_service_publicly_reachable()` bash function.
+
+- `docs/components/config-deployment.md` -- re-stamped again in outer round 4:
+  the ONE ENGINE claim is scoped to the two paths this bead actually moved, the
+  two surviving local engines are named with what each skips, and the deleted
+  `BACKEND_SECRETS` caller override is gone from the `--set-secrets` paragraph.
 
 Review outcomes recorded in the closeout ping.
 
