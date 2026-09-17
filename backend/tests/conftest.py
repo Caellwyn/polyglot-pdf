@@ -22,6 +22,11 @@ from backend.tests.unit._no_real_firestore import install_no_real_firestore_guar
 # case where something re-sets K_SERVICE mid-session outside a test's own
 # monkeypatch.
 os.environ.pop("K_SERVICE", None)
+# Sprint 23 PF-5 (bd o2fub): the per-instance limiter keys on the caller
+# address, and TestClient is ONE address hitting the same doors hundreds of
+# times per run. Off for the suite; backend/tests/unit/test_rate_limit.py
+# turns it on per test with a tiny budget.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 
 @pytest.fixture(autouse=True)

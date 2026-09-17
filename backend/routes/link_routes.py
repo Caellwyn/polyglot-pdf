@@ -50,6 +50,9 @@ from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+
+from ..utils import rate_limit
+from ..utils.rate_limit import rate_limited
 from pydantic import BaseModel, Field
 
 from backend.services import links_store
@@ -529,7 +532,11 @@ async def mint_link(
 
 
 @router.post("/open", response_model=OpenLinkResponse)
-async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
+async def open_client_link(
+    body: OpenLinkRequest,
+    _limit: None = Depends(rate_limited(
+        "links_open", status_code=404, detail=rate_limit.NOT_FOUND_LINK)),
+) -> OpenLinkResponse:
     """Redeem a client link. UNAUTHENTICATED by design -- the token is the
     credential.
 

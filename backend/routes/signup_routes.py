@@ -22,7 +22,9 @@ Posture, deliberately the same as POST /api/links/open:
 """
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
+
+from ..utils.rate_limit import NOT_FOUND, rate_limited
 from pydantic import BaseModel, Field
 
 import structlog
@@ -70,7 +72,11 @@ def email_is_allowlisted(email: str) -> bool:
 
 
 @router.post("/check", status_code=204, response_class=Response)
-async def signup_check(body: SignupCheckRequest) -> Response:
+async def signup_check(
+    body: SignupCheckRequest,
+    # Sprint 23 PF-5 (bd o2fub): over budget looks exactly like a miss.
+    _limit: None = Depends(rate_limited("signup_check", status_code=404, detail=NOT_FOUND)),
+) -> Response:
     allowed = await asyncio.to_thread(email_is_allowlisted, body.email)
     if not allowed:
         # Length only: the address is staff PII and must not reach the log.

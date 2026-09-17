@@ -1874,3 +1874,17 @@ def test_frontend_build_deploy_actually_exports_channel_at_runtime(by_id, channe
         "npm's environment does not contain the resolved "
         "VITE_ADMIN_API_BASE_URL"
     )
+
+
+# --- sprint 23 PF-5 (bd polyglot-pdf-o2fub): the spend ceiling ---------------------------
+
+
+def test_every_cloud_run_deploy_carries_a_max_instances_ceiling(steps):
+    """The per-instance rate limiter (backend/utils/rate_limit.py) bounds one
+    caller; --max-instances bounds what a flood can cost. Every `gcloud run
+    deploy` in the build must carry it. Mutation: drop the flag from either
+    deploy -> red, naming the step."""
+    deploys = [s for s in steps if "gcloud run deploy" in script_of(s)]
+    assert len(deploys) >= 2, [s.get("id") for s in deploys]
+    missing = [s.get("id") for s in deploys if "--max-instances=" not in script_of(s)]
+    assert missing == [], "Cloud Run deploy without a --max-instances ceiling: %s" % missing

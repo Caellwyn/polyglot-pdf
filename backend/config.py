@@ -220,6 +220,13 @@ class Settings(BaseModel):
 	# sending its credential-bearing first frame before it is closed 1008.
 	WS_MAX_TEXT_FRAME_BYTES: int = int(os.getenv("WS_MAX_TEXT_FRAME_BYTES", "4000000"))
 	WS_AUTH_TIMEOUT_SEC: float = float(os.getenv("WS_AUTH_TIMEOUT_SEC", "10"))
+	# Sprint 23 PF-5 (bd polyglot-pdf-o2fub): the per-instance limiter on the
+	# unauthenticated write doors (backend/utils/rate_limit.py). Budget per
+	# caller address per door per window; on by default everywhere except the
+	# test suite (conftest). A weak, deliberate interim -- see the module.
+	RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+	RATE_LIMIT_BUDGET: int = int(os.getenv("RATE_LIMIT_BUDGET", "30"))
+	RATE_LIMIT_WINDOW_SEC: float = float(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 
 	# === DTI (Dynamic Turn Injection) Settings ===
 	# The thin-principal SI mode (bd polyglot-pdf-jnjj.22): the system instruction
