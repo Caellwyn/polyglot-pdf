@@ -17,8 +17,8 @@
  * not an oversight.
  *
  * What is NOT duplicated, on purpose:
- *   * NO Firestore. The voice app's AuthContext writes a users/ profile doc and
- *     reads an authorized_emails collection on sign-up. The editor's allowlist
+ *   * NO Firestore. The voice app's AuthContext writes a users/ profile doc (its
+ *     sign-up allowlist check is a backend call since sprint 23 C3). The editor's allowlist
  *     is the schema_editor_role CUSTOM CLAIM, stamped by
  *     scripts/bootstrap_editor_user.py -- so there is nothing here to read, and
  *     a profile write would be a new cross-surface dependency.

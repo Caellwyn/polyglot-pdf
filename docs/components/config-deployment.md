@@ -657,8 +657,9 @@ the gate crying wolf. The counts are pinned per script.
   frontend never goes live against stale rules. **`deploy-staging.sh` deliberately
   does NOT ship rules**: they are project-wide, not per-site, so a staging rules
   deploy would apply to the live demo. A project left on default-deny
-  breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
-  profile sync -- see [auth.md](auth.md).
+  breaks the `users/{uid}` profile sync -- see [auth.md](auth.md); email signup
+  no longer depends on a client-readable rule (the allowlist check is
+  server-side since sprint 23 C3, `POST /api/signup/check`).
 
 ### One image, two services (`APP_MODULE`)
 

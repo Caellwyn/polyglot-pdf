@@ -228,6 +228,12 @@ _DELIBERATELY_UNGATED_HTTP_ROUTES = {
                                                # credential (bd ugm6); see
                                                # link_routes.py's own module
                                                # docstring.
+    ("POST", "/api/signup/check"),            # The email-signup allowlist
+                                               # check (sprint 23 C3): the
+                                               # caller has no account yet.
+                                               # Uniform 404 on every
+                                               # refusal; pinned in
+                                               # test_signup_check_route.py.
 }
 
 # The editor/author surface is a SEPARATE credential system

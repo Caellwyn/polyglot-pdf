@@ -172,6 +172,17 @@ flag ON there is no session yet at that point, so Agree CONNECTS instead and
 
 ### 6. Run the cycle (outcome-gated)
 
+**The field id below is an EXAMPLE from an older i-90 revision.** Kits are
+republished from the editor and their ids move (the current i-90's first field
+is `a_number`). Read the live one first and pass THAT -- a stale id makes
+`runCycle` watch a field that never fills while the model happily fills the
+real one (verdict FLAKY, "field never filled"; two wasted cycles on
+2026-09-16):
+
+```js
+window.__VFF_HARNESS.lastNextField();   // e.g. 'a_number' -- use it as fieldId
+```
+
 Launch `runCycle` async and poll its result object (no top-level await):
 ```js
 window.__vffReport = null;

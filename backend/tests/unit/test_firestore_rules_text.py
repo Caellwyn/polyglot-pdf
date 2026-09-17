@@ -37,11 +37,19 @@ _RULES = Path(__file__).resolve().parents[3] / "firestore.rules"
 # collections; Epic 4 adds build_checks and deployments.
 #
 # NOT LISTED, deliberately: users/{userId} (a signed-in user reads and writes
-# their OWN profile from the browser -- AuthContext.onAuthStateChanged) and
-# authorized_emails/{doc} (read UNAUTHENTICATED during email signup, before
-# the account exists). Both are client-facing by design; asserting a deny on
-# either would pin the opposite of the intended behaviour.
+# their OWN profile from the browser -- AuthContext.onAuthStateChanged); a
+# per-uid rule also denies LISTING the collection (a list needs every doc
+# readable). authorized_emails/{doc} WAS client-readable for the pre-signup
+# allowlist query; sprint 23 C3 moved that check server-side, so it is in
+# the list now.
 ADMIN_SDK_ONLY_COLLECTIONS = (
+    # Sprint 23 C3 (PF-6): the email-signup allowlist. Its public read let
+    # anyone with the web config enumerate every staff email; the check is
+    # server-side now (backend/routes/signup_routes.py, uniform 404).
+    ("authorized_emails", "doc"),
+    # Sprint 23 C3 (PF-8): the legal evidence trail, written only by the
+    # backend's Admin SDK; an explicit deny instead of the implicit default.
+    ("confirmation_events", "eventId"),
     # bd polyglot-pdf-lo88 -- firm profiles + allowed-kits allowlists.
     ("firms", "firmId"),
     # bd polyglot-pdf-li9x0 -- the admin audit log.
