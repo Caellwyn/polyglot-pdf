@@ -191,10 +191,13 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
   // deliberately no directory-wide scan (a real, intentional prod-default
   // export like deploy-production.sh's `export FORM_KITS_BUCKET=` must NOT
   // be swept in and flagged as a false mismatch).
+  // deploy-all.sh is NOT here since bd frg8a (#838): it is a thin wrapper that
+  // submits cloudbuild.yaml, and the bucket is computed THERE as
+  // `$PROJECT_ID-form-kits` -- pinned by the cloudbuild case below, not by a
+  // bare-default grep (bd polyglot-pdf-6ky1x: the stale entry kept dev red).
   const SCRIPTS_WITH_BARE_DEFAULTS = [
     '../../scripts/deploy-form-kit.sh',
     '../../scripts/pull-form-kits.sh',
-    '../../deploy-all.sh',
   ];
 
   it.each(SCRIPTS_WITH_BARE_DEFAULTS)(
@@ -207,6 +210,22 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
       expect(m![1]).toBe(DEFAULT_BUCKET);
     }
   );
+
+  it('cloudbuild.yaml computes the bucket as $PROJECT_ID-form-kits, and the plugin default is that bucket for the default project', () => {
+    // The Cloud Build path (bd frg8a) has no FORM_KITS_BUCKET env at all: every
+    // bucket reference is `$PROJECT_ID-form-kits`. Parity with the plugin's
+    // DEFAULT_BUCKET therefore means: the same suffix, and the prefix is the
+    // project the deploy scripts target (.firebaserc's 'demo' alias).
+    const build = fs.readFileSync(path.resolve(__dirname, '../../cloudbuild.yaml'), 'utf-8');
+    const refs = build.match(/\$PROJECT_ID-form-kits/g) ?? [];
+    expect(refs.length, 'cloudbuild.yaml no longer names $PROJECT_ID-form-kits').toBeGreaterThanOrEqual(2);
+    const other = build.match(/[\w$-]+-form-kits/g)?.filter((m) => m !== '$PROJECT_ID-form-kits') ?? [];
+    expect(other, 'a second bucket spelling crept into cloudbuild.yaml').toEqual([]);
+    const rc = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../.firebaserc'), 'utf-8'));
+    const project = rc.projects?.demo ?? rc.projects?.default;  // .firebaserc names the one project as 'demo'
+    expect(typeof project).toBe('string');
+    expect(DEFAULT_BUCKET).toBe(`${project}-form-kits`);
+  });
 
   it('deploy-production.sh explicitly EXPORTS the prod bucket rather than defaulting to it', () => {
     // The one legitimate prod-bucket reference: not a bare default (which
