@@ -48,7 +48,7 @@ export const App: React.FC = () => {
   const [who, setWho] = React.useState<WhoAmI | null>(null);
   const [tab, setTab] = React.useState<Tab>('whoami');
   const [openFirmId, setOpenFirmId] = React.useState<string | null>(null);
-  // Set when a call from AuditLogPage/ConfigEditorPage fails with a 401 or
+  // Set when a call from any page fails with a 401 or
   // 403 MID-SESSION (an operator revoked this person's app_admin claim, or
   // their ID token simply expired, while the tab stayed open). Routes back
   // to SignInGate's explicit refused/sign-in-again screen instead of the
