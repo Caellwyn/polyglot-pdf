@@ -140,6 +140,12 @@ def rate_limited(door: str, *, status_code: int, detail: str) -> Callable:
         client_key, connection_key = client_keys(request)
         now = time.monotonic()
         refused_by = None
+        # ORDER MATTERS: the client bucket first, and the connection bucket only
+        # when the client bucket allowed. A client-refused call must not draw
+        # on the shared bucket, or one abuser behind Hosting's egress would
+        # drain it for everyone behind it. (A direct caller cannot make its
+        # last hop equal that egress, so it cannot reach the shared bucket of
+        # real browsers at all.)
         if not _take(door, "client", client_key, budget, window, now):
             refused_by = "client"
         elif not _take(door, "connection", connection_key, shared, window, now):

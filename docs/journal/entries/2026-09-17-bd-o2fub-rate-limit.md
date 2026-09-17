@@ -92,7 +92,17 @@ shared-egress cases. Its nits: the instance ceiling is a user-facing cap
 the PR must state plainly (done); the suite-wide off switch should live in
 every testpath conftest (done); the limiter runs after FastAPI has parsed
 the body, so it sheds handler work, not body-flood cost (stated in the
-module docstring). Round 2: OPUS_RECORD2
+module docstring). Round 2: NO-GAPS. It re-derived the Hosting-rewrite premise from
+`firebase.json` and `pdfFiller.ts` and judged the two-bucket design and the
+600/min shared budget sound. Its one open fact, stated here as the follow-up
+check: Hosting APPENDING the browser's address to a client-supplied
+`X-Forwarded-For` is the premise the client bucket rests on and nothing in
+the repo verifies it -- the first staging deploy carrying this code is the
+place to read one forwarded chain (Cloud Run's request log, redacted) and
+confirm the tail is `browser, egress`; if Hosting passed a client header
+through verbatim, the connection bucket would still cap the flood at the
+shared rate. Nits folded in: the ordering rationale on the two buckets,
+the redundant `os` re-import in two conftests.
 
 ## Lessons
 

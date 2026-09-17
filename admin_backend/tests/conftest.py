@@ -80,6 +80,4 @@ def _no_real_firestore(monkeypatch, request):
 # backend/tests/conftest.py, so this suite never depends on a sibling
 # having been collected first (the incidental-ordering hazard this file's
 # own docstring describes).
-import os as _os
-
-_os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
