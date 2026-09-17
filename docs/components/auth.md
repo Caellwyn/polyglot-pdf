@@ -2,6 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/usage_rollups.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
+*Last updated: 2026-09-17 (bd polyglot-pdf-b554d: `_mirror_budget_exhausted` no longer overwrites a terminal `revoked`/`refunded` status -- it now checks `links_store.OPEN_BLOCKING_STATUSES` before writing, and a set-derived test pins every `links[_<channel>]/{jti}.status` writer as either guarded or an explicit non-writer.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the WebSocket credential rides the first frame, not the URL; the Origin check before accept.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the email-signup allowlist check moved server-side to `POST /api/signup/check` (uniform 404, never logs the address); `authorized_emails` is a full client deny; `confirmation_events` has its explicit deny; the deploy note no longer ties signup to a client-readable rule.)*
 
@@ -602,7 +603,31 @@ via `links_store._collection()` (off the event loop, `asyncio.to_thread`,
 same as every other Firestore call on this route) with NO ledger entry --
 whether a budget-exhausted link earns a refund, and whether a replacement
 link (bd `polyglot-pdf-1uyof`) costs a fresh credit, are both maintainer
-pricing calls the plan lists as undecided.
+pricing calls the plan lists as undecided. **Never overwrites a terminal
+status** (bd `polyglot-pdf-b554d`): the read this function already does
+before writing (to avoid creating an orphan doc on a jti with no mint
+record) also reads the current `status`, and the write is skipped -- same
+as the missing-doc case -- when that status is already in
+`links_store.OPEN_BLOCKING_STATUSES` (`revoked`/`refunded`). Without this,
+a staff revoke (`POST /admin/links/{jti}/revoke`, bd `polyglot-pdf-jmiys`)
+racing a live socket's spend-ceiling trip would have this mirror stomp
+`revoked` back to `budget_exhausted` -- a status the open gate above does
+NOT refuse on, silently re-opening a link a human explicitly revoked.
+
+**Every writer of `links[_<channel>]/{jti}.status` refuses a terminal
+current value before writing**, and the set is pinned exactly (bd
+`polyglot-pdf-b554d`, CLAUDE.md scar #8): `links_store.build_mint_record`
+(writes `minted` on a FRESH doc only -- nothing to stomp), `links_store.
+mark_opened` (only ever moves `minted` -> `opened`), `credit_ledger.
+refund_expired_link`'s inner status-flip (reached only when the
+transaction's own read confirms `status == "minted"`),
+`admin_backend`'s revoke transaction (`409` unless `status == "minted"`),
+and this mirror. `backend/tests/unit/test_credit_refunds.py::
+test_the_complete_set_of_links_status_writers_all_guard_terminal_states`
+derives this set from source (every dict literal carrying a `"status"`
+key in a links_store-importing file) rather than hand-listing it, so a
+newly-added writer -- the plan's still-unbuilt `opened`/`completed`
+mirrors among them -- fails that test instead of a review round.
 
 ### Minting a link costs a credit, and opening one requires the record (Epic 2 bead A3, `polyglot-pdf-jecrl`)
 
