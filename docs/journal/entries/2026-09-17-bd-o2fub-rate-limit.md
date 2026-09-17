@@ -16,13 +16,18 @@ that decision built.
 
 ## What shipped
 
-- **`backend/utils/rate_limit.py`**: a token bucket per caller address per
-  door, held in the process. The address is the first `X-Forwarded-For`
-  hop (Cloud Run's front end sets it; `request.client.host` there is the
-  proxy), else the socket peer locally. Budget and window are settings read
-  at call time (`RATE_LIMIT_ENABLED`, `RATE_LIMIT_BUDGET` 30,
-  `RATE_LIMIT_WINDOW_SEC` 60), refilling continuously. The map is pruned
-  once it passes 1024 keys.
+- **`backend/utils/rate_limit.py`**: two token buckets per door, held in
+  the process, both keyed from the END of the `X-Forwarded-For` chain --
+  the front of that list is caller-seeded; every proxy appends what it
+  saw. Browser traffic reaches Cloud Run through the Hosting `/api/**`
+  rewrite (`..., browser, hosting-egress`); a direct run.app call ends
+  `..., caller`. The client bucket is keyed on the last two hops
+  (`RATE_LIMIT_BUDGET` 30 per `RATE_LIMIT_WINDOW_SEC` 60) -- per browser
+  behind Hosting, unforgeable by it; the connection bucket on the last hop
+  alone (`RATE_LIMIT_SHARED_BUDGET` 600) -- shared per Hosting egress, the
+  backstop against a direct caller rotating forged hops. A client-refused
+  call never draws on the connection bucket. The per-door maps are LRU
+  bounded (4096 keys), so forged hops cost no memory.
 - **The three doors**, wired as a dependency: `POST /api/links/open` and
   `POST /api/signup/check` refuse over budget with the door's OWN 404
   phrase -- byte-identical to a wrong token or a miss, so a limited caller
@@ -62,14 +67,32 @@ and a door limited but not classified fails too.
 - Targeted: the limiter's tests, the cloudbuild pins, the access matrix,
   the route-auth pin, the disclaimer and signup route tests, the PII
   guard -- green (211 + the limiter's 11).
-- Scar #9, one interpreter each, all RED: the limiter dependency removed
+- Scar #9, one interpreter each, all RED -- seven after the redesign (the client key on the FIRST hop; the connection bucket dropped; the LRU bound dropped; `_take` never refusing; an address on the refusal line; the signup door unlimited; the links/open refusal a 429) -- the original four being: the limiter dependency removed
   from the signup door (the set test names it; its own case fails); the
   links/open refusal changed to a 429 (the byte-identical pin); the
   address added to the refusal log kwargs (the kwarg pin); `_take` made to
   never refuse (every limit case).
 - Full suite (both services + repo-level, on the stacked branch): 6604 passed, 289 skipped.
 
-REVIEW_RECORD
+## Review record
+
+Fresh-eyes (Sonnet): the signup module docstring still said "not rate-limited";
+a weak disclaimer assertion; a stub patched a name that did not exist --
+all fixed. Opus cross-surface round 1: two BLOCKERS in the design, both
+in untouched consumers -- the limiter keyed on the FIRST forwarded hop,
+which a caller seeds (Cloud Run appends the real address after it), so a
+rotating forged header opened a fresh bucket per request and the pruning
+could not keep up; and every browser call reaches the doors through the
+Firebase Hosting `/api/**` rewrite (`pdfFiller.ts` falls back to the
+Hosting origin; `VITE_BACKEND_HTTP_URL` is set nowhere), a hop the design
+had not accounted for, so a last-hop key would have put every browser
+behind one egress in one bucket. Fixed with the two-bucket key above and
+an LRU-bounded map, pinned by forged-prefix, rotating-forge and
+shared-egress cases. Its nits: the instance ceiling is a user-facing cap
+the PR must state plainly (done); the suite-wide off switch should live in
+every testpath conftest (done); the limiter runs after FastAPI has parsed
+the body, so it sheds handler work, not body-flood cost (stated in the
+module docstring). Round 2: OPUS_RECORD2
 
 ## Lessons
 

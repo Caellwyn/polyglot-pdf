@@ -213,9 +213,13 @@ Recorded here so they are not rediscovered as findings.
   on a warm instance's disk** until the instance is recycled; the parse
   itself is timed out and the temp files are cleaned in `finally`.
 - **Rate limiting is a per-instance limiter plus an instance ceiling**, not a
-  network-edge control: the bucket resets on autoscale and a distributed
-  caller spreads around it. Cloud Armor is deferred until abuse is observed
-  (`config-deployment.md`, "Rate limiting on the unauthenticated doors").
+  network-edge control: the buckets reset on autoscale and a distributed
+  caller spreads around them. The keys are the tail of the forwarded chain
+  (per browser behind Hosting; per connecting address as the backstop), so a
+  forged `X-Forwarded-For` prefix buys nothing, but everyone behind one
+  Hosting egress shares the wide connection bucket. Cloud Armor is deferred
+  until abuse is observed (`config-deployment.md`, "Rate limiting on the
+  unauthenticated doors").
 - **Two project Owners are the same person's two accounts** (a sole
   operator, 2026-09-17). The posture check keeps reporting it so a third
   Owner is noticed.

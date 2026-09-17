@@ -226,6 +226,9 @@ class Settings(BaseModel):
 	# test suite (conftest). A weak, deliberate interim -- see the module.
 	RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
 	RATE_LIMIT_BUDGET: int = int(os.getenv("RATE_LIMIT_BUDGET", "30"))
+	# The connection bucket (the last forwarded hop alone -- shared by every
+	# browser behind one Hosting egress): wide, the backstop against forged hops.
+	RATE_LIMIT_SHARED_BUDGET: int = int(os.getenv("RATE_LIMIT_SHARED_BUDGET", "600"))
 	RATE_LIMIT_WINDOW_SEC: float = float(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 
 	# === DTI (Dynamic Turn Injection) Settings ===

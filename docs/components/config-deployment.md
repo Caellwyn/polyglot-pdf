@@ -367,10 +367,21 @@ until abuse is observed:
 
 - **A per-instance limiter** (`backend/utils/rate_limit.py`) on the three
   unauthenticated write doors: `POST /api/links/open`, `POST /api/signup/check`
-  and `POST /api/disclaimer-acceptance`. A token bucket per caller address
-  (the first `X-Forwarded-For` hop on Cloud Run) per door: `RATE_LIMIT_BUDGET`
-  calls (default 30) per `RATE_LIMIT_WINDOW_SEC` (default 60), refilling
-  continuously; `RATE_LIMIT_ENABLED=false` turns it off (the test suite does).
+  and `POST /api/disclaimer-acceptance`. Two token buckets per door, both
+  keyed from the END of the `X-Forwarded-For` chain (a caller can seed the
+  front of that list; every proxy appends the address it saw, so only the
+  tail is trustworthy). In production every browser call reaches Cloud Run
+  through the Hosting `/api/**` rewrite, so the chain ends
+  `..., browser, hosting-egress`; a direct call to the run.app host ends
+  `..., caller`. The CLIENT bucket is keyed on the last two hops
+  (`RATE_LIMIT_BUDGET`, default 30, per `RATE_LIMIT_WINDOW_SEC`, default 60):
+  per browser through Hosting, unforgeable by the browser. The CONNECTION
+  bucket is keyed on the last hop alone (`RATE_LIMIT_SHARED_BUDGET`, default
+  600): shared by everyone behind one Hosting egress, and the backstop that
+  caps a direct caller who rotates forged hops. A call the client bucket
+  refuses never draws on the connection bucket, so one abuser behind
+  Hosting cannot drain it for everyone. `RATE_LIMIT_ENABLED=false` turns the
+  limiter off (the test suite does). The per-door maps are LRU-bounded.
   An over-budget caller on the two oracle-sensitive doors gets the door's own
   404 phrase, byte-identical to a wrong token or a miss; on the disclaimer door
   a plain 429. The refusal log line (`rate_limited`) carries the door and the

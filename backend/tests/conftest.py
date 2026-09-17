@@ -26,9 +26,9 @@ os.environ.pop("K_SERVICE", None)
 # address, and TestClient is ONE address hitting the same doors hundreds of
 # times per run. Off for the suite; backend/tests/unit/test_rate_limit.py
 # turns it on per test with a tiny budget.
-# Order: pytest.ini collects backend/tests first, so this lands before any
-# module builds the lru-cached Settings; a run of tests/ or admin_backend/
-# alone never posts to a limited door, so the default is inert there.
+# The default is read when backend.config is IMPORTED (a class-body default),
+# and this conftest runs before any test module imports it. tests/ and
+# admin_backend/tests/ set the same default in their own conftests.
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 

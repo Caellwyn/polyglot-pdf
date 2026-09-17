@@ -3,12 +3,15 @@ PF-5, bd polyglot-pdf-o2fub).
 
 Mutations (each RED): remove `Depends(rate_limited(...))` from any one of the
 three doors (the set pin names it and that door's own case fails); make the
-links/open refusal say "Too many requests" (the byte-identical pin); log the
-address on refusal (the PII guard's kwarg rule + the kwarg pin here);
-change `_take` to never refuse (every limit case).
+links/open refusal say "Too many requests" (the byte-identical pin); log an
+address on refusal (the kwarg pin); key the client bucket on the FIRST hop
+(the forged-hop cases); drop the connection bucket (the rotating-forge case);
+change `_take` to never refuse (every limit case); drop the LRU bound (the
+bounded-map case).
 """
 from __future__ import annotations
 
+import time as _time
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,9 +26,11 @@ from backend.utils import rate_limit
 
 @pytest.fixture
 def tiny_budget(monkeypatch):
+    """Client bucket 3, connection bucket 5, one-minute window."""
     s = get_settings()
     monkeypatch.setattr(s, "RATE_LIMIT_ENABLED", True, raising=False)
     monkeypatch.setattr(s, "RATE_LIMIT_BUDGET", 3, raising=False)
+    monkeypatch.setattr(s, "RATE_LIMIT_SHARED_BUDGET", 5, raising=False)
     monkeypatch.setattr(s, "RATE_LIMIT_WINDOW_SEC", 60.0, raising=False)
     rate_limit.reset()
     yield
@@ -37,35 +42,98 @@ def client():
     return TestClient(app)
 
 
+def _allow_all_signups(monkeypatch):
+    monkeypatch.setattr(signup_routes, "email_is_allowlisted", lambda email: True)
+
+
+def _signup(client, xff=None):
+    headers = {"x-forwarded-for": xff} if xff else {}
+    return client.post("/api/signup/check", json={"email": "a@b.co"}, headers=headers).status_code
+
+
 # --- the bucket itself ---------------------------------------------------------------
 
 
 def test_the_bucket_refuses_the_call_after_the_budget_and_refills_with_time():
     rate_limit.reset()
     now = 1000.0
-    allowed = [rate_limit._take("d", "k", 3, 60.0, now) for _ in range(4)]
+    allowed = [rate_limit._take("d", "client", "k", 3, 60.0, now) for _ in range(4)]
     assert allowed == [True, True, True, False]
     # One token refills after window/budget seconds (20 s here).
-    assert rate_limit._take("d", "k", 3, 60.0, now + 19.0) is False
-    assert rate_limit._take("d", "k", 3, 60.0, now + 21.0) is True
+    assert rate_limit._take("d", "client", "k", 3, 60.0, now + 19.0) is False
+    assert rate_limit._take("d", "client", "k", 3, 60.0, now + 21.0) is True
 
 
-def test_buckets_are_per_address_and_per_door():
+def test_buckets_are_per_key_per_door_per_kind():
     rate_limit.reset()
     for _ in range(3):
-        assert rate_limit._take("d", "a", 3, 60.0, 0.0)
-    assert rate_limit._take("d", "a", 3, 60.0, 0.0) is False
-    assert rate_limit._take("d", "b", 3, 60.0, 0.0) is True    # another address
-    assert rate_limit._take("e", "a", 3, 60.0, 0.0) is True    # another door
+        assert rate_limit._take("d", "client", "a", 3, 60.0, 0.0)
+    assert rate_limit._take("d", "client", "a", 3, 60.0, 0.0) is False
+    assert rate_limit._take("d", "client", "b", 3, 60.0, 0.0) is True      # another key
+    assert rate_limit._take("e", "client", "a", 3, 60.0, 0.0) is True      # another door
+    assert rate_limit._take("d", "connection", "a", 3, 60.0, 0.0) is True  # the other kind
 
 
-def test_the_address_is_the_first_forwarded_hop():
+def test_the_map_is_bounded_and_evicts_the_oldest_key():
+    """A flood of forged hops must not grow memory: the per-door map is an
+    LRU capped at MAX_KEYS_PER_DOOR. Mutation: drop the `while` -> red."""
+    rate_limit.reset()
+    for i in range(rate_limit.MAX_KEYS_PER_DOOR + 50):
+        rate_limit._take("d", "client", "k%d" % i, 3, 60.0, 0.0)
+    per = rate_limit._buckets[("d", "client")]
+    assert len(per) == rate_limit.MAX_KEYS_PER_DOOR
+    assert "k0" not in per and "k49" not in per and "k50" in per
+
+
+# --- the keys: taken from the END of the forwarded chain ----------------------------
+
+
+def _req(xff=None, peer="127.0.0.1"):
     req = MagicMock()
-    req.headers = {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}
-    assert rate_limit.client_address(req) == "203.0.113.9"
-    req.headers = {}
-    req.client.host = "127.0.0.1"
-    assert rate_limit.client_address(req) == "127.0.0.1"
+    req.headers = {"x-forwarded-for": xff} if xff is not None else {}
+    req.client.host = peer
+    return req
+
+
+def test_the_keys_are_the_last_two_hops_and_the_last_hop():
+    assert rate_limit.client_keys(_req("203.0.113.9, 198.51.100.7")) == ("203.0.113.9|198.51.100.7", "198.51.100.7")
+    # A forged prefix changes neither key: only the end of the chain counts.
+    assert rate_limit.client_keys(_req("9.9.9.9, 203.0.113.9, 198.51.100.7")) == ("203.0.113.9|198.51.100.7", "198.51.100.7")
+    # A direct caller (one hop) is keyed on itself twice over.
+    assert rate_limit.client_keys(_req("203.0.113.9")) == ("-|203.0.113.9", "203.0.113.9")
+    # No chain at all (local dev): the socket peer.
+    assert rate_limit.client_keys(_req(None, peer="127.0.0.1")) == ("-|127.0.0.1", "127.0.0.1")
+
+
+def test_a_forged_first_hop_does_not_open_a_fresh_bucket(client, tiny_budget, monkeypatch):
+    """Through Hosting the browser's address sits second-to-last and the
+    egress last; a browser that rotates a forged FIRST hop stays in its own
+    client bucket. Mutation: key on hops[0] -> red."""
+    _allow_all_signups(monkeypatch)
+    codes = [_signup(client, "10.0.0.%d, 203.0.113.9, 198.51.100.7" % i) for i in range(4)]
+    assert codes == [204, 204, 204, 404]
+
+
+def test_a_direct_caller_rotating_forged_hops_hits_the_connection_bucket(client, tiny_budget, monkeypatch):
+    """A direct caller controls every hop but the last; rotating the
+    second-to-last opens fresh client buckets, and the connection bucket
+    (keyed on the last hop alone) is the backstop. Mutation: drop the
+    connection bucket -> red (every call would be 204)."""
+    _allow_all_signups(monkeypatch)
+    codes = [_signup(client, "10.0.0.%d, 203.0.113.9" % i) for i in range(7)]
+    assert codes == [204, 204, 204, 204, 204, 404, 404]
+
+
+def test_one_abuser_behind_hosting_does_not_drain_the_shared_bucket(client, tiny_budget, monkeypatch):
+    """A refused client call must not draw on the connection bucket, or one
+    abuser behind Hosting's egress would lock out everyone behind it."""
+    _allow_all_signups(monkeypatch)
+    abuser = [_signup(client, "203.0.113.9, 198.51.100.7") for _ in range(10)]
+    assert abuser == [204, 204, 204] + [404] * 7
+    # A different browser behind the same egress still has the shared budget
+    # left (5 shared - 3 used by the abuser = 2 more).
+    other = [_signup(client, "203.0.113.10, 198.51.100.7") for _ in range(3)]
+    assert other == [204, 204, 404]
 
 
 # --- the doors ------------------------------------------------------------------------
@@ -86,8 +154,8 @@ def test_links_open_over_budget_is_the_same_404_as_a_bad_token(client, tiny_budg
 
 
 def test_signup_check_over_budget_is_the_uniform_404(client, tiny_budget, monkeypatch):
-    monkeypatch.setattr(signup_routes, "email_is_allowlisted", lambda email: True)
-    codes = [client.post("/api/signup/check", json={"email": "a@b.co"}).status_code for _ in range(4)]
+    _allow_all_signups(monkeypatch)
+    codes = [_signup(client) for _ in range(4)]
     assert codes == [204, 204, 204, 404]
     r = client.post("/api/signup/check", json={"email": "a@b.co"})
     assert r.status_code == 404 and r.json() == {"detail": "Not found"}
@@ -95,7 +163,6 @@ def test_signup_check_over_budget_is_the_uniform_404(client, tiny_budget, monkey
 
 def test_disclaimer_acceptance_over_budget_is_429(client, tiny_budget, monkeypatch):
     monkeypatch.setattr(disclaimer_routes, "write_durable_acceptance_record", MagicMock())
-    import time as _time
     body = {"form_session_id": "fss_rl", "language": "English", "timestamp": int(_time.time() * 1000)}
     codes = [client.post("/api/disclaimer-acceptance", json=body).status_code for _ in range(4)]
     assert codes == [200, 200, 200, 429], codes
@@ -105,15 +172,14 @@ def test_disclaimer_acceptance_over_budget_is_429(client, tiny_budget, monkeypat
 def test_the_refusal_log_line_carries_no_address(client, tiny_budget, monkeypatch):
     mock_log = MagicMock()
     monkeypatch.setattr(rate_limit, "_log", mock_log)
-    monkeypatch.setattr(signup_routes, "email_is_allowlisted", lambda email: True)
+    _allow_all_signups(monkeypatch)
     for _ in range(4):
-        client.post("/api/signup/check", json={"email": "a@b.co"},
-                    headers={"x-forwarded-for": "203.0.113.9"})
+        _signup(client, "203.0.113.9, 198.51.100.7")
     calls = [c for c in mock_log.warning.call_args_list if c.args and c.args[0] == "rate_limited"]
     assert len(calls) == 1
     _, kwargs = calls[0]
-    assert set(kwargs) == {"door", "budget", "window_sec"}
-    assert "203.0.113.9" not in repr(kwargs)
+    assert set(kwargs) == {"door", "bucket", "budget", "window_sec"}
+    assert "203.0.113.9" not in repr(kwargs) and "198.51.100.7" not in repr(kwargs)
 
 
 def test_disabled_means_no_refusal(client, monkeypatch):
@@ -121,9 +187,8 @@ def test_disabled_means_no_refusal(client, monkeypatch):
     monkeypatch.setattr(s, "RATE_LIMIT_ENABLED", False, raising=False)
     monkeypatch.setattr(s, "RATE_LIMIT_BUDGET", 1, raising=False)
     rate_limit.reset()
-    monkeypatch.setattr(signup_routes, "email_is_allowlisted", lambda email: True)
-    codes = [client.post("/api/signup/check", json={"email": "a@b.co"}).status_code for _ in range(3)]
-    assert codes == [204, 204, 204]
+    _allow_all_signups(monkeypatch)
+    assert [_signup(client) for _ in range(3)] == [204, 204, 204]
 
 
 # --- the SET: every deliberately ungated POST door is limited ------------------------
