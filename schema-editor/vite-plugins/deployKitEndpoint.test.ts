@@ -171,14 +171,26 @@ describe('handleDeploy: guards that run before any spawn', () => {
 
 describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET default (bd polyglot-pdf-d7hy, polyglot-pdf-n2awd)', () => {
   // The plugin always passes FORM_KITS_BUCKET explicitly when it spawns
-  // deploy-form-kit.sh (see handleDeploy's env block), and deploy-demo.sh /
-  // deploy-production.sh both export it explicitly before delegating to
-  // deploy-all.sh -- so every script's OWN bare `${FORM_KITS_BUCKET:-...}`
-  // default only matters for a bare CLI run with no env var set. If any two
-  // of them disagree, "unset" silently means a DIFFERENT bucket depending on
-  // which entry point ran -- exactly the d7hy hazard, and exactly how
-  // deploy-all.sh's own default was missed in the first round (bd n2awd:
-  // the original version of this test checked only deploy-form-kit.sh).
+  // deploy-form-kit.sh (see handleDeploy's env block). deploy-production.sh
+  // also carries an explicit export of the prod bucket (pinned by the
+  // sibling test below), but that line is unreachable: the script's own
+  // dead-script guard unconditionally `exit 1`s before ever reaching it, so
+  // it is source text this test still checks, not a live path. So each
+  // remaining script's OWN bare `${FORM_KITS_BUCKET:-...}` default only
+  // matters for a bare CLI run with no env var set. If any two of them
+  // disagree, "unset" silently means a DIFFERENT bucket depending on which
+  // entry point ran -- exactly the d7hy hazard, and exactly how
+  // deploy-all.sh's own (now-removed) default was missed in the first round
+  // (bd n2awd: the original version of this test checked only
+  // deploy-form-kit.sh).
+  //
+  // deploy-all.sh no longer belongs in this list: bd polyglot-pdf-oqtm7
+  // (E4.6) moved its deploy logic to Cloud Build, so it no longer assigns
+  // FORM_KITS_BUCKET at all -- the real bucket for a Cloud Build form-kits
+  // upload is cloudbuild.yaml's `form-kits-upload` step, which computes
+  // `BUCKET="$PROJECT_ID-form-kits"` directly with no env-var indirection to
+  // check parity against. Removed here rather than restored in
+  // deploy-all.sh, which no longer runs deploy steps locally at all.
   //
   // This reads the actual script text rather than hand-copying each default,
   // so editing any ONE of them without the others fails here instead of
@@ -191,10 +203,14 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
   // deliberately no directory-wide scan (a real, intentional prod-default
   // export like deploy-production.sh's `export FORM_KITS_BUCKET=` must NOT
   // be swept in and flagged as a false mismatch).
+  // deploy-all.sh is NOT here since bd oqtm7 (#836, the thin Cloud Build
+  // wrappers): it is a thin wrapper that
+  // submits cloudbuild.yaml, and the bucket is computed THERE as
+  // `$PROJECT_ID-form-kits` -- pinned by the cloudbuild case below, not by a
+  // bare-default grep (bd polyglot-pdf-6ky1x: the stale entry kept dev red).
   const SCRIPTS_WITH_BARE_DEFAULTS = [
     '../../scripts/deploy-form-kit.sh',
     '../../scripts/pull-form-kits.sh',
-    '../../deploy-all.sh',
   ];
 
   it.each(SCRIPTS_WITH_BARE_DEFAULTS)(
@@ -207,6 +223,25 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
       expect(m![1]).toBe(DEFAULT_BUCKET);
     }
   );
+
+  it('cloudbuild.yaml computes the bucket as $PROJECT_ID-form-kits, and the plugin default is that bucket for the default project', () => {
+    // The Cloud Build path (bd oqtm7) has no FORM_KITS_BUCKET env at all: every
+    // bucket reference is one exact spelling ON PURPOSE -- a respelling such as
+    // `${PROJECT_ID}-form-kits` must come through this test, not drift in.
+    // Every
+    // bucket reference is `$PROJECT_ID-form-kits`. Parity with the plugin's
+    // DEFAULT_BUCKET therefore means: the same suffix, and the prefix is the
+    // project the deploy scripts target (.firebaserc's 'demo' alias).
+    const build = fs.readFileSync(path.resolve(__dirname, '../../cloudbuild.yaml'), 'utf-8');
+    const refs = build.match(/\$PROJECT_ID-form-kits\b/g) ?? [];
+    expect(refs.length, 'cloudbuild.yaml no longer names $PROJECT_ID-form-kits').toBeGreaterThanOrEqual(2);
+    const other = (build.match(/[\w$-]+-form-kits\b/g) ?? []).filter((m) => m !== '$PROJECT_ID-form-kits' && m !== '--form-kits');
+    expect(other, 'a second bucket spelling crept into cloudbuild.yaml').toEqual([]);
+    const rc = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../.firebaserc'), 'utf-8'));
+    const project = rc.projects?.demo ?? rc.projects?.default;  // .firebaserc names the one project as 'demo'
+    expect(typeof project).toBe('string');
+    expect(DEFAULT_BUCKET).toBe(`${project}-form-kits`);
+  });
 
   it('deploy-production.sh explicitly EXPORTS the prod bucket rather than defaulting to it', () => {
     // The one legitimate prod-bucket reference: not a bare default (which
