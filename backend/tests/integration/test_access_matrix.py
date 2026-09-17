@@ -673,49 +673,31 @@ def test_ws_firm_B_link_naming_a_firm_A_kit_hits_the_mismatch_branch(monkeypatch
     assert seen == {"code": 1008, "reason_token": "link_kit_mismatch"}
 
 
-def test_ws_a_STAFF_token_naming_a_kit_outside_its_firm_is_NOT_refused(monkeypatch):
+def test_ws_a_STAFF_token_naming_a_kit_outside_its_firm_IS_refused_1008(monkeypatch):
     """Case 3 (bead text): 'a staff token naming a kit outside its firm is
-    refused.' THIS TEST DOCUMENTS A REAL GATE GAP -- it currently is NOT
-    refused. websocket_routes.py never calls kit_gates.require_visible (or
-    firm_allowed_kits) for a staff (non-client-link) credential; the
-    kit_mismatch check at websocket_routes.py:1769-1775 is INSIDE the
-    `if claims.get("is_client_link")` block only, so it never runs for a
-    plain Firebase staff token. The staff-side firm scoping exists ONLY on
-    the HTTP kit-read routes (kit_gates.py, form_kit_routes.py) -- nothing
-    equivalent runs on /ws/fill.
-
-    THIS IS A FINDING TO REPORT, NOT TO FIX HERE (out of this bead's
-    declared surfaces -- backend/routes/websocket_routes.py is a production
-    route file). See the builder report for severity/evidence.
-
-    The test is written to PASS against the CURRENT (gapped) behavior --
-    i.e. it documents that connect+handshake SUCCEEDS today for a
-    firm-A staff token naming firm-B's private kit_id on the handshake --
-    so the matrix stays green while flagging the gap in its own docstring
-    and the report. If/when the gap is fixed, this test's assertion is
-    exactly what must flip (session_ready -> a 1008 refusal), which is why
-    it is kept in the suite rather than deleted: a silent regression from
-    'fixed' back to 'gapped' would otherwise have nothing watching it.
+    refused.' CLOSED by sprint 23 C2 (bd polyglot-pdf-bwevj): websocket_routes
+    now mirrors the HTTP kit routes' kit_gates.require_visible for a STAFF
+    credential, BEFORE any Gemini session -- a private kit outside the
+    caller's firm closes 1008 (wire reason "Kit not available"), the same
+    uniform shape as the client-link mismatch branch. Before C2 this test
+    documented the gap (connect + handshake SUCCEEDED); its assertion is the
+    inverse now, so a regression back to the gap has something watching it.
     """
     import asyncio
     import json as _json
     from unittest.mock import AsyncMock, MagicMock
-
+    from backend.services.form_kits import FormKitNotFound
     monkeypatch.setattr(wsr, "verify_token",
                         lambda token, **_kw: {"uid": "mgr-a", "firm_id": "firm-a",
                                               "firm_role": "manager"})
-    # This is the crux of the finding: NOTHING on the staff path checks the
-    # handshake kit_id against the firm's allowlist, so -- unlike the
-    # client-link cases above -- there is no gate to observe closing the
-    # socket. Stub _handle_fill_session so the test asserts precisely "did
-    # accept()/session_ready happen" without also needing a full fake
-    # Gemini session to satisfy the real receive loop.
     monkeypatch.setattr(wsr, "_handle_fill_session", AsyncMock())
-
+    # The kit is PRIVATE and not in firm A's allowlist: require_visible refuses.
+    monkeypatch.setattr(wsr, "_load_live_metadata", AsyncMock(return_value={"visibility": "private"}))
+    monkeypatch.setattr(wsr, "_require_visible", AsyncMock(side_effect=FormKitNotFound("Kit not visible: kit-b-priv")))
     hostile = dict(_HANDSHAKE)
     hostile["kit_id"] = "kit-b-priv"   # firm-A staff naming firm-B's private kit
-
     ws = MagicMock()
+    ws.headers = {}
     ws.accept = AsyncMock()
     ws.close = AsyncMock()
     ws.send_json = AsyncMock()
@@ -724,24 +706,43 @@ def test_ws_a_STAFF_token_naming_a_kit_outside_its_firm_is_NOT_refused(monkeypat
     async def _run():
         await wsr.fill_form_from_schema(ws, token="tok-firm-a-manager-shape",
                                         service=AsyncMock())
-
     asyncio.run(_run())
-
-    # CURRENT BEHAVIOR (the gap): accept() is called and no close(1008) for
-    # a kit-scoping reason occurs -- the session proceeds. If this
-    # assertion ever fails, the gap has been fixed upstream; update this
-    # test (and the report) rather than deleting it.
     ws.accept.assert_awaited()
-    kit_scoping_close = [
-        c for c in ws.close.await_args_list
-        if c.kwargs.get("code") == 1008
-    ]
-    assert not kit_scoping_close, (
-        "a staff-token kit-scoping refusal now exists on the WS route -- "
-        "this test documents the PRE-fix gap and must be updated (its "
-        "assertion inverted) now that the gap is closed"
-    )
+    kit_scoping_close = [c for c in ws.close.await_args_list if c.kwargs.get("code") == 1008]
+    assert kit_scoping_close, "the staff kit-scoping refusal is missing again (C2 regression)"
+    assert kit_scoping_close[0].kwargs.get("reason") == "Kit not available"
+    wsr._handle_fill_session.assert_not_awaited()
 
+
+def test_ws_a_STAFF_token_naming_a_PUBLIC_or_firm_kit_proceeds(monkeypatch):
+    """The other half of the C2 gate: a visible kit passes through to the
+    session (require_visible returns), so the gate refuses only what the HTTP
+    routes would also 404."""
+    import asyncio
+    import json as _json
+    from unittest.mock import AsyncMock, MagicMock
+    monkeypatch.setattr(wsr, "verify_token",
+                        lambda token, **_kw: {"uid": "mgr-a", "firm_id": "firm-a",
+                                              "firm_role": "manager"})
+    monkeypatch.setattr(wsr, "_handle_fill_session", AsyncMock())
+    monkeypatch.setattr(wsr, "_load_live_metadata", AsyncMock(return_value={}))
+    monkeypatch.setattr(wsr, "_require_published", MagicMock(return_value=None))
+    monkeypatch.setattr(wsr, "_require_visible", AsyncMock(return_value=None))
+    own = dict(_HANDSHAKE)
+    own["kit_id"] = "kit-a-pub"
+    ws = MagicMock()
+    ws.headers = {}
+    ws.accept = AsyncMock()
+    ws.close = AsyncMock()
+    ws.send_json = AsyncMock()
+    ws.receive_text = AsyncMock(return_value=_json.dumps(own))
+
+    async def _run():
+        await wsr.fill_form_from_schema(ws, token="tok-firm-a-manager-shape",
+                                        service=AsyncMock())
+    asyncio.run(_run())
+    assert not [c for c in ws.close.await_args_list if c.kwargs.get("code") == 1008]
+    wsr._handle_fill_session.assert_awaited()
 
 def test_ws_client_link_still_hits_kit_mismatch_for_its_own_firm(monkeypatch):
     """Contrast case: a client link (not staff) naming a DIFFERENT kit in

@@ -9,7 +9,7 @@ import structlog
 # Load environment variables from .env file (if it exists)
 load_dotenv()
 
-from .config import get_settings, parse_extra_origins
+from .config import browser_origins, get_settings
 from .routes import websocket_routes, link_routes, signup_routes
 from .routes import pdf_fill_routes
 from .routes import tts_routes
@@ -56,24 +56,14 @@ app.add_event_handler("shutdown", _drain_confirmation_sink_bounded)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5175",  # Added for dev server port conflicts
-        "http://127.0.0.1:5175",
-        "http://localhost:5176",  # Schema form dev server
-        "http://127.0.0.1:5176",
-        "http://localhost:5177",  # Schema form dev server
-        "http://127.0.0.1:5177",
-        "http://localhost:3001",  # Schema editor dev server
-        "http://127.0.0.1:3001",
-        # The hosted schema-editor origin(s) arrive via env: it calls this
-        # service directly (no Hosting /api rewrite -- its 60s cap would kill
-        # minutes-long extraction requests), so CORS must allow it here
-        # (bd polyglot-pdf-92qe.1).
-    ] + parse_extra_origins(get_settings().CORS_EXTRA_ORIGINS),
+    # ONE origin list (backend/config.py browser_origins): the local dev
+    # origins plus CORS_EXTRA_ORIGINS from the channel env. The hosted
+    # schema editor calls this service directly (no Hosting /api rewrite --
+    # its 60s cap would kill minutes-long extraction requests), and the
+    # voice app opens /ws/fill directly (no rewrite for WebSockets), so
+    # both arrive via that env (bd polyglot-pdf-92qe.1; sprint 23 C2 shares
+    # the same list with the socket's Origin check).
+    allow_origins=browser_origins(get_settings()),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

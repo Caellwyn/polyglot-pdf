@@ -2,6 +2,8 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the `token` handshake key -- the credential rides the first frame; `?token=` deprecated for one deploy cycle.)*
+
 *Last updated: 2026-09-08 (bd polyglot-pdf-96um6: `manual_field_update` carries `verified` -- the field's verification STATE, phrased to the model as state rather than provenance; absent reads as false, the safe direction.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
@@ -37,6 +39,7 @@ removed JIT SI mode (bd polyglot-pdf-en2j).
 
 | Key | Type | Mode | Meaning |
 |-----|------|------|---------|
+| `token` | string | both | **The credential** (sprint 23 C2, bd `polyglot-pdf-bwevj`): a firm staff Firebase ID token or a client magic-link token. The backend pops it from the handshake and verifies it BEFORE anything else in the frame is read and before any Gemini session starts; missing or invalid closes `1008` ("Authentication failed" / the not-enrolled phrase). It replaced the `?token=` query parameter, which landed a live credential in every request log; `?token=` is still accepted for ONE deploy cycle behind a `ws_token_in_url_deprecated` log line, then goes. An accepted socket that sends no first frame within `WS_AUTH_TIMEOUT_SEC` (10s) is closed `1008`. |
 | `type` | `"handshake"` \| `"handshake_jit"` | both | Selects the handshake shape. `handshake_jit` -> the manifest-first transport (DTI's carrier; the `is_jit_mode = handshake_type == "handshake_jit"` check). Anything else (incl. missing) -> the legacy full-schema handshake. |
 | `form_session_id` | string | both | Persistent, frontend-managed ID; survives reconnects. Logging/metrics correlation only -- never used for server-side state (the `form_session_id = handshake.get(...)` read). |
 | `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (the `current_values` read, right after the legacy/JIT schema branch). |

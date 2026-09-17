@@ -68,6 +68,7 @@ EXPECTED_CLOSE_SEVERITY = {
     1006: "ERROR",
     1007: "WARNING",
     1008: "WARNING",
+    1009: "WARNING",
     1011: "ERROR",
     1013: "WARNING",
 }
@@ -325,6 +326,15 @@ EXPECTED_WIRE_REASON = {
     "link_kit_mismatch": "Authentication failed",
     "budget_exhausted": "budget_exhausted",
     "budget_unavailable": "budget_unavailable",
+    # Sprint 23 C2 (bd polyglot-pdf-bwevj): four new refusals, each a fixed
+    # phrase the client may branch on; none is built from caller data.
+    "origin_refused": "Origin not allowed",
+    "auth_timeout": "Authentication failed",
+    "frame_too_large": "Frame too large",
+    "kit_not_visible": "Kit not available",
+    # A TRANSIENT kit-store failure (GCS 5xx) is 1013 like budget_unavailable:
+    # the client's ordinary retry path, never the terminal 1008.
+    "kit_unavailable": "kit_unavailable",
     # Closed with NO reason kwarg before the wrapper -- must still send none.
     "handshake_not_text": "",
     "handshake_json_decode": "",

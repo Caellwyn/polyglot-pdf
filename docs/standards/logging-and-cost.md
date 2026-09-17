@@ -446,7 +446,8 @@ uvicorn's per-request access line -- the full request target at INFO -- is
 not emitted anywhere this app runs: the deployed image's CMD passes
 `--no-access-log`, and `configure_logging()` lists `uvicorn.access` among
 the WARNING-capped library loggers for a uvicorn started without the flag
-(the local launchers). The reason is `/ws/fill`'s `?token=` credential
+(the local launchers). The reason was `/ws/fill`'s `?token=` credential (it rides the first
+frame since sprint 23 C2; `?token=` is honoured one more deploy)
 (see [hipaa-pii-policy.md](hipaa-pii-policy.md)); the cost is that the app
 stream carries no per-connection line, so per-request status and latency
 come from Cloud Run's `run.googleapis.com/requests` log instead. The two

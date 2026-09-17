@@ -634,6 +634,12 @@ WS_WIRE_CLOSE_REASONS = frozenset({
     "This account is not enrolled for the voice application",
     "budget_exhausted",
     "budget_unavailable",
+    # Sprint 23 C2: the Origin allowlist, the frame cap and the staff
+    # kit-scope refusal, each a fixed phrase.
+    "Origin not allowed",
+    "Frame too large",
+    "Kit not available",
+    "kit_unavailable",
 })
 
 _WS_ROUTES = REPO_ROOT / "backend" / "routes" / "websocket_routes.py"

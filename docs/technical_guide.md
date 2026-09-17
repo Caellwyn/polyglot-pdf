@@ -1,5 +1,6 @@
 # Technical guide -- polyglot-pdf
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the `/ws/fill` and dev-socket rows.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the `POST /api/signup/check` route row.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: the public `/health` row -- status + the two Firestore probes only, no configuration; the `GEMINI_API_KEY` row no longer claims a presence bit on `/health`.)*
@@ -151,8 +152,8 @@ insertion point.
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 | GET | `/health` | Liveness + the two Firestore probes (`confirmation_sink`, `firms_store`) and NOTHING about the configuration -- no model id, audio rate, upload limit, provider flag or key-presence bit (unauthenticated = free fingerprint; sprint 23 B1b, pinned by an exact key set in `backend/tests/unit/test_health.py`). The ADMIN service serves a different `/health` at its own hostname -- see "Admin service routes" below. |
 | GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`) -- `git_sha` reads the `GIT_SHA` runtime env var, `"unknown"` when unset or empty. The admin service serves its own `/version` at its own hostname. |
-| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (the marker half of `/dev/console-log`'s gate; unlike that route they do not yet also fail closed on `K_SERVICE` -- bead C2, `polyglot-pdf-bwevj`, adds it; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
-| WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
+| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: refused before accept unless the `backend/.env.DEV` marker exists AND `K_SERVICE` is unset (both halves of `/dev/console-log`'s gate; sprint 23 C2, bd polyglot-pdf-puu8). `components/websocket-routing.md` |
+| WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. The credential (Firebase ID token or client link token) rides the FIRST FRAME's `token` key (sprint 23 C2; `?token=` deprecated for one deploy cycle); browser Origin must be in the CORS list; text frames capped; a staff token's kit must be visible to its firm. `components/websocket-routing.md`, `components/voice-ai.md` |
 
 ## Admin service routes
 
@@ -363,6 +364,16 @@ Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
 `form_metadata.form_number` logs `form_id="unknown"` in the audit trail; a
 dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
+- `token` (sprint 23 C2, bd `polyglot-pdf-bwevj`): THE CREDENTIAL -- a staff
+  Firebase ID token or a client magic-link token, sent by every one of
+  `webFormConnection.ts`'s three handshake send sites as `{...handshake, token}`
+  and read FIRST by the route (`handshake.get("token")`, then popped so the
+  dict that feeds the log/telemetry paths never carries it), verified before
+  any other key is read and before any Gemini session; missing or invalid
+  closes `1008`. It replaced the `?token=` query parameter (honoured one more
+  deploy cycle). The route also refuses a browser `Origin` outside
+  `browser_origins()` before `accept()`. *Breaks if malformed:* `1008`
+  "Authentication failed" -- loud, by design.
 - Key keys: `type` (`handshake` vs `handshake_jit` switches the whole parse,
   the `is_jit_mode = handshake_type == "handshake_jit"` check),
   `manifest`/`first_field_schema`/`loaded_field_ids` (JIT branch reads),

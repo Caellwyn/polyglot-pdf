@@ -214,6 +214,12 @@ class Settings(BaseModel):
 	VALIDATOR_PRO_TIMEOUT_SEC: float = float(os.getenv("VALIDATOR_PRO_TIMEOUT_SEC", "20.0"))
 
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
+	# Sprint 23 C2: a cap on any TEXT frame on /ws/fill (the handshake carries a
+	# whole kit schema, so this is generous; a control message is bytes). A
+	# larger frame closes 1009. And how long an accepted socket may sit without
+	# sending its credential-bearing first frame before it is closed 1008.
+	WS_MAX_TEXT_FRAME_BYTES: int = int(os.getenv("WS_MAX_TEXT_FRAME_BYTES", "4000000"))
+	WS_AUTH_TIMEOUT_SEC: float = float(os.getenv("WS_AUTH_TIMEOUT_SEC", "10"))
 
 	# === DTI (Dynamic Turn Injection) Settings ===
 	# The thin-principal SI mode (bd polyglot-pdf-jnjj.22): the system instruction
@@ -1369,10 +1375,30 @@ def get_settings() -> Settings:
 	return Settings()
 
 
+# The local dev origins every browser surface may run on. ONE list, used by
+# main.py's CORS middleware and by /ws/fill's Origin check (sprint 23 C2), so
+# the two can never disagree about who may talk to the backend.
+LOCAL_BROWSER_ORIGINS: tuple[str, ...] = (
+	"http://localhost:5173", "http://127.0.0.1:5173",
+	"http://localhost:5174", "http://127.0.0.1:5174",
+	"http://localhost:5175", "http://127.0.0.1:5175",  # dev server port conflicts
+	"http://localhost:5176", "http://127.0.0.1:5176",  # schema form dev server
+	"http://localhost:5177", "http://127.0.0.1:5177",  # schema form dev server
+	"http://localhost:3001", "http://127.0.0.1:3001",  # schema editor dev server
+)
+
+
+def browser_origins(settings) -> list[str]:
+	"""Every origin a browser may connect from: the local dev list plus the
+	deploy-time CORS_EXTRA_ORIGINS (the Hosting sites; deploy/channels/*.env)."""
+	return list(LOCAL_BROWSER_ORIGINS) + parse_extra_origins(settings.CORS_EXTRA_ORIGINS)
+
+
 def parse_extra_origins(raw: str | None) -> list[str]:
 	"""Split CORS_EXTRA_ORIGINS ("https://a.web.app, https://a.firebaseapp.com")
 	into a clean origin list. Empty/None -> [] (no extra origins). Used by
-	main.py to extend the hardcoded localhost CORS list with the hosted
+	browser_origins() above (CORS + the /ws/fill Origin check) to extend the
+	LOCAL_BROWSER_ORIGINS list with the hosted
 	schema-editor's origin(s) without a code change per deploy
 	(bd polyglot-pdf-92qe.1).
 

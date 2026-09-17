@@ -45,6 +45,8 @@ describe('the save nudge on a spend-ceiling close', () => {
     expect(statuses.length).toBeGreaterThan(1);
 
     expect(statuses).toContain('budget_exhausted');
+    // sprint 23 C2: a policy refusal (1008/1009) is terminal the same way.
+    expect(statuses).toContain('policy_refused');
     // And the cases that already worked must not have been traded away.
     expect(statuses).toContain('idle_timeout');
     expect(statuses).toContain('reconnect_failed');

@@ -28,6 +28,7 @@ WS_CLOSE_SEVERITY: Dict[int, Severity] = {
     1006: "ERROR",
     1007: "WARNING",
     1008: "WARNING",
+    1009: "WARNING",  # frame too large: bad client input, like 1007 (sprint 23 C2)
     1011: "ERROR",
     1013: "WARNING",
 }
@@ -526,6 +527,8 @@ class StructuredLogger:
                                    connection died without a close frame.
           1007         WARNING  -- the client sent an unparseable handshake.
                                    Bad input, not a server fault.
+          1009         WARNING  -- a text frame over the cap (sprint 23 C2).
+                                   Bad input, same family as 1007.
           1013         WARNING  -- a budget or capacity refusal. Working as
                                    designed; it is the RATE that matters, and
                                    the metric captures that.

@@ -1045,6 +1045,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					console.log('[VoiceOverlayMobile] Link spend ceiling reached -- not waiting for connect')
 					break
 				}
+				if (currentStatus === 'policy_refused') {
+					console.log('[VoiceOverlayMobile] Policy refusal -- not waiting for connect')
+					break
+				}
 
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
@@ -1052,7 +1056,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 			// Check final status
 			const finalStatus = connectionManager.getStatus()
-			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
+			if (finalStatus === 'policy_refused') {
+				setConnectionError(connectionManager.lastPolicyRefusal || 'Connection refused')
+			} else if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlayMobile] [X] Connection timeout, final status:', finalStatus)
 				setConnectionError('Connection timed out - please try again')
 			}
