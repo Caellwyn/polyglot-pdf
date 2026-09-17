@@ -44,23 +44,37 @@ class _FakeAccessEntry:
 class _FakeClient:
     """A minimal stand-in for google.cloud.bigquery.Client covering exactly
     the calls telemetry_bq_setup.py makes: get_dataset, list_tables,
-    update_dataset. Datasets are keyed by (project, dataset_id)."""
+    update_dataset. Datasets are keyed by (project, dataset_id).
 
-    def __init__(self, datasets=None, tables=None):
+    `get_dataset_raises` / `list_tables_raises` let a test force a
+    NON-"not found" exception out of the corresponding call (e.g. a
+    permission error or transient network fault), keyed by
+    (project, dataset_id), to pin that such faults are surfaced as an
+    ERROR rather than silently treated the same as "the dataset/table
+    does not exist"."""
+
+    def __init__(self, datasets=None, tables=None, get_dataset_raises=None, list_tables_raises=None):
         # {(project, dataset_id): _FakeDataset}
         self._datasets = dict(datasets or {})
         # {(project, dataset_id): [table_id, ...]}
         self._tables = dict(tables or {})
+        # {(project, dataset_id): Exception instance}
+        self._get_dataset_raises = dict(get_dataset_raises or {})
+        self._list_tables_raises = dict(list_tables_raises or {})
         self.update_dataset_calls = []
 
     def get_dataset(self, ref):
         key = (ref.project, ref.dataset_id)
+        if key in self._get_dataset_raises:
+            raise self._get_dataset_raises[key]
         if key not in self._datasets:
             raise LookupError("404 dataset not found: {}".format(key))
         return self._datasets[key]
 
     def list_tables(self, ref):
         key = (ref.project, ref.dataset_id)
+        if key in self._list_tables_raises:
+            raise self._list_tables_raises[key]
         return list(self._tables.get(key, []))
 
     def update_dataset(self, dataset, fields):
@@ -229,6 +243,75 @@ def test_resolve_location_succeeds_when_locations_already_match(
     assert exit_code == 0
     out = capsys.readouterr().out.strip()
     assert out == "US"
+
+
+def test_resolve_location_surfaces_non_notfound_error_reading_telemetry_dataset(
+    fake_bigquery, capsys
+):
+    """A get_dataset failure that is NOT "not found" (a permission error, a
+    transient network fault, ...) must NOT be treated the same as "the
+    telemetry dataset doesn't exist yet" -- that would silently print the
+    billing location without ever having confirmed there is no conflicting,
+    already-populated dataset in a different location to protect. Mutation:
+    widen the except back to a bare `except Exception` around the
+    get_dataset call -- red (this would then print the billing location and
+    exit 0 instead of erroring)."""
+    client = _FakeClient(
+        datasets={
+            ("billing-proj", "billing_ds"): _FakeDataset(location="US"),
+        },
+        get_dataset_raises={
+            ("polyglot-demo", "polyglot_telemetry"): PermissionError("access denied"),
+        },
+    )
+    fake_bigquery(client)
+    exit_code = telemetry_bq_setup.main(
+        [
+            "resolve-location",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--billing-table",
+            "billing-proj.billing_ds.gcp_billing_export_resource_v1_ABC123",
+        ]
+    )
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "ERROR" in err
+    assert "polyglot_telemetry" in err
+
+
+def test_resolve_location_surfaces_error_listing_tables_in_telemetry_dataset(
+    fake_bigquery, capsys
+):
+    """A list_tables failure on an existing telemetry dataset must be
+    surfaced as an ERROR, not left to propagate as a raw traceback and not
+    silently treated as "no tables". Mutation: drop the try/except around
+    the has_tables lookup -- red (an unhandled exception instead of a
+    clean ERROR: line, contradicting this module's own documented
+    "every failure prints a human-readable reason first" contract)."""
+    client = _FakeClient(
+        datasets={
+            ("billing-proj", "billing_ds"): _FakeDataset(location="US"),
+            ("polyglot-demo", "polyglot_telemetry"): _FakeDataset(location="us-central1"),
+        },
+        list_tables_raises={
+            ("polyglot-demo", "polyglot_telemetry"): TimeoutError("deadline exceeded"),
+        },
+    )
+    fake_bigquery(client)
+    exit_code = telemetry_bq_setup.main(
+        [
+            "resolve-location",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--billing-table",
+            "billing-proj.billing_ds.gcp_billing_export_resource_v1_ABC123",
+        ]
+    )
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "ERROR" in err
+    assert "polyglot_telemetry" in err
 
 
 def test_resolve_location_rejects_a_malformed_billing_table_argument(

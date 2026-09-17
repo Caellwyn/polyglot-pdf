@@ -141,13 +141,38 @@ def _resolve_location(args: argparse.Namespace) -> int:
         args.project, args.dataset
     )
     try:
+        from google.api_core import exceptions as gexc
+    except ImportError as exc:
+        print(
+            "ERROR: google-api-core is not importable: {}".format(exc),
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
         telemetry_dataset = client.get_dataset(telemetry_dataset_ref)
-    except Exception:  # noqa: BLE001 -- not found is the common, fine case
+    except (LookupError, gexc.NotFound):
         # The telemetry dataset does not exist yet -- nothing to conflict
         # with, so the billing dataset's own location is simply where it
-        # should be created.
+        # should be created. LookupError is what this module's own test
+        # fake raises for "not found" (the test file avoids depending on
+        # the real google-cloud-bigquery client for its fixtures);
+        # gexc.NotFound is what the real API raises. Anything else (a
+        # permission error, a transient network fault, ...) is NOT "the
+        # dataset doesn't exist" and must not be treated as though it
+        # were -- that would silently print a location without ever
+        # having confirmed there is no conflicting, already-populated
+        # dataset to protect.
         print(billing_location)
         return 0
+    except Exception as exc:  # noqa: BLE001 -- surfaced, not swallowed
+        print(
+            "ERROR: could not read telemetry dataset {}: {}".format(
+                telemetry_dataset_ref, exc
+            ),
+            file=sys.stderr,
+        )
+        return 1
 
     # The telemetry dataset already exists. If it is EMPTY, a location
     # mismatch strands nothing -- recreating it in the billing dataset's
@@ -155,7 +180,16 @@ def _resolve_location(args: argparse.Namespace) -> int:
     # and this bead's own bug report is that path having to be done by
     # hand today. Only refuse when there is real content that a location
     # change cannot carry over.
-    has_tables = next(iter(client.list_tables(telemetry_dataset_ref)), None) is not None
+    try:
+        has_tables = next(iter(client.list_tables(telemetry_dataset_ref)), None) is not None
+    except Exception as exc:  # noqa: BLE001 -- surfaced, not a raw traceback
+        print(
+            "ERROR: could not list tables in telemetry dataset {}: {}".format(
+                telemetry_dataset_ref, exc
+            ),
+            file=sys.stderr,
+        )
+        return 1
     if has_tables and telemetry_dataset.location != billing_location:
         print(
             "ERROR: telemetry dataset {} already exists in location {!r} "

@@ -66,6 +66,53 @@ matching `deploy-form-kit.sh`'s `find_manifest_python` shape: try `python3`,
 App-Execution-Alias stub that `command -v` finds but that cannot execute)
 resolves the interpreter that runs the new helper.
 
+## Fresh-eyes round 2 (cross-surface review)
+
+Adopt/reject/defer breakdown from the outer cross-surface review's single
+GAPS-FOUND finding plus its lower-confidence observations:
+
+- **ADOPTED (fixed):** `_resolve_location`'s telemetry-dataset `get_dataset`
+  lookup (`scripts/telemetry_bq_setup.py`) caught bare `Exception`, so a
+  permission error or transient network fault on an EXISTING, populated,
+  location-mismatched dataset was silently treated the same as "the dataset
+  does not exist yet" -- printing the billing location and exiting 0 instead
+  of refusing, defeating the conflict-refusal exit criterion in exactly the
+  scenario it exists to catch. Narrowed to `except (LookupError,
+  gexc.NotFound)` (matching both the test fake's `LookupError` and the real
+  API's `google.api_core.exceptions.NotFound`), with a new `except Exception`
+  branch that prints an `ERROR:` line and exits 1 for everything else,
+  mirroring the established pattern already used in
+  `scripts/audit/log_pii_sweep.py`'s `_bq_table_schema`. Two new tests pin
+  this: a non-`NotFound` `get_dataset` failure must exit 1 with an `ERROR:`
+  message, not print the billing location; both were mutation-verified
+  (widening the except back to bare `Exception` turns the first test red;
+  removing the try/except around `list_tables` turns the second red).
+- **ADOPTED (fixed):** the same function's `client.list_tables(...)` call had
+  no exception handling at all, contradicting the module's own docstring
+  promise that "every failure prints a human-readable reason to stderr
+  first" -- an API error there would have propagated as a raw traceback.
+  Wrapped in the same try/except-and-report-ERROR shape as the rest of the
+  module; pinned by the second new test above.
+- **DEFERRED (filed as a bead, not fixed here):** the reviewer's low-confidence
+  coverage observation that no test pins `find_telemetry_python`'s
+  existence/correctness directly in `scripts/setup-telemetry.sh` (only its
+  call site is checked) -- filed as `polyglot-pdf-vxmny` (chore(nits):
+  deferred review nits from polyglot-pdf-vzvio). Low risk (the function is
+  copied verbatim from the proven `find_manifest_python` precedent) and
+  purely a test-rigor gap, not a suspected bug, so it did not warrant a
+  behavioral fix in this round.
+- **NOT RE-LITIGATED (reviewer's own disclosure, no action needed):** the
+  reviewer could not independently re-run the `google-cloud-bigquery`- and
+  `firebase_admin`-dependent suites in its ambient environment; this round
+  re-ran the full backend suite (3871 passed, 195 skipped), the root suite
+  (2016 passed, 94 skipped), `tests/test_telemetry_bq_setup.py` (11 passed,
+  including the 2 new tests), and `admin_backend/tests/unit/
+  test_admin_sa_iam_envelope.py` (13 passed) directly from this worktree,
+  confirming the builder's earlier counts and the reviewer's own re-derived
+  contract checks. `AccessEntry(entity_type="userByEmail", ...)` was already
+  independently verified by the reviewer against the installed
+  `google-cloud-bigquery` source and was not re-checked here.
+
 ## Lessons
 
 A bug report's own enumerated problem list is not itself proof the CURRENT
@@ -139,11 +186,14 @@ not go red.
 
 All new/changed tests were mutation-verified: each production behavior
 (the `has_tables` location-conflict check, the `grant-dataset-role`
-idempotency check, the `LOCATION` derivation branch, and the `bq
-add-iam-policy-binding` -> API-helper swap in the shell script) was reverted
-to its pre-fix shape and the corresponding test observed to fail, then
-restored. Full backend suite (3871 passed, 195 skipped), root suite (2013
-passed, 94 skipped), and `admin_backend` suite (718 passed) all re-run clean
-after the fix; tree left clean.
+idempotency check, the `LOCATION` derivation branch, the `bq
+add-iam-policy-binding` -> API-helper swap in the shell script, and -- round
+2 -- the narrowed `except (LookupError, gexc.NotFound)` on the telemetry
+dataset lookup and the new try/except around `list_tables`) was reverted to
+its pre-fix shape and the corresponding test observed to fail, then restored.
+Full backend suite (3871 passed, 195 skipped), root suite (2016 passed, 94
+skipped), `tests/test_telemetry_bq_setup.py` (11 passed), and
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py` (13 passed) all
+re-run clean after round 2's fix; tree left clean.
 
 Review outcomes recorded in the closeout ping.
