@@ -59,9 +59,9 @@ were unreadable because the operator identity lacks Identity Toolkit read.
 ## Findings register
 
 Every pre-finding, then every finding a bead or its reviews produced.
-"Fixed" means merged to `dev` unless the row says otherwise. Three PRs are
-open for the maintainer's merge at the time of writing: C3 (#833), C2
-(#834) and F2 (#835); their rows say "in PR".
+"Fixed" means merged to `dev` unless the row says otherwise. One PR is
+open for the maintainer's merge at the time of writing: C2 (#834); its
+rows say "in PR". C3 (#833) and F2 (#835) merged on 2026-09-17 UTC.
 
 ### The plan's pre-findings
 
@@ -72,8 +72,8 @@ open for the maintainer's merge at the time of writing: C3 (#833), C2
 | PF-3 | P1 | A 422 echoed the request body's values back to the caller; `debug` unpinned | FIXED: B1a (`wfgjz`, #825) -- value-free 422 on both apps incl. the custom-validator `msg` channel; `debug` pinned False. Sibling sink filed: `giebe` (P2, the editor's own schema-validation 422); `jbb44` (P3). |
 | PF-4 | P1 | No response headers on any of the five Hosting sites | FIXED: E2 (`j29z1`, #828) -- HSTS, nosniff, Referrer-Policy, Permissions-Policy, `frame-ancestors`, CSP in REPORT-ONLY mode; needs the next Hosting deploy to be live (D's runbook reports FAIL until then). Enforcement gated on `18o7c` (self-host the VAD/ONNX assets, P2) and the staging soak; `p3o51` (P2), `b45a4` (P3). |
 | PF-5 | P1 | No rate limiting on the unauthenticated doors | NOT FIXED -- a cost decision. The options memo is on `6088m`; the new `POST /api/signup/check` door (C3) joined its scope. **Needs the maintainer's choice or a written acceptance** (a P1 with neither is the one open item on epic criterion 5). |
-| PF-6 | P1 | `authorized_emails` publicly listable (staff-email enumeration) | FIXED: C3 (`vcjgs`, #833, in PR) -- full client deny; server-side `POST /api/signup/check` behind the uniform 404; needs the rules deploy (backend first). Emulator-backed rules tests: `34y4y` (P2, Java in CI). |
-| PF-7 | P2 | No dependency/secret/SAST scanning; test tooling in the image; stale pins | FIXED: F1 (`ikdnd`, #812) -- the informational CI job, Dependabot, the requirements split, digest-pinned non-root image, `python-multipart` and two others bumped; F2 (`cwiip`, #835, in PR) -- uvicorn 0.53 + websockets 16.1.1, harness-gated. Remaining: `5r456` (P2, the starlette 2026 advisories; fastapi moves with it, same harness gate), `gdqmr` (P3), `kq042` (P3). |
+| PF-6 | P1 | `authorized_emails` publicly listable (staff-email enumeration) | FIXED: C3 (`vcjgs`, #833, merged) -- full client deny; server-side `POST /api/signup/check` behind the uniform 404; needs the rules deploy (backend first). Emulator-backed rules tests: `34y4y` (P2, Java in CI). |
+| PF-7 | P2 | No dependency/secret/SAST scanning; test tooling in the image; stale pins | FIXED: F1 (`ikdnd`, #812) -- the informational CI job, Dependabot, the requirements split, digest-pinned non-root image, `python-multipart` and two others bumped; F2 (`cwiip`, #835, merged) -- uvicorn 0.53 + websockets 16.1.1, harness-gated. Remaining: `5r456` (P2, the starlette 2026 advisories; fastapi moves with it, same harness gate), `gdqmr` (P3), `kq042` (P3). |
 | PF-8 | P2 | `confirmation_events` safe only by the implicit deny; no retention decision | FIXED (rules half): C3 -- explicit deny + `ADMIN_SDK_ONLY_COLLECTIONS`. FILED (retention): `t5v83` (P2, maintainer-owned, with `pol2`'s legal input). |
 | PF-9 | P1 | Operator free text (`reason`) unbounded, stored in three places and logged | FIXED for the credit path: A (`uaxt5`, #802) -- 500-char bound at both doors, ids-only log line, the audit-log `before`/`after` shapes pinned per route. One sibling site remains: `e8wzz` (`set_firm_kind` logs its free-text reason) -- **a P1-class residual that needs a fix or written acceptance**; `uanl9` (P2, the console's opaque 422), `q2cu7`, `g2wib`. |
 | PF-10 | P2 | Dev routes gated on a marker file; `MAX_UPLOAD_MB` unenforced; resume-form decoded before its size check with no parse timeout; `/health` disclosed config; no WS frame cap or Origin check | FIXED: C4 (`6088m`, #803: `K_SERVICE` fail-closed + the dockerignore pin, byte-accurate caps, parse timeout, bounded disclaimer timestamp), B1b (`/health` trimmed), C2 (the two WS dev sockets fail closed on `K_SERVICE`, text-frame cap, Origin allowlist). Filed: `07vpc` (P2, four editor routes with unbounded bodies), `ij9ue` (P2), `lhrln` (P2), `nb9tx` (P3, binary frames uncapped). |
@@ -104,7 +104,7 @@ open for the maintainer's merge at the time of writing: C3 (#833), C2
 | E1 (`8v8i7`) reviews | P2 | The idle wipe fired 5 s after a status that only means "no socket traffic"; the bundle test built apps whose deps CI never installs; three sessionStorage keys survive the wipe; a pre-existing overlay test flake | The first two FIXED in E1; `vzvkk`, `y6b48` FILED. |
 | E2 (`j29z1`) reviews | P1 (avoided) / P2 | `X-Frame-Options: DENY` would have broken Google sign-in (the app site serves Firebase Auth's iframe); the voice overlay loads executable code from jsdelivr; the ONNX glue needs `'unsafe-eval'`; the env-derived pin's wss demand | XFO dropped for `frame-ancestors` before the PR; `18o7c` (P2), `p3o51` (P2), `b45a4` (P3) FILED. |
 | F1 (`ikdnd`) | P2/P3 | starlette 0.48's 2026 advisories; React Router 6 advisories; editor/admin deploy scripts build stale packages; Dependabot PRs close no bead; venv-path mismatch; the grouped Dependabot merge broke `dev` (#830 reverted it) | `5r456` (P2), `o9b51` (P2), `gdqmr`, `g4p1j`, `datcz` (P3) FILED. |
-| F2 (`cwiip`) review | P2 (pre-existing) | uvicorn's "WebSocket accepted" line logs the request target incl. `?token=` at INFO on `uvicorn.error`, which `--no-access-log` does not cover; only an unpinned logger entry suppressed it | FIXED in F2 (#835, in PR): pinned by `test_logging_access_log.py`. `kq042` (P3) FILED. |
+| F2 (`cwiip`) review | P2 (pre-existing) | uvicorn's "WebSocket accepted" line logs the request target incl. `?token=` at INFO on `uvicorn.error`, which `--no-access-log` does not cover; only an unpinned logger entry suppressed it | FIXED in F2 (#835, merged): pinned by `test_logging_access_log.py`. `kq042` (P3) FILED. |
 | B0 (`6rj0j`) review | P3 | Stacked doc stamps | `q7oml` FILED (`dfxet` tracks the pattern). |
 
 Every P2/P3 above has a bead (all children of `polyglot-pdf-uijam`, or
