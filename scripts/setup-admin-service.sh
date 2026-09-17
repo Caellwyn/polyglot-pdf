@@ -271,7 +271,7 @@ echo -e "${GREEN}[INFO]${NC} Admin service account ready: $SA_EMAIL"
 echo -e "${YELLOW}[NOTE]${NC} Deploy the admin service with the SHARED image and"
 echo -e "${YELLOW}[NOTE]${NC} APP_MODULE=admin_backend.main:app plus --service-account $SA_EMAIL."
 
-# 5. Cloud Scheduler: the hourly expired-link refund sweep (Epic 2 bead B5,
+# 7. Cloud Scheduler: the hourly expired-link refund sweep (Epic 2 bead B5,
 # plan: "Refund on unopened expiry").
 #
 # A SEPARATE service account from admin-backend-sa, on purpose. admin-
@@ -341,13 +341,13 @@ echo -e "${YELLOW}[NOTE]${NC} scheduler job above, so this deploy's env vars inc
 echo -e "${YELLOW}[NOTE]${NC} (unset on the very first deploy, before the service has a URL at all)."
 
 
-# 6. Cloud Scheduler: the monthly firm-plan credit top-up (bd
+# 8. Cloud Scheduler: the monthly firm-plan credit top-up (bd
 # polyglot-pdf-0euzk, plan: "maintainer's pricing decision -- 35
 # credits/month cap as a starting place").
 #
 # A SEPARATE service account from BOTH admin-backend-sa (the callee) and
 # admin-sweep-scheduler-sa (the OTHER Scheduler job's caller identity,
-# section 5 above) -- see that section's own comment for why a Scheduler
+# section 7 above) -- see that section's own comment for why a Scheduler
 # caller identity is never reused across jobs: rotating one job's
 # credential must never silently change what a DIFFERENT job accepts.
 MONTHLY_TOPUP_SCHEDULER_SA_NAME="admin-topup-scheduler-sa"
@@ -362,7 +362,7 @@ else
     echo -e "${GREEN}[INFO]${NC} Service account $MONTHLY_TOPUP_SCHEDULER_SA_NAME already exists"
 fi
 
-# NOT run here, for the identical reason section 5's sweep job is not: the
+# NOT run here, for the identical reason section 7's sweep job is not: the
 # job needs the admin service's OWN Cloud Run URL, unknown until AFTER the
 # first successful admin-service deploy. tests/test_setup_admin_service_
 # monthly_topup_scheduler.py pins this exact command's shape.
@@ -373,7 +373,7 @@ fi
 # month boundary.
 # --uri / --oidc-token-audience: the monthly top-up route's own full path,
 # admin_backend/routes/credit_routes.py's run_monthly_topup -- root+path,
-# mirroring section 5's sweep job exactly (that route's _audience() appends
+# mirroring section 7's sweep job exactly (that route's _audience() appends
 # its own path to the bare ADMIN_SERVICE_URL the SAME way this route's
 # _topup_audience() does).
 echo -e "${YELLOW}[NOTE]${NC} After the admin service's FIRST deploy, create the monthly top-up job:"
@@ -389,7 +389,7 @@ echo -e "${YELLOW}[NOTE]${NC}     --oidc-token-audience=\"\$ADMIN_SERVICE_URL/ad
 echo -e "${YELLOW}[NOTE]${NC}"
 echo -e "${YELLOW}[NOTE]${NC} ADMIN_SERVICE_URL and MONTHLY_TOPUP_SCHEDULER_SA_EMAIL are now set"
 echo -e "${YELLOW}[NOTE]${NC} AUTOMATICALLY by deploy-admin.sh itself on every run -- the identical"
-echo -e "${YELLOW}[NOTE]${NC} mechanism section 5's SWEEP_SCHEDULER_SA_EMAIL already uses. Just re-run"
+echo -e "${YELLOW}[NOTE]${NC} mechanism section 7's SWEEP_SCHEDULER_SA_EMAIL already uses. Just re-run"
 echo -e "${YELLOW}[NOTE]${NC} ./deploy-admin.sh once after creating the scheduler job above, so this"
 echo -e "${YELLOW}[NOTE]${NC} deploy's env vars include ADMIN_SERVICE_URL (unset on the very first"
 echo -e "${YELLOW}[NOTE]${NC} deploy, before the service has a URL at all)."
