@@ -13,8 +13,18 @@
  * Fixing them one test at a time would leave the NEXT map -- and new maps get
  * added -- to be caught by a reviewer one round at a time. So this file asserts
  * over a list that a companion test proves is COMPLETE: a newly added
- * `*_TRANSLATIONS` map fails the completeness check below until it is either
+ * language-keyed map fails the completeness check below until it is either
  * covered here or explicitly excluded with a reason.
+ *
+ * THE LIMIT OF THAT GUARANTEE, stated honestly. The completeness scan matches
+ * EXPORT NAMES (`*_TRANSLATIONS`, plus the `*_COPY` / `*_STRINGS` / `*_LABELS`
+ * shapes a future map might plausibly use), so it enumerates over a NAMING
+ * CONVENTION -- not over the underlying hazard, "any object keyed by language
+ * name". A map exported under a name matching none of those suffixes would
+ * still slip through. Detecting the hazard structurally is not practical from a
+ * regex (a `Record<string, T>` is indistinguishable from any other dictionary
+ * at the source level), so the convention IS the guarantee: keep naming
+ * language-keyed maps with one of these suffixes.
  *
  * THE TRAP THIS REPLACES. DisclaimerModal.test.tsx derived its audited set from
  * the map under test, and bound it to a local named `SPOKEN_LANGUAGES` --
@@ -47,6 +57,12 @@ const EXPECTED: string[] = SPOKEN_LANGUAGES.map((l) => l.name as string).sort();
 // A separator no file path contains, so a path with a space cannot
 // split into a bogus (name, file) pair.
 const SEP = "|::|";
+
+// Export-name shapes a language-keyed map may plausibly carry. Built fresh per
+// call: a /g regex carries `lastIndex` across uses, so sharing one instance
+// between the two scans below would make the second silently skip matches.
+const MAP_EXPORT_RE = () =>
+  /export\s+const\s+([A-Z0-9_]*_(?:TRANSLATIONS|COPY|STRINGS|LABELS))\b/g;
 
 const MAPS: Record<string, Record<string, unknown>> = {
   OVERLAY_TRANSLATIONS,
@@ -99,7 +115,7 @@ describe('the guarded set covers every translation map in the frontend', () => {
   // Maps that are deliberately NOT language-keyed, with the reason.
   const EXCLUDED: Record<string, string> = {};
 
-  it('every exported *_TRANSLATIONS map is guarded above or explicitly excluded', () => {
+  it('every exported language-map export is guarded above or explicitly excluded', () => {
     const srcRoot = join(__dirname, '..');
     const found: string[] = [];
 
@@ -114,7 +130,7 @@ describe('the guarded set covers every translation map in the frontend', () => {
         if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) continue;
         const text = readFileSync(full, 'utf-8');
         for (const m of text.matchAll(
-          /export\s+const\s+([A-Z0-9_]*_TRANSLATIONS)\b/g
+          MAP_EXPORT_RE()
         )) {
           found.push(`${m[1]}${SEP}${relative(srcRoot, full)}`);
         }
@@ -150,7 +166,7 @@ describe('the guarded set covers every translation map in the frontend', () => {
         }
         if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) continue;
         for (const m of readFileSync(full, 'utf-8').matchAll(
-          /export\s+const\s+([A-Z0-9_]*_TRANSLATIONS)\b/g
+          MAP_EXPORT_RE()
         )) {
           names.push(m[1]);
         }

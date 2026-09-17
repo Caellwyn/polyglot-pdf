@@ -279,9 +279,18 @@ field to optional so its blank passed the usable-value gate, and fell back to th
 raw bracketed id as the spoken name in the re-prompt. Use
 **`findFieldWithAlias(fields, id)`** (`schema-forms/utils/fieldValue.ts`, beside
 `readFieldEntryWithAlias`) for ANY schema lookup keyed on an id that can arrive
-from the model. The one legitimate exact-only site is
-`handleSwitchFieldRequest`, which resolves the identifier through
-`resolveFieldForNavigation` first and then re-reads by the schema's OWN id.
+from the model. `handleSwitchFieldRequest`'s own `fields.find` is legitimately
+exact-only, because it re-reads by the schema's OWN id AFTER
+`resolveFieldForNavigation` has resolved the model's identifier.
+
+**But `resolveFieldForNavigation` itself is NOT alias-aware** (bd
+`polyglot-pdf-mwgim`, pre-existing): its first lookup is an exact
+`fields.find(f => f.id === identifier)` on a model-supplied identifier, and its
+fallbacks match `spoken_name` / `name` / `spoken_aliases` -- none of which is the
+bracket variant. So a `switch_field` naming `race` against a schema declaring
+`race[]` resolves only if a spoken name happens to match. Do not read the
+exact-only lookup in `handleSwitchFieldRequest` as evidence that the navigation
+path as a whole handles the alias.
 
 That set is pinned mechanically by `schema-forms/utils/fieldAliasLookup.test.ts`,
 which scans source for exact-only lookups on a model-supplied id and asserts the

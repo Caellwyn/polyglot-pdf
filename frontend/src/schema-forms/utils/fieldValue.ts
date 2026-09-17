@@ -506,7 +506,7 @@ export function unwrapToBoolean(value: any): boolean {
  * webFormConnection's shownFor/valueFor helpers and twice in schemaFormState,
  * and the one place that skipped it is exactly where the bug landed. The set of
  * legitimate bare `fields.find(f => f.id === ...)` sites is pinned by
- * fieldValue.aliasLookup.test.ts, so a new exact-only lookup on a
+ * fieldAliasLookup.test.ts, so a new exact-only lookup on a
  * model-supplied id fails CI instead of a review round.
  *
  * Precedence: an EXACT id match always wins; only when the schema declares
