@@ -72,6 +72,27 @@ from __future__ import annotations
 import argparse
 import sys
 
+# BigQuery's dataset ACL (Dataset.access_entries) predates IAM-style role
+# strings. For a userByEmail entity, the server normalizes whatever role it
+# was granted with down to one of the three legacy access roles below --
+# confirmed 2026-09-17 against a live dataset's ACL (a grant originally made
+# via `bq add-iam-policy-binding --role roles/bigquery.dataViewer` reads
+# back over the API as {"role": "READER", "userByEmail": "..."}), and
+# documented in google-cloud-bigquery's own AccessEntry docstring ("READER",
+# "WRITER", "OWNER" are the only legal `role` values for a
+# userByEmail-shaped entity). Comparing an IAM-style role string (what
+# setup-telemetry.sh passes on the command line) directly against
+# entry.role therefore never matches a real, previously-granted entry --
+# only this normalized form does. Extend this mapping if a future caller
+# grants a different dataset-scoped role; an unmapped role is a hard error
+# (see _grant_dataset_role) rather than a silent skip of the idempotency
+# check.
+_IAM_ROLE_TO_LEGACY_ACCESS_ROLE = {
+    "roles/bigquery.dataViewer": "READER",
+    "roles/bigquery.dataEditor": "WRITER",
+    "roles/bigquery.dataOwner": "OWNER",
+}
+
 
 def _client():
     """A google.cloud.bigquery.Client, or None with a message on stderr.
@@ -247,9 +268,33 @@ def _grant_dataset_role(args: argparse.Namespace) -> int:
         return 1
     entity_id = args.member[len("serviceAccount:"):]
 
+    # The BigQuery API normalizes an IAM-style role to the legacy
+    # READER/WRITER/OWNER form for a userByEmail entity (see the
+    # _IAM_ROLE_TO_LEGACY_ACCESS_ROLE comment above) -- a live,
+    # previously-granted entry's `role` is NEVER the IAM string this
+    # script is invoked with. Fail loudly on a role this module does not
+    # know how to normalize, rather than silently comparing the raw IAM
+    # string and never matching a real entry (the bug this mapping
+    # fixes): a false 'not yet granted' means the idempotency guarantee
+    # this helper exists to provide silently does not hold, appending a
+    # duplicate access entry on every re-run.
+    legacy_role = _IAM_ROLE_TO_LEGACY_ACCESS_ROLE.get(args.role)
+    if legacy_role is None:
+        print(
+            "ERROR: --role {!r} is not one this helper knows how to "
+            "check for idempotency (known: {}). Add it to "
+            "_IAM_ROLE_TO_LEGACY_ACCESS_ROLE first -- comparing the raw "
+            "IAM role string against a live access entry's `role` would "
+            "never match, defeating idempotency.".format(
+                args.role, sorted(_IAM_ROLE_TO_LEGACY_ACCESS_ROLE)
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
     existing = list(dataset.access_entries)
     already_granted = any(
-        entry.role == args.role
+        entry.role in (legacy_role, args.role)
         and entry.entity_type == "userByEmail"
         and entry.entity_id == entity_id
         for entry in existing

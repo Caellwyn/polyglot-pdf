@@ -396,10 +396,112 @@ def test_grant_dataset_role_is_idempotent(fake_bigquery, capsys):
             "--role", "roles/bigquery.dataViewer",
         ]
     )
+def test_grant_dataset_role_is_idempotent_against_a_real_api_shaped_entry(
+    fake_bigquery, capsys
+):
+    """Regression for the live-verified bug (fresh-eyes round on bd
+    polyglot-pdf-vzvio, 2026-09-17): a real, previously-granted access entry
+    round-tripped through the actual BigQuery API is NEVER stored with the
+    IAM-style role string this script is invoked with -- the server
+    normalizes a userByEmail entity's role down to the legacy
+    READER/WRITER/OWNER form (confirmed live against a real dataset's ACL:
+    a grant originally made via `bq add-iam-policy-binding --role
+    roles/bigquery.dataViewer` reads back as
+    {"role": "READER", "userByEmail": "..."}). The OTHER idempotency test
+    above constructs its existing entry with role="roles/bigquery.dataViewer"
+    directly, which is NOT what a real dataset ever contains and was
+    (unintentionally) masking this bug. Mutation: revert the
+    _IAM_ROLE_TO_LEGACY_ACCESS_ROLE normalization and compare
+    `entry.role == args.role` directly -- red (already_granted is always
+    False against this real-shaped entry, so update_dataset gets called and
+    a duplicate access entry is appended on every re-run)."""
+    from google.cloud import bigquery
+
+    existing_entry = bigquery.AccessEntry(
+        role="READER",
+        entity_type="userByEmail",
+        entity_id="admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+    )
+    dataset = _FakeDataset(location="US", access_entries=[existing_entry])
+    client = _FakeClient(datasets={("polyglot-demo", "polyglot_telemetry"): dataset})
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.dataViewer",
+        ]
+    )
     assert exit_code == 0
     assert len(dataset.access_entries) == 1
     assert client.update_dataset_calls == []
     assert "already has" in capsys.readouterr().out
+
+
+def test_grant_dataset_role_is_idempotent_for_data_editor_against_a_real_api_shaped_entry(
+    fake_bigquery, capsys
+):
+    """Same regression as above, for the OTHER role setup-telemetry.sh
+    grants (roles/bigquery.dataEditor, for the log sink's writer identity) --
+    a real WRITER-shaped entry must also be recognized. Mutation: an
+    incomplete _IAM_ROLE_TO_LEGACY_ACCESS_ROLE mapping (e.g. only
+    dataViewer -> READER) -- red for this role specifically, even though
+    the dataViewer case above would stay green, which is exactly the
+    per-parametrization trap this repo's testing doctrine warns about."""
+    from google.cloud import bigquery
+
+    existing_entry = bigquery.AccessEntry(
+        role="WRITER",
+        entity_type="userByEmail",
+        entity_id="telemetry-sink-writer@gcp-sa-logging.iam.gserviceaccount.com",
+    )
+    dataset = _FakeDataset(location="US", access_entries=[existing_entry])
+    client = _FakeClient(datasets={("polyglot-demo", "polyglot_telemetry"): dataset})
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:telemetry-sink-writer@gcp-sa-logging.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.dataEditor",
+        ]
+    )
+    assert exit_code == 0
+    assert len(dataset.access_entries) == 1
+    assert client.update_dataset_calls == []
+    assert "already has" in capsys.readouterr().out
+
+
+def test_grant_dataset_role_rejects_an_unmapped_role(fake_bigquery, capsys):
+    """A --role this module has no legacy-form mapping for must fail loudly
+    rather than silently comparing the raw IAM string (which would never
+    match a real entry, defeating idempotency without any error at all).
+    Mutation: drop the legacy_role is None check -- red (no error, and the
+    role would be silently compared as a raw IAM string forever)."""
+    dataset = _FakeDataset(location="US", access_entries=[])
+    client = _FakeClient(datasets={("polyglot-demo", "polyglot_telemetry"): dataset})
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.admin",
+        ]
+    )
+    assert exit_code == 1
+    assert dataset.access_entries == []
+    assert client.update_dataset_calls == []
+    err = capsys.readouterr().err
+    assert "ERROR" in err
+    assert "roles/bigquery.admin" in err
 
 
 def test_grant_dataset_role_rejects_a_non_service_account_member(fake_bigquery, capsys):

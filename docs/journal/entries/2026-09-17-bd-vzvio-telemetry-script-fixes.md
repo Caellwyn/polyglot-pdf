@@ -253,4 +253,88 @@ what the wire API itself validates.
   correct home for anything still open, and this round's findings were
   either refuted or already covered.
 
+## Fresh-eyes round 4 (cross-surface review)
+
+The round-4 outer review returned `GAPS-FOUND (1)`, this time with a live,
+read-only verification behind it: it fetched the actual
+`polyglot_telemetry` dataset's ACL from the real BigQuery REST API on
+`polyglot-demo-aa709` and found that a genuine, previously-`bq`-created
+grant for `admin-backend-sa` is stored on the server as
+`{"role": "READER", "userByEmail": "admin-backend-sa@..."}` -- confirming
+round 3's `userByEmail`-entity-type refutation (a service-account grant made
+via an IAM-role string does land as `userByEmail`), but also revealing that
+the server normalizes the `role` field itself to the legacy `READER`/
+`WRITER`/`OWNER` form on read, which round 3's discovery-document check had
+not separately verified.
+
+- **ADOPTED (fixed) -- the actual blocker:** `_grant_dataset_role`'s
+  idempotency check (`scripts/telemetry_bq_setup.py`) compared
+  `entry.role == args.role`, i.e. a live access entry's role (always
+  `READER`/`WRITER`/`OWNER` for a `userByEmail` entity, per the live
+  verification above) against the IAM-style role string the CLI is invoked
+  with (`roles/bigquery.dataViewer` / `roles/bigquery.dataEditor`) -- these
+  can never be equal, so `already_granted` was always `False` against a
+  real, previously-granted entry, and every re-run of
+  `setup-telemetry.sh` silently appended a duplicate access entry for the
+  same principal/role. This directly contradicted the module's own
+  documented idempotency guarantee (and `docs/standards/logging-and-cost.md`'s
+  restatement of it) for the one scenario the guarantee exists for: a
+  re-run against an already-provisioned project. Fixed by adding
+  `_IAM_ROLE_TO_LEGACY_ACCESS_ROLE` (a small, explicit map from the three
+  IAM role strings this script grants to their legacy equivalents) and
+  comparing against BOTH the normalized legacy role and the raw IAM string
+  (the latter kept for defense-in-depth against a hypothetical future
+  caller storing the raw string directly, though the live data shows the
+  real API never does). A role with no entry in the map is now a hard
+  `ERROR` exit-1, not a silent mis-compare -- extending the script to a
+  new dataset-scoped role requires deliberately extending the map first.
+  Two regression tests pin the real-world shape directly (an existing
+  `AccessEntry` constructed with `role="READER"` / `role="WRITER"`, matching
+  what the live API actually returns, for both roles this script grants --
+  not just the `roles/bigquery.dataViewer` case the finding was filed
+  against, since CLAUDE.md scar #8's "enumerate the set" lesson applies to a
+  two-member role set as much as a larger one), plus a third test pinning
+  the new unmapped-role hard-error path. All three were mutation-verified:
+  reverting the comparison to `entry.role == args.role` turns both
+  real-shape regression tests red (reproducing the exact duplicate-entry
+  bug -- `len(dataset.access_entries) == 2` where the test asserts `== 1`);
+  short-circuiting the `legacy_role is None` guard to `False` turns the
+  unmapped-role test red (exit 0 instead of the expected exit 1). The
+  PRE-EXISTING idempotency test (which constructs its fixture with
+  `role="roles/bigquery.dataViewer"` directly -- not the shape a real
+  dataset ever contains, per the live-verified finding above) stays green
+  throughout, since the fix's `entry.role in (legacy_role, args.role)` check
+  still matches that unrealistic-but-harmless shape; it was left in place
+  rather than corrected, since it still passes and removing it would lose a
+  (weaker) assertion for no benefit.
+- **REFUTED (no code change) -- re-confirmed, not re-litigated:** the
+  round-3 `userByEmail`-entity-type finding. The round-4 reviewer
+  independently re-verified this live (rather than only against the
+  discovery document) and reached the same conclusion round 3 did:
+  `userByEmail` is the correct entity type for a service-account grant.
+  `scripts/audit/infra_posture.sh`'s pre-existing hedge (checking for either
+  shape) was noted as evidence its author was uncertain at the time, not as
+  a live disagreement -- no action needed there.
+- **NOT SEPARATELY FIXED (moot once the code fix lands):**
+  `docs/standards/logging-and-cost.md`'s IAM paragraph claims the helper "is
+  idempotent (an access entry already granting the exact role/member pair
+  is left alone)" -- true again now that the comparison bug above is fixed,
+  so the doc's claim needed no edit; it was a restatement of the code bug,
+  not an independent doc defect.
+- **DEFERRED (added to the existing nits bead):** a low-confidence,
+  unverified observation that `_resolve_location`'s `has_tables` check
+  (`next(iter(client.list_tables(...)), None) is not None`) would also
+  return true for a dataset holding only views (no base tables), which
+  isn't explicitly exercised by a test. Appended to `polyglot-pdf-vxmny`
+  (already the deferred-nits bead for this bead's review rounds) rather
+  than filing a new one, since the telemetry dataset only ever holds base
+  tables from the Cloud Logging sink by design and this is a narrow,
+  unlikely-to-occur edge case.
+- **Verification:** full backend suite (3871 passed, 195 skipped, 4
+  deselected) and root suite (2019 passed, 94 skipped) re-run clean from
+  this worktree after the fix; `tests/test_telemetry_bq_setup.py` (14
+  passed, including the 3 new tests), `tests/test_setup_telemetry_script.py`
+  (25 passed), and `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+  (13 passed) all green. Tree left clean.
+
 Review outcomes recorded in the closeout ping.
