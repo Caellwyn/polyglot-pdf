@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, findFieldWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -1397,14 +1397,10 @@ export class WebFormConnection {
     // as shown=true, matching the backend renderer's shown_map default.
     const fields = this.state.schema?.fields ?? [];
     const shownFor = (fieldId: string): boolean => {
-      let field = fields.find((f) => f.id === fieldId);
-      // Mirror the [] bracket fallbacks used for value lookup below.
-      if (!field && !fieldId.endsWith('[]')) {
-        field = fields.find((f) => f.id === fieldId + '[]');
-      }
-      if (!field && fieldId.endsWith('[]')) {
-        field = fields.find((f) => f.id === fieldId.slice(0, -2));
-      }
+      // Mirror the [] bracket fallbacks used for value lookup below, via the
+      // shared helper (bd polyglot-pdf-una9) rather than a fourth hand-rolled
+      // copy of the same three lines.
+      const field = findFieldWithAlias(fields, fieldId);
       if (!field) return true;
       return shouldShowField(field, this.state.fieldValues, fields);
     };
@@ -2007,7 +2003,13 @@ export class WebFormConnection {
     // Required fields can never arrive here with '' because validateField rejects ''
     // for required fields at the applyAiValueWithValidation gate, so the value
     // never lands. Therefore, treat '' as usable when the field is not required.
-    const fieldSchema = this.state.schema.fields.find(f => f.id === field_id);
+    // Resolve the SCHEMA through the same `[]`-alias fallback the value read
+    // above uses (bd polyglot-pdf-una9). An exact-only lookup loses the field
+    // whenever the model sends the variant the schema does not declare -- and
+    // `fieldSchema?.validation?.required` then reads off `undefined`, silently
+    // defaulting a REQUIRED field to optional, which lets the `''` carve-out
+    // below accept a blank as usable and confirm an unanswered required field.
+    const fieldSchema = findFieldWithAlias(this.state.schema.fields, field_id);
     const fieldIsRequired = fieldSchema?.validation?.required === true;
     // Whitespace-only is BLANK and never usable, on required OR optional fields
     // (bd polyglot-pdf-5ovod): typing spaces is not the "does not apply" answer.
@@ -2059,7 +2061,11 @@ export class WebFormConnection {
         this.unconfirmableRepromptCount < WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP &&
         !sessionCapReached
       ) {
-        const field = this.state.schema.fields.find(f => f.id === field_id);
+        // Alias-aware for the same reason as the schema read above (bd
+        // polyglot-pdf-una9): an exact-only miss falls back to the raw id, so
+        // the re-prompt would read a bracketed `race[]` aloud to the user
+        // instead of the field's spoken name.
+        const field = findFieldWithAlias(this.state.schema.fields, field_id);
         const spokenName = field?.spoken_name || field?.name || field_id;
         this.unconfirmableConfirmCount = 0;
         this.unconfirmableRepromptCount += 1;
@@ -2304,7 +2310,11 @@ export class WebFormConnection {
       };
     }
 
-    const field = this.state.schema.fields.find(f => f.id === field_id);
+    // Alias-aware (bd polyglot-pdf-una9): the value guard below already reads
+    // through the `[]` fallback, so resolving the schema exact-only made the two
+    // disagree -- a legitimate skip of an aliased checkbox group was refused as
+    // 'unknown_field' even though the very next read finds its value.
+    const field = findFieldWithAlias(this.state.schema.fields, field_id);
     if (!field) {
       // Unknown field id -- cannot skip. Ack not-recorded so the backend tells
       // Gemini to re-ask rather than confabulating a skip. `reason` is a fixed

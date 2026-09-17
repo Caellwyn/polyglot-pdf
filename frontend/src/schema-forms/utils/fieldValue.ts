@@ -6,7 +6,7 @@
  * Solution: Unwrap FieldValue objects to get primitive values for display
  */
 
-import type { FieldValue } from '../types/schema';
+import type { FieldValue, FormField } from '../types/schema';
 
 /**
  * Whether a raw field value is BLANK -- carries no answer at all.
@@ -481,4 +481,45 @@ export function unwrapToBoolean(value: any): boolean {
     return String(unwrapped) === 'true' || String(unwrapped) === '1';
   }
   return false;
+}
+
+/**
+ * Resolve a field's SCHEMA entry with the checkbox-group `[]`-alias fallback.
+ *
+ * The schema-side twin of `readFieldEntryWithAlias` above, and it exists for the
+ * same reason: Gemini drops or adds the trailing `[]` on a checkbox-group id
+ * inconsistently (bd polyglot-pdf-5k52), so a model-supplied `field_id` can name
+ * the variant the schema does NOT declare. An exact-only `fields.find(f => f.id
+ * === fieldId)` then returns undefined for a field that plainly exists, and the
+ * caller silently takes its not-found branch.
+ *
+ * The VALUE side of that asymmetry was already closed; the SCHEMA side was not,
+ * which is what bd polyglot-pdf-una9 reports: handleConfirmFieldRequest read the
+ * value through the alias but resolved the schema bare, so on an aliased
+ * checkbox group it found the value and then lost the field -- reading
+ * `validation.required` off `undefined` (defaulting the field to OPTIONAL, so a
+ * required blank became confirmable) and falling back to the raw bracketed id as
+ * the spoken name in the re-prompt.
+ *
+ * Factored out rather than hand-written a fifth time (CLAUDE.md scar #8): this
+ * same three-line fallback had been written out independently in
+ * webFormConnection's shownFor/valueFor helpers and twice in schemaFormState,
+ * and the one place that skipped it is exactly where the bug landed. The set of
+ * legitimate bare `fields.find(f => f.id === ...)` sites is pinned by
+ * fieldValue.aliasLookup.test.ts, so a new exact-only lookup on a
+ * model-supplied id fails CI instead of a review round.
+ *
+ * Precedence: an EXACT id match always wins; only when the schema declares
+ * neither variant do we return undefined. (Unlike the value side, there is no
+ * "hollow entry" notion -- a schema field either exists or it does not.)
+ */
+export function findFieldWithAlias(
+  fields: readonly FormField[] | undefined,
+  fieldId: string
+): FormField | undefined {
+  if (!fields || !fieldId) return undefined;
+  const exact = fields.find((f) => f.id === fieldId);
+  if (exact) return exact;
+  const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+  return fields.find((f) => f.id === aliasKey);
 }
