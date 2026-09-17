@@ -191,7 +191,8 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
   // deliberately no directory-wide scan (a real, intentional prod-default
   // export like deploy-production.sh's `export FORM_KITS_BUCKET=` must NOT
   // be swept in and flagged as a false mismatch).
-  // deploy-all.sh is NOT here since bd frg8a (#838): it is a thin wrapper that
+  // deploy-all.sh is NOT here since bd oqtm7 (#836, the thin Cloud Build
+  // wrappers): it is a thin wrapper that
   // submits cloudbuild.yaml, and the bucket is computed THERE as
   // `$PROJECT_ID-form-kits` -- pinned by the cloudbuild case below, not by a
   // bare-default grep (bd polyglot-pdf-6ky1x: the stale entry kept dev red).
@@ -212,7 +213,10 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
   );
 
   it('cloudbuild.yaml computes the bucket as $PROJECT_ID-form-kits, and the plugin default is that bucket for the default project', () => {
-    // The Cloud Build path (bd frg8a) has no FORM_KITS_BUCKET env at all: every
+    // The Cloud Build path (bd oqtm7) has no FORM_KITS_BUCKET env at all: every
+    // bucket reference is one exact spelling ON PURPOSE -- a respelling such as
+    // `${PROJECT_ID}-form-kits` must come through this test, not drift in.
+    // Every
     // bucket reference is `$PROJECT_ID-form-kits`. Parity with the plugin's
     // DEFAULT_BUCKET therefore means: the same suffix, and the prefix is the
     // project the deploy scripts target (.firebaserc's 'demo' alias).
