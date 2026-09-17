@@ -1215,8 +1215,9 @@ def test_no_log_line_in_either_backend_carries_client_supplied_free_text():
     hits, walked = _client_free_text_log_sites(root)
     # Guard the guard (the outer review on e8wzz): an empty hit list must mean
     # "clean", never "walked nothing" -- the sibling sweep in
-    # test_no_pii_logging.py carries the same floor. 26 route modules and
-    # several hundred log calls today.
+    # test_no_pii_logging.py carries a file-count floor of the same kind;
+    # this one also floors the log calls examined. 27 route modules and
+    # 300+ log calls today.
     assert walked["modules"] >= 20, walked
     assert walked["log_calls"] >= 100, walked
     assert hits == [], "client-supplied free text reaches a log line at: {}".format(hits)
