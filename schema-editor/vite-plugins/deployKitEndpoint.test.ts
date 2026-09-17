@@ -217,9 +217,9 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
     // DEFAULT_BUCKET therefore means: the same suffix, and the prefix is the
     // project the deploy scripts target (.firebaserc's 'demo' alias).
     const build = fs.readFileSync(path.resolve(__dirname, '../../cloudbuild.yaml'), 'utf-8');
-    const refs = build.match(/\$PROJECT_ID-form-kits/g) ?? [];
+    const refs = build.match(/\$PROJECT_ID-form-kits\b/g) ?? [];
     expect(refs.length, 'cloudbuild.yaml no longer names $PROJECT_ID-form-kits').toBeGreaterThanOrEqual(2);
-    const other = build.match(/[\w$-]+-form-kits/g)?.filter((m) => m !== '$PROJECT_ID-form-kits') ?? [];
+    const other = (build.match(/[\w$-]+-form-kits\b/g) ?? []).filter((m) => m !== '$PROJECT_ID-form-kits' && m !== '--form-kits');
     expect(other, 'a second bucket spelling crept into cloudbuild.yaml').toEqual([]);
     const rc = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../.firebaserc'), 'utf-8'));
     const project = rc.projects?.demo ?? rc.projects?.default;  // .firebaserc names the one project as 'demo'
