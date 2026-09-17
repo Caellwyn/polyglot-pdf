@@ -171,7 +171,7 @@ project, printing counts, key names, types and ids and never a value:
 | Script | What it proves | Last clean run |
 |--------|----------------|----------------|
 | `scripts/audit/inventory_stores.py --project <id>` | every sampled document in every store sits inside its pinned key allowlist; the bucket holds only kit objects; the telemetry views' schemas | 2026-09-15 (journal: `2026-09-15-bd-uaxt5-data-at-rest-inventory.md`) |
-| `scripts/audit/log_pii_sweep.py --project <id> --retention-days 30` | zero credential, JWT, A-number, SSN, email, phone or DOB hits across the three services' app streams and request logs and the BigQuery views, in-process (spawns nothing) | 2026-09-15: zero post-fix hits; 88 pre-fix request-log rows accepted as residue, aging out by 2026-10-14 (journal: `2026-09-15-bd-v8l6m-log-pii-sweep.md`) |
+| `scripts/audit/log_pii_sweep.py --project <id> --retention-days 30` | zero credential, JWT, A-number, SSN, email, phone or DOB hits across the three services' app streams and request logs and the BigQuery views, in-process (spawns nothing) | 2026-09-15: zero real post-fix hits; the 88-89 pre-fix request-log rows accepted as residue, aging out by 2026-10-14 (journal: `2026-09-15-bd-v8l6m-log-pii-sweep.md`) |
 | `scripts/audit/infra_posture.sh --project <id>` | 78 checks: IAM, service-account envelopes, Cloud Run env and flags, secrets, bucket, active Firestore rules vs repo, TTL/PITR, Logging retention and exclusions, BigQuery ACL, Firebase Auth, Hosting headers, container scanning, Cloud Build log content, the T4 settings -- each PASS, FAIL or `N/A: <reason>` | 2026-09-15: 55 PASS, 8 FAIL, 15 N/A (journal: `2026-09-15-bd-m1dlv-infra-posture.md`); the Hosting-header FAILs clear on the next deploy of E2 |
 
 Static guards that run in CI on every PR: `test_no_pii_logging.py` (the
@@ -185,8 +185,9 @@ detect-secrets, bandit, semgrep).
 
 Recorded here so they are not rediscovered as findings.
 
-- **88 request-log rows carrying a `?token=` credential from before the fix**
-  (75 demo, 13 staging; 2026-08-17 to 2026-09-14). Accepted by the
+- **88 to 89 request-log rows carrying a `?token=` credential from before the
+  fix** (13 staging; 75 or 76 demo -- the B2 entry's summary and its itemised
+  post-fix list disagree by one; 2026-08-17 to 2026-09-14). Accepted by the
   maintainer on 2026-09-14 (option C): every link record in the window was a
   budget-exhausted stub with no minted link, Firebase ID tokens expire
   within an hour, and the rows age out with the 30-day bucket retention (the
