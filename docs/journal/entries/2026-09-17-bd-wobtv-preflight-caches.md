@@ -83,6 +83,38 @@ tracked-cache half of the bug and its fix) plus the fresh-detached-worktree
 (with a `node_modules` junction) deploy pattern the bead asked to record, per
 CLAUDE.md's "current state only" doc rule.
 
+## What shipped -- cross-surface review round
+
+The Opus outer cross-surface review (STATUS: GAPS-FOUND (1)) traced the
+`deploy_preflight()` contract out to all seven wrapper callers, the
+tarball-refusal path in `cloudbuild.yaml`, the form-kit publish blast radius,
+the admin-service build trigger, the `[NOTE]` stderr producers/consumers, and
+the `.gitignore` `.firebase/` rule -- all confirmed correct, no code change
+needed for any of them (**adopt: none needed, all traces OK**).
+
+One finding surfaced a real gap and was fixed in this round (**adopt**):
+
+- `docs/components/config-deployment.md:590-591` -- the tier-2 surface doc's
+  "Deploy preflight" paragraph still said the dirty check refuses on
+  "`git status --porcelain` non-empty, untracked files included", which this
+  bead's own diff made false. Narrowed the paragraph to match
+  `scripts/deploy_preflight.sh`'s actual `--untracked-files=no` behavior and
+  added the untracked-files-are-noted-not-refused sentence, mirroring how
+  `docs/doctrine/promotion-tiers.md` was already worded. Bumped the doc's
+  `*Last updated*` stamp (2026-09-17, this bead) per the existing running-log
+  convention; `check_doc_freshness.py` now reports this doc OK.
+
+One finding was filed rather than fixed here (**defer**):
+
+- `tests/test_deploy_preflight.py:8-11`'s module docstring still gives the
+  retired tarball-upload rationale for the dirty-tree check, which this
+  bead's diff also made stale (comment-only, not a behavioral gap). Filed as
+  bd `polyglot-pdf-k6o0f` per the reviewer's classification
+  (docs-nit, not a blocker) rather than fixed in this round.
+
+No finding was rejected/refuted this round -- both were confirmed against the
+code and either fixed or filed.
+
 ## Lessons
 
 A preflight rationale needs re-checking whenever the mechanism it protects
@@ -102,6 +134,13 @@ touched.
 `polyglot-pdf-wobtv` note appended to the running parenthetical log per this
 doc's existing convention). No `**Tracks:**` line on this doc, so
 `check_doc_freshness.py` does not check it mechanically; reviewed by hand.
+
+`docs/components/config-deployment.md` also bumped in the cross-surface
+review round above (its "Deploy preflight" paragraph narrowed to match the
+actual `--untracked-files=no` behavior; stamp bumped to 2026-09-17). This doc
+DOES carry a `**Tracks:**` line including `scripts/deploy_preflight.sh`, so
+`check_doc_freshness.py` checks it mechanically -- it now reports this file
+`OK`.
 
 `scripts/check_doc_freshness.py` flagged several *other* tier-2 docs as stale
 against files whose mtimes reflect this worktree's checkout from `origin/dev`,
@@ -129,3 +168,7 @@ Review outcomes recorded in the closeout ping.
   tracked file instead of an untracked one.
 - `docs/doctrine/promotion-tiers.md` -- "Deploy preflight" section updated to
   current state; fresh-detached-worktree deploy pattern recorded.
+- `docs/components/config-deployment.md` -- "Deploy preflight" paragraph
+  narrowed to match the actual `--untracked-files=no` behavior (cross-surface
+  review round; the paragraph had gone stale relative to this bead's own
+  code change).

@@ -2,6 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
+*Last updated: 2026-09-17 (bd polyglot-pdf-wobtv: the "Deploy preflight" paragraph -- the dirty-tree check is scoped to TRACKED paths only (`--untracked-files=no`); untracked files are noted on stderr, not refused, since a Cloud Build trigger run fetches only the named commit and never sees them.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 4: the ONE ENGINE claim is scoped to the `deploy-*.sh` wrappers and the admin console, and the two surviving LOCAL engines -- `npm run deploy:demo` and `scripts/deploy-form-kit.sh` -- are named as the ungated exceptions (bd polyglot-pdf-1qzr8 owns their fate); `--set-secrets` no longer claims a caller-side `BACKEND_SECRETS` override, which the bash engine took with it.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: the form-kits rows say what the target actually does -- it reads the BUILD's checkout, no kit is tracked there, so it cannot succeed and no wrapper selects it implicitly any more (bd polyglot-pdf-wm7ga owns the source question); the contractor round-trip note no longer claims a local pull feeds the next deploy.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
 now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
 deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
@@ -585,19 +587,23 @@ be the gate crying wolf.
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
 
-  **Deploy preflight (bd `polyglot-pdf-1s3ko`).** EVERY wrapper sources
-  `scripts/deploy_preflight.sh` and calls
-  `deploy_preflight` BEFORE anything else. It refuses a **dirty** tree
-  (`git status --porcelain` non-empty, untracked files included) and a commit
-  **no remote branch contains**. Both refusals protect the same claim: a Cloud
-  Build build runs from a COMMIT and `build_checks/{sha}` vouches for that
-  commit's test run, so a tree that does not match the named commit makes the
-  record true about something other than what shipped. The unpushed check asks
-  `git branch -r --contains HEAD` rather than testing ancestry against one
-  branch, because a commit on a pushed FEATURE branch is perfectly deployable
-  -- that is the normal shape of a staging deploy. Pinned behaviourally by
-  `tests/test_deploy_preflight.py`, which runs the helper under bash against
-  real temporary repositories.
+  **Deploy preflight (bd `polyglot-pdf-1s3ko`, narrowed by bd
+  `polyglot-pdf-wobtv`).** EVERY wrapper sources `scripts/deploy_preflight.sh`
+  and calls `deploy_preflight` BEFORE anything else. It refuses a **dirty
+  tracked tree** (`git status --porcelain --untracked-files=no` non-empty) and
+  a commit **no remote branch contains**. Both refusals protect the same
+  claim: a Cloud Build build runs from a COMMIT and `build_checks/{sha}`
+  vouches for that commit's test run, so a tree that does not match the named
+  commit makes the record true about something other than what shipped. The
+  unpushed check asks `git branch -r --contains HEAD` rather than testing
+  ancestry against one branch, because a commit on a pushed FEATURE branch is
+  perfectly deployable -- that is the normal shape of a staging deploy.
+  **Untracked files are noted (`[NOTE]` on stderr), not refused:** the build
+  fetches only the named commit from GitHub, so an untracked file can never
+  reach it and cannot cause a tree/commit mismatch -- enforcing it anyway
+  refused every real deploy over routine scratch files. Pinned behaviourally
+  by `tests/test_deploy_preflight.py`, which runs the helper under bash
+  against real temporary repositories.
 
   **Reachability gate (bd `polyglot-pdf-pidtg`).** After the deploy, the
   `backend-reachability-gate` step
