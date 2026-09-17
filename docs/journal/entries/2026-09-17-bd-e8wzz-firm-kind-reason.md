@@ -68,7 +68,10 @@ first commit changed (fixed). Nits: the admin console's kind dialog has no
 `maxLength` and renders a 422 as an opaque status (folded into `uanl9`,
 which already covers the credit dialog on the same code path); the hipaa
 sentence now says exactly which syntactic shape the pin proves. Round 2:
-OPUS_RECORD2
+NO-GAPS. It re-verified the floors against the real counts (27 route
+modules, 300+ log calls), the two guide rows against `admin-service.md`, and
+the zero-hit claim against the two benign look-alikes (`credit_routes.py`'s
+ledger argument; `deploy_webhook.py`'s local assignment).
 
 ## Files
 
