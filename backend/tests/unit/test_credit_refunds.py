@@ -772,20 +772,27 @@ def test_websocket_budget_exhausted_writes_the_telemetry_mirror(monkeypatch):
     """Socket teardown on LinkBudgetExhausted (plan: "writes the
     budget_exhausted mirror"). NO ledger call -- this is the telemetry-only
     half, pinned by asserting credit_ledger is never touched. The fake's
-    get() reports an EXISTING doc -- the normal case once A3's mint-route
-    rewrite (bd polyglot-pdf-jecrl) lands and writes a links doc before this
-    can ever run -- so the guard added for the orphan-doc case (see the
-    "does_not_create" test below) does not swallow this write too.
+    get() reports an EXISTING doc with status=minted -- the normal case
+    once A3's mint-route rewrite (bd polyglot-pdf-jecrl) lands and writes a
+    links doc before this can ever run -- so the guard added for the
+    orphan-doc case (see the "does_not_create" test below) does not
+    swallow this write too, and the terminal-status guard (see the
+    "does_not_stomp_a_terminal_status" test below, bd polyglot-pdf-b554d)
+    does not either.
 
     Mutation: change the written status to STATUS_REVOKED, or drop the
     mirror call from the except block entirely -- both red. Verified
-    2026-09-08."""
+    2026-09-08, re-verified 2026-09-17 after the terminal-status guard was
+    added."""
     import backend.routes.websocket_routes as ws_routes
 
     written = {}
 
     class _FakeSnapshot:
         exists = True
+
+        def to_dict(self):
+            return {"status": links_store.STATUS_MINTED}
 
     class _FakeDocRef:
         def get(self):
@@ -808,6 +815,52 @@ def test_websocket_budget_exhausted_writes_the_telemetry_mirror(monkeypatch):
     assert written["jti"] == "jti-teardown"
     assert written["data"] == {"status": links_store.STATUS_BUDGET_EXHAUSTED}
     assert written["merge"] is True
+
+
+@pytest.mark.parametrize("terminal_status", sorted(links_store.OPEN_BLOCKING_STATUSES))
+def test_websocket_budget_exhausted_mirror_does_not_stomp_a_terminal_status(
+        monkeypatch, terminal_status):
+    """bd polyglot-pdf-b554d exit criterion 1: a links record whose status
+    is already `revoked` or `refunded` (links_store.OPEN_BLOCKING_STATUSES,
+    the TERMINAL money states) is left UNCHANGED when the mirror runs --
+    the whole point of B4's revoke route (bd polyglot-pdf-jmiys) is defeated
+    if a later LinkBudgetExhausted teardown can silently overwrite the
+    revoke with `budget_exhausted`, a status the A3 open-gate does not
+    treat as blocking. Parametrized over the COMPLETE set
+    (docs/standards/testing.md#test-the-tests: per-parametrization, not a
+    sample) so a future third terminal status is covered automatically.
+
+    Mutation: delete the `if current_status in
+    _links_store.OPEN_BLOCKING_STATUSES: return` guard from
+    _mirror_budget_exhausted -- both parametrizations go red (set() gets
+    called). Verified 2026-09-17."""
+    import backend.routes.websocket_routes as ws_routes
+
+    calls = {"set": 0}
+
+    class _FakeSnapshot:
+        exists = True
+
+        def to_dict(self, *, _status=terminal_status):
+            return {"status": _status}
+
+    class _FakeDocRef:
+        def get(self):
+            return _FakeSnapshot()
+
+        def set(self, data, merge=False):
+            calls["set"] += 1
+
+    class _FakeCollection:
+        def document(self, jti):
+            return _FakeDocRef()
+
+    monkeypatch.setattr(links_store, "_collection",
+                        lambda *a, **k: _FakeCollection())
+
+    ws_routes._mirror_budget_exhausted("jti-terminal")
+
+    assert calls["set"] == 0
 
 
 def test_websocket_budget_exhausted_mirror_does_not_create_an_orphan_doc(
@@ -896,3 +949,155 @@ def test_websocket_budget_exhausted_mirror_ignores_a_missing_jti(monkeypatch):
     ws_routes._mirror_budget_exhausted(None)
 
     assert calls == []
+
+
+# --------------------------------------- the SET of links.status writers
+
+
+def test_the_complete_set_of_links_status_writers_all_guard_terminal_states():
+    """bd polyglot-pdf-b554d exit criterion 2 (CLAUDE.md scar #8: enumerate
+    the SET before fixing any of it, then pin the set, not the instance).
+
+    _mirror_budget_exhausted was ONE unguarded writer of
+    links[_<channel>]/{jti}.status; the bead's own text names four sibling
+    writers and asks for a test asserting the COMPLETE list so a future
+    fifth writer (the plan's still-unbuilt opened/completed mirrors) fails
+    CI rather than a review round finding it one at a time (the exact
+    failure mode PR #551 and bd saxh hit repeatedly).
+
+    DERIVED, not hand-listed: every dict LITERAL containing a `"status"` key
+    anywhere in backend/ or admin_backend/ (excluding tests), in a file that
+    references links_store at all -- source-level, so it needs no live
+    Firestore and no import-time side effect. A hand-maintained list is
+    exactly the shape of bug this test exists to catch (the writer itself
+    would be new code no one added to the list yet).
+
+    THE ALLOWLIST is the two kinds of match that are NOT a links-doc write:
+      - _public_link_view / revoke_link (admin_backend/routes/link_routes.py):
+        build an HTTP JSON response body (a plain dict), never write to
+        Firestore -- the actual writes happen in _txn (revoke) and the mint
+        route, both already in the writer set below.
+      - _audit_write (admin_backend/routes/sweep_routes.py): builds the
+        before/after payload passed to audit_log.record_in_transaction, an
+        audit-log row, not the links doc itself -- the actual refund write
+        is credit_ledger.py's _mark_refunded_and_extra, already below.
+    Each entry is commented with WHY it is not a links-doc writer; a new
+    allowlist entry added without that reasoning is itself a review smell.
+
+    THE SANCTIONED WRITER SET, each with why it cannot stomp a terminal
+    status:
+      - links_store.build_mint_record: always writes STATUS_MINTED on a
+        FRESH document at mint time -- there is no prior status to stomp
+        (the doc does not exist yet).
+      - links_store.mark_opened: internally guarded -- only ever moves
+        minted -> opened; any other current status (including both
+        terminal ones) is left alone (own docstring: "a record already...
+        revoked or refunded is left alone").
+      - credit_ledger._mark_refunded_and_extra: reached only after the
+        enclosing transaction's read gate raises LinkNotRefundable unless
+        status == STATUS_MINTED -- a terminal status never reaches the
+        write.
+      - admin_backend link_routes._txn (the revoke transaction): raises
+        HTTPException(409) unless before_status == STATUS_MINTED -- same
+        shape, checked BEFORE the write.
+      - websocket_routes._mirror_budget_exhausted: THIS bead's fix -- skips
+        the write when the current status is already in
+        links_store.OPEN_BLOCKING_STATUSES (pinned by
+        test_websocket_budget_exhausted_mirror_does_not_stomp_a_terminal_status
+        above).
+
+    This test itself only checks membership in the expected set (it is the
+    tripwire for a NEW, unlisted writer appearing) -- each existing writer's
+    OWN guard is pinned and mutation-verified by its own dedicated test
+    (this file's mirror tests above; test_links_store.py for mark_opened;
+    test_credit_refunds.py's refund tests; admin_backend's revoke tests).
+
+    Mutation: add a new function anywhere in backend/ or admin_backend/ that
+    writes a dict literal containing a "status" key in a links_store-
+    importing file, without adding it to EXPECTED_WRITERS or ALLOWLISTED_
+    NON_WRITERS below -- this goes red, naming the new (file, function).
+    Verified 2026-09-17 by temporarily adding such a function to a scratch
+    copy of websocket_routes.py and confirming the set comparison fails
+    with the new entry named.
+    """
+    import ast
+    import pathlib
+
+    import backend as _backend_pkg
+
+    repo_root = pathlib.Path(_backend_pkg.__file__).resolve().parent.parent
+
+    EXPECTED_WRITERS = {
+        ("backend/services/links_store.py", "build_mint_record"),
+        ("backend/services/links_store.py", "mark_opened"),
+        ("backend/services/credit_ledger.py", "_mark_refunded_and_extra"),
+        ("admin_backend/routes/link_routes.py", "_txn"),
+        ("backend/routes/websocket_routes.py", "_mirror_budget_exhausted"),
+    }
+
+    # (file, function): reason it is NOT a links-doc status write, per the
+    # docstring above. Every entry here must have its reasoning stated
+    # there, not just here.
+    ALLOWLISTED_NON_WRITERS = {
+        ("admin_backend/routes/link_routes.py", "_public_link_view"),
+        ("admin_backend/routes/link_routes.py", "revoke_link"),
+        ("admin_backend/routes/sweep_routes.py", "_audit_write"),
+    }
+
+    def _dict_has_status_key(node):
+        if not isinstance(node, ast.Dict):
+            return False
+        return any(
+            isinstance(k, ast.Constant) and k.value == "status"
+            for k in node.keys
+        )
+
+    def _iter_prod_py_files():
+        for base in ("backend", "admin_backend"):
+            for path in (repo_root / base).rglob("*.py"):
+                rel = path.relative_to(repo_root).as_posix()
+                if "/tests/" in rel or "__pycache__" in rel:
+                    continue
+                yield path, rel
+
+    found = set()
+    for path, rel in _iter_prod_py_files():
+        src = path.read_text(encoding="utf-8")
+        if "links_store" not in src:
+            continue
+        tree = ast.parse(src, filename=rel)
+
+        parent = {}
+        for node in ast.walk(tree):
+            for child in ast.iter_child_nodes(node):
+                parent[child] = node
+
+        def _enclosing_function(node):
+            cur = node
+            while cur is not None:
+                if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    return cur.name
+                cur = parent.get(cur)
+            return "<module>"
+
+        for node in ast.walk(tree):
+            if _dict_has_status_key(node):
+                found.add((rel, _enclosing_function(node)))
+
+    unexpected = found - EXPECTED_WRITERS - ALLOWLISTED_NON_WRITERS
+    assert not unexpected, (
+        "New links[_<channel>]/{{jti}}.status writer(s) found that are "
+        "neither in EXPECTED_WRITERS (guarded) nor ALLOWLISTED_NON_WRITERS "
+        "(not a links-doc write): {}. Give it a terminal-state guard "
+        "(refuse when the current status is in links_store."
+        "OPEN_BLOCKING_STATUSES) and add it to EXPECTED_WRITERS, or if it "
+        "is not actually a links-doc write, add it to "
+        "ALLOWLISTED_NON_WRITERS with the reason.".format(sorted(unexpected))
+    )
+
+    missing = EXPECTED_WRITERS - found
+    assert not missing, (
+        "Expected writer(s) no longer found by the scan -- update "
+        "EXPECTED_WRITERS if one was removed/renamed on purpose: "
+        "{}".format(sorted(missing))
+    )
