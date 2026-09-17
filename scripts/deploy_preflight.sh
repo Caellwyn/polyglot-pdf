@@ -7,37 +7,55 @@
 # passed". Both claims are false the moment the operator's tree does not match
 # the commit they are about to name.
 #
-#   DIRTY TREE -- `gcloud builds submit` uploads the LOCAL tree while
-#   `git rev-parse HEAD` names a clean commit, so uncommitted code deploys
-#   under a SHA that build_checks vouches for. The record is not wrong about
-#   the commit; it is simply about a different tree than the one that shipped.
+#   DIRTY TRACKED STATE -- a modified-or-staged tracked file means the commit
+#   named to the build differs from the tree the operator is looking at, so
+#   the commit deployed is not the one they meant to ship.
 #
-#   UNPUSHED COMMIT -- a build from the connected GitHub repository can only
-#   fetch a commit the remote actually has. An unpushed SHA fails the build
-#   late and opaquely ("revision not found"), and worse, a LOCAL SHA that
-#   exists only here can never be reproduced by the admin console, which
-#   triggers builds by SHA against the same repository.
+#   UNPUSHED COMMIT -- `gcloud builds triggers run --sha=<sha>` fetches that
+#   commit from the connected GitHub repository, which can only ever have a
+#   commit the remote actually has. An unpushed SHA fails the build late and
+#   opaquely ("revision not found"), and worse, a LOCAL SHA that exists only
+#   here can never be reproduced by the admin console, which triggers builds
+#   by SHA against the same repository.
 #
 # Both failures are silent-ish and land minutes into a deploy, so they are
 # checked here, first, before anything else in the wrapper runs.
 #
+# UNTRACKED FILES DO NOT COUNT (bd polyglot-pdf-wobtv). Earlier this also
+# refused on any untracked file, on the theory that a local tarball build
+# would upload it. That stopped being true when deploy moved onto Cloud Build
+# triggers (bd polyglot-pdf-oqtm7): the build fetches ONLY the named commit
+# from GitHub, so a file git never committed cannot reach it under any
+# circumstances -- there is no tree/commit mismatch for the build to inherit.
+# Enforcing it anyway made every real deploy attempt fail: three
+# `.firebase/*.cache` files were tracked (untracked now, bd polyglot-pdf-wobtv)
+# so every Hosting deploy dirtied the tree, and scratch files other sessions
+# leave at the repo root (`Claude outputs/`, `*.bak.py`, `prep-*.txt`) piled on
+# top. The check below still lists untracked paths as a NOTE -- an operator
+# mid-deploy should still see what is lying around uncommitted -- it just does
+# not refuse over them.
+#
 # Usage, from a wrapper:   source scripts/deploy_preflight.sh && deploy_preflight
 # Usage, standalone:       bash scripts/deploy_preflight.sh [repo-dir]
 #
-# Exit 0 = clean and pushed. Exit 1 = refused, with the reason on stderr.
+# Exit 0 = tracked state clean and pushed (untracked files noted, not fatal).
+# Exit 1 = refused, with the reason on stderr.
 
 deploy_preflight() {
-    local repo="${1:-.}" dirty head remote_branches
+    local repo="${1:-.}" dirty untracked head remote_branches
 
     if ! git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
         echo "[ERROR] deploy preflight: $repo is not a git repository." >&2
         return 1
     fi
 
-    # 1. DIRTY TREE. --porcelain covers staged, unstaged and untracked; an
-    # untracked file counts because `gcloud builds submit` uploads it (subject
-    # to .gcloudignore) while the commit does not contain it.
-    dirty=$(git -C "$repo" status --porcelain)
+    # 1. DIRTY TRACKED STATE. --untracked-files=no limits --porcelain to
+    # staged and unstaged changes to TRACKED paths -- exactly the set that
+    # would make the deployed commit differ from what is on the operator's
+    # screen. Untracked files are handled separately below: they never reach
+    # a Cloud Build trigger run (it fetches only the named commit from
+    # GitHub), so they are surfaced as a NOTE, not a refusal.
+    dirty=$(git -C "$repo" status --porcelain --untracked-files=no)
     if [ -n "$dirty" ]; then
         echo "[ERROR] ===========================================================" >&2
         echo "[ERROR]   DEPLOY REFUSED: the working tree is not clean" >&2
@@ -51,6 +69,16 @@ deploy_preflight() {
         echo "[ERROR]" >&2
         echo "[ERROR] Commit (or stash) them, push, then redeploy." >&2
         return 1
+    fi
+
+    # Untracked files are noted, never fatal (bd polyglot-pdf-wobtv): the
+    # commit named to the build does not contain them either way, so their
+    # presence cannot make the build ship something the operator did not see.
+    untracked=$(git -C "$repo" ls-files --others --exclude-standard)
+    if [ -n "$untracked" ]; then
+        echo "[NOTE] Untracked files present (not part of the deployed commit," >&2
+        echo "[NOTE] so they do not block this deploy -- shown for awareness):" >&2
+        echo "$untracked" | sed 's/^/[NOTE]   /' >&2
     fi
 
     head=$(git -C "$repo" rev-parse HEAD 2>/dev/null)

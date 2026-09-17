@@ -595,8 +595,17 @@ def test_deploy_all_runs_the_named_channels_targets(
 
 def test_a_dirty_tree_is_still_refused_before_any_trigger(deploy_repo, stub_bin):
     """The preflight is not decorative: a build runs from a COMMIT, and
-    build_checks/{sha} vouches for that commit's test run."""
-    (deploy_repo / "scratch.txt").write_text("uncommitted\n", encoding="utf-8")
+    build_checks/{sha} vouches for that commit's test run.
+
+    The dirty file here is a TRACKED one (appended to, not merely created):
+    an untracked file no longer refuses (bd polyglot-pdf-wobtv -- a Cloud
+    Build trigger run fetches only the named commit from GitHub, so an
+    untracked file can never reach it), so this fixture has to exercise the
+    case that still must refuse -- an uncommitted edit to a tracked path.
+    """
+    wrapper = deploy_repo / "deploy-staging.sh"
+    with wrapper.open("a", encoding="utf-8", newline="\n") as f:
+        f.write("# uncommitted edit\n")
     proc, calls, _sha = _run(
         deploy_repo, stub_bin, "deploy-staging.sh", build_check_exit="0"
     )
