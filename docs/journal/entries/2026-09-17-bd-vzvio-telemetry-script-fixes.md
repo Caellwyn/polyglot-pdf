@@ -196,4 +196,61 @@ skipped), `tests/test_telemetry_bq_setup.py` (11 passed), and
 `admin_backend/tests/unit/test_admin_sa_iam_envelope.py` (13 passed) all
 re-run clean after round 2's fix; tree left clean.
 
+## Fresh-eyes round 3 (cross-surface review)
+
+The outer review's round-3 pass returned `GAPS-FOUND (1)`, flagging exit
+criterion 2 (dataset grants no longer use `bq`) as failing "as a practical
+matter": it claimed `_grant_dataset_role`'s `bigquery.AccessEntry(role=args.role,
+entity_type="userByEmail", entity_id=entity_id)` pairs an IAM-role string
+(`roles/bigquery.dataViewer` / `roles/bigquery.dataEditor`) with the wrong
+entity type -- arguing `userByEmail` only accepts the legacy `READER`/
+`WRITER`/`OWNER` roles, and an IAM-role string requires `entity_type=
+"iamMember"` with the member's full `serviceAccount:...` string, not the
+bare email `entity_id` already stripped at line 248. The finding was based on
+the vendored `google-cloud-bigquery` SDK's own `AccessEntry` class docstring,
+whose one worked example (`AccessEntry('OWNER', 'userByEmail', ...)`) pairs
+`userByEmail` with a legacy role, plus the two Python client-library methods'
+docstrings describing `iamMember` and `userByEmail` as parallel-but-distinct
+entity kinds -- reasonable evidence, but not the authoritative source for
+what the wire API itself validates.
+
+- **REFUTED (no code change):** checked the finding against BigQuery's own
+  REST API discovery document (`bigquery.datasets.get`'s `Dataset.access[]`
+  schema, fetched live from `https://bigquery.googleapis.com/discovery/v1/
+  apis/bigquery/v2/rest`) rather than the client library's docstrings one
+  level removed from it. The discovery doc's `role` field description is
+  unambiguous and entity-type-agnostic: "This field will accept any of the
+  above [legacy] formats, but will return only the legacy format" -- i.e. an
+  IAM role string like `roles/bigquery.dataViewer` is accepted for ANY
+  entity type, including `userByEmail`, and the server normalizes it back to
+  `READER`/`WRITER`/`OWNER` on read. `userByEmail`'s own description
+  ("Maps to IAM policy member `user:EMAIL` or `serviceAccount:EMAIL`")
+  confirms it explicitly supports service accounts via the bare email --
+  exactly what `entity_id` already holds after the `serviceAccount:` prefix
+  is stripped at line 248. `iamMember` is documented only as the catch-all
+  for "some other type of member that appears in the IAM Policy but isn't a
+  user, group, domain, or special group" -- not the field to use for a plain
+  service-account grant, which `userByEmail` already covers correctly. A
+  Google-documented sample payload matches the code under review exactly:
+  `{"role": "roles/bigquery.dataViewer", "userByEmail":
+  "service-account@project.iam.gserviceaccount.com"}`. The reviewer's own
+  "How to verify" section flagged this as unverified-but-high-confidence,
+  pending a live-API check it could not run; that check is what this round
+  did, against the authoritative schema rather than a docstring example, and
+  it comes out the other way. `_grant_dataset_role` and its idempotency
+  check are therefore correct as shipped; exit criterion 2 stands as PASS.
+  Findings 2 (the `find_telemetry_python` coverage nit) and 3 (fake-client
+  return-type fidelity) were already dispositioned in round 2 / already
+  filed (`polyglot-pdf-vxmny`) and needed no new action. Finding 4 (the
+  module docstring's "the exact mechanism `bq add-iam-policy-binding` itself
+  calls into" claim) was contingent on Finding 1; since Finding 1 is
+  refuted, the docstring's claim stands as accurate and needed no edit.
+- **Verification:** full backend suite (3871 passed, 195 skipped) and root
+  suite (2016 passed, 94 skipped) re-run clean from this worktree -- same
+  counts as round 2, confirming no regression from this round (no production
+  code changed). No new bead filed: both out-of-scope items already on
+  record from round 2 (`polyglot-pdf-vxmny`, `polyglot-pdf-cl3qp`) remain the
+  correct home for anything still open, and this round's findings were
+  either refuted or already covered.
+
 Review outcomes recorded in the closeout ping.
