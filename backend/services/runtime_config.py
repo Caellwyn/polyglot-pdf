@@ -47,9 +47,10 @@ deploy of either channel until someone ran the seed step -- exactly the
 regression this module exists to avoid reintroducing. Each of the three env
 reads is parsed with the SAME rules the pre-bg313 call sites used (see
 _legacy_env_default below); an unset or unparsable env var falls through to
-the historical compiled constant. CREDITS_ENFORCED is the one exception: it
-is brand new, never had an env var, and its default stays the compiled
-`False` with no os.getenv call at all (see credits_enforced()).
+the historical compiled constant. CREDITS_ENFORCED and CREDIT_LOW_THRESHOLD
+are the two exceptions: both are brand new, never had an env var, and their
+defaults stay the compiled `False`/`10` with no os.getenv call at all (see
+credits_enforced() and credit_low_threshold()).
 
 CACHING. A per-process, per-channel TTL cache (30-60s): frequent enough that
 flipping a flag from the console is visible within the TTL with no redeploy
@@ -61,8 +62,9 @@ change at all.
 CALL-SITE SWAP. The three existing os.getenv reads become calls into this
 module: backend/routes/link_routes.py's _minting_enabled(),
 backend/services/link_budget.py's firm_link_cap() and
-default_cost_ceiling_usd(). CREDITS_ENFORCED has no os.getenv call to swap;
-it is read ONLY via credits_enforced() below.
+default_cost_ceiling_usd(). CREDITS_ENFORCED and CREDIT_LOW_THRESHOLD have
+no os.getenv call to swap; each is read ONLY via its own getter below
+(credits_enforced(), credit_low_threshold()).
 
 FIRESTORE ACCESS pattern matches services/firms.py and
 services/link_redemptions.py: lazy-imported backend.services.auth.get_db()
