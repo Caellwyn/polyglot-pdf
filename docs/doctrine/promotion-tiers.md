@@ -347,7 +347,8 @@ The pieces:
   (bd `polyglot-pdf-p4ale`, E4.5) -- a dedicated SA, never the legacy
   default Cloud Build SA, holding `run.admin`, `firebasehosting.admin`,
   `firebaserules.admin`, `artifactregistry.writer`, `logging.logWriter`,
-  `datastore.user` and `datastore.indexAdmin` project-wide,
+  `datastore.user`, `datastore.indexAdmin` and `serviceusage.serviceUsageViewer`
+  (the API-enabled pre-flight `firebase-tools deploy` runs) project-wide,
   `storage.objectAdmin` on the form-kits
   bucket only, and resource-scoped actAs (`roles/iam.serviceAccountUser`)
   on BOTH `polyglot-backend-sa` and `admin-backend-sa` -- deploying a

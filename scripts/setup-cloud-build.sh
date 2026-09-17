@@ -173,6 +173,13 @@ PROJECT_ROLES=(
     # runs BEFORE frontend-demo and the runner stops at the first failure
     # (CLAUDE.md scar #7).
     "roles/datastore.indexAdmin"
+    # Read whether an API is enabled. `firebase-tools deploy --only
+    # firestore:rules` (and :indexes) calls serviceusage.services.get on
+    # firestore.googleapis.com before deploying anything ("ensuring required
+    # API ... is enabled"); none of the roles above carries that permission,
+    # and the first demo deploy through the wrappers died on it with a 403
+    # (bd polyglot-pdf-8e812). The viewer role is the narrowest that has it.
+    "roles/serviceusage.serviceUsageViewer"
 )
 
 echo "[INFO] Assigning project-level IAM roles to $BUILD_SA_NAME..."
