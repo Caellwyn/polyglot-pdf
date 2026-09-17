@@ -1129,3 +1129,95 @@ def test_every_referenced_action_constant_is_in_the_table():
             "operator free text, add a content-shape test above too".format(
                 filename, missing, filename)
         )
+
+
+# --- e8wzz: the firm-kind reason (the PF-9 class, second site) ------------------------
+
+
+def test_admin_firm_kind_set_log_line_has_no_reason(client, fake_db, monkeypatch):
+    """Same rule as admin_credits_adjusted (bd polyglot-pdf-e8wzz): the
+    operator's free-text reason stays in the audit row and never reaches a
+    log line. Mutation: restore `reason=body.reason` on the call -> red."""
+    from admin_backend.routes import firm_routes
+    mock_log = MagicMock()
+    monkeypatch.setattr(firm_routes, "_log", mock_log)
+    resp = client.patch("/admin/firms/acme/kind", json={
+        "kind": "live", "reason": "a client's intake notes should never land here",
+    })
+    assert resp.status_code == 200, resp.text
+    calls = [c for c in mock_log.info.call_args_list
+             if c.args and c.args[0] == "admin_firm_kind_set"]
+    assert len(calls) == 1, "expected exactly one admin_firm_kind_set line"
+    _, kwargs = calls[0]
+    assert "reason" not in kwargs, "admin_firm_kind_set logged the operator's reason"
+    for value in kwargs.values():
+        assert "intake notes" not in str(value)
+
+
+def test_the_firm_kind_reason_is_bounded_like_the_credit_reason():
+    """One number: credit_ledger.REASON_MAX_LENGTH bounds both operator
+    free-text doors. Mutation: drop the Field(max_length=...) -> red."""
+    from pydantic import ValidationError
+    from admin_backend.routes.firm_routes import SetKindRequest
+    from backend.services import credit_ledger
+    SetKindRequest(kind="live", reason="x" * credit_ledger.REASON_MAX_LENGTH)
+    with pytest.raises(ValidationError):
+        SetKindRequest(kind="live", reason="x" * (credit_ledger.REASON_MAX_LENGTH + 1))
+
+
+# --- the SET: no log line in either backend carries client-supplied free text ------
+
+
+_FREE_TEXT_KWARGS = {"reason", "note", "notes", "comment", "comments", "description", "message"}
+_BODY_NAMES = {"body", "req", "request", "payload", "data"}
+# The terminal levels AND structlog's context binders: a `log.bind(reason=body.x)`
+# threads the value into every later line (fresh-eyes on bd e8wzz).
+_LOG_METHODS = {"debug", "info", "warning", "warn", "error", "critical", "exception",
+                "bind", "new", "unbind"}
+
+
+def _client_free_text_log_sites(root):
+    """Every `<log>.<level>(..., reason=body.<x>)`-shaped kwarg: a log call whose
+    keyword is a free-text name and whose value is an attribute of a request
+    body. Walks both services' routes dirs (scar #8: the set, not the site)."""
+    import pathlib
+    hits = []
+    walked = {"modules": 0, "log_calls": 0}
+    for base in ("backend/routes", "admin_backend/routes"):
+        for path in sorted((root / base).glob("*.py")):
+            walked["modules"] += 1
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                fn = node.func
+                if not (isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS):
+                    continue
+                walked["log_calls"] += 1
+                for kw in node.keywords:
+                    v = kw.value
+                    if (kw.arg in _FREE_TEXT_KWARGS and isinstance(v, ast.Attribute)
+                            and isinstance(v.value, ast.Name) and v.value.id in _BODY_NAMES):
+                        hits.append("{}:{} {}={}.{}".format(
+                            path.name, node.lineno, kw.arg, v.value.id, v.attr))
+    return hits, walked
+
+
+def test_no_log_line_in_either_backend_carries_client_supplied_free_text():
+    """The PF-9 set (bd polyglot-pdf-uaxt5 fixed credit-adjust; e8wzz the
+    firm-kind route): zero log kwargs named like free text whose value comes
+    straight off a request body. Mutation: restore either site -> red, and
+    the test names the site."""
+    import ast as _ast  # noqa: F401  (the module-level import is what the walker uses)
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[3]
+    assert (root / "backend" / "routes").is_dir() and (root / "admin_backend" / "routes").is_dir()
+    hits, walked = _client_free_text_log_sites(root)
+    # Guard the guard (the outer review on e8wzz): an empty hit list must mean
+    # "clean", never "walked nothing" -- the sibling sweep in
+    # test_no_pii_logging.py carries a file-count floor of the same kind;
+    # this one also floors the log calls examined. 27 route modules and
+    # 300+ log calls today.
+    assert walked["modules"] >= 20, walked
+    assert walked["log_calls"] >= 100, walked
+    assert hits == [], "client-supplied free text reaches a log line at: {}".format(hits)

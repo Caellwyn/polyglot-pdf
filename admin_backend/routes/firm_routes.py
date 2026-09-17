@@ -203,7 +203,10 @@ class SetKindRequest(BaseModel):
     a human clicked."""
 
     kind: str
-    reason: str
+    # Bounded like the credit-adjust reason (ONE number, credit_ledger's;
+    # bd polyglot-pdf-e8wzz, the PF-9 class): operator free text is stored in
+    # the audit row, bounded, and never in a log line.
+    reason: str = Field(max_length=credit_ledger.REASON_MAX_LENGTH)
 
 
 class SetPlanRequest(BaseModel):
@@ -755,8 +758,11 @@ async def set_firm_kind(
         _do_set_firm_kind, firm_id=firm_id, body=body, actor=actor,
         request_id=request_id,
     )
+    # reason is DELIBERATELY absent (bd polyglot-pdf-e8wzz, PF-9): the audit
+    # row carries it, bounded, under access control; Cloud Logging would be a
+    # second copy with no control of its own. request_id looks it up.
     _log.info("admin_firm_kind_set", firm_id=firm_id, kind=body.kind,
-              reason=body.reason, actor_uid=actor.uid, request_id=request_id)
+              actor_uid=actor.uid, request_id=request_id)
     return {
         "firm_id": firm_id, "kind": body.kind,
         "before_kind": result["before_kind"], "request_id": request_id,

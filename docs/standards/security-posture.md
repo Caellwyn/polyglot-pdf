@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/audit/inventory_stores.py scripts/audit/log_pii_sweep.py scripts/audit/infra_posture.sh backend/tests/integration/test_access_matrix.py admin_backend/tests/unit/test_access_matrix.py firestore.rules firebase.json backend/routes/websocket_routes.py backend/services/link_tokens.py
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-vzrbc: created -- sprint 23's closing doc).*
+*Last updated: 2026-09-17 (bd polyglot-pdf-e8wzz: the maintainer's decisions of 2026-09-17 recorded; the firm-kind reason closed).*
 
 The current-state home for how this app keeps client data in and
 unauthorised parties out: the threat model, every persistent store, every
@@ -146,12 +146,13 @@ reports any secret-shaped env value by NAME).
 
 What leaves the project boundary, to whom, and under what terms. The
 "live setting" column is what `infra_posture.sh` could read on
-2026-09-15; where it says console-only, the maintainer reads it in the
-Cloud Console and the answer is recorded in the journal.
+2026-09-15, updated with the maintainer's 2026-09-17 actions; where it says
+console-only, the maintainer reads it in the Cloud Console and the answer
+is recorded in the journal.
 
 | Processor | Data sent | Governing terms | Retention / use | Live setting |
 |-----------|-----------|-----------------|-----------------|--------------|
-| Vertex AI, Gemini Live (`gemini-live-2.5-flash-native-audio`; premium tier per `ai-models.md`) | the client's spoken audio; the system instruction including the current field values (`current_values`) and the form schema text with translations; tool calls and results (field ids and values); the model's audio back | Google Cloud Platform terms with the Cloud Data Processing Addendum (enterprise; customer data is not used to train models) -- NOT AI Studio's consumer terms: `VERTEXAI=true` is enforced at startup on `K_SERVICE` | a Live session holds context for the session only; Vertex may log prompts and responses for abuse monitoring for a limited period unless the project's opt-out is granted | opt-out state UNREADABLE by API (console-only toggle; the Organization Policy proxy is disabled) -- maintainer to read and record |
+| Vertex AI, Gemini Live (`gemini-live-2.5-flash-native-audio`; premium tier per `ai-models.md`) | the client's spoken audio; the system instruction including the current field values (`current_values`) and the form schema text with translations; tool calls and results (field ids and values); the model's audio back | Google Cloud Platform terms with the Cloud Data Processing Addendum (enterprise; customer data is not used to train models) -- NOT AI Studio's consumer terms: `VERTEXAI=true` is enforced at startup on `K_SERVICE` | a Live session holds context for the session only; Vertex may log prompts and responses for abuse monitoring for a limited period unless the project's opt-out is granted | not opted out today: no toggle is exposed for this project; Google's abuse-monitoring exemption was REQUESTED on 2026-09-17 and is pending |
 | Vertex AI, text models (`generate_content`: the secretary, validator and option translation) | schema text and field values in the prompt; the secretary's catalog | as above | as above | as above |
 | Cloud Text-to-Speech | the spellback field VALUE as text (`spellback_tts.py`), the intro and notice phrases | GCP terms + the Cloud Data Processing Addendum | Google documents TTS request data as not retained beyond serving and not used for improvement; no per-project data-use setting exists to verify (`infra_posture.sh` N/A by design) -- confirm in the contract review | none exists |
 | Firebase Auth | staff email, display name, Google profile photo URL (stored, never shown), custom claims | Firebase terms (the project's Firebase services sit under the same Google Cloud account) | until the account is deleted; deleted-user handling undocumented (`t5v83`) | authorized domains, email-enumeration protection, providers and password policy N/A: the operator identity lacks Identity Toolkit read -- grant or read in the console |
@@ -211,27 +212,34 @@ Recorded here so they are not rediscovered as findings.
 - **A hung or OOM-killed extraction subprocess can leave uploaded PDF bytes
   on a warm instance's disk** until the instance is recycled; the parse
   itself is timed out and the temp files are cleaned in `finally`.
-- **Rate limiting is absent** on the unauthenticated doors; each is bounded
-  only by token entropy, field caps and the uniform 404 (see decisions).
+- **Rate limiting is absent until `polyglot-pdf-o2fub` ships**, and after it
+  is a per-instance limiter plus an instance ceiling, not a network-edge
+  control: it resets on autoscale and a distributed caller spreads around it.
+  Cloud Armor is deferred until abuse is observed.
+- **Two project Owners are the same person's two accounts** (a sole
+  operator, 2026-09-17). The posture check keeps reporting it so a third
+  Owner is noticed.
 - **The user's own profile write (`users/{uid}`) has no shape validation**
   (`wnkky`, P3): self-corruption only.
 
 ## Decisions handed to the maintainer
 
-Open as of 2026-09-16; each is a product, cost or legal call, not an
-engineering one. The answer is recorded on the named bead or in the journal.
+Each is a product, cost or legal call, not an engineering one. A row marked
+DECIDED, DONE, DEFERRED, ACCEPTED or FIXED is closed (the maintainer's
+2026-09-17 answers); the others are open. The answer is recorded on the
+named bead or in the journal.
 
 | Decision | Options | Where |
 |----------|---------|-------|
-| Rate limiting on the unauthenticated doors (PF-5, P1) | Cloud Armor + load balancer (new infra + cost); an in-process per-instance token bucket (cheap, weak); Cloud Run max-instances/concurrency (a cost bound only) | memo on `polyglot-pdf-6088m`; a P1 with no fix needs a written acceptance or a follow-up bead |
+| Rate limiting on the unauthenticated doors (PF-5, P1) | DECIDED 2026-09-17: the in-process per-instance limiter on the three write doors plus a Cloud Run max-instances ceiling; Cloud Armor + load balancer deferred until abuse is observed | `polyglot-pdf-o2fub` (implementation) |
 | Data retention (`confirmation_events` and `link_redemptions` TTL, Logging bucket retention, BigQuery expiration, deleted Firebase users) | per store | `polyglot-pdf-t5v83`, with `pol2`'s legal input |
 | The CI `security` job: informational or required | keep non-blocking (the workflow's doctrine) or make it a required check | `polyglot-pdf-ikdnd` notes |
 | The voice app's Firebase persistence mode | `browserSessionPersistence` for the voice app only (recommended), local for editor/admin | `polyglot-pdf-8v8i7` notes |
-| Bucket public-access prevention: `inherited` -> `enforced` | one live command; consequence-free for the app (no `allUsers` binding) | `polyglot-pdf-m1dlv` (a live-change ask) |
-| Enable Artifact Registry container scanning | a live change with a small cost | `polyglot-pdf-m1dlv` |
-| Provision `polyglot-cloudbuild-sa` (`setup-cloud-build.sh` has never run on the project) | run the script (a live change) | `polyglot-pdf-m1dlv` |
-| Two human accounts hold project Owner | accept (owner-operated project) or reduce one to Editor/Viewer | `polyglot-pdf-m1dlv` |
-| Read the Vertex AI abuse-monitoring opt-out state in the console and record it | console-only | the processor table above |
+| Bucket public-access prevention | DONE 2026-09-17: `enforced` on `gs://polyglot-demo-aa709-form-kits` | `polyglot-pdf-m1dlv` |
+| Artifact Registry container scanning | DONE 2026-09-17: `containerscanning.googleapis.com` enabled; `infra_posture.sh` reads the findings from the next pushed image on | `polyglot-pdf-m1dlv` |
+| Provision `polyglot-cloudbuild-sa` | DEFERRED 2026-09-17: the identity only matters once deploys move to Cloud Build; run `setup-cloud-build.sh` then | `polyglot-pdf-m1dlv` |
+| Two human accounts hold project Owner | ACCEPTED 2026-09-17: both are the sole operator's own accounts (see accepted risks) | `polyglot-pdf-m1dlv` |
+| Vertex AI abuse-monitoring opt-out | REQUESTED from Google 2026-09-17 (the exemption request); pending their processing -- record the outcome in the processor table | the processor table above |
 | Grant the operator identity Identity Toolkit read (or read the Firebase Auth settings in the console): authorized domains, email-enumeration protection, providers, password policy | a live IAM change | `polyglot-pdf-m1dlv` |
 | Flip the CSP from report-only to enforcing after the staging soak and `18o7c` | a `firebase.json` change through review | `polyglot-pdf-j29z1` notes |
-| The operator free-text `reason` on `set_firm_kind` still reaches the logs (`e8wzz`, the PF-9 class) | fix (small) or accept in writing | `polyglot-pdf-e8wzz` |
+| The operator free-text `reason` on `set_firm_kind` reached the logs (`e8wzz`, the PF-9 class) | FIXED 2026-09-17: bounded at the model, dropped from the log line; the whole set (both backends' routes) pinned at zero | `polyglot-pdf-e8wzz` |
