@@ -523,3 +523,37 @@ export function findFieldWithAlias(
   const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
   return fields.find((f) => f.id === aliasKey);
 }
+
+/**
+ * Whether a section's `fields` list declares this field, across the `[]`-alias
+ * variants.
+ *
+ * The MEMBERSHIP twin of `findFieldWithAlias` above. A section's `fields` array
+ * holds field IDS, and a section.fields entry can carry a DIFFERENT bracket
+ * form from the `field.id` it names -- a generated schema may list `race[]`
+ * while the field declares `race`, or vice versa. An exact
+ * `section.fields.includes(f.id)` then silently reports the field as not
+ * belonging to any section.
+ *
+ * Silent is the operative word, and it is why this is factored out rather than
+ * written a fifth time (bd polyglot-pdf-db1en). Every consumer of this question
+ * degrades QUIETLY on a miss: the section schema sent to the model loses a
+ * field, a resume lands the client on the wrong section, a section validates as
+ * complete with an answer missing. None of them throws.
+ *
+ * Matches in BOTH directions (the passed id bracketed or not, the section entry
+ * bracketed or not) because either side can carry the bracket.
+ */
+export function sectionDeclaresField(
+  section: { fields?: readonly string[] } | null | undefined,
+  fieldId: string
+): boolean {
+  if (!section?.fields || !fieldId) return false;
+  const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
+  const aliasId = baseId + '[]';
+  return (
+    section.fields.includes(fieldId) ||
+    section.fields.includes(baseId) ||
+    section.fields.includes(aliasId)
+  );
+}

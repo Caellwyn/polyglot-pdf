@@ -18,6 +18,7 @@
  * from before the save join up with the ones after it.
  */
 import type { FieldValue } from './types/schema';
+import { readFieldEntryWithAlias } from './utils/fieldValue';
 import type { SchemaFormState } from './state/schemaFormState';
 
 export interface ResumePayload {
@@ -105,7 +106,18 @@ function firstIncompleteSection(
   for (const section of schema.sections ?? []) {
     const unanswered = (section.fields ?? []).some((fieldId) => {
       if (typeof fieldId !== 'string') return false;
-      const entry = values[fieldId] as { value?: unknown } | undefined;
+      // Read through the []-alias (bd polyglot-pdf-db1en). A checkbox group's
+      // value can sit under the bracketed OR unbracketed key -- the resume
+      // payload comes from an uploaded PDF, whose field keys need not carry the
+      // same bracket form as section.fields. A bare read misses it, the group
+      // counts as UNANSWERED, and this function then lands the returning client
+      // on an EARLIER section than they had reached -- the precise "saved at
+      // question 60, restarted at question 1" outcome the note above says this
+      // function exists to prevent.
+      const entry = readFieldEntryWithAlias(
+        values as Record<string, FieldValue>,
+        fieldId
+      ) as { value?: unknown } | undefined;
       const value = entry?.value;
       return value === undefined || value === null || value === '';
     });
