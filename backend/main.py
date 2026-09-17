@@ -10,7 +10,7 @@ import structlog
 load_dotenv()
 
 from .config import get_settings, parse_extra_origins
-from .routes import websocket_routes, link_routes
+from .routes import websocket_routes, link_routes, signup_routes
 from .routes import pdf_fill_routes
 from .routes import tts_routes
 from .routes import disclaimer_routes
@@ -101,6 +101,7 @@ app.include_router(form_kit_routes.router)
 # ceiling it waited on (bd polyglot-pdf-ik7e) have landed, and the demo now
 # enables it (bd polyglot-pdf-gob8l).
 app.include_router(link_routes.router)
+app.include_router(signup_routes.router)  # server-side email-signup allowlist check (sprint 23 C3)
 app.include_router(editor_kit_routes.router)  # editor/author-gated hosted-editor surface (bd 92qe.1)
 app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (bd na1zy)
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)

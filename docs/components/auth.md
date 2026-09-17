@@ -2,6 +2,8 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/link_spend.py backend/services/credit_ledger.py backend/services/alerts.py backend/services/usage_rollups.py backend/services/runtime_config.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py scripts/backfill_firm_kind.py scripts/seed_kit_commercials.py admin_backend/services/admin_auth.py admin_backend/routes/user_routes.py admin_backend/services/user_admin.py backend/routes/form_kit_routes.py scripts/bootstrap_admin_user.py firestore.rules firebase.json backend/services/kit_commercials.py backend/routes/link_routes.py
 
+*Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the email-signup allowlist check moved server-side to `POST /api/signup/check` (uniform 404, never logs the address); `authorized_emails` is a full client deny; `confirmation_events` has its explicit deny; the deploy note no longer ties signup to a client-readable rule.)*
+
 *Last updated: 2026-09-16 (bd polyglot-pdf-he3lt: maintainer observation
 after the first live mint on staging -- a mint touched no usage-rollup
 document, so the console's Usage page stayed on "no data" until a client
@@ -81,31 +83,52 @@ the `VFF_DISABLE_AUTH` dev bypass is in
 
 ### The `authorized_emails` allowlist (email signup only)
 
-`signUpWithEmail` queries the Firestore **`authorized_emails`** collection
-(`where('email','==', email.toLowerCase())`) **before** calling
-`createUserWithEmailAndPassword`, and throws *"This email is not authorized"* if
-there's no match. So email signup is allowlisted; **Google sign-in is not gated by
-this check.**
+`signUpWithEmail` asks the backend -- `POST /api/signup/check` with
+`{email: <lower-cased>}` -- **before** calling `createUserWithEmailAndPassword`,
+and throws *"This email is not authorized"* unless the answer is `204`. So email
+signup is allowlisted; **Google sign-in is not gated by this check.**
 
-**Firestore rule.** Because that pre-signup query runs while the user is
-**unauthenticated**, `firestore.rules` allows an unauthenticated **read** of
-`authorized_emails` (and forbids client **writes** — entries are managed out of
-band):
+**The check is server-side (sprint 23 C3, PF-6).** The browser used to query
+the Firestore **`authorized_emails`** collection directly, which forced
+`allow read: if true` on it -- and a public read on a collection of staff
+emails is a LIST: anyone holding the public web config could enumerate every
+allowlisted address. `backend/routes/signup_routes.py` now does the one
+Admin-SDK lookup (`where('email','==', <trimmed, lower-cased>)`, limit 1; the
+browser applies the same trim + lower-case and creates the account with the
+trimmed address, so what was checked is what gets created) and answers with the
+same posture as `POST /api/links/open`: **unauthenticated by design** (the
+caller has no account yet) and a **uniform 404** on every refusal -- a miss, a
+malformed address and a Firestore failure are indistinguishable (fail closed),
+the cause is logged as a type/length only, and the address never reaches a log
+line. The browser treats anything but `204` (including a network failure) as a
+refusal. Not rate-limited yet: that is the sprint's PF-5 decision.
+
+**Firestore rule.** `authorized_emails` is a full client deny now, like every
+other Admin-SDK-only collection (entries are managed out of band in the
+Firebase console; no code writes them):
 
 ```
 match /authorized_emails/{doc} {
-  allow read: if true;
-  allow write: if false;
+  allow read, write: if false;
 }
 ```
+
+It is in `ADMIN_SDK_ONLY_COLLECTIONS` (`backend/tests/unit/test_firestore_rules_text.py`),
+so the rules-text pin fails in both directions if the block is weakened or
+removed. `confirmation_events` (the legal evidence trail) got its explicit deny
+block in the same change (PF-8). An emulator-backed rules test (an
+unauthenticated list AND get on `authorized_emails` denied) is
+`polyglot-pdf-34y4y`: the Firestore emulator needs a Java runtime that neither
+the maintainer's machine nor CI has today.
 
 > **Deploy note.** The repo `firestore.rules` is the source of truth and is wired
 > into `firebase.json` (`firestore.rules`). `deploy-demo.sh` ships it
 > (`firebase deploy --only firestore:rules`) on any
 > frontend/full deploy, so a normal deploy keeps the live rules in sync with the
-> repo. A project left on default-deny breaks BOTH email signup (the unauth
-> `authorized_emails` read) and the `users/{uid}` profile sync below. Deploy is a
-> maintainer action (the NEVER-deploy rule).
+> repo. A project left on default-deny breaks the `users/{uid}` profile sync
+> below (email signup no longer depends on a client-readable rule). Deploy is a
+> maintainer action (the NEVER-deploy rule); rules are project-wide, so a rules
+> deploy is a demo action whichever channel triggered it.
 
 ## User profile (Firestore `users/{uid}`)
 

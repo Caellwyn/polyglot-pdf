@@ -12,7 +12,8 @@ import {
     signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller';
 import { isTestHarnessEnabled } from '../shared/config';
 
 interface AuthContextType {
@@ -115,14 +116,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const signUpWithEmail = async (email: string, password: string) => {
-        // Check against authorized_emails collection before creating account
-        const q = query(collection(db, 'authorized_emails'), where('email', '==', email.toLowerCase()));
-        const snap = await getDocs(q);
-        if (snap.empty) {
+        // The allowlist check runs SERVER-SIDE (sprint 23 C3): the browser
+        // used to query authorized_emails directly, which forced a public
+        // read on a collection of staff emails (anyone could list it). The
+        // backend answers 204 for an allowlisted address and a uniform 404
+        // for everything else; a network failure is treated as a refusal.
+        // ONE normalisation: trimmed; lower-cased for the check (the server
+        // lower-cases too), and the trimmed address is what the account is
+        // created with, so what was checked is what gets created.
+        const address = email.trim();
+        let allowed = false;
+        try {
+            const res = await fetch(`${getBackendHttpUrl()}/api/signup/check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: address.toLowerCase() }),
+            });
+            allowed = res.status === 204;
+        } catch {
+            allowed = false;
+        }
+        if (!allowed) {
             throw new Error('This email is not authorized. Please contact the administrator.');
         }
         try {
-            await createUserWithEmailAndPassword(auth, email, password);
+            await createUserWithEmailAndPassword(auth, address, password);
         } catch (error) {
             console.error('[Auth] Email Sign-Up Error:', error);
             throw error;

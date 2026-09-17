@@ -116,9 +116,10 @@ if [ "$DEPLOY_FIREBASE" = true ]; then
 
     # Deploy Firestore security rules (firestore.rules, wired via firebase.json)
     # BEFORE the frontend: deploy-all.sh ships hosting only, and the demo project
-    # otherwise stays on default-deny -- which breaks email signup (the unauth
-    # authorized_emails read) and the users/{uid} profile sync on login. Rules
-    # first so the new frontend never goes live against stale rules.
+    # otherwise stays on default-deny -- which breaks the users/{uid} profile
+    # sync on login (email signup's allowlist check is server-side since sprint
+    # 23 C3 and needs no client-readable rule). Rules first so the new frontend
+    # never goes live against stale rules.
     echo -e "${GREEN}[INFO]${NC} 🔒 Stage 2a: Deploying Firestore rules to Firebase ($FIREBASE_PROJECT)..."
     firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT"
 

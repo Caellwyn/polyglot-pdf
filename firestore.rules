@@ -8,14 +8,13 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Email-signup allowlist (authorized_emails): signUpWithEmail queries this
-    // collection while the user is still UNAUTHENTICATED (before
-    // createUserWithEmailAndPassword), so the read must be allowed without auth.
-    // It is read-only -- never client-writable; entries are managed out of band
-    // (Firebase Console / admin tooling). See docs/components/auth.md.
+    // The email-signup allowlist. Admin-SDK-only since sprint 23 C3: the
+    // public read let anyone with the web config LIST every staff email. The
+    // signup check now runs server-side (POST /api/signup/check, uniform 404).
+    // Entries are managed out of band (Firebase Console); see
+    // docs/components/auth.md.
     match /authorized_emails/{doc} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // Firm records (firms/{firm_id}): Admin-SDK-only (bd polyglot-pdf-lo88).
@@ -45,6 +44,12 @@ service cloud.firestore {
     // Firestore's rules language, so this block is load-bearing on its own,
     // not redundant with the firms/{firmId} block above.
     match /firms/{firmId}/ledger/{entryId} {
+      allow read, write: if false;
+    }
+
+    // The legal evidence trail (bd z2is): written by the backend's Admin SDK
+    // only. Explicit deny rather than the implicit default (sprint 23 C3, PF-8).
+    match /confirmation_events/{eventId} {
       allow read, write: if false;
     }
 
