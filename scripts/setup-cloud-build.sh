@@ -158,6 +158,21 @@ PROJECT_ROLES=(
     # success rows (the staging-before-demo gate's evidence), and read
     # deployments/{id} to evaluate that gate for a demo build.
     "roles/datastore.user"
+    # Deploy the COMPOSITE INDEXES half of the firestore-rules target
+    # (`firebase deploy --only firestore:indexes`). NOT covered by either
+    # role above: roles/firebaserules.admin is rules-only, and
+    # roles/datastore.user carries datastore.schemas.list (read) but none of
+    # datastore.schemas.create/update/delete, which is what writing an index
+    # definition needs. Until this bead the index deploy ran on an
+    # OPERATOR's own owner-level account inside deploy-demo.sh; moving it
+    # into the build (bd polyglot-pdf-oqtm7) moved it onto this identity, so
+    # the permission question is new. Without the role the target is a no-op
+    # list that passes by luck while firestore.indexes.json is unchanged,
+    # then dies with PERMISSION_DENIED on the first added or edited index --
+    # and takes the whole demo deploy down with it, because firestore-rules
+    # runs BEFORE frontend-demo and the runner stops at the first failure
+    # (CLAUDE.md scar #7).
+    "roles/datastore.indexAdmin"
 )
 
 echo "[INFO] Assigning project-level IAM roles to $BUILD_SA_NAME..."

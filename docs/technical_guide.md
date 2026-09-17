@@ -4,7 +4,7 @@
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: the public `/health` row -- status + the two Firestore probes only, no configuration; the `GEMINI_API_KEY` row no longer claims a presence bit on `/health`.)*
 
-*Last updated: 2026-09-09 (bd polyglot-pdf-x22hm: Epic 2 Track C bead C5 -- new Surface contract 27, link history (`frontend/src/console/LinkHistoryPage.tsx` at `/console/links/history`), the first real caller of contract 23's admin-service wiring alongside C4's `EmployeesPage.tsx`; a known gap in `require_app_admin_or_owning_manager` (contract 22) that refuses an employee-role account before its own scoping logic runs is filed separately as bd polyglot-pdf-scaig, not fixed in this bead.) (bd polyglot-pdf-w828m outer Opus cross-surface review: Surface contract 26's usage-rollup teardown call site now dispatches `firm_kind()` + `record_session_end()` through ONE `asyncio.to_thread` call, matching every sibling Firestore call already on that route -- both were previously called directly on the shared event loop; and the rollup month-document id is now channel-suffixed (`YYYY-MM` for demo, `YYYY-MM_{channel}` for every other channel, mirroring bd polyglot-pdf-3q9qn's collection-suffix convention), since staging and demo share one Firestore project and the prior bare `YYYY-MM` id let a staging test-drive increment the same document the demo's billing view reads.) (bd polyglot-pdf-w828m: Epic 3 bead E3.4 -- new Surface contract 26, session-end usage rollups (`firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}`, new `backend/services/usage_rollups.py`): `record_session_end()` writes ONE BATCHED `db.batch()` set of `firestore.Increment` updates from the SAME websocket teardown block as `log_form_session_end`/`_bank_link_spend`; `record_link_opened`/`record_link_completed` hook `link_redemptions.py`'s open/complete paths for the two counters the teardown call cannot itself produce. HYPHENATED MAP KEYS (`i-90`, `zh-CN`) are handled by building every nested increment as a REAL nested dict via a `FieldPath(*parts).parts` walk, never a dotted string -- `set(merge=True)`, the write API this module uses so a new month document's first write CREATES it, does NOT dot-expand a flat string key the way `update()` does (confirmed against the vendored SDK before writing the module). `firestore.rules` gains deny blocks for both new nested `usage` subcollections.) (bd polyglot-pdf-f0kuu: Epic 2 Track B bead B3 -- kit commercial settings on the admin service, `GET /admin/kits`, GET/PUT `/admin/kits/{kit_id}/commercial`, extending Surface contract 24 with the write side of the mechanism that contract already documents the read side of: `resolve_commercial` reused as-is (no second reader), and a strictly validated PUT -- credit_cost a positive int, burn_cap_usd a positive finite float, bool/NaN/+-inf all refused explicitly -- audited in the same `@firestore.transactional` body as the write.) (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new Surface contract 25, the BigQuery telemetry sink + cost/income views (`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that ORs across three genuinely different `jsonPayload` shapes (contract 20's nested `message.event_type` for usage events, contract 18's flat `event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed `jsonPayload.event` for the two wired session events) rather than the single field name the plan's prose implied; five views whose referenced columns are pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and `LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind = 'live'` filter hard-coded in the view; and `admin-backend-sa`'s two BigQuery roles moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than `setup-admin-service.sh`.) (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
+*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: Surface contract 36 records that `form-kits` is selected only by an explicit `--form-kits`, pinned as a discovered SET over the wrappers.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the composite indexes are deployed by the `firestore-rules` Cloud Build target, not by `deploy-demo.sh` itself -- corrected in Surface contract 15's prose AND in the `/admin/audit` route row, with the `roles/datastore.indexAdmin` grant that build step needs recorded alongside it.) (bd polyglot-pdf-oqtm7 fresh-eyes review round: the E4.6 doc pass finishes here. Surface contract 12 now describes the BUILD's `APP_MODULE`/`GIT_SHA` producers -- a literal for the public backends, `deploy/channels/admin.env` for the admin service -- and the `admin-service` target's step ORDER as the tagged-candidate gate, in place of `deploy-all.sh`'s deleted backend stage and `BACKEND_NO_TRAFFIC_TAG`; contract 29a's consumer is the build rather than a bash backend stage; and the Environments section, the `BACKEND_URLS_JSON` producer, contract 30's preamble, the `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` note and the two Firestore-flag env rows stop naming bash mechanisms this bead deleted.) (bd polyglot-pdf-oqtm7, E4.6: new Surface contract 36 -- the `polyglot-<target>` trigger-name contract from the BASH side, now that every `deploy-*.sh` is a thin wrapper that runs a build rather than deploying anything itself, plus the `deploy-all.sh` library half `cloudbuild.yaml` sources for the channel-file parser. Contract 12's pin moves to the build's own step order, contract 22's producer becomes the build's frontend steps, and contract 31b loses its bash-caller half -- no wrapper calls the reachability module any more because none deploys a service.) (bd polyglot-pdf-x22hm: Epic 2 Track C bead C5 -- new Surface contract 27, link history (`frontend/src/console/LinkHistoryPage.tsx` at `/console/links/history`), the first real caller of contract 23's admin-service wiring alongside C4's `EmployeesPage.tsx`; a known gap in `require_app_admin_or_owning_manager` (contract 22) that refuses an employee-role account before its own scoping logic runs is filed separately as bd polyglot-pdf-scaig, not fixed in this bead.) (bd polyglot-pdf-w828m outer Opus cross-surface review: Surface contract 26's usage-rollup teardown call site now dispatches `firm_kind()` + `record_session_end()` through ONE `asyncio.to_thread` call, matching every sibling Firestore call already on that route -- both were previously called directly on the shared event loop; and the rollup month-document id is now channel-suffixed (`YYYY-MM` for demo, `YYYY-MM_{channel}` for every other channel, mirroring bd polyglot-pdf-3q9qn's collection-suffix convention), since staging and demo share one Firestore project and the prior bare `YYYY-MM` id let a staging test-drive increment the same document the demo's billing view reads.) (bd polyglot-pdf-w828m: Epic 3 bead E3.4 -- new Surface contract 26, session-end usage rollups (`firms/{firm_id}/usage/{YYYY-MM[_channel]}` + `kits/{kit_id}/usage/{YYYY-MM[_channel]}`, new `backend/services/usage_rollups.py`): `record_session_end()` writes ONE BATCHED `db.batch()` set of `firestore.Increment` updates from the SAME websocket teardown block as `log_form_session_end`/`_bank_link_spend`; `record_link_opened`/`record_link_completed` hook `link_redemptions.py`'s open/complete paths for the two counters the teardown call cannot itself produce. HYPHENATED MAP KEYS (`i-90`, `zh-CN`) are handled by building every nested increment as a REAL nested dict via a `FieldPath(*parts).parts` walk, never a dotted string -- `set(merge=True)`, the write API this module uses so a new month document's first write CREATES it, does NOT dot-expand a flat string key the way `update()` does (confirmed against the vendored SDK before writing the module). `firestore.rules` gains deny blocks for both new nested `usage` subcollections.) (bd polyglot-pdf-f0kuu: Epic 2 Track B bead B3 -- kit commercial settings on the admin service, `GET /admin/kits`, GET/PUT `/admin/kits/{kit_id}/commercial`, extending Surface contract 24 with the write side of the mechanism that contract already documents the read side of: `resolve_commercial` reused as-is (no second reader), and a strictly validated PUT -- credit_cost a positive int, burn_cap_usd a positive finite float, bool/NaN/+-inf all refused explicitly -- audited in the same `@firestore.transactional` body as the write.) (bd polyglot-pdf-rd3s8: Epic 3 bead E3.6 -- new Surface contract 25, the BigQuery telemetry sink + cost/income views (`scripts/setup-telemetry.sh`, `sql/telemetry_views.sql`): a sink filter that ORs across three genuinely different `jsonPayload` shapes (contract 20's nested `message.event_type` for usage events, contract 18's flat `event_type` for `ledger_export`, and a THIRD flat-but-differently-keyed `jsonPayload.event` for the two wired session events) rather than the single field name the plan's prose implied; five views whose referenced columns are pinned by a DERIVED set (from `USAGE_CONTEXT_KEYS` and `LEDGER_EXPORT_FIELDS`), not hand-listed; `income_month`'s `firm_kind = 'live'` filter hard-coded in the view; and `admin-backend-sa`'s two BigQuery roles moved out of `DEFERRED_ROLES` into `EXPECTED_ADMIN_SA_ROLES`, granted by the new script rather than `setup-admin-service.sh`.) (bd polyglot-pdf-jecrl: the mint reservation and the open gate -- new Surface contract 24: `POST /api/links/mint` reserves the credit in ONE transaction (balance + `mint_debit` entry + the `links[_<channel>]/{jti}` record) BEFORE signing a token, refusing `403` for a live or kindless firm off the raw-`demo` channel and `402` when `CREDITS_ENFORCED` and the balance falls short; new `backend/services/kit_commercials.py` reads `kits/{kit_id}` fail-soft for the price and the `cap_usd` signed in; and `enforce_link_redemption` refuses a link with no mint record or a revoked/refunded one, for every door that spends. Contract 16's 'not wired to anything yet' and contract 9's gate description are updated with it.) (bd polyglot-pdf-bo95a: Epic 3 bead E3.5 -- new Surface contract 21, telemetry alert docs (`alerts/{id}`, new `backend/services/alerts.py`) with deterministic ids so a repeated trigger dedups onto the same document: `link_exhausted_{jti}` from `link_spend.check_budget()`'s refusal branch (which gains an optional `firm_id` kwarg purely to label the alert) and day-keyed `{firm_id}_credit_low_{day}` / `{firm_id}_credit_exhausted_{day}` from `credit_ledger.append_entry()` after a `mint_debit` commits, gated on the new runtime-config key `CREDIT_LOW_THRESHOLD` (no env fallback, like `CREDITS_ENFORCED`); both hooks best-effort, never raising into the caller; `firestore.rules` gains a deny block for `alerts/{alertId}`.) (bd polyglot-pdf-cjifh: Epic 3 bead E3.2 -- Surface contract 20's live-voice call site now threads REAL firm/employee/link/kit/channel/model context ids end to end (`_handle_fill_session` -> `FormFillingService.start_session` -> `LiveAIGemini.set_session_context`), instead of the six-keyword shape existing with nothing filling it.) (bd polyglot-pdf-wio6m: usage event v2 -- new Surface contract 20, ONE emitter shape (`StructuredLogger._emit_usage` plus three wrappers) for every paid model/TTS call, the closed `usage_kind` set and `USAGE_CONTEXT_KEYS` written unconditionally so a missing key never masquerades as a null at the BigQuery sink, the AST-derived paid-call-site allowlist, and the text + TTS pricing tables that the Live table does NOT transfer to.) (bd polyglot-pdf-dmjl5: staff-account management -- new Surface contract 19 (the firm-manager rule's ONE home, `backend/services/firms.py`'s `manager_firm_id`, and the admin service's claims allowlist), four new Admin service routes (POST + GET /admin/users, PATCH /admin/users/{uid}/disable, PATCH .../role) behind the composite gate `require_app_admin_or_owning_manager`, and contract 8's manager check now consuming the shared rule rather than restating it.) (bd polyglot-pdf-1op3g: Epic 2 Track A bead A5 -- Surface contract 18 gains `credit_ledger.refund_expired_link()` (the transactional expiry refund keyed on `link_redemptions[_<channel>]/{jti}`'s existence, idempotent on `links[_<channel>]/{jti}.status == "minted"`) and `reconcile_expired_for_firm()` (the lazy per-firm catch-up called only by a balance read, never by the mint transaction -- pinned by an exact-read-set test on `append_entry()` plus an AST-walk non-call guard), plus the socket's `LinkBudgetExhausted` teardown writing a telemetry-only `budget_exhausted` status mirror with no ledger entry.) (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -36,8 +36,13 @@ without the other -- see [Surface contracts](#surface-contracts) below.
 
 Promotion is worktree -> local test server (`scripts/dev-local.ps1`) -> `dev` ->
 **staging** remote (`deploy-staging.sh`) -> **demo** remote (`deploy-demo.sh`).
-Deploys are **local/manual** (`deploy-staging.sh` / `deploy-demo.sh` ->
-`deploy-all.sh`), NOT branch-triggered/CI, and there is **no prod** --
+Every deploy is a **Cloud Build build of a pushed commit**: `deploy-staging.sh`
+and `deploy-demo.sh` -- like every other `deploy-*.sh` -- refuse a dirty or
+unpushed tree and then run the matching `polyglot-<target>` triggers at `HEAD`,
+streaming each build's log (Surface contract 36). The admin console's Deploys
+page runs the SAME triggers, so there is ONE deploy engine and no path around
+the gates that live inside the build. Builds are **operator-started, never
+branch-triggered**, and there is **no prod** --
 `deploy-production.sh` targets a dead, unreachable project and refuses to run.
 Staging and demo are two channels in the ONE project `polyglot-demo-aa709`, split
 by Cloud Run service (`polyglot-backend-staging` / `polyglot-backend`) and Hosting
@@ -67,7 +72,7 @@ production project is dead and unreachable; reference purge tracked in bd
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
-| `FIRMS_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, consumed by the form-kit routes' firm-scoped visibility filter (bd vccy). Reads FAIL CLOSED to `[]` when off/broken, so an outage hides private kits rather than exposing them. Set in `deploy-all.sh`'s `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list hint enumerates it (pinned by `tests/test_deploy_form_kit_hints.py`). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
+| `FIRMS_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, consumed by the form-kit routes' firm-scoped visibility filter (bd vccy). Reads FAIL CLOSED to `[]` when off/broken, so an outage hides private kits rather than exposing them. Set in `cloudbuild.yaml`'s `backend-deploy` `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list hint enumerates it (pinned by `tests/test_deploy_form_kit_hints.py`). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
@@ -107,7 +112,7 @@ insertion point.
 | POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. One acceptance per `form_session_id` -- a duplicate POST is dropped silently, not errored -- except PLACEHOLDER ids (`unknown`/`undefined`/`null`/`none`/empty), which are deliberately NOT deduped (bd polyglot-pdf-g3kui: `confirmation_logger._claim_first_acceptance`); every request field is bounded at the Pydantic model so an oversized body 422s before reaching the sink. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Editor-tier (per-person Firebase claim). |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author-tier (per-person Firebase claim). |
-| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). GRADUATED FRICTION, never a permanent block (bd polyglot-pdf-6zhaf): risk decides how firmly the caller is asked, not whether the door exists. Never live + no records + the check SUCCEEDED -> deleted. Never live but records exist OR the check could not run -> 409 prefixed `DELETE_NEEDS_ACK:`. EVER LIVE (`complete`/`unpublished`, or any `published_at` -- either signal alone is sufficient, since `w7` is complete with no stamp while `unpublished` means RETIRED-formerly-live; a kit with NO metadata.json is never-live, but one whose metadata is PRESENT and unparseable is treated as live) -> 409 prefixed `DELETE_NEEDS_DOUBLE_ACK:`. Each refusal names the acknowledgement that clears it, and the two are DISTINCT values -- `?acknowledged=understood` for the single, `understood-published` for the double. The weaker does NOT satisfy an ever-live delete: one shared boolean would put "double confirmation" in the client's checkbox only, where any direct API call skips it. The editor sends the level the server asked for, and the double additionally requires an explicit tick before it will send. The old design refused outright when the check was positive or unavailable -- and un-attributable legacy records make it permanently unavailable, so EVERY kit became undeletable forever. The check itself is unchanged and its outcome still grades the warning; the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`) whose local JSONL fallback dies with the instance, so silence there is still not evidence of absence. NOTE what a delete destroys: only this kit's prefix -- confirmation records live in a separate collection and SURVIVE, so what is lost is the revision those records name, not the agreement itself. Every delete logs actor + acknowledged + ever_live + had_records. Editors are refused server-side, not merely hidden from in the UI. |
+| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). GRADUATED FRICTION, never a permanent block (bd polyglot-pdf-6zhaf): risk decides how firmly the caller is asked, not whether the door exists. Never live + no records + the check SUCCEEDED -> deleted. Never live but records exist OR the check could not run -> 409 prefixed `DELETE_NEEDS_ACK:`. EVER LIVE (`complete`/`unpublished`, or any `published_at` -- either signal alone is sufficient, since `w7` is complete with no stamp while `unpublished` means RETIRED-formerly-live; a kit with NO metadata.json is never-live, but one whose metadata is PRESENT and unparseable is treated as live) -> 409 prefixed `DELETE_NEEDS_DOUBLE_ACK:`. Each refusal names the acknowledgement that clears it, and the two are DISTINCT values -- `?acknowledged=understood` for the single, `understood-published` for the double. The weaker does NOT satisfy an ever-live delete: one shared boolean would put "double confirmation" in the client's checkbox only, where any direct API call skips it. The editor sends the level the server asked for, and the double additionally requires an explicit tick before it will send. The old design refused outright when the check was positive or unavailable -- and un-attributable legacy records make it permanently unavailable, so EVERY kit became undeletable forever. The check itself is unchanged and its outcome still grades the warning; the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `cloudbuild.yaml`'s backend deploy) whose local JSONL fallback dies with the instance, so silence there is still not evidence of absence. NOTE what a delete destroys: only this kit's prefix -- confirmation records live in a separate collection and SURVIVE, so what is lost is the revision those records name, not the agreement itself. Every delete logs actor + acknowledged + ever_live + had_records. Editors are refused server-side, not merely hidden from in the UI. |
 | GET | `/api/editor/kits/{kit_id}/archive`, `.../archive/{marker}/schema` | The editor's archive reads (bd qfyxr): superseded revisions newest-first + one revision's schema, READ-ONLY (returning to an old revision goes through draft/publish, never the archive). Editor-tier (per-person Firebase claim). |
 | POST | `/api/editor/kits/{kit_id}/derive-divisions` | Regenerate the kit's parts/sections deterministically (bd 6cfu.3) -- re-runs `derive_sections.derive_and_apply` on the STORED schema + PDF (widget-name conventions -> printed headings -> page fallback) and re-files every field's `section_id`. **DESTRUCTIVE to manual division edits by design**; the editor fronts it with a confirm dialog, field content untouched. Author-only; 409 on complete or on a kit with no PDF; a corrupt/0-page PDF is a 422 data defect, not a 500. |
 | GET | `/api/editor/kits/{kit_id}/draft-snapshots` | Prior saved states of this kit's draft, newest-first (bd polyglot-pdf-y2l0p). EDITOR-accessible by deliberate maintainer decision (2026-08-18): routing recovery through an author means the person who lost the work cannot get it back themselves. 404 (not an empty list) for a kit that does not exist -- "no earlier versions" and "no such form" are different answers. Editor-tier (per-person Firebase claim). |
@@ -167,7 +172,7 @@ its own table).
 |---|---|---|
 | GET | `/admin/alerts` | List `alerts/{id}` docs, newest first, page-capped (bd `polyglot-pdf-mpebj`, E3.11a; docs: bd `polyglot-pdf-bo95a`, Surface contract 21). Optional `?acknowledged=`/`?firm_id=`/`?kind=` filters (422 on an unrecognized `kind`), filtered in Python over a full collection stream (mirrors `/admin/audit`'s own no-composite-index reasoning). Response rows are an explicit key allowlist. A read, so no audit row. `admin_backend/routes/alert_routes.py` |
 | PATCH | `/admin/alerts/{alert_id}/acknowledge` | Acknowledge one telemetry alert (bd `polyglot-pdf-mpebj`, E3.11a; gate WIDENED by bd `polyglot-pdf-62o4d`; docs: Surface contracts 21, 32). Sets `acknowledged_by` (the ACTOR's own uid, never a request body value) and `acknowledged_at`, in ONE `@firestore.transactional` body with an in-transaction audit row (mirrors `firm_routes.py`'s `_apply_firm_patch` shape) -- a forced audit failure leaves `acknowledged_at` unset. 404 for an unknown alert id OR one belonging to a firm the caller (a manager or employee) does not own (the same 404 either way); 409 (naming who acknowledged it first) for one already acknowledged. Gate: `require_app_admin_or_owning_manager_or_employee` -- an app admin may acknowledge any firm's alert (or a firm-less one); a manager only their OWN firm's; an EMPLOYEE is refused with a 403 INSIDE THE ROUTE BODY (not the dependency, which lets an employee actor through for the sibling read route) -- see alert_routes.py's own docstring for why. `admin_backend/routes/alert_routes.py` |
-| GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
+| GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by the `firestore-rules` Cloud Build target, which `deploy-demo.sh` runs) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
 | GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. Also returns `schema` (bd `polyglot-pdf-wxcj0`), `{key: {type, default}}` for every known key derived from `runtime_config.config_schema()` -- the console's only source for a key's type (bool/int/float), so it never hand-lists key types itself. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
 | POST | `/admin/credits/monthly-topup` | The monthly firm-plan credit top-up (bd `polyglot-pdf-0euzk`, maintainer pricing decision 2026-09-14: "35 credits/month cap as a starting place" -- see bd `polyglot-pdf-hnlj3`, 2026-09-15, for why `rollover` now defaults True and "cap" no longer describes the common case). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- the SAME shape as the sweep route below, a SEPARATE Cloud Scheduler identity (`MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`) and a SEPARATE env-var-set audience (this route's own path). **THIS TRIGGER IS INTERIM** (bd `polyglot-pdf-hnlj3`): the per-firm grant logic lives in its own function, `topup_firm(db, firm_id, firm, *, period, actor=None)`, this route just loops it over every active firm -- Epic 5's Stripe webhook (invoice.paid / subscription renewal) will call the SAME function directly for the one firm a payment event names, once that lands. For every `status == active` firm carrying a `plan` (`{tier, monthly_credits, rollover}`, `backend/services/plans.py`; `rollover` defaults True as of bd `polyglot-pdf-hnlj3`), `topup_firm` writes ONE `subscription_grant` through `credit_ledger.append_entry` with `usd_amount=None` ("no money moved" -- the credits are the product a flat recurring fee already covers outside this ledger) and a new `period="YYYY-MM"` field on the entry. `rollover=false` brings the balance UP TO `monthly_credits` (skipped, writing nothing, when already at or over the cap -- a negative balance from the metered soft-launch is brought up to the cap too); `rollover=true` ADDS `monthly_credits` regardless of the current balance. IDEMPOTENT BY MONTH: before writing, queries the firm's ledger for an existing `subscription_grant` with the SAME `period` and skips the firm entirely if one exists -- a retried Scheduler call or a second manual run writes nothing. Mock firms are topped up too (no `kind` filter -- staging needs credits to test). A per-firm failure (a malformed plan, a Firestore hiccup) is logged and skipped, never aborting the whole monthly pass. Audited via `append_entry`'s `extra_writes` hook, the SAME extra_writes-delegated shape the sweep route below and the grant/adjust routes above use. Returns per-outcome firm_id lists (`topped_up`/`skipped_at_cap`/`skipped_already_run`/`skipped_no_plan`/`failed`) -- counts derivable from list lengths; the ledger entry and audit row are the durable record. `admin_backend/routes/credit_routes.py` |
@@ -204,7 +209,7 @@ its own table).
 | PATCH | `/admin/users/{uid}/role` | Move a staff account between `manager` and `employee` (bd `polyglot-pdf-dmjl5`). Body `{firm_role, firm_id?}`. Merges over every other claim, so a promotion cannot strip the account's `vff_dev` or `schema_editor_role`. Same firm-scoping 404 as disable, so this route cannot move an account between firms however the request is shaped. `admin_backend/routes/user_routes.py` |
 | GET | `/admin/whoami` | The FIRST gated route (bd `polyglot-pdf-7w17m`): returns `{uid, email}` for the caller, gated by `require_app_admin`. Exists to prove the gate end to end before any business logic lands -- a stamped account passes, a valid unstamped account 403s with the `NO_ADMIN_ACCESS:` prefix, a tokenless caller 401s. `admin_backend/routes/whoami.py`, `admin_backend/services/admin_auth.py` |
 | POST | `/api/deploys/webhook` | The Pub/Sub PUSH endpoint for Cloud Build's build-status notifications (bd `polyglot-pdf-tb3kp`, E4.3). Gate: `require_google_oidc(audience, allowed_caller_emails)` -- this gate's SECOND consuming route (after `POST /admin/links/sweep-expired`), pinned against the push subscription's own service-account email (`PUBSUB_PUSH_SA_EMAIL` env var) and this route's own URL. Decodes the base64-encoded Cloud Build `Build` resource out of the Pub/Sub push envelope's `message.data`, then upserts `deployments/{id}` BY `build_id` (never by document id) inside ONE `@firestore.transactional` body with an in-transaction audit row (actor `system:cloud_build_webhook`, since the caller is Cloud Build via Pub/Sub, never an operator) -- a console-triggered build's pre-existing row is updated in place; a bash-triggered build with no row gets one created with `triggered_by: "external"`, target/channel read from the build's own `substitutions`. Idempotent: applying the identical message twice produces the identical document. Cloud Build's `Build.Status` enum collapses onto this collection's five-way `status` (`queued`\|`working`\|`success`\|`failure`\|`cancelled`) -- `INTERNAL_ERROR`/`TIMEOUT`/`EXPIRED` and any unrecognized value all map to `failure`. Always returns 204 on a well-formed message so Pub/Sub's retry policy leaves it alone; a message that cannot even be PARSED is 400 (Pub/Sub does not retry faster for a 400 than a 500, and a 400 is a clearer signal that something upstream sent garbage). `admin_backend/routes/deploy_webhook.py` |
-| GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and, together with `/version`, the ONLY routes that stay so -- every other route on this service carries one of the plan's four named gates, or the fifth route-scoped gate `require_app_admin_or_owning_manager_or_employee` (GET `/admin/firms/{firm_id}/links`, GET `/admin/firms/{firm_id}/alerts`, and PATCH `/admin/alerts/{alert_id}/acknowledge` -- bd `polyglot-pdf-62o4d` put the latter two on this same gate) -- the complete set is enumerated and enforced in `admin_backend/tests/unit/test_admin_route_auth.py`. `deploy-all.sh`'s IAM-based reachability check still issues no HTTP request against it, but `deploy-admin.sh`'s tagged flow (bd `polyglot-pdf-3l2vp`) DOES curl this exact route at the tagged candidate revision's stable URL and aborts the traffic shift on anything but a 200 -- so for the admin service, this route is now exercised by a real deploy gate, not just by an operator's manual curl. `admin_backend/main.py` |
+| GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and, together with `/version`, the ONLY routes that stay so -- every other route on this service carries one of the plan's four named gates, or the fifth route-scoped gate `require_app_admin_or_owning_manager_or_employee` (GET `/admin/firms/{firm_id}/links`, GET `/admin/firms/{firm_id}/alerts`, and PATCH `/admin/alerts/{alert_id}/acknowledge` -- bd `polyglot-pdf-62o4d` put the latter two on this same gate) -- the complete set is enumerated and enforced in `admin_backend/tests/unit/test_admin_route_auth.py`. The build's IAM-based reachability gate (`scripts/verify_service_reachable.py`) still issues no HTTP request against it, but `cloudbuild.yaml`'s `admin-service` target DOES curl this exact route at the tagged candidate revision's stable URL and refuses the traffic shift on anything but a 200 -- so for the admin service, this route is exercised by a real deploy gate, not just by an operator's manual curl. `admin_backend/main.py` |
 | GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`, same GIT_SHA env var and "unknown" fallback as the public backend's `/version`) -- the admin app's own `version`, not the public backend's. `admin_backend/main.py` |
 
 ## Gotchas
@@ -940,28 +945,39 @@ its own "`LIVE_VOICE_NAME` has a SECOND consumer" section.
 ### 12. `APP_MODULE`: one image, two Cloud Run services (bd polyglot-pdf-pnoik)
 
 The root `Dockerfile` copies BOTH top-level Python packages and chooses which
-ASGI app to serve at RUNTIME. There is no build arg -- `deploy-all.sh` builds
-with `gcloud builds submit --tag`, which cannot pass one.
+ASGI app to serve at RUNTIME. There is no build arg -- the image is built once
+per commit as `gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}` and the SAME image
+is what both services run, so the selection has to happen at container start.
 
-- **Producer:** `deploy-all.sh`'s backend stage (bd polyglot-pdf-3l2vp, sprint-
-  22 plan bead 1.3) computes `APP_MODULE="${APP_MODULE:-backend.main:app}"`
-  and passes it (plus `GIT_SHA=$(git rev-parse HEAD)`) as RUNTIME env in
-  `--set-env-vars` on EVERY backend deploy. A caller that sets nothing (every
-  existing channel: `deploy-staging.sh`, `deploy-demo.sh`, `backend/deploy-
-  new.sh`) still resolves to `backend.main:app`, so this is a config addition
-  with no behavior change for the public channels. `deploy-admin.sh` is the
-  one caller that overrides it, exporting `APP_MODULE=admin_backend.main:app`
-  ahead of the same `deploy-all.sh --backend` invocation.
-- **Staging tier (bd polyglot-pdf-3l2vp):** `deploy-admin.sh` also sets
-  `BACKEND_NO_TRAFFIC_TAG=candidate`, which makes `deploy-all.sh` deploy
-  `--no-traffic --tag candidate`, curl the TAGGED revision's own stable URL's
-  `/health` (built by inserting `<tag>---` ahead of the service's base host,
-  since `gcloud run services describe` reports no revision-scoped address),
-  and only on a 200 run `gcloud run services update-traffic --to-latest`. A
-  failing health check aborts the script WITHOUT shifting traffic, leaving the
+- **Producer:** `cloudbuild.yaml`'s deploy steps, which write `APP_MODULE` into
+  the `--set-env-vars` block of every `gcloud run deploy` they run (bd
+  polyglot-pdf-oqtm7, E4.6). No bash script sets it: the wrappers deploy
+  nothing. The two families differ in WHERE the value comes from,
+  deliberately:
+  - `backend-deploy` (targets `backend-staging` / `backend-demo`) appends the
+    literal `APP_MODULE=backend.main:app,GIT_SHA=${_SHA}` to its computed
+    keys. The public channels have no reason to vary it, and a literal cannot
+    be blanked by a channel file edit.
+  - `admin-service-deploy-tagged` reads `APP_MODULE=admin_backend.main:app`
+    out of `deploy/channels/admin.env`'s `[SET_ENV_VARS]` (Surface contract
+    29a's parser, sourced from `deploy-all.sh`'s library half) and appends
+    only `GIT_SHA=${_SHA}` itself. That file is the ONE source of the admin
+    service's env block since E4.6 retired `deploy-admin.sh`'s inline copy.
+  `GIT_SHA` is the commit the build ran at -- the same `_SHA` the trigger was
+  run with, never a `git rev-parse` of whatever tree an operator has locally.
+  That is the point of the deploy living in the build.
+- **Staging tier (bd polyglot-pdf-3l2vp, now build-side):** the `admin-service`
+  target's step ORDER is the gate. `admin-service-deploy-tagged` deploys
+  `--no-traffic --tag candidate`; a later step curls the TAGGED revision's own
+  stable URL's `/health` (built by inserting `candidate---` ahead of the
+  service's base host, since `gcloud run services describe` reports no
+  revision-scoped address) and exits non-zero on anything but a 200; only then
+  does the final step run `gcloud run services update-traffic`. A failing
+  health check fails the BUILD with traffic unshifted, leaving the
   previously-live revision serving. There is ONE admin service backing BOTH
   channels' data, so this is that service's own staging tier -- it has no
-  second Cloud Run service to rehearse against first.
+  second Cloud Run service to rehearse against first. `deploy-admin.sh` runs
+  this target and performs no part of the sequence itself.
 - **Consumer:** the root `Dockerfile`'s
   `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log`,
   plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must
@@ -976,10 +992,12 @@ with `gcloud builds submit --tag`, which cannot pass one.
 - **Pinned by** `tests/test_dockerfile_app_module.py` (CMD shape, default,
   no `ARG`, no `ENV` default, both `COPY` lines, and the constant/Dockerfile
   agreement), `admin_backend/tests/unit/test_admin_health.py`, and
-  `tests/test_deploy_admin_tag_flow.py` (the untagged-vs-tagged `deploy-
-  all.sh` invocation: `APP_MODULE`/`GIT_SHA` always set; `--tag`/`--no-
-  traffic` only with `BACKEND_NO_TRAFFIC_TAG`; a failing tag-URL `/health`
-  aborts before `update-traffic` runs).
+  `tests/test_cloudbuild_yaml.py` (each backend-family target's env block:
+  `APP_MODULE` set -- literal for the public backends, read from `admin.env`
+  for the admin service -- and `GIT_SHA` set to the built commit,
+  and the `admin-service` target's step order -- the tagged no-traffic deploy,
+  then the tag-URL health check, then the traffic shift, so a failing health
+  check fails the step and the shift never runs).
 
 ### 13. `admin_backend/` -> `backend/` shared-code direction (bd polyglot-pdf-pnoik)
 
@@ -1065,15 +1083,17 @@ doc, so an operator retunes them with no redeploy.
   secret has no business in a plain Firestore doc), `LINK_BASE_URL`,
   `LINK_CHANNEL` (topology; moving either would reopen the channel-isolation
   bead polyglot-pdf-3q9qn).
-- **Deploy-script env lines are the fallback, not dead text.**
-  `deploy-demo.sh` and `deploy-staging.sh` still set
-  `LINK_MINTING_ENABLED=true` in `BACKEND_EXTRA_ENV` (pre-dates this bead);
+- **Deploy-time env lines are the fallback, not dead text.**
+  `deploy/channels/demo.env` and `deploy/channels/staging.env` both set
+  `LINK_MINTING_ENABLED=true`, and the build's `backend-deploy` step passes
+  that channel file's `[SET_ENV_VARS]` block straight into `--set-env-vars`
+  (Surface contract 29a);
   `runtime_config.py` reads that SAME env var as its own fallback (see
   above), so a freshly deployed channel with no `app_config/{channel}` doc
   yet still mints exactly as before this bead. Seeding
   `app_config/{channel}` via `scripts/set_runtime_config.py` or the console
   route lets an operator override the deploy-time value per channel with no
-  redeploy; it is not required just to keep the deploy scripts' setting
+  redeploy; it is not required just to keep the channel files' setting
   working. `CREDITS_ENFORCED` and `CREDIT_LOW_THRESHOLD` are the two keys
   with no env fallback (both are brand new); each stays at its compiled
   default (`false`, `10`) until a channel's doc sets it -- see
@@ -1154,11 +1174,16 @@ write forms BIND the row to the mutation rather than firing it alongside.
   with `FAILED_PRECONDITION`. The unfiltered default view needs no composite
   (single-field auto-index on `ts`), so an operator's FIRST use of a filter
   is where the gap would surface. The four indexes ship in
-  `firestore.indexes.json`, wired via `firebase.json` and deployed by
-  `deploy-demo.sh` (`firebase deploy --only firestore:indexes`) -- indexes
-  are PROJECT-wide exactly like rules, so the demo deploy lands them for
-  staging too, and index builds are asynchronous (a freshly added index is
-  not READY the moment the command returns).
+  `firestore.indexes.json`, wired via `firebase.json` and deployed by the
+  `firestore-rules` Cloud Build target (`cloudbuild.yaml` runs `firebase
+  deploy --only firestore:indexes` there, beside the rules) -- which
+  `deploy-demo.sh` runs and `deploy-staging.sh` deliberately does not.
+  Indexes are PROJECT-wide exactly like rules, so the demo deploy lands them
+  for staging too, and index builds are asynchronous (a freshly added index
+  is not READY the moment the command returns). That build step is why
+  `polyglot-cloudbuild-sa` holds `roles/datastore.indexAdmin` alongside
+  `roles/firebaserules.admin` (rules-only) -- pinned by
+  `admin_backend/tests/unit/test_cloud_build_sa_iam_envelope.py`.
   `admin_backend/tests/unit/test_firestore_indexes.py` derives the filter
   set from the route's own AST and pins it against the shipped artifact in
   both directions, so a fifth filter added without its index fails CI rather
@@ -1853,37 +1878,29 @@ proxies only the public backend) and the WebSocket path (contract 9 /
 now call it -- C4's `EmployeesPage.tsx` (contract 19's four `/admin/users`
 routes) and C5's `LinkHistoryPage.tsx` (contract 22's listing + revoke).
 
-- **Producer:** `deploy-all.sh`'s frontend stage. `ADMIN_SERVICE_NAME`
-  (`${ADMIN_SERVICE_NAME:-polyglot-admin}`, matching `deploy-admin.sh`'s and
-  `deploy-admin-console.sh`'s own default) is resolved to a live Cloud Run URL
-  via `gcloud run services describe`, the SAME mechanism `VITE_WS_URL` already
-  uses for the public backend -- a second, independent `gcloud` call and a
-  second `export VITE_ADMIN_API_BASE_URL=...` in the same stage. Unlike
-  `BACKEND_SERVICE_NAME`, `ADMIN_SERVICE_NAME` is never overridden by either
-  channel wrapper: there is ONE admin service serving BOTH channels'
-  Firestore data (see contract 17 and `docs/doctrine/promotion-tiers.md`), so
-  staging and demo both want the same value. Each resolution is followed by
-  its own `verify_service_publicly_reachable(..., warn)` call -- warn, not
-  fatal, because the admin service is pre-existing from this script's point
-  of view (`deploy-admin.sh`'s job, not this one's), the same reasoning
-  `deploy-admin-console.sh`'s and `deploy-editor.sh`'s identical warn-mode
-  calls already use. An EXPLICITLY-selected channel (`BACKEND_SERVICE_NAME_
-  EXPLICIT` -- the SAME capture `VITE_WS_URL`'s abort branch reads; there is
-  only one such signal in `deploy-all.sh`) whose admin URL cannot be resolved
-  aborts the build (`exit 1`); a bare run warns and falls back to the
-  committed `.env.demo` literal, exactly mirroring `VITE_WS_URL`'s two-branch
-  shape. Pinned by `tests/test_deploy_admin_url_injection.py` and
-  `tests/test_deploy_reachability_gate.py`'s `URL_BAKING_SEVERITY["deploy-
-  all.sh"] = (2, 1)` / `GATED_DEPLOY_SEVERITY["deploy-all.sh"] = (2, 1)`.
-- **`VITE_APP_CHANNEL`**, the SECOND half of this contract: `deploy-
-  staging.sh` exports `VITE_APP_CHANNEL="staging"` and `deploy-demo.sh`
-  exports `VITE_APP_CHANNEL="demo"`, each as a `VAR=value` prefix on their own
-  `FRONTEND_BUILD_CMD=...` invocation of `deploy-all.sh` -- inherited by
-  `deploy-all.sh`'s own `$FRONTEND_BUILD_CMD` child process without
-  `deploy-all.sh` needing to `export` it itself (unlike the two
-  `gcloud`-resolved URLs, which `deploy-all.sh` computes rather than
-  receives). This is deliberately NOT derived from Vite's `MODE`: both
-  channel wrappers build with `npm run build:schema:demo` (mode `demo`,
+- **Producer:** `cloudbuild.yaml`'s `frontend-resolve-urls` step, which
+  resolves the live `polyglot-admin` Cloud Run URL via `gcloud run services
+  describe` -- the SAME mechanism and the SAME step that resolves
+  `VITE_WS_URL` for the public backend -- and writes it to
+  `/workspace/.vite_admin_api_base_url` for `frontend-build-deploy` to export.
+  It is a separate STEP rather than a substitution because substitutions are
+  fixed at trigger time, before the build can look anything up. There is ONE
+  admin service serving BOTH channels' Firestore data (see contract 17 and
+  `docs/doctrine/promotion-tiers.md`), so the service name is a literal here
+  rather than derived from `_CHANNEL`. An unresolvable admin URL ABORTS the
+  build (`exit 1`), and the reason is sharper than for `VITE_WS_URL`: the
+  build step exports whatever the resolve step wrote, UNCONDITIONALLY, so an
+  empty export would OVERRIDE the committed `.env.demo` fallback and turn
+  every firm-console call into a relative path Hosting's `/api/**` rewrite
+  sends to the VOICE backend. Pinned by
+  `tests/test_deploy_admin_url_injection.py` and
+  `tests/test_cloudbuild_yaml.py`.
+- **`VITE_APP_CHANNEL`**, the SECOND half of this contract:
+  `frontend-build-deploy` exports `VITE_APP_CHANNEL="${_CHANNEL}"` -- the
+  channel the TRIGGER fixed, so it cannot disagree with the Hosting target or
+  the backend service the same substitution selected. This is
+  deliberately NOT derived from Vite's `MODE`: both
+  channels build with `npm run build:schema:demo` (mode `demo`,
   because staging and demo share one Firebase project and therefore one set
   of client Firebase keys -- see "Frontend" in
   `docs/components/config-deployment.md`), so `import.meta.env.MODE` cannot
@@ -2611,17 +2628,18 @@ share the bead and its cross-cutting rules rather than one data shape.
   typed field (mutation-verified).
 - **`BACKEND_URLS_JSON`'s WIRE FORMAT IS "channel=url;channel=url", NOT
   literal JSON, despite the name matching the plan's own prose.** The
-  value rides inside `deploy-admin.sh`'s `BACKEND_EXTRA_ENV`, which
-  `deploy-all.sh` joins into ONE comma-separated `--set-env-vars` string
-  (that script's own `BACKEND_ENV` assembly) -- a real JSON object's `,`
-  between key/value pairs would be silently split apart there as a second,
-  malformed env-var entry, the identical reason `CORS_EXTRA_ORIGINS` is
-  semicolon-separated rather than comma-separated (this same file,
-  `deploy-admin.sh`'s CORS section). `deploy-admin.sh` resolves both
-  public backends' Cloud Run URLs via `gcloud run services describe` (the
-  same mechanism `deploy-all.sh` uses for `VITE_WS_URL`) and builds
-  `demo=<url>;staging=<url>`, omitting either side whose service does not
-  exist yet. `admin_backend/routes/ops_routes.py`'s `_backend_urls()` is
+  value rides inside the ONE comma-separated `--set-env-vars` string that
+  `cloudbuild.yaml`'s `admin-service-deploy-tagged` step assembles -- a real
+  JSON object's `,` between key/value pairs would be silently split apart
+  there as a second, malformed env-var entry, the identical reason
+  `CORS_EXTRA_ORIGINS` is semicolon-separated rather than comma-separated
+  (`deploy/channels/admin.env`'s own comment on that key). That build step
+  resolves both public backends' Cloud Run URLs via `gcloud run services
+  describe` (the same mechanism the frontend steps use for `VITE_WS_URL`)
+  and builds `demo=<url>;staging=<url>`, omitting either side whose service
+  does not exist yet. It is resolved live by the build rather than declared
+  in `admin.env` because the admin service has no channel of its own, so it
+  cannot name either public backend's URL ahead of time. `admin_backend/routes/ops_routes.py`'s `_backend_urls()` is
   the ONE parser for this shape, read fresh on every request (never at
   import time, mirroring `sweep_routes.py`'s own `ADMIN_SERVICE_URL`
   resolution) -- a malformed segment (no `=`, an empty url, or a channel
@@ -2695,8 +2713,11 @@ rather than a second copy of it.
 Two contracts share this entry because they are two halves of one move: taking
 the deploy out of bash-only and giving Cloud Build something it can read.
 **Neither has run in production yet** -- the first build needs the
-2nd-generation Cloud Build GitHub connection (a maintainer OAuth step), so
-`deploy-staging.sh` / `deploy-demo.sh` remain the live deploy path.
+2nd-generation Cloud Build GitHub connection (a maintainer OAuth step). Since
+E4.6 (bd polyglot-pdf-oqtm7) there is no bash fallback waiting behind it
+either: `deploy-staging.sh` / `deploy-demo.sh` RUN these builds rather than
+deploying anything themselves, so that one connection is what the entire
+deploy path now waits on.
 
 **29a. The channel file: `deploy/channels/<channel>.env`.**
 
@@ -2707,36 +2728,42 @@ the deploy out of bash-only and giving Cloud Build something it can read.
   must be computed at deploy time is supplied by the caller instead.
   `deploy/channels/README.md` is the reference.
 - **Files:** `staging.env`, `demo.env` (the parity pair) and `admin.env`.
-- **Consumer 1 (bash):** `deploy-all.sh`'s `read_channel_section` /
-  `read_channel_value`, selected by the `DEPLOY_CHANNEL` env var the wrapper
-  passes. The backend stage layers the file's `[SET_ENV_VARS]` AFTER its own
-  computed keys (`GOOGLE_CLOUD_PROJECT`, the `FORM_KITS_*` trio, `APP_MODULE`,
-  `GIT_SHA`) and BEFORE `BACKEND_EXTRA_ENV`, which now carries only
-  deploy-time-only values (`deploy-admin.sh`'s `ADMIN_SERVICE_URL`).
-  `[SET_SECRETS]` and `[SERVICE_ACCOUNT]` become the defaults for
-  `BACKEND_SECRETS` / `BACKEND_SERVICE_ACCOUNT`; an explicit caller value still
-  wins.
-- **Consumer 2 (Cloud Build):** `cloudbuild.yaml`'s `backend-deploy` step
-  **sources `deploy-all.sh`** and calls the SAME two functions, rather than
-  reimplementing the format. A second parser would be the drift the files
+- **The parser:** `deploy-all.sh`'s `read_channel_section` /
+  `read_channel_value`. `deploy-all.sh` is itself a thin Cloud Build trigger
+  wrapper since E4.6 (bd polyglot-pdf-oqtm7), but these two functions are not
+  dead code -- they sit ABOVE the script's sourcing guard precisely so a build
+  step can `source` the file and get the parser without running the wrapper
+  flow. They are the ONE implementation of this format.
+- **Consumer (Cloud Build, the only one):** `cloudbuild.yaml`'s
+  `backend-deploy` and `admin-service-deploy-tagged` steps **source
+  `deploy-all.sh`** and call those same two functions rather than
+  reimplementing the format, picking the file from the `_CHANNEL` substitution
+  the trigger fixed (`admin-service` reads `admin.env` unconditionally, having
+  no channel). Each step layers the file's `[SET_ENV_VARS]` AFTER its own
+  computed keys (`GOOGLE_CLOUD_PROJECT`, the `FORM_KITS_*` trio, `GIT_SHA`,
+  and `APP_MODULE` for the public backends -- see Surface contract 12) and
+  before the values only a live lookup can supply (the admin step's
+  `ADMIN_SERVICE_URL` and `BACKEND_URLS_JSON`). `[SET_SECRETS]` and
+  `[SERVICE_ACCOUNT]` become that step's `--set-secrets` and
+  `--service-account` flags. A second parser would be the drift the files
   exist to end, one level up.
 - **Producers of the values:** formerly the inline `BACKEND_EXTRA_ENV` /
   `BACKEND_SECRETS_COMMON` / `SA_EMAIL` constants in each wrapper, all now
   deleted. `SERVICE_ACCOUNT` is explicit and versioned for the first time.
 - **Pinned by:** `tests/test_deploy_channel_parity.py` -- the two files must
   agree key-for-key and value-for-value except `LINK_BASE_URL`, `LINK_CHANNEL`
-  and `GIT_SHA`; `deploy-all.sh` and both wrappers must set NO channel key
-  inline (derived from the shipped file, not a hand-typed list); each wrapper
-  must pass `DEPLOY_CHANNEL` inside its `./deploy-all.sh` env prefix; and each
-  section must reach its own gcloud flag. `admin.env` is outside the parity
-  pair (one admin service, both channels' data). `cloudbuild.yaml`'s
-  `admin-service` target now reads it directly (bead `polyglot-pdf-ywxoh`,
-  4.2, same `read_channel_section`/`read_channel_value` sourcing as the
-  `backend-<channel>` targets); `deploy-admin.sh` still passes the same
-  values inline, and the two copies stay pinned equal by
-  `tests/test_cloudbuild_yaml.py::test_admin_channel_file_matches_the_wrapper`
-  until bead `polyglot-pdf-oqtm7` (4.6) switches the wrapper itself over to a
-  thin call into the build.
+  and `GIT_SHA`; neither `deploy-all.sh` nor either channel wrapper may set a
+  channel key inline (derived from the shipped file, not a hand-typed list);
+  each wrapper may name only its OWN channel's build targets; and
+  `deploy-all.sh` must still define both parser functions above its sourcing
+  guard. Each section reaching its own gcloud flag is pinned on the consumer
+  side, in `tests/test_cloudbuild_yaml.py`, where the deploy now happens.
+  `admin.env` is outside the parity pair (one admin service, both channels'
+  data); `cloudbuild.yaml`'s `admin-service` target reads it directly (bead
+  `polyglot-pdf-ywxoh`, 4.2, same sourcing as the `backend-<channel>`
+  targets), and since E4.6 it is the ONLY copy --
+  `tests/test_cloudbuild_yaml.py::test_admin_env_is_the_only_copy_of_the_admin_service_config`
+  refuses any key in that file being restated by `deploy-admin.sh`.
 
 **29b. The verify gate: Firestore `build_checks/{sha}`.**
 
@@ -2803,8 +2830,7 @@ exactly one place instead of drifting per caller.
   substring-matching filename); `backend/tests/unit/test_firestore_rules_text.py`
   (the deny block, in `ADMIN_SDK_ONLY_COLLECTIONS`).
 
-**31b. The reachability gate: ONE python module, four bash callers, three
-build steps.**
+**31b. The reachability gate: ONE python module, three build steps.**
 
 - **Before this bead:** `deploy-all.sh`, `backend/deploy-new.sh`,
   `deploy-editor.sh` and `deploy-admin-console.sh` each carried a
@@ -2825,15 +2851,13 @@ build steps.**
   CLI (`python scripts/verify_service_reachable.py <svc> <region> <project>
   [--severity warn|fatal]`) translates that to an exit code for both bash and
   Cloud Build.
-- **Bash callers:** all four scripts' `verify_service_publicly_reachable()` is
-  now a THIN WRAPPER -- resolve a python interpreter
-  (`MANIFEST_PYTHON_CANDIDATES`-style fallback), resolve the module's path
-  relative to the wrapper's OWN file (two candidate depths, since
-  `backend/deploy-new.sh` sits one directory below the other three), shell
-  out, and `exit 1` on a non-zero return so the calling script still
-  terminates (the bare-command-shape requirement from bead pidtg/6oi9s
-  carries over unchanged -- a `| cat` or `$(...)` around the call would still
-  swallow the exit). All four wrapper functions are byte-identical.
+- **No bash callers left** (bd polyglot-pdf-oqtm7, E4.6). Four scripts briefly
+  kept a thin bash wrapper around the module; each existed only because that
+  script deployed a service itself, and none does now -- every deploy is a
+  build. The module therefore has exactly one kind of caller, which is what
+  the port was for. `tests/test_deploy_wrappers.py` pins that no wrapper
+  reintroduces a bash copy (neither the function nor a bare `get-iam-policy`
+  query).
 - **Build callers:** `backend-reachability-gate` (fatal),
   `editor-reachability-warn` and `admin-console-reachability-warn` (warn) call
   `python3 scripts/verify_service_reachable.py` directly on the
@@ -2841,12 +2865,8 @@ build steps.**
   internal use -- NOT `python:3.12`, which has no `gcloud` binary on PATH for
   the module's default `gcloud_runner` to shell out to).
 - **Pinned by:** `tests/test_verify_service_reachable.py` (the module's
-  behavior); `tests/test_deploy_reachability_gate.py` (the four wrapper
-  functions are byte-identical thin calls with NO inline `get-iam-policy`
-  query left, executed end-to-end with a stubbed interpreter to prove the
-  argument binding and exit-code propagation actually work, plus the
-  unchanged per-script call-site properties -- bare command, correct
-  severity counts, ordering vs. the success banner); `tests/test_cloudbuild_yaml.py`
+  behavior); `tests/test_deploy_wrappers.py` (no wrapper carries a bash copy);
+  `tests/test_cloudbuild_yaml.py`
   (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
   their target's mutating step).
 
@@ -3152,11 +3172,12 @@ unchanged, only which behavior it defaults to.
   echoed-NOTE `gcloud scheduler jobs create http admin-monthly-credit-topup`
   declaration (`--schedule="5 0 1 * *"` -- the 1st of the month, 5 minutes
   past midnight UTC, offset from the sweep job's `"0 * * * *"` so the two
-  never race at a month boundary), and `deploy-admin.sh`'s own
-  `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` computed-without-a-gcloud-lookup
-  assignment folded into the SAME `BACKEND_EXTRA_ENV` re-assertion the
-  sweep job's env vars already ride (bd polyglot-pdf-8vgfh finding 3) --
-  every deploy re-asserts it, never a separately erasable hand-run step.
+  never race at a month boundary), and a
+  `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL` declaration that needs no gcloud lookup,
+  sitting in `deploy/channels/admin.env` beside the sweep job's own caller
+  identity (bd polyglot-pdf-8vgfh finding 3; moved there from
+  `deploy-admin.sh`'s deleted inline env assembly by bd polyglot-pdf-oqtm7)
+  -- every deploy re-asserts it, never a separately erasable hand-run step.
 - **Console: `admin-console/src/pages/FirmDetailPage.tsx` gains a plan
   editor** -- tier `<select>`, a monthly-credits number input (no native
   `min`/`step`; `handleSavePlan`'s own `Number.isInteger` + positivity
@@ -3403,3 +3424,84 @@ changes -- for BOTH console-triggered and bash-triggered builds.
   push-caller service account is neither runtime identity, the printed
   subscription-create NOTE names the right topic/path and carries both
   `--push-auth-*` flags and is a printed NOTE, not an executed command).
+
+### 36. `polyglot-<target>` trigger names: the bash wrappers as a third caller of the one deploy engine (Epic 4 bead E4.6, bd polyglot-pdf-oqtm7)
+
+Contract 35 established the trigger-name convention between
+`scripts/setup-cloud-build.sh` (which provisions one manual trigger per target,
+`name="polyglot-$target"`) and `admin_backend/services/cloud_build.py::
+run_target()` (which runs `polyglot-<target>` by name). This bead adds the
+THIRD participant: the bash wrappers, which stopped deploying anything
+themselves and now press the same button. The point of the change is that there
+is no longer any deploy path that does NOT go through `cloudbuild.yaml`, so the
+gates that live in the build (the per-SHA `verify` record, the reachability
+check, the kits-manifest validation, the staging-before-demo promotion gate)
+cannot be routed around by choosing a different script.
+
+- **Producers:**
+  - `scripts/deploy_build_targets.sh::run_build_target(target, sha)` --
+    `gcloud builds triggers run polyglot-<target> --sha=<sha>
+    --region=$CLOUD_BUILD_REGION --project=$POLYGLOT_PROJECT_NAME
+    --substitutions=_SHA=<sha>`. Both the `--sha` and the `_SHA` substitution
+    are required and carry the SAME value: `--sha` tells the trigger which
+    revision of the connected repository to fetch, and `_SHA` is what the
+    build's own step 0 (`require-sha`) demands, the `verify` target writes to
+    `build_checks/{sha}`, and every deploy target reads. This is the identical
+    request shape `cloud_build.py::run_target()` builds through the client
+    library, for the identical reason.
+  - `run_build_targets(sha, target...)` runs a list IN ORDER and stops at the
+    first failure. Each target's result is read from `gcloud builds describe`
+    after the log stream ends, NOT from `gcloud builds log --stream`'s own exit
+    code -- "the log was read successfully" is not "the build succeeded", and
+    treating it as such is how a deploy that deployed nothing reports green.
+  - `form-kits` is selected ONLY by an explicit `--form-kits`, on every
+    wrapper that can run it -- never by a bare run and never by `--all`. The
+    target reads the kit tree from the build's checkout while kits are
+    bucket-canonical and never tracked (CLAUDE.md scar #10), so it cannot
+    currently succeed, and `run_build_targets` stops at the first failure:
+    an implicit selection stopped every later target in the list (bd
+    `polyglot-pdf-wm7ga` owns the source question). Pinned as a SET over the
+    wrappers that can select it, discovered from the shipped scripts, in
+    `tests/test_deploy_wrappers.py`.
+  - The wrappers themselves choose which targets to run:
+    `deploy-staging.sh` (`verify` when this commit has no `build_checks`
+    record, then `backend-staging`, `form-kits` with `--form-kits`,
+    `frontend-staging`), `deploy-demo.sh` (`backend-demo`, `form-kits` with
+    `--form-kits`, `firestore-rules`, `frontend-demo`), `deploy-editor.sh`
+    (`editor`),
+    `deploy-admin.sh` (`admin-service`), `deploy-admin-console.sh`
+    (`admin-console-candidate`, or `admin-console` with `--live`),
+    `backend/deploy-new.sh` (the target for the named service; an unknown
+    service name is REFUSED rather than guessed), and `deploy-all.sh`
+    (`DEPLOY_CHANNEL`'s targets, with no default channel -- guessing one would
+    guess `demo`, the protected target).
+- **Consumers:** the trigger set `scripts/setup-cloud-build.sh` provisions, and
+  through it `cloudbuild.yaml`'s `_TARGET`/`_CHANNEL` dispatch.
+  `deploy/targets.py` holds the same target names for the admin route's own
+  validation.
+- *Breaks if disagreed:* a target name no trigger exists for fails with an
+  empty build id, which the runner turns into a named refusal. The dangerous
+  direction is the reverse -- a trigger whose `_CHANNEL` substitution does not
+  match its name (say `polyglot-backend-staging` fixed to `_CHANNEL=demo`)
+  would deploy the demo's service while every log line said staging. That
+  pairing lives in `setup-cloud-build.sh`'s `TARGETS` list and is pinned by
+  `tests/test_cloudbuild_yaml.py::
+  test_the_trigger_script_names_a_trigger_for_every_target`.
+- *Also load-bearing:* `deploy-all.sh` keeps a LIBRARY half above its sourcing
+  guard. `cloudbuild.yaml`'s `backend-deploy` and `admin-service-deploy-tagged`
+  steps run `source ./deploy-all.sh` and call its `read_channel_section` /
+  `read_channel_value`, so the channel-file format has one parser rather than a
+  bash copy and a yaml copy. Deleting either function, or moving it below the
+  guard, breaks every backend and admin deploy at deploy time.
+- **Pinned by:** `tests/test_deploy_wrappers.py` (each wrapper's trigger
+  sequence, in order, with the current commit's sha in both places, driven by
+  EXECUTING the real scripts against a stubbed `gcloud` in a real clean+pushed
+  temporary repo; the first failed build stops the rest; a trigger that cannot
+  start fails the wrapper; the preflight still refuses a dirty tree; and, as a
+  SET over every wrapper, no surviving `gcloud run deploy` / `firebase deploy`
+  / `gcloud builds submit --tag` and no bash copy of the reachability gate);
+  `tests/test_deploy_channel_parity.py` (the parser survives above the sourcing
+  guard, and each wrapper runs only its own channel's targets);
+  `backend/tests/unit/test_deploy_channel_isolation.py` (the build's
+  channel-to-service and channel-to-Hosting-target maps, and its refusal of an
+  unknown channel).

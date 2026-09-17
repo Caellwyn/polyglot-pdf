@@ -6,16 +6,22 @@ and pilot firms; staging (polyglot-app-staging.web.app) is the disposable test
 deploy. They share ONE GCP/Firebase project, so the ONLY things keeping a
 staging deploy off the demo are three pieces of wiring:
 
-  1. deploy-all.sh honouring an EXPORTED BACKEND_SERVICE_NAME,
-  2. deploy-all.sh honouring an EXPORTED FRONTEND_HOSTING_TARGET,
+  1. cloudbuild.yaml mapping each CHANNEL to its own Cloud Run service,
+  2. cloudbuild.yaml mapping each CHANNEL to its own Hosting target,
   3. each firebase.json hosting target rewriting /api/** to its OWN service.
 
-Every one of those fails SILENTLY when broken. A bare `X="literal"` assignment
-in deploy-all.sh (which is exactly what shipped before this bead -- and which
-made deploy-production.sh's exported BACKEND_SERVICE_NAME a no-op for its entire
-life) clobbers the caller's value with no error, a clean shell exit, and a
-successful-looking deploy that has just overwritten the live demo. There is no
-runtime signal, because the deploy genuinely succeeded -- at the wrong target.
+Every one of those fails SILENTLY when broken: there is no runtime signal,
+because the deploy genuinely succeeded -- at the wrong target.
+
+WHERE THE WIRING MOVED (bd polyglot-pdf-oqtm7). Items 1 and 2 used to be about
+deploy-all.sh honouring EXPORTED variables, because every deploy ran locally
+and the channel travelled as a bash variable a bare assignment could silently
+clobber -- which is exactly what shipped before bd polyglot-pdf-9qn64, and
+what made deploy-production.sh's exported BACKEND_SERVICE_NAME a no-op for its
+entire life. The deploy stages are Cloud Build steps now and the channel is a
+trigger-fixed substitution, so there is no caller variable left to clobber;
+what is pinned instead is the mapping itself, plus the refusal of an unknown
+channel.
 
 So this pins the SET of wiring that keeps the channels apart, per CLAUDE.md scar
 tissue #8 (enumerate the set, then pin the set, not the instance).
@@ -43,54 +49,91 @@ def _read(rel: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1. deploy-all.sh must not CLOBBER caller-exported channel wiring.
+# 1. The BUILD must derive the service and the Hosting site from the channel.
+#
+# This used to be about deploy-all.sh honouring caller-exported variables:
+# every deploy ran locally, and the channel travelled as an exported bash
+# variable that a bare assignment could silently clobber. The deploy stages
+# live in cloudbuild.yaml now (bd polyglot-pdf-oqtm7), where the channel is a
+# TRIGGER-FIXED substitution -- there is no caller variable left to clobber,
+# so what needs pinning is the mapping itself: each channel reaching its OWN
+# service and its OWN Hosting target, and an unknown channel refusing rather
+# than falling back to one of them.
 # ---------------------------------------------------------------------------
 
-# The two variables that select which channel a deploy lands on. Both must be
-# defaulted (${VAR:-default}), never bare-assigned, or the channel scripts'
-# exports are silently discarded.
-CHANNEL_VARS = ["BACKEND_SERVICE_NAME", "FRONTEND_HOSTING_TARGET"]
+CHANNEL_SERVICES = [("staging", STAGING_SERVICE), ("demo", DEMO_SERVICE)]
+CHANNEL_HOSTING_TARGETS = [("staging", STAGING_TARGET), ("demo", DEMO_TARGET)]
 
 
-@pytest.mark.parametrize("var", CHANNEL_VARS)
-def test_deploy_all_honours_exported_channel_var(var):
-    """A bare assignment would silently point staging at the demo's target."""
-    body = _read("deploy-all.sh")
-    # Find every top-level assignment to this variable.
-    assigns = re.findall(rf'^{var}=(.*)$', body, flags=re.MULTILINE)
-    assert assigns, f"{var} is not assigned in deploy-all.sh at all"
-    for rhs in assigns:
-        assert rhs.startswith(f'"${{{var}:-'), (
-            f"deploy-all.sh assigns {var}={rhs.strip()} -- a bare assignment "
-            f"CLOBBERS the value deploy-staging.sh exports, so a staging "
-            f"deploy would land on the DEMO. Use "
-            f'{var}="${{{var}:-<default>}}" instead.'
+def _channel_arms(var: str) -> list[tuple[str, str]]:
+    """Every `<channel>) <VAR>="<value>" ;;` arm in the build, in file order.
+
+    EVERY arm, not the first match: the channel-to-service mapping is spelled
+    out in more than one step (the deploy and the reachability gate each
+    resolve it), and a guard that stops at the first occurrence passes while a
+    later arm sends a staging deploy to the demo's service -- verified: that
+    exact mutation went green before this helper existed.
+    """
+    body = _read("cloudbuild.yaml")
+    return re.findall(
+        rf'^\s*(\w+)\)\s*{var}="([^"]+)" ;;$', body, flags=re.MULTILINE
+    )
+
+
+@pytest.mark.parametrize("channel,service", CHANNEL_SERVICES)
+def test_the_build_maps_each_channel_to_its_own_backend_service(channel, service):
+    arms = _channel_arms("SERVICE")
+    assert arms, "cloudbuild.yaml assigns SERVICE from no channel arm at all"
+    mine = [value for arm, value in arms if arm == channel]
+    assert mine, (
+        f"cloudbuild.yaml has no {channel} arm assigning SERVICE -- a "
+        f"{channel} deploy has no service to land on"
+    )
+    assert all(value == service for value in mine), (
+        f"a {channel} arm maps to {sorted(set(mine))} rather than {service} -- "
+        f"a {channel} deploy would land on another channel's Cloud Run service"
+    )
+
+
+@pytest.mark.parametrize("channel,target", CHANNEL_HOSTING_TARGETS)
+def test_the_build_maps_each_channel_to_its_own_hosting_target(channel, target):
+    arms = _channel_arms("HOSTING_TARGET")
+    assert arms, "cloudbuild.yaml assigns HOSTING_TARGET from no channel arm"
+    mine = [value for arm, value in arms if arm == channel]
+    assert mine, f"cloudbuild.yaml has no {channel} arm assigning HOSTING_TARGET"
+    assert all(value == target for value in mine), (
+        f"a {channel} arm maps to {sorted(set(mine))} rather than {target} -- "
+        f"a {channel} build would publish to another channel's site"
+    )
+
+
+def test_an_unknown_channel_aborts_rather_than_defaulting():
+    """A fallback arm is how a misconfigured trigger reaches the demo.
+
+    Every channel-dispatch `case` in the build must end in an arm that ABORTS.
+    Pinned as a set over every such case (CLAUDE.md scar #8): a new
+    channel-dispatching step that silently defaults would otherwise only be
+    found by a wrong deploy.
+    """
+    body = _read("cloudbuild.yaml")
+    lines = body.splitlines()
+    dispatches = [
+        i for i, line in enumerate(lines) if 'case "${_CHANNEL}" in' in line
+    ]
+    assert dispatches, "no channel dispatch found in cloudbuild.yaml"
+    for start in dispatches:
+        end = next(
+            i for i in range(start + 1, len(lines)) if lines[i].strip() == "esac"
         )
-
-
-@pytest.mark.parametrize(
-    "var,default",
-    [("BACKEND_SERVICE_NAME", DEMO_SERVICE), ("FRONTEND_HOSTING_TARGET", DEMO_TARGET)],
-)
-def test_deploy_all_default_is_the_demo_channel(var, default):
-    """An unset var must mean the demo -- never an accidental staging deploy."""
-    body = _read("deploy-all.sh")
-    assert f'{var}="${{{var}:-{default}}}"' in body, (
-        f"deploy-all.sh's default for {var} must be {default!r} so a bare "
-        f"./deploy-all.sh run keeps its historical (demo) behavior."
-    )
-
-
-def test_deploy_all_uses_the_hosting_target_variable():
-    """`--only hosting:app` hardcoded would ship staging's build to the demo."""
-    body = _read("deploy-all.sh")
-    assert 'firebase deploy --only "hosting:$FRONTEND_HOSTING_TARGET"' in body, (
-        "deploy-all.sh must deploy the PARAMETERIZED hosting target; a "
-        "hardcoded hosting:app publishes a staging build to the demo site."
-    )
-    assert "--only hosting:app " not in body, (
-        "a hardcoded --only hosting:app remains in deploy-all.sh"
-    )
+        arms = lines[start + 1:end]
+        catch_all = [ln for ln in arms if ln.strip().startswith("*)")]
+        assert catch_all, (
+            f"the channel dispatch at line {start + 1} has no catch-all arm"
+        )
+        assert all("exit 1" in ln for ln in catch_all), (
+            f"the channel dispatch at line {start + 1} does not abort on an "
+            f"unknown channel: {catch_all}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -98,41 +141,34 @@ def test_deploy_all_uses_the_hosting_target_variable():
 # ---------------------------------------------------------------------------
 
 
-def test_staging_script_exports_staging_service_for_both_stages():
-    """Backend AND frontend stages both need the staging service name.
+def test_staging_script_runs_both_of_its_channels_targets():
+    """Backend AND frontend, each the staging one.
 
-    The frontend stage matters as much as the backend one: deploy-all.sh
-    resolves the LIVE Cloud Run URL for BACKEND_SERVICE_NAME and bakes it into
-    the build as VITE_WS_URL. Omitting it there would build a staging frontend
-    that talks to the DEMO backend.
+    The frontend target matters as much as the backend one: the build resolves
+    the LIVE Cloud Run URL for its channel's service and bakes it into the
+    bundle as VITE_WS_URL, so running the demo's frontend target from here
+    would build a staging site that talks to the DEMO backend.
     """
     body = _read("deploy-staging.sh")
-    assert body.count(f'BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME"') == 2, (
-        "deploy-staging.sh must pass BACKEND_SERVICE_NAME to BOTH the backend "
-        "and frontend deploy-all.sh invocations"
-    )
-    assert f'STAGING_SERVICE_NAME="{STAGING_SERVICE}"' in body
-    assert f'STAGING_HOSTING_TARGET="{STAGING_TARGET}"' in body
-    assert 'FRONTEND_HOSTING_TARGET="$STAGING_HOSTING_TARGET"' in body
+    for target in ("backend-staging", "frontend-staging"):
+        assert f'"{target}"' in body, (
+            f"deploy-staging.sh never runs the {target} target"
+        )
 
 
 def test_staging_script_never_names_the_demo_target():
-    """The literal demo service/site must not appear as a deploy target."""
+    """The demo's build targets must not appear in the staging wrapper."""
     body = _read("deploy-staging.sh")
-    for bad in (
-        'BACKEND_SERVICE_NAME="polyglot-backend"',
-        'FRONTEND_HOSTING_TARGET="app"',
-        "--only hosting:app ",
-    ):
+    for bad in ("backend-demo", "frontend-demo"):
         assert bad not in body, f"deploy-staging.sh targets the DEMO via {bad!r}"
 
 
 def test_staging_does_not_deploy_firestore_rules():
     """Rules are PROJECT-wide: deploying them from staging hits the demo."""
     body = _read("deploy-staging.sh")
-    assert "firebase deploy --only firestore:rules" not in body, (
-        "deploy-staging.sh must not deploy firestore.rules -- rules are "
-        "project-wide, so a staging rules deploy applies to the live demo."
+    assert "firestore-rules" not in body, (
+        "deploy-staging.sh must not run the firestore-rules target -- rules "
+        "are project-wide, so a staging rules deploy applies to the live demo."
     )
 
 
@@ -222,7 +258,7 @@ def test_dead_production_script_refuses_to_run():
 # ---------------------------------------------------------------------------
 
 
-def test_explicit_channel_fails_hard_when_backend_url_unresolvable():
+def test_the_build_fails_hard_when_the_backend_url_is_unresolvable():
     """WebSockets BYPASS the Hosting rewrite -- VITE_WS_URL is the only binding.
 
     Firebase Hosting does not proxy WS upgrades, so the voice client connects to
@@ -231,40 +267,32 @@ def test_explicit_channel_fails_hard_when_backend_url_unresolvable():
     build-time VITE_WS_URL is the ONLY thing tying a frontend to its backend.
 
     Both of its fallbacks name a DEMO backend (.env.demo's committed literal and
-    config.ts's PRODUCTION_WS_URL). So if `gcloud run services describe` fails
-    for an explicitly-selected channel, warning-and-continuing would build a
-    STAGING frontend driving the LIVE DEMO backend -- real Gemini spend and real
-    confirmation_events against the demo's service -- while looking successful.
-    That fires on the FIRST staging deploy, when the service does not exist yet.
+    config.ts's PRODUCTION_WS_URL). So if `gcloud run services describe` fails,
+    warning-and-continuing would build a STAGING frontend driving the LIVE DEMO
+    backend -- real Gemini spend and real confirmation_events against the demo's
+    service -- while looking successful. That fires on the FIRST staging deploy,
+    when the service does not exist yet.
+
+    The build ALWAYS knows its channel (the trigger fixes _CHANNEL), so unlike
+    the local script this replaces there is no bare-run case to warn for: every
+    unresolved backend URL aborts.
     """
-    body = _read("deploy-all.sh")
-    assert 'BACKEND_SERVICE_NAME_EXPLICIT="${BACKEND_SERVICE_NAME:-}"' in body, (
-        "deploy-all.sh must capture whether the caller explicitly selected a "
-        "channel BEFORE defaulting BACKEND_SERVICE_NAME."
+    body = _read("cloudbuild.yaml")
+    lines = body.splitlines()
+    marker = 'if [ -z "$$BACKEND_URL" ]; then'
+    start = next(
+        (i for i, ln in enumerate(lines) if ln.strip() == marker), None
     )
-    assert 'elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then' in body, (
-        "the frontend stage must branch on an EXPLICIT channel when the backend "
-        "URL cannot be resolved"
+    assert start is not None, (
+        "cloudbuild.yaml's frontend target does not check whether the backend "
+        "Cloud Run URL resolved"
     )
-    # The explicit-channel branch must ABORT, not warn.
-    explicit_branch = body.split('elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then')[1]
-    explicit_branch = explicit_branch.split("else")[0]
-    assert "exit 1" in explicit_branch, (
-        "an explicitly-selected channel whose Cloud Run URL cannot be resolved "
-        "must ABORT the build -- otherwise the staging frontend silently ships "
-        "pointing at the DEMO backend."
-    )
-
-
-def test_capture_precedes_defaulting():
-    """Order matters: capture after defaulting would make EVERY run 'explicit'."""
-    body = _read("deploy-all.sh")
-    capture = body.index('BACKEND_SERVICE_NAME_EXPLICIT="${BACKEND_SERVICE_NAME:-}"')
-    default = body.index('BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"')
-    assert capture < default, (
-        "BACKEND_SERVICE_NAME_EXPLICIT must be captured BEFORE the default is "
-        "applied; otherwise a bare deploy-all.sh run looks explicit and would "
-        "start failing hard, breaking its historical behavior."
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "fi")
+    branch = lines[start + 1:end]
+    assert any(ln.strip() == "exit 1" for ln in branch), (
+        "an unresolved backend Cloud Run URL must ABORT the build -- otherwise "
+        "the staging frontend silently ships pointing at the DEMO backend: "
+        + repr(branch)
     )
 
 

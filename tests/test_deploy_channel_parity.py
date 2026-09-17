@@ -292,10 +292,11 @@ def _live_text(script: Path) -> str:
 def test_deploy_all_no_longer_defines_the_env_block_inline():
     """THE POINT OF THE BEAD: the channel env must come from the FILE.
 
-    deploy-all.sh may still assemble the COMPUTED keys (GOOGLE_CLOUD_PROJECT,
-    the FORM_KITS_* trio, GIT_SHA, APP_MODULE) -- none of those is static data.
-    What it must NOT do is spell out channel settings, because a Cloud Build
-    step cannot read a bash string, and a restated config is exactly the drift
+    The COMPUTED keys (GOOGLE_CLOUD_PROJECT, the FORM_KITS_* trio, GIT_SHA,
+    APP_MODULE) are assembled by cloudbuild.yaml's deploy steps -- none of
+    those is static data, so none belongs in a channel file. What no bash
+    script may do is spell out channel SETTINGS, because a Cloud Build step
+    cannot read a bash string, and a restated config is exactly the drift
     this file exists to catch.
 
     DERIVED from the shipped channel file rather than a hand-typed list: a
@@ -310,21 +311,47 @@ def test_deploy_all_no_longer_defines_the_env_block_inline():
         )
 
 
-def test_deploy_all_reads_the_channel_file():
-    """The parser must exist and be called for the backend stage."""
+def test_deploy_all_still_exports_the_channel_parser():
+    """cloudbuild.yaml SOURCES this file for the parser.
+
+    deploy-all.sh is a thin Cloud Build trigger wrapper as of bd
+    polyglot-pdf-oqtm7, but its helper half is not dead code: the backend and
+    admin-service build steps run `source ./deploy-all.sh` and then call
+    read_channel_section / read_channel_value, because a Cloud Build step
+    cannot read a bash string and a second copy of the channel-file format is
+    exactly the drift these files exist to end. Deleting either function --
+    or the sourcing guard that stops a `source` from running the wrapper flow
+    -- breaks every backend and admin deploy, at deploy time, with nothing
+    local to catch it.
+
+    The parser's own BEHAVIOUR (each section reaching its gcloud flag, the
+    empty-section refusal, the channel file being read at all) is pinned on
+    the consumer side now, where the deploy actually happens:
+    tests/test_cloudbuild_yaml.py::
+    test_the_backend_target_takes_its_env_from_the_channel_file and
+    ::test_the_backend_target_refuses_an_empty_channel_env.
+    """
     lines = _live_lines(DEPLOY_ALL)
-    assert any("read_channel_section() {" in line for line in lines), (
-        "deploy-all.sh defines no read_channel_section parser"
-    )
     joined = "\n".join(lines)
-    assert "deploy/channels/$DEPLOY_CHANNEL.env" in joined, (
-        "deploy-all.sh never composes the channel file path, so DEPLOY_CHANNEL "
-        "selects nothing"
+    for fn in ("read_channel_section() {", "read_channel_value() {"):
+        assert fn in joined, (
+            f"deploy-all.sh no longer defines {fn.split('(')[0]} -- "
+            "cloudbuild.yaml sources this file for it"
+        )
+    assert 'if [ "${BASH_SOURCE[0]}" != "${0}" ]; then' in joined, (
+        "deploy-all.sh lost its sourcing guard, so `source ./deploy-all.sh` "
+        "in a build step would run the wrapper flow (and its preflight) "
+        "instead of just defining the helpers"
     )
-    for section in SECTIONS:
-        assert section in joined, (
-            f"deploy-all.sh never reads the {section} section, so that half "
-            "of every channel file is silently ignored"
+    guard = joined.index('if [ "${BASH_SOURCE[0]}" != "${0}" ]; then')
+    for fn in ("read_channel_section() {", "read_channel_value() {"):
+        # rindex, not index: EVERY definition must precede the guard. A later
+        # redefinition below it is what a build step would never see, and a
+        # first-match check passes right through that (verified -- adding a
+        # stub above the guard defeated the earlier version of this line).
+        assert joined.rindex(fn) < guard, (
+            f"{fn.split('(')[0]} is defined AFTER the sourcing guard, so a "
+            "build step that sources this file never sees it"
         )
 
 
@@ -333,35 +360,26 @@ def test_deploy_all_reads_the_channel_file():
     [(DEPLOY_STAGING, "staging"), (DEPLOY_DEMO, "demo")],
     ids=["staging", "demo"],
 )
-def test_each_wrapper_names_its_channel_in_the_invocation(script: Path, channel: str):
-    """Containment is not position.
+def test_each_wrapper_runs_only_its_own_channels_targets(script, channel):
+    """A wrapper must never name the OTHER channel's build targets.
 
-    A DEPLOY_CHANNEL assignment that has lost its trailing backslash is a
-    standalone assignment the child process never sees -- the exact
-    containment-vs-proximity defeat this file's ancestor paid two rounds for.
-    So walk BACKWARD from the deploy-all.sh call over its continuation lines
-    and require the assignment to be IN the env prefix.
+    The channel used to be carried as DEPLOY_CHANNEL into deploy-all.sh; it is
+    carried as the target NAME now (backend-staging vs backend-demo), so this
+    is the same guard against a staging deploy reaching the demo's service,
+    read off the same file. The behavioural version -- which triggers each
+    wrapper actually runs, in order -- is
+    tests/test_deploy_wrappers.py::test_wrapper_runs_its_trigger_sequence.
     """
-    lines = [line.rstrip() for line in _live_lines(script)]
-    call = next(
-        (i for i, line in enumerate(lines) if "./deploy-all.sh" in line), None
-    )
-    assert call is not None, f"could not locate {script.name}'s deploy-all.sh call"
-
-    prefix: list[str] = []
-    i = call - 1
-    while i >= 0 and lines[i].endswith("\\"):
-        prefix.append(lines[i].rstrip("\\").strip())
-        i -= 1
-    # The assignment may be the FIRST word of the call line itself.
-    prefix.append(lines[call].strip())
-
-    needle = 'DEPLOY_CHANNEL="' + channel + '"'
-    assert any(needle in line for line in prefix), (
-        f"{script.name} does not pass DEPLOY_CHANNEL={channel} as part of its "
-        f"deploy-all.sh invocation (env prefix is {prefix}) -- the channel "
-        "file is never read and the service deploys with bare defaults"
-    )
+    other = "demo" if channel == "staging" else "staging"
+    text = _live_text(script)
+    for family in ("backend", "frontend"):
+        assert f"{family}-{channel}" in text, (
+            f"{script.name} never names the {family}-{channel} target"
+        )
+        assert f"{family}-{other}" not in text, (
+            f"{script.name} names {family}-{other} -- a {channel} deploy must "
+            f"not be able to touch the {other} channel"
+        )
 
 
 @pytest.mark.parametrize(
@@ -370,8 +388,10 @@ def test_each_wrapper_names_its_channel_in_the_invocation(script: Path, channel:
 def test_no_wrapper_rebuilds_the_channel_env_inline(script: Path):
     """The wrappers must not carry a second copy of the settings.
 
-    BACKEND_EXTRA_ENV survives for deploy-time-only values (deploy-admin.sh's
-    ADMIN_SERVICE_URL). It must no longer carry channel configuration.
+    No wrapper assembles an env block at all since bd polyglot-pdf-oqtm7 --
+    the deploy-time-only values (ADMIN_SERVICE_URL, BACKEND_URLS_JSON) are
+    resolved by the build itself. A wrapper line setting a channel key would
+    be a second live copy of config the build reads from the file.
     """
     text = _live_text(script)
     for key in sorted(parse_channel_file(STAGING)["SET_ENV_VARS"]):
@@ -379,80 +399,6 @@ def test_no_wrapper_rebuilds_the_channel_env_inline(script: Path):
             f"{script.name} still sets {key} inline -- it belongs in "
             "deploy/channels/<channel>.env, the one source Cloud Build reads."
         )
-
-
-def _gcloud_run_deploy_argv(text: str) -> list[str]:
-    """The ARGUMENT lines of the gcloud run deploy invocation.
-
-    Follows backslash continuations and stops at the first line that does not
-    continue. An earlier version sliced to the next blank line, overran by ~14
-    lines, and let a reviewer disable a flag while leaving its literal in a
-    trailing comment -- passing 12/12 with the flag gone.
-    """
-    lines = text.splitlines()
-    start = next(i for i, line in enumerate(lines) if "gcloud run deploy" in line)
-    argv: list[str] = []
-    i = start
-    while i < len(lines):
-        code = lines[i].split("#", 1)[0].rstrip()
-        if code.strip():
-            argv.append(code.strip())
-        continued = code.endswith("\\")
-        i += 1
-        if not continued:
-            break
-    return argv
-
-
-def test_deploy_all_passes_env_secrets_and_sa_to_gcloud():
-    """Building the values and never expanding them is the classic defeat."""
-    argv = _gcloud_run_deploy_argv(DEPLOY_ALL.read_text(encoding="utf-8"))
-    assert len(argv) > 5, f"could not parse the gcloud invocation (got {argv})"
-    assert any('--set-env-vars="$BACKEND_ENV"' in arg for arg in argv), (
-        f"BACKEND_ENV never reaches gcloud. Parsed argv: {argv}"
-    )
-    assert any('"${SECRETS_FLAG[@]}"' in arg for arg in argv), (
-        f"SECRETS_FLAG is built but never passed. Parsed argv: {argv}"
-    )
-    assert any('"${SA_FLAG[@]}"' in arg for arg in argv), (
-        f"SA_FLAG is built but never passed. Parsed argv: {argv}"
-    )
-
-
-def test_deploy_all_layers_the_channel_sections_into_those_flags():
-    """Each section must be wired to ITS flag, not merely read.
-
-    Reading the secrets section into a variable nothing forwards is the
-    "documented but never passed" bug (bd polyglot-pdf-hvui4) one level up.
-    """
-    text = _live_text(DEPLOY_ALL)
-    assert 'BACKEND_ENV="$BACKEND_ENV,$CHANNEL_ENV"' in text, (
-        "deploy-all.sh reads SET_ENV_VARS but never appends it to BACKEND_ENV"
-    )
-    assert '[ -z "$BACKEND_SECRETS" ] && BACKEND_SECRETS="$CHANNEL_SECRETS"' in text, (
-        "deploy-all.sh reads SET_SECRETS but never feeds BACKEND_SECRETS, so "
-        "--set-secrets binds nothing for a channel that relies on the file"
-    )
-    assert (
-        '[ -z "$BACKEND_SERVICE_ACCOUNT" ] && BACKEND_SERVICE_ACCOUNT="$CHANNEL_SA"'
-        in text
-    ), (
-        "deploy-all.sh reads SERVICE_ACCOUNT but never feeds "
-        "BACKEND_SERVICE_ACCOUNT, so the revision runs as the Compute default"
-    )
-
-
-def test_an_empty_channel_env_section_is_refused():
-    """--set-env-vars REPLACES the block, so an empty file must not deploy.
-
-    Without this branch a channel file that lost its SET_ENV_VARS entries
-    would deploy the bare computed defaults -- every LINK_*, VERTEXAI and CORS
-    setting silently gone, with the deploy exiting 0.
-    """
-    text = _live_text(DEPLOY_ALL)
-    assert 'if [ -z "$CHANNEL_ENV" ]; then' in text, (
-        "deploy-all.sh does not refuse an empty SET_ENV_VARS section"
-    )
 
 
 # ---------------------------------------------------------------------------

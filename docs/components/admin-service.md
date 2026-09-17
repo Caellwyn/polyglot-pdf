@@ -21,6 +21,14 @@ registered on `deploy_routes.py`'s router AHEAD OF `GET
 swallow the literal `targets`/`promotable` segment. No new IAM grant, env
 var, or Firestore write.)*
 
+*Last updated: 2026-09-16 (bd `polyglot-pdf-oqtm7`, E4.6: `deploy-admin.sh`
+and `deploy-admin-console.sh` are thin Cloud Build trigger wrappers now -- the
+service's env, secrets and runtime identity come from
+`deploy/channels/admin.env` (which gains `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`,
+previously injected only by the wrapper), and the tagged-no-traffic sequence
+plus both console sites are build targets. No route, gate or wire shape
+changed.)*
+
 *Last updated: 2026-09-15 (bd polyglot-pdf-tb3kp, E4.3 -- deploy trigger
 route, Pub/Sub build-status webhook, and the `deployments` collection.
 POST/GET `/admin/deploys` + GET `/admin/deploys/{deploy_id}`
@@ -330,10 +338,10 @@ ImportError degrades to the same documented shape (`reachable: false` /
 backend base URLs come
 from a new admin-service-only env var, `BACKEND_URLS_JSON` -- despite the
 name, its WIRE FORMAT is `"channel=url;channel=url"`, not literal JSON:
-`deploy-admin.sh` builds it via two `gcloud run services describe` calls
-(the same mechanism `deploy-all.sh` uses for `VITE_WS_URL`) and appends it
-to `BACKEND_EXTRA_ENV`, which rides inside `deploy-all.sh`'s own
-comma-joined `--set-env-vars` block -- a literal JSON object's `,` between
+`cloudbuild.yaml`'s `admin-service-deploy-tagged` step builds it via two
+`gcloud run services describe` calls (the same mechanism the frontend targets
+use for `VITE_WS_URL`) and appends it to the env block it passes to
+`gcloud run deploy`, which is comma-joined -- a literal JSON object's `,` between
 key/value pairs would be silently split apart there, the same reason
 `CORS_EXTRA_ORIGINS` is semicolon-separated rather than comma-separated. A
 channel with no entry in `BACKEND_URLS_JSON` reads `configured: false`,
@@ -558,8 +566,8 @@ live, and nothing in `backend/` may reach it.
 
 One root `Dockerfile` builds both packages; which ASGI app a container
 actually serves is a RUNTIME choice, not a build-time one --
-`deploy-all.sh` builds with `gcloud builds submit --tag`, which cannot pass
-a build arg.
+which app a container serves is a per-SERVICE fact, not a per-image one, so
+freezing it at image-build time would need one image per service.
 
 - `Dockerfile`'s `CMD` is `uvicorn ${APP_MODULE:-backend.main:app} --host
   0.0.0.0 --port ${PORT} --no-access-log`. Unset or empty resolves to the public backend
@@ -569,11 +577,12 @@ a build arg.
   resolves it (`os.getenv("APP_MODULE") or DEFAULT_APP_MODULE"`), so the
   admin service's own `/health` reports the true running module even when
   `APP_MODULE` is set but empty.
-- `deploy-admin.sh` sets `APP_MODULE=admin_backend.main:app` (plus
-  `BACKEND_SERVICE_NAME=polyglot-admin`, `BACKEND_SERVICE_ACCOUNT=admin-
-  backend-sa@...`) ahead of the SAME `deploy-all.sh --backend` the public
-  channels use. No other caller sets `APP_MODULE`, so `deploy-staging.sh` /
-  `deploy-demo.sh` / `backend/deploy-new.sh` are unaffected.
+- `deploy/channels/admin.env` sets `APP_MODULE=admin_backend.main:app` (plus
+  `CORS_EXTRA_ORIGINS`, the three OIDC caller identities, and
+  `SERVICE_ACCOUNT=admin-backend-sa@...`), read by the `admin-service` build
+  target. The public channels' own files set
+  `APP_MODULE=backend.main:app`, so no channel depends on the Dockerfile's
+  fallback.
 - Full contract, including the pin tests, is Surface contract 12 in
   [technical_guide.md](../technical_guide.md).
 
@@ -926,17 +935,17 @@ there is no same-origin Hosting rewrite in front of it (unlike the main
 app's `/api/**` rewrite). `admin_backend/main.py`'s `CORSMiddleware`
 allowlist carries the console's and the main app's dev-server localhost
 ports (3002 for the console, mirroring the editor's 3001) plus, at deploy
-time, `deploy-admin.sh`'s `ADMIN_CORS_ORIGINS` -- both admin Hosting sites'
+time, `deploy/channels/admin.env`'s `CORS_EXTRA_ORIGINS` -- both admin Hosting sites'
 `.web.app` and `.firebaseapp.com` domains, and both channels' app origins
 (the main app's future firm-manager pages call this service too), via
 `parse_extra_origins` (`backend/config.py`).
 
-## Deploying the service: `deploy-admin.sh`
+## Deploying the service: the `admin-service` build target
 
-Builds on `deploy-all.sh`'s backend stage with
-`BACKEND_SERVICE_NAME=polyglot-admin`,
-`BACKEND_SERVICE_ACCOUNT=admin-backend-sa@...`,
-`APP_MODULE=admin_backend.main:app`, and `BACKEND_NO_TRAFFIC_TAG=candidate`.
+`deploy-admin.sh` is a thin wrapper that runs the `admin-service` Cloud Build
+trigger at the current commit (bd `polyglot-pdf-oqtm7`); the build does the
+work, reading its env, secrets and runtime identity from
+`deploy/channels/admin.env`.
 
 **Why tagged-no-traffic, unlike `deploy-staging.sh`/`deploy-demo.sh`.**
 There is ONE admin service backing BOTH channels' data -- a bad deploy would
@@ -945,9 +954,9 @@ no cheap staging Cloud Run service to rehearse against first the way the
 public backend has. So every admin deploy lands as a Cloud Run revision with
 `--no-traffic --tag candidate`, gets curled at ITS OWN stable tagged URL's
 `/health`, and only on a 200 receives traffic via
-`gcloud run services update-traffic --to-latest`. A failing health check
-aborts before any traffic shifts; the previously-live revision keeps
-serving throughout. Full mechanism (URL construction, the aborting
+`gcloud run services update-traffic --to-latest`. A failing health check fails
+that build step, so the traffic shift never runs and the previously-live
+revision keeps serving throughout. Full mechanism (URL construction, the aborting
 condition) is Surface contract 12 in
 [technical_guide.md](../technical_guide.md); the doctrine framing (why this
 counts as this service's OWN staging tier) is in
@@ -1159,9 +1168,9 @@ one.
   `NO_ADMIN_ACCESS:` wire prefix, the same idiom the schema editor's
   `NO_EDITOR_ACCESS_PREFIX` uses.
 - **`VITE_ADMIN_API_BASE_URL`:** the admin service's own Cloud Run URL,
-  resolved at DEPLOY time by `deploy-admin-console.sh`, the same way
-  `deploy-editor.sh` resolves the public backend's URL for the schema
-  editor. Distinct from `VITE_API_BASE_URL` -- the console never calls the
+  resolved at BUILD time by the `admin-console-*` targets' own
+  `admin-console-resolve-url` step, the same way the `editor` target resolves
+  the public backend's URL for the schema editor. Distinct from `VITE_API_BASE_URL` -- the console never calls the
   public backend.
 - **Auth project:** the SAME Firebase project as the voice app and the
   schema editor (`admin-console/.env.hosted`'s `VITE_FIREBASE_*` match
@@ -1175,9 +1184,10 @@ one.
 
 ## Deploying the console: candidate site, then live
 
-`deploy-admin-console.sh` (no flag) builds and deploys to
-`polyglot-admin-candidate`; `deploy-admin-console.sh --live` deploys the
-SAME build to `polyglot-admin-demo`, the site every admin actually uses. An
+`deploy-admin-console.sh` (no flag) runs the `admin-console-candidate` target,
+which deploys to `polyglot-admin-candidate`; `deploy-admin-console.sh --live`
+runs `admin-console`, deploying the SAME commit to `polyglot-admin-demo`, the
+site every admin actually uses. An
 unrecognized argument is fatal (never silently falls through to the
 candidate deploy while printing a success banner).
 

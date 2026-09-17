@@ -387,25 +387,50 @@ def test_uptime_checks_probe_health_not_the_root_path():
         "the uptime checks do not probe /health")
 
 
-def test_uptime_check_service_names_match_the_deploy_scripts():
-    """The three service names are the ones the deploy scripts actually use.
+def test_uptime_check_service_names_match_the_deployed_services():
+    """The three service names are the ones the deploy pipeline actually uses.
 
-    Derived from those scripts, not from a copy here: a rename on either side
+    Derived from the build, not from a copy here: a rename on either side
     otherwise leaves a check monitoring a service that no longer exists,
     which reads as a permanent outage or a permanent silence depending on
     which way it broke.
     """
     text = _script_text()
-    deploy_all = (REPO_ROOT / "deploy-all.sh").read_text(encoding="utf-8")
-    deploy_staging = (REPO_ROOT / "deploy-staging.sh").read_text(
-        encoding="utf-8")
+    # cloudbuild.yaml is where the service names live now: the bash wrappers
+    # became thin Cloud Build triggers (bd polyglot-pdf-oqtm7), so the build's
+    # own `gcloud run deploy` calls are the only place a service is named.
+    build = (REPO_ROOT / "cloudbuild.yaml").read_text(encoding="utf-8")
 
-    assert 'BACKEND_SERVICE_NAME:-polyglot-backend}' in deploy_all, (
-        "deploy-all.sh's default backend service name changed")
-    assert 'ADMIN_SERVICE_NAME:-polyglot-admin}' in deploy_all, (
-        "deploy-all.sh's default admin service name changed")
-    assert 'STAGING_SERVICE_NAME="polyglot-backend-staging"' in deploy_staging, (
-        "deploy-staging.sh's service name changed")
+    # The COMPLETE set of Cloud Run services the build deploys, derived from
+    # every channel arm plus every literal `gcloud run deploy <name>` -- not a
+    # first-match lookup. The channel-to-service mapping is spelled out in
+    # more than one step, so a guard that stopped at the first occurrence
+    # would pass while a later arm named a service no uptime check monitors
+    # (verified: renaming the second occurrence went green before this).
+    arms = set(
+        re.findall(r'^\s*\w+\)\s*SERVICE="([^"]+)" ;;$', build, flags=re.M)
+    )
+    # Command lines only: a `# ... gcloud run deploy --service-account ...`
+    # prose comment is not a deploy, and counting it would wedge this guard on
+    # a word from an explanation.
+    literals = {
+        match.group(1)
+        for line in build.splitlines()
+        if not line.strip().startswith("#")
+        for match in [re.match(r"\s*gcloud run deploy ([\w-]+)", line)]
+        if match
+    }
+    deployed = arms | literals
+    assert deployed == {
+        "polyglot-backend",
+        "polyglot-backend-staging",
+        "polyglot-admin",
+    }, (
+        "cloudbuild.yaml deploys {} -- the uptime checks below monitor a "
+        "fixed set of three services, so a rename or a new service leaves one "
+        "unmonitored (a permanent silence) or monitors one that no longer "
+        "exists (a permanent outage)".format(sorted(deployed))
+    )
 
     for name in ("polyglot-backend", "polyglot-backend-staging",
                  "polyglot-admin"):
