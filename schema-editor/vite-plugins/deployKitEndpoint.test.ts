@@ -171,14 +171,26 @@ describe('handleDeploy: guards that run before any spawn', () => {
 
 describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET default (bd polyglot-pdf-d7hy, polyglot-pdf-n2awd)', () => {
   // The plugin always passes FORM_KITS_BUCKET explicitly when it spawns
-  // deploy-form-kit.sh (see handleDeploy's env block), and deploy-demo.sh /
-  // deploy-production.sh both export it explicitly before delegating to
-  // deploy-all.sh -- so every script's OWN bare `${FORM_KITS_BUCKET:-...}`
-  // default only matters for a bare CLI run with no env var set. If any two
-  // of them disagree, "unset" silently means a DIFFERENT bucket depending on
-  // which entry point ran -- exactly the d7hy hazard, and exactly how
-  // deploy-all.sh's own default was missed in the first round (bd n2awd:
-  // the original version of this test checked only deploy-form-kit.sh).
+  // deploy-form-kit.sh (see handleDeploy's env block). deploy-production.sh
+  // also carries an explicit export of the prod bucket (pinned by the
+  // sibling test below), but that line is unreachable: the script's own
+  // dead-script guard unconditionally `exit 1`s before ever reaching it, so
+  // it is source text this test still checks, not a live path. So each
+  // remaining script's OWN bare `${FORM_KITS_BUCKET:-...}` default only
+  // matters for a bare CLI run with no env var set. If any two of them
+  // disagree, "unset" silently means a DIFFERENT bucket depending on which
+  // entry point ran -- exactly the d7hy hazard, and exactly how
+  // deploy-all.sh's own (now-removed) default was missed in the first round
+  // (bd n2awd: the original version of this test checked only
+  // deploy-form-kit.sh).
+  //
+  // deploy-all.sh no longer belongs in this list: bd polyglot-pdf-oqtm7
+  // (E4.6) moved its deploy logic to Cloud Build, so it no longer assigns
+  // FORM_KITS_BUCKET at all -- the real bucket for a Cloud Build form-kits
+  // upload is cloudbuild.yaml's `form-kits-upload` step, which computes
+  // `BUCKET="$PROJECT_ID-form-kits"` directly with no env-var indirection to
+  // check parity against. Removed here rather than restored in
+  // deploy-all.sh, which no longer runs deploy steps locally at all.
   //
   // This reads the actual script text rather than hand-copying each default,
   // so editing any ONE of them without the others fails here instead of
@@ -194,7 +206,6 @@ describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET
   const SCRIPTS_WITH_BARE_DEFAULTS = [
     '../../scripts/deploy-form-kit.sh',
     '../../scripts/pull-form-kits.sh',
-    '../../deploy-all.sh',
   ];
 
   it.each(SCRIPTS_WITH_BARE_DEFAULTS)(
