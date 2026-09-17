@@ -628,3 +628,80 @@ def test_every_sql_placeholder_has_a_corresponding_sed_substitution():
             sorted(substituted_placeholders), sorted(declared_placeholders)
         )
     )
+
+
+
+def test_python_probe_checks_the_real_dependency_not_a_bare_run():
+    """bd polyglot-pdf-vzvio cross-surface review round 5: a candidate that
+    merely RUNS (`-c pass`) is not enough -- telemetry_bq_setup.py imports
+    google-cloud-bigquery, a backend/requirements.txt dependency, not a
+    stdlib one. Reproduced directly on the maintainer's machine: `python`
+    passes a bare `-c pass` probe but has no google-cloud-bigquery
+    installed, so the script aborted with "ModuleNotFoundError: No module
+    named 'google'" before the dataset was even created.
+    Mutation: revert the probe body back to `-c "pass"` -- red (this test
+    fails because the probe would then accept ANY runnable interpreter,
+    including one without the library)."""
+    text = _script_text()
+    assert 'import google.cloud.bigquery' in text, (
+        "find_telemetry_python's probe does not check for "
+        "google.cloud.bigquery -- a bare `-c pass` accepts any runnable "
+        "interpreter, including one missing the dependency the script "
+        "actually needs")
+    assert '-c "pass"' not in text, (
+        "the old bare `-c \"pass\"` probe is still present -- it must be "
+        "replaced by the dependency-checking probe, not left alongside it")
+
+
+def test_python_candidates_try_backend_venv_before_bare_python():
+    """bd polyglot-pdf-vzvio cross-surface review round 5: the repo's other
+    operator script with a real backend/.venv dependency
+    (scripts/audit/infra_posture.sh) puts its venv candidates FIRST, ahead
+    of bare python3/python/py, precisely because a bare `python` on the
+    operator's PATH commonly lacks the library that lives only in the venv.
+    Mutation: reorder the default candidate list so a bare python3/python/py
+    comes before the backend/.venv candidates -- red (this regex requires
+    the venv candidates to appear first in the default list)."""
+    text = _script_text()
+    match = re.search(
+        r'for cand in \$\{TELEMETRY_PYTHON_CANDIDATES:-(.*?)\}; do',
+        text,
+    )
+    assert match, "find_telemetry_python's default candidate list is missing"
+    defaults = match.group(1)
+    venv_pos = defaults.find("backend/.venv")
+    bare_python_pos = defaults.find("python3 python py")
+    assert venv_pos != -1, "no backend/.venv candidate in the default list"
+    assert bare_python_pos != -1, (
+        "no bare 'python3 python py' fallback tail in the default list")
+    assert venv_pos < bare_python_pos, (
+        "backend/.venv candidates must come BEFORE the bare python3/python/"
+        "py fallbacks in the default candidate list, matching "
+        "infra_posture.sh's _python_candidates ordering")
+
+
+def test_python_candidates_support_an_explicit_override():
+    """An operator (or CI) must be able to point at a known-good
+    interpreter without editing the script, matching infra_posture.sh's
+    INFRA_POSTURE_PYTHON override. Mutation: remove
+    TELEMETRY_PYTHON_OVERRIDE from the default-candidate expression -- red."""
+    text = _script_text()
+    assert "TELEMETRY_PYTHON_OVERRIDE" in text, (
+        "no TELEMETRY_PYTHON_OVERRIDE escape hatch for an operator to pin "
+        "a known-good interpreter")
+
+
+def test_repo_root_is_computed_before_the_python_probe_runs():
+    """REPO_ROOT (used to build the backend/.venv candidate paths) must be
+    computed BEFORE find_telemetry_python is invoked, not after -- an
+    empty/undefined REPO_ROOT at call time would silently produce a bare
+    "backend/.venv/..." candidate relative to the shell's cwd instead of the
+    repo root. Mutation: move the REPO_ROOT assignment to after the
+    `if ! PYTHON_BIN=$(find_telemetry_python)` call -- red."""
+    text = _script_text()
+    repo_root_pos = text.find('REPO_ROOT="$(cd "$SCRIPT_DIR/.."')
+    probe_call_pos = text.find("if ! PYTHON_BIN=$(find_telemetry_python)")
+    assert repo_root_pos != -1, "REPO_ROOT is not computed in the script"
+    assert probe_call_pos != -1, "find_telemetry_python is never invoked"
+    assert repo_root_pos < probe_call_pos, (
+        "REPO_ROOT must be assigned before find_telemetry_python is called")

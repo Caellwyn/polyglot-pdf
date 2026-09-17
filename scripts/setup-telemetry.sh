@@ -105,17 +105,38 @@ BILLING_EXPORT_TABLE=$2
 DATASET="polyglot_telemetry"
 SINK_NAME="polyglot-telemetry-sink"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Resolve a python interpreter for scripts/telemetry_bq_setup.py (location
-# derivation + the dataset-scoped IAM grants below). python3 is not
-# guaranteed on Windows Git Bash, so fall back to python, then the py
-# launcher -- same probe as deploy-form-kit.sh's find_manifest_python, and
-# for the same reason: a candidate must actually RUN (-c pass), not merely
-# exist, since Windows ships a python3 App-Execution-Alias stub that
-# `command -v` finds but that cannot execute.
+# derivation + the dataset-scoped IAM grants below). That script imports
+# google-cloud-bigquery, a backend/requirements.txt dependency, NOT a
+# stdlib one -- a candidate that merely RUNS (-c pass) is not enough, since
+# the library is installed only inside backend/.venv on a normal checkout.
+# Reproduced directly on the maintainer's machine (bd polyglot-pdf-vzvio,
+# cross-surface review round 5): `python` passes a bare `-c pass` probe but
+# has no google-cloud-bigquery installed, so telemetry_bq_setup.py aborted
+# with "ModuleNotFoundError: No module named 'google'" -- BEFORE the
+# dataset, sink, or grants were even created, i.e. strictly earlier and
+# broader than the bug this bead was filed to fix.
+#
+# Mirrors scripts/audit/infra_posture.sh's _python_candidates -- the
+# repo's other operator script with a real dependency on backend/.venv --
+# which puts an explicit override and the venv candidates FIRST, ahead of
+# bare python3/python/py: an operator running this from a plain shell,
+# without having activated the venv, still gets a working interpreter. A
+# worktree (which has no backend/.venv of its own -- CLAUDE.md scar #3)
+# just falls through those candidates to the bare ones, same as
+# infra_posture.sh.
+#
+# The probe checks `import google.cloud.bigquery`, not just `-c pass`, so
+# a python that merely runs but lacks the dependency is correctly skipped
+# instead of being selected and failing deeper into the script.
 find_telemetry_python() {
     local cand
-    for cand in ${TELEMETRY_PYTHON_CANDIDATES:-python3 python py}; do
-        if "$cand" -c "pass" >/dev/null 2>&1; then
+    for cand in ${TELEMETRY_PYTHON_CANDIDATES:-${TELEMETRY_PYTHON_OVERRIDE:-} "$REPO_ROOT/backend/.venv/Scripts/python.exe" "$REPO_ROOT/backend/.venv/bin/python" backend/.venv/Scripts/python.exe backend/.venv/bin/python python3 python py}; do
+        [ -z "$cand" ] && continue
+        if "$cand" -c "import google.cloud.bigquery" >/dev/null 2>&1; then
             echo "$cand"
             return 0
         fi
@@ -124,10 +145,9 @@ find_telemetry_python() {
 }
 
 if ! PYTHON_BIN=$(find_telemetry_python); then
-    echo -e "${RED}[ERROR]${NC} No python interpreter found (tried: ${TELEMETRY_PYTHON_CANDIDATES:-python3 python py}) -- cannot run scripts/telemetry_bq_setup.py; aborting."
+    echo -e "${RED}[ERROR]${NC} No python interpreter with google-cloud-bigquery installed found (tried: TELEMETRY_PYTHON_OVERRIDE, ${REPO_ROOT}/backend/.venv/{Scripts,bin}/python{.exe,}, backend/.venv/{Scripts,bin}/python{.exe,}, python3, python, py) -- cannot run scripts/telemetry_bq_setup.py; aborting. Activate backend/.venv first, or set TELEMETRY_PYTHON_OVERRIDE=<path> to an interpreter with google-cloud-bigquery installed."
     exit 1
 fi
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # LOCATION: derived from the billing dataset when BILLING_EXPORT_TABLE is
 # given (bd polyglot-pdf-vzvio) -- BigQuery refuses to create a view

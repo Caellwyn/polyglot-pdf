@@ -95,10 +95,19 @@ def fake_bigquery(monkeypatch):
     imports lazily (TableReference, DatasetReference, AccessEntry) with real
     upstream classes (safe -- they do no network I/O to construct) and
     patches telemetry_bq_setup._client to return a _FakeClient the test
-    configures."""
-    client_holder = {}
+    configures.
 
-    def _fake_client():
+    The fake records every `project` it was called with
+    (`client_holder["project_calls"]`) so tests can pin that _client is
+    always invoked with the operator's --project (bd polyglot-pdf-vzvio
+    cross-surface review round 5: production code used to call a bare
+    bigquery.Client() with no project=, silently depending on an ambient
+    default project instead of the one the caller already supplied on the
+    command line)."""
+    client_holder = {"project_calls": []}
+
+    def _fake_client(project):
+        client_holder["project_calls"].append(project)
         return client_holder.get("client")
 
     monkeypatch.setattr(telemetry_bq_setup, "_client", _fake_client)
@@ -106,6 +115,7 @@ def fake_bigquery(monkeypatch):
     def _set(client):
         client_holder["client"] = client
 
+    _set.project_calls = client_holder["project_calls"]
     return _set
 
 
@@ -548,3 +558,89 @@ def test_grant_dataset_role_fails_loudly_when_dataset_missing(fake_bigquery, cap
     )
     assert exit_code == 1
     assert "ERROR" in capsys.readouterr().err
+
+
+
+# ---------------------------------------------------------------------------
+# _client project passthrough (bd polyglot-pdf-vzvio cross-surface review
+# round 5)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_location_passes_project_through_to_client(fake_bigquery):
+    """_client must be constructed with the operator's --project, not left
+    to resolve an ambient default project on its own -- the whole point of
+    this script is to stop depending on the operator's ambient environment.
+    Mutation: change the resolve-location call site back to a bare
+    `_client()` -- red (fake_bigquery's fake raises TypeError on a bare
+    call now that _client takes a required `project` argument, and even if
+    it did not, project_calls would be empty instead of ["polyglot-demo"])."""
+    client = _FakeClient(
+        datasets={("billing-proj", "billing_ds"): _FakeDataset(location="US")},
+    )
+    fake_bigquery(client)
+    exit_code = telemetry_bq_setup.main(
+        [
+            "resolve-location",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--billing-table",
+            "billing-proj.billing_ds.gcp_billing_export_resource_v1_ABC123",
+        ]
+    )
+    assert exit_code == 0
+    assert fake_bigquery.project_calls == ["polyglot-demo"]
+
+
+def test_grant_dataset_role_passes_project_through_to_client(fake_bigquery):
+    """Same passthrough contract as resolve-location, for the other
+    subcommand. Mutation: change the grant-dataset-role call site back to a
+    bare `_client()` -- red."""
+    dataset = _FakeDataset(location="US", access_entries=[])
+    client = _FakeClient(datasets={("polyglot-demo", "polyglot_telemetry"): dataset})
+    fake_bigquery(client)
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.dataViewer",
+        ]
+    )
+    assert exit_code == 0
+    assert fake_bigquery.project_calls == ["polyglot-demo"]
+
+
+def test_client_constructs_with_explicit_project_not_ambient_default():
+    """Unmocked unit test of _client itself (not the CLI): it must call
+    bigquery.Client(project=...) rather than a bare bigquery.Client(),
+    which would fall back to google.auth.default()'s ambient project
+    lookup. Confirmed on a real install: a bare bigquery.Client() with no
+    resolvable ambient project raises
+    "EnvironmentError: Project was not passed and could not be determined
+    from the environment." -- reintroducing the exact ambient-environment
+    dependency this script exists to remove, even though --project was
+    already given on the command line.
+    Mutation: change `bigquery.Client(project=project)` back to
+    `bigquery.Client()` inside telemetry_bq_setup._client -- red (this test
+    asserts the constructor call received project= explicitly via a spy)."""
+    import unittest.mock as mock
+
+    calls = []
+
+    class _SpyClient:
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+    with mock.patch("google.cloud.bigquery.Client", _SpyClient):
+        client = telemetry_bq_setup._client("polyglot-demo")
+
+    assert client is not None
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == ()
+    assert kwargs.get("project") == "polyglot-demo", (
+        "bigquery.Client() was not called with project='polyglot-demo' -- "
+        "got args={!r} kwargs={!r}".format(args, kwargs)
+    )

@@ -338,3 +338,91 @@ not separately verified.
   (13 passed) all green. Tree left clean.
 
 Review outcomes recorded in the closeout ping.
+
+## Fresh-eyes round 5 (cross-surface review)
+
+The round-5 outer review returned `GAPS-FOUND (2)`, both reproduced directly
+on the maintainer's machine (not reasoned from code alone) and both
+pre-dating this bead's own diff in the sense that the CLI helper this bead
+added exposed them for the first time under real use.
+
+- **ADOPTED (fixed) -- finding 1, the actual blocker:**
+  `find_telemetry_python` (`scripts/setup-telemetry.sh`) selected any
+  interpreter that could run `-c "pass"`, but `telemetry_bq_setup.py`
+  requires `google-cloud-bigquery`, which is installed only in
+  `backend/.venv`. On the maintainer's machine `python3` is the Windows
+  Store alias stub (fails the probe), and `python` passes the probe but
+  lacks the library -- so `resolve-location` printed
+  `ERROR: google-cloud-bigquery is not importable: No module named 'google'`
+  and the script aborted via `set -e` BEFORE the dataset, sink, or either
+  grant existed, i.e. strictly earlier and broader than the `bq`
+  IAM-policy-binding failure this bead was filed to fix in the first place.
+  Fixed by mirroring `scripts/audit/infra_posture.sh`'s `_python_candidates`
+  -- the repo's other operator script with a real `backend/.venv`
+  dependency -- which puts an explicit override and the venv candidates
+  FIRST, ahead of bare `python3`/`python`/`py`. Two changes: (a) the probe
+  itself now checks `import google.cloud.bigquery`, not a bare `-c "pass"`,
+  so a runnable-but-dependency-less interpreter is correctly skipped instead
+  of selected and failing deeper into the script; (b) the default candidate
+  list now tries `TELEMETRY_PYTHON_OVERRIDE`, then
+  `$REPO_ROOT/backend/.venv/{Scripts,bin}/python{.exe,}` (both the
+  computed-`REPO_ROOT`-relative and bare-relative forms, matching
+  `infra_posture.sh`'s own belt-and-suspenders pair), before falling back to
+  bare `python3 python py`. `REPO_ROOT` (previously computed only for
+  `SCRIPT_DIR`) is now computed before the probe runs, not after. Four new
+  tests in `tests/test_setup_telemetry_script.py` pin: the dependency-aware
+  probe body, the venv-before-bare-python default ordering, the
+  `TELEMETRY_PYTHON_OVERRIDE` escape hatch, and that `REPO_ROOT` is assigned
+  before `find_telemetry_python` is ever called. All four were
+  mutation-verified (reverting the probe to `-c "pass"`, reordering the
+  default candidate list to put bare `python3 python py` first, and each
+  turns its corresponding test red; restored after).
+- **ADOPTED (fixed) -- finding 2:** `telemetry_bq_setup.py`'s `_client()`
+  constructed `bigquery.Client()` with no `project=`, discarding the
+  `--project` the operator already gave on the command line and instead
+  depending on `google.auth.default()`'s ambient project lookup -- which
+  raises `EnvironmentError` outright with no ambient project configured
+  (confirmed directly: `ERROR: could not construct a BigQuery client:
+  Project was not passed and could not be determined from the
+  environment.`), and on Windows can shell out to `gcloud.cmd config
+  get-value project` to find one, an extra subprocess this script has no
+  reason to risk when the caller already supplied the project.
+  `scripts/audit/log_pii_sweep.py`'s `_bq_client` -- the repo's other
+  operator-machine BigQuery client -- already makes this exact argument and
+  passes `project=project` explicitly. Fixed by changing `_client()` to
+  `_client(project)` (both call sites now pass `args.project`) and
+  `bigquery.Client()` to `bigquery.Client(project=project)`. Every existing
+  test monkeypatches `_client` wholesale (the scar-#7 shape: a mock proves
+  the code CALLS something, not that the call is well-formed), so this was
+  never exercised before; the `fake_bigquery` fixture now records every
+  `project` value `_client` was called with
+  (`fake_bigquery.project_calls`), and three new tests pin the passthrough:
+  `resolve-location` calls `_client` with the operator's `--project`,
+  `grant-dataset-role` does too, and an unmocked spy on
+  `google.cloud.bigquery.Client` confirms `_client` itself passes
+  `project=` explicitly rather than relying on the SDK's ambient lookup. All
+  three mutation-verified (reverting either call site to a bare `_client()`
+  turns the fixture's own `TypeError` into the failure signal for the first
+  two -- the fake now requires a `project` argument -- and reverting
+  `bigquery.Client(project=project)` back to `bigquery.Client()` turns the
+  spy test red).
+- **NOT RE-OPENED (pre-existing, filed separately, no action needed here):**
+  finding 3 (`admin_backend/services/bigquery_reports.py`'s comments at
+  lines 41-44 and 56-59 stating the telemetry dataset is `us-central1`,
+  stale now that the location is derived rather than hard-coded) was filed
+  as `polyglot-pdf-pvpqk`, and finding 4 (two more stale `bq
+  add-iam-policy-binding` mechanism comments outside this bead's diff --
+  `test_admin_sa_iam_envelope.py`'s `EXPECTED_ADMIN_SA_ROLES` comment and
+  `infra_posture.sh:369-371`) was filed as `polyglot-pdf-0cnk5`. Neither has
+  runtime impact and neither is a behavioral change, so per the closeout
+  doctrine (only a behavioral fix voids a review clear) they stay as filed
+  beads rather than being folded into this round's diff.
+- **Verification:** `tests/test_telemetry_bq_setup.py` (17 passed, including
+  the 3 new project-passthrough tests), `tests/test_setup_telemetry_script.py`
+  (29 passed, including the 4 new interpreter-probe tests), and
+  `admin_backend/tests/unit/test_admin_sa_iam_envelope.py` (13 passed) all
+  green from this worktree after the fix. Full backend suite (3871 passed,
+  195 skipped, 4 deselected) and root suite (2026 passed, 94 skipped) also
+  re-run clean from this worktree -- same backend count as round 4, 7 more
+  in the root suite (unrelated tests added elsewhere on `dev` since round 4
+  was merged). Tree left clean.

@@ -94,14 +94,29 @@ _IAM_ROLE_TO_LEGACY_ACCESS_ROLE = {
 }
 
 
-def _client():
-    """A google.cloud.bigquery.Client, or None with a message on stderr.
+def _client(project):
+    """A google.cloud.bigquery.Client scoped to `project`, or None with a
+    message on stderr.
 
     Lazy-imported like every other BigQuery call site in this repo
     (admin_backend/services/bigquery_reports.py, scripts/audit/
     log_pii_sweep.py) so importing this module never requires the library
     or ambient credentials to be resolvable -- only actually calling a
     subcommand does.
+
+    `project` MUST be passed through explicitly (both call sites pass
+    args.project, the --project the caller already gave on the command
+    line) rather than left for bigquery.Client() to resolve on its own.
+    Without it, a bare bigquery.Client() falls back to
+    google.auth.default()'s ambient project lookup, which (a) raises
+    EnvironmentError outright when no ambient project is configured --
+    reintroducing the exact ambient-environment dependency this script
+    exists to remove -- and (b) on Windows can shell out to
+    `gcloud.cmd config get-value project` to find one
+    (google/auth/_cloud_sdk.py's get_project_id), an extra subprocess this
+    script has no reason to risk when the caller already supplied the
+    project. scripts/audit/log_pii_sweep.py's _bq_client makes the same
+    argument for the same reason.
     """
     try:
         from google.cloud import bigquery
@@ -112,7 +127,7 @@ def _client():
         )
         return None
     try:
-        return bigquery.Client()
+        return bigquery.Client(project=project)
     except Exception as exc:  # noqa: BLE001 -- surfaced to the operator, not swallowed
         print(
             "ERROR: could not construct a BigQuery client: {}".format(exc),
@@ -124,7 +139,7 @@ def _client():
 def _resolve_location(args: argparse.Namespace) -> int:
     from google.cloud import bigquery
 
-    client = _client()
+    client = _client(args.project)
     if client is None:
         return 1
 
@@ -239,7 +254,7 @@ def _resolve_location(args: argparse.Namespace) -> int:
 def _grant_dataset_role(args: argparse.Namespace) -> int:
     from google.cloud import bigquery
 
-    client = _client()
+    client = _client(args.project)
     if client is None:
         return 1
 
