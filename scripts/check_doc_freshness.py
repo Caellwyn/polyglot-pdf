@@ -883,6 +883,37 @@ def check_doc_conventions(
                 "move the content to dev_journal.md and drop the section",
             ))
             break
+        # Check 3: a STACKED *Last updated:* chain -- more than one such
+        # line in the doc (bd polyglot-pdf-e1l5f). Checks 1+2 catch a
+        # chain shaped like "Previously:"/"Prior:"/"Earlier:" prose or a
+        # history-section heading, but neither one matches a doc that
+        # instead grows a NEW *Last updated:* paragraph per bead and
+        # never removes the old ones -- docs/components/admin-service.md
+        # accumulated EIGHTEEN before this check existed, and
+        # docs/components/config-deployment.md EIGHT, with zero
+        # PREVIOUSLY_CHAIN_RE / HISTORY_HEADING_RE hits between them: the
+        # same current-state-only violation in a third shape neither
+        # existing regex was built to see. A tier-1/tier-2 doc must
+        # carry exactly ONE *Last updated:* line -- the
+        # freshness-staleness half of this script
+        # (LAST_UPDATED_RE.search, via parse_last_updated_ts) already
+        # only ever reads the FIRST match, so a second, third, ... stamp
+        # was silently invisible to staleness tracking too, not just to
+        # the convention scan.
+        stamp_lines = [
+            text.count("\n", 0, m.start()) + 1
+            for m in LAST_UPDATED_RE.finditer(text)
+        ]
+        if len(stamp_lines) > 1:
+            findings.append((
+                doc,
+                f"lines {', '.join(str(n) for n in stamp_lines)}: "
+                f"{len(stamp_lines)} stacked '*Last updated:*' stamps -- "
+                "a doc must carry exactly ONE; fold every behavioural "
+                "fact worth keeping into the body as present-tense "
+                "current state and drop the rest (the per-bead journal "
+                "entry already has the history)",
+            ))
     return findings
 
 

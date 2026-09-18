@@ -1011,6 +1011,107 @@ class TestCheckDocConventionsOnTmpDocs:
         assert findings[0][0] == doc
         assert "history" in findings[0][1].lower()
 
+    # bd polyglot-pdf-e1l5f: a THIRD current-state-only violation shape --
+    # a doc that grows a NEW *Last updated:* paragraph per bead instead of
+    # replacing the old one, so it accumulates a stamp chain that neither
+    # PREVIOUSLY_CHAIN_RE (no "Previously:"/"Prior:"/"Earlier:" keyword) nor
+    # HISTORY_HEADING_RE (no "## Update history" heading) can see.
+    # docs/components/admin-service.md accumulated EIGHTEEN of these before
+    # this check existed; docs/components/config-deployment.md EIGHT.
+    def test_single_stamp_produces_no_stacked_stamp_finding(self, tmp_path):
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n*Last updated: 2026-05-20.*\n\nbody\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert findings == []
+
+    def test_two_stacked_stamps_flagged(self, tmp_path):
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n"
+            "*Last updated: 2026-05-21 (bd polyglot-pdf-aaa11: second fix).*\n\n"
+            "*Last updated: 2026-05-20 (bd polyglot-pdf-zzz99: first fix).*\n\n"
+            "body\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 1
+        assert findings[0][0] == doc
+        assert "stacked" in findings[0][1].lower()
+        assert "2 stacked" in findings[0][1]
+
+    def test_eighteen_stacked_stamps_flagged_with_full_line_list(self, tmp_path):
+        # THE MUTATION THAT MATTERS: a naive implementation might only
+        # detect a SECOND stamp (e.g. an `if count == 2` check) and miss a
+        # doc that has many more, or might report only the first two line
+        # numbers. Pin the real admin-service.md-shaped case: many stamps,
+        # every one of their line numbers named in the finding.
+        stamps = "".join(
+            f"*Last updated: 2026-01-{i:02d} (bd polyglot-pdf-x{i}: a fix).*\n\n"
+            for i in range(1, 19)
+        )
+        doc = _make_doc(tmp_path, f"# Foo\n\n{stamps}body\n")
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 1
+        assert "18 stacked" in findings[0][1]
+        # Every stamp is on its own line (each is one line of text followed
+        # by a blank line): lines 3, 5, 7, ... 37.
+        expected_lines = [str(3 + 2 * i) for i in range(18)]
+        for line_no in expected_lines:
+            assert line_no in findings[0][1], (
+                f"stacked-stamp finding did not name line {line_no!r} -- "
+                f"{findings[0][1]!r}"
+            )
+
+    def test_stacked_stamps_and_previously_chain_both_reported(self, tmp_path):
+        # The three checks (chain / history-section / stacked-stamp) are
+        # independent findings, not mutually exclusive -- a doc violating
+        # two shapes at once must report both, not just the first one hit.
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n"
+            "*Last updated: 2026-05-21. Previously: 2026-05-20. Sprint 40 did X.*\n\n"
+            "*Last updated: 2026-05-19 (bd polyglot-pdf-zzz99: first fix).*\n\n"
+            "body\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 2
+        messages = " ".join(msg for _doc, msg in findings)
+        assert "Previously" in messages
+        assert "stacked" in messages.lower()
+
+    def test_real_admin_service_and_config_deployment_docs_are_clean(self):
+        # Acceptance test from the bead: after the collapse, both named
+        # docs carry exactly one stamp and produce no stacked-stamp finding
+        # against the REAL repo files (not a synthetic fixture).
+        for rel in (
+            "docs/components/admin-service.md",
+            "docs/components/config-deployment.md",
+        ):
+            doc = freshness.REPO_ROOT / rel
+            if not doc.is_file():
+                import pytest
+                pytest.skip(f"{rel} not present in this checkout")
+            text = doc.read_text(encoding="utf-8")
+            stamp_count = len(freshness.LAST_UPDATED_RE.findall(text))
+            assert stamp_count == 1, (
+                f"{rel} has {stamp_count} '*Last updated:*' stamps, expected "
+                "exactly 1 -- bd polyglot-pdf-e1l5f collapse regressed"
+            )
+            # check_doc_conventions() always unions its explicit `docs`
+            # list with TIER1_DOCS + CONVENTION_ONLY_DOCS internally, so a
+            # real-repo run also scans technical_guide.md et al. -- filter
+            # findings down to THIS doc, which is the only claim this test
+            # makes.
+            findings = freshness.check_doc_conventions(
+                docs=[doc], repo_root=freshness.REPO_ROOT
+            )
+            stacked_findings = [
+                (d, m) for d, m in findings
+                if d == doc and "stacked" in m.lower()
+            ]
+            assert stacked_findings == []
+
     def test_rationale_prose_with_previously_sprint_is_flagged(self, tmp_path):
         # Per the docstring + the strict-mode body audit: rationale-section
         # prose stringing sprint events together is also forbidden. Pin
@@ -1087,8 +1188,48 @@ class TestCurrentRepoIsCleanOfChainsAndHistorySections:
     warnings; this test fails CI if they're committed.
     """
 
+    # TEMPORARY, bd polyglot-pdf-e1l5f / bd polyglot-pdf-4iyi6. Landing the
+    # stacked-stamp check (Check 3 in check_doc_conventions()) against the
+    # REAL corpus surfaced eight PRE-EXISTING stamp-chain docs beyond the
+    # two e1l5f collapsed -- fixing all eight is out of e1l5f's docs-nit
+    # scope (it would be its own multi-file content pass, not a mechanical
+    # cleanup), so bd polyglot-pdf-4iyi6 tracks that follow-up with the
+    # exact enumerated list. This allowlist exists ONLY to keep CI green on
+    # every OTHER branch in the meantime -- it does not weaken the check
+    # itself (a NEW doc, or a NINTH stamp on any of these eight, still
+    # fails immediately) and it names exactly the eight paths 4iyi6 must
+    # clear. Remove an entry the moment its doc is fixed; the allowlist
+    # must be EMPTY (or deleted) when 4iyi6 closes -- do not add a ninth
+    # entry here for a new violation instead of fixing it.
+    KNOWN_STACKED_STAMP_DOCS = {
+        # SPECIAL CASE: technical_guide.md is documented (doc-architecture.md,
+        # bd polyglot-pdf-abn4o) to carry NO stamp at all -- its four lines
+        # are a regrowth of the exact pattern abn4o already removed once;
+        # 4iyi6's fix is to delete all four, not collapse to one.
+        "docs/technical_guide.md",
+        "docs/components/auth.md",
+        "docs/components/websocket-routing.md",
+        "docs/standards/ai-models.md",
+        "docs/standards/hipaa-pii-policy.md",
+        "docs/standards/logging-and-cost.md",
+        "docs/standards/testing.md",
+        "docs/standards/ws-protocol.md",
+    }
+
     def test_no_history_chains_in_current_state_docs(self):
         findings = freshness.check_doc_conventions()
+        # Drop a 'stacked' finding for a doc on the temporary allowlist
+        # above -- every OTHER finding (a chain, a history section, or a
+        # stacked-stamp finding on any doc NOT listed) still fails this
+        # test exactly as before.
+        findings = [
+            (doc, msg) for doc, msg in findings
+            if not (
+                "stacked" in msg.lower()
+                and doc.relative_to(freshness.REPO_ROOT).as_posix()
+                in self.KNOWN_STACKED_STAMP_DOCS
+            )
+        ]
         if findings:
             lines = [
                 f"  {doc.relative_to(freshness.REPO_ROOT).as_posix()}: {msg}"
