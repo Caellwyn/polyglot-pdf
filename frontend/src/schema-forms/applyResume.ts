@@ -18,6 +18,7 @@
  * from before the save join up with the ones after it.
  */
 import type { FieldValue } from './types/schema';
+import { readFieldEntryWithAlias } from './utils/fieldValue';
 import type { SchemaFormState } from './state/schemaFormState';
 
 export interface ResumePayload {
@@ -105,7 +106,25 @@ function firstIncompleteSection(
   for (const section of schema.sections ?? []) {
     const unanswered = (section.fields ?? []).some((fieldId) => {
       if (typeof fieldId !== 'string') return false;
-      const entry = values[fieldId] as { value?: unknown } | undefined;
+      // Read through the []-alias (bd polyglot-pdf-db1en).
+      //
+      // The drifting side is the SECTION LIST, not the payload. Resume keys are
+      // bracket-stable by construction -- pdf_fill_routes.py derives every one
+      // from the schema's own `field.get("id")` verbatim (only the WIDGET name
+      // uses a suffix fallback). What can disagree is a `section.fields` entry
+      // versus the `field.id` it names, so the id this loop iterates may carry
+      // the opposite bracket form from the key the payload actually used.
+      //
+      // A bare read then misses a real answer, the group counts as UNANSWERED,
+      // and this function lands the returning client on an EARLIER section than
+      // they reached -- the precise "saved at question 60, restarted at
+      // question 1" outcome the note above says this function exists to
+      // prevent. (Causal direction corrected in cross-surface review, bd
+      // polyglot-pdf-gob5v; the read itself was already right.)
+      const entry = readFieldEntryWithAlias(
+        values as Record<string, FieldValue>,
+        fieldId
+      ) as { value?: unknown } | undefined;
       const value = entry?.value;
       return value === undefined || value === null || value === '';
     });

@@ -16,7 +16,7 @@ import type { FormSchema, FormSection, FormField, FormPart, FieldValue, Validato
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 import { isBlankFieldValue, isConfirmedButBlank } from "../utils/fieldValue";
-import { readFieldEntryWithAlias, findFieldWithAlias } from "../utils/fieldValue";
+import { readFieldEntryWithAlias, findFieldWithAlias, sectionDeclaresField } from "../utils/fieldValue";
 import { loadOnboardingState, clearOnboardingState } from "../onboardingStorage";
 import { clearClientLinkToken } from "../../shared/sessionCredential";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
@@ -809,14 +809,8 @@ export class SchemaFormStateManager {
    */
   static findSectionIdForField(state: SchemaFormState, fieldId: string): string | null {
     if (!fieldId) return null;
-    const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
-    const aliasId = baseId + '[]';
     for (const section of state.schema.sections) {
-      if (
-        section.fields.includes(fieldId) ||
-        section.fields.includes(baseId) ||
-        section.fields.includes(aliasId)
-      ) {
+      if (sectionDeclaresField(section, fieldId)) {
         return section.id;
       }
     }
@@ -1120,7 +1114,16 @@ export class SchemaFormStateManager {
 
     // Extract ALL fields for this section (no filtering)
     // Dependency checking is handled by computeNextField() and backend validation
-    const sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
+    //
+    // []-alias-aware membership (bd polyglot-pdf-db1en), matching the five
+    // sibling section.fields resolutions widened by bd polyglot-pdf-una9. A
+    // section.fields entry and the matching field.id can carry DIFFERENT
+    // bracket forms of the same field, and an exact `includes(f.id)` then
+    // silently DROPS it -- so the legacy handshake sends the model a section
+    // schema missing that field, and getJITHandshakePayload's
+    // no-unfilled-field fallback picks sectionSchema.fields[0], which can now
+    // be the wrong field.
+    const sectionFields = schema.fields.filter(f => sectionDeclaresField(section, f.id));
 
     return {
       ...schema,
@@ -1631,7 +1634,15 @@ export class SchemaFormStateManager {
     identifier: string
   ): string | null {
     if (!identifier) return null;
-    const exact = state.schema.fields.find(f => f.id === identifier);
+    // []-alias-aware (bd polyglot-pdf-mwgim). The model sends this identifier,
+    // and it drops or adds the trailing `[]` on a checkbox-group id
+    // inconsistently (bd polyglot-pdf-5k52) -- so an exact-only match misses a
+    // field that plainly exists, and the id then falls through to the fuzzy
+    // spoken_name / name / alias matching below, which rescues it only if one
+    // of those happens to equal the raw identifier. When none does,
+    // switch_field is refused as 'unknown_field' for a field the form is
+    // showing.
+    const exact = findFieldWithAlias(state.schema.fields, identifier);
     if (exact) return exact.id;
     const needle = identifier.trim().toLowerCase();
     if (!needle) return null;

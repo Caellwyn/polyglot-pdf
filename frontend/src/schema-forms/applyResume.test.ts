@@ -120,6 +120,33 @@ describe('applyResume', () => {
     expect(next.currentSectionId).not.toBe(SECTIONS[0].id);
   });
 
+  it('counts a []-alias-drifted answer as ANSWERED, not as a reason to go back', () => {
+    // bd polyglot-pdf-db1en. The resume payload is read off an uploaded PDF,
+    // whose keys need not carry the same bracket form as section.fields -- a
+    // checkbox group answered as `race` against a section listing `race[]` (or
+    // vice versa) is the same answer either way.
+    //
+    // With an exact-key read, the drifted entry looks MISSING, the section
+    // counts as incomplete, and the client is sent BACK to it -- the precise
+    // "saved at question 60, restarted at question 1" outcome applyResume.ts's
+    // own note says this function exists to prevent. Drive the FIRST section,
+    // answering every field but writing ONE of them under the opposite bracket
+    // form, and assert we still advance.
+    const answered: Record<string, string> = {};
+    for (const fieldId of SECTIONS[0].fields) answered[fieldId] = 'x';
+
+    // Re-key one answer to its bracket variant, leaving the value identical.
+    const drifted = SECTIONS[0].fields[0];
+    const variant = drifted.endsWith('[]') ? drifted.slice(0, -2) : drifted + '[]';
+    delete answered[drifted];
+    answered[variant] = 'x';
+
+    const next = applyResume(baseState(), { fieldValues: answered, linkJtis: [] });
+
+    expect(next.currentSectionId).toBe(SECTIONS[1].id);
+    expect(next.currentSectionId).not.toBe(SECTIONS[0].id);
+  });
+
   it('stays put when every field is answered', () => {
     const answered: Record<string, string> = {};
     for (const section of SECTIONS) {

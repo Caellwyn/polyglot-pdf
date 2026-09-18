@@ -283,22 +283,35 @@ from the model. `handleSwitchFieldRequest`'s own `fields.find` is legitimately
 exact-only, because it re-reads by the schema's OWN id AFTER
 `resolveFieldForNavigation` has resolved the model's identifier.
 
-**But `resolveFieldForNavigation` itself is NOT alias-aware** (bd
-`polyglot-pdf-mwgim`, pre-existing): its first lookup is an exact
-`fields.find(f => f.id === identifier)` on a model-supplied identifier, and its
-fallbacks match `spoken_name` / `name` / `spoken_aliases` -- none of which is the
-bracket variant. So a `switch_field` naming `race` against a schema declaring
-`race[]` resolves only if a spoken name happens to match. Do not read the
-exact-only lookup in `handleSwitchFieldRequest` as evidence that the navigation
-path as a whole handles the alias.
+`resolveFieldForNavigation` resolves through the alias too (bd
+`polyglot-pdf-mwgim`), which is what makes that precondition hold. Its exact
+match was previously alias-blind, so a `switch_field` naming `race` against a
+schema declaring `race[]` fell through to the fuzzy `spoken_name` / `name` /
+`spoken_aliases` matching and resolved only if one of those happened to equal
+the raw identifier -- otherwise the model was told `unknown_field` about a
+question sitting visible on screen.
 
 That set is pinned mechanically by `schema-forms/utils/fieldAliasLookup.test.ts`,
 which scans source for exact-only lookups on a model-supplied id and asserts the
-complete allowlist -- so a new one fails CI rather than a review round. Note the
-same fallback applies to ids read off **`section.fields`**, whose bracket form can
-differ from the `field.id` it names: an exact-only match there dropped a required
-group from `isSectionValid` (the section reported VALID with the answer missing)
-and dropped a field's spoken name from `getPreviousSpokenNames`.
+complete allowlist -- so a new one fails CI rather than a review round.
+
+**`section.fields` is the SECOND shape of the same hazard, and it needs its own
+helper** (bd `polyglot-pdf-db1en`). A section's `fields` array holds field IDS,
+and an entry there can carry a different bracket form from the `field.id` it
+names -- so asking "does this section declare this field" with an exact
+`includes` answers NO for a field that plainly belongs to it. Use
+**`sectionDeclaresField(section, id)`** (same module). Every consumer of that
+question fails SILENTLY: `isSectionValid` reported a section VALID with a
+required group missing, `generateSectionManifest` dropped the field from the
+payload the model is given, `extractSectionFields` dropped it from the legacy
+handshake's section schema, `getPreviousSpokenNames` dropped its spoken name,
+and `applyResume`'s `firstIncompleteSection` counted a drifted answer as
+unanswered and sent a returning client BACK to a section they had finished.
+
+Because it is a membership test rather than a `.find`, the lookup scan above
+structurally cannot see it -- which is how `extractSectionFields` survived the
+sweep that widened its five siblings. It has its OWN tree-wide scan in the same
+test file.
 
 `handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
 wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.

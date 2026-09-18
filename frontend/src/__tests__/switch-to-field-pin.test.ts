@@ -94,6 +94,57 @@ describe('switch_to_field pin (bd jnjj.36)', () => {
     expect(SchemaFormStateManager.resolveFieldForNavigation(s, 'field gamma')).toBe('c')
   })
 
+  it('resolves a []-alias-drifted id the fuzzy fallback CANNOT rescue', () => {
+    // bd polyglot-pdf-mwgim. The model drops/adds the trailing [] on a
+    // checkbox-group id inconsistently (bd 5k52), so switch_field can name the
+    // variant the schema does not declare.
+    //
+    // NON-VACUITY IS THE WHOLE POINT HERE. resolveFieldForNavigation has a
+    // fuzzy second pass over spoken_name / name / spoken_aliases, so if the
+    // group's names happened to equal the drifted identifier, this test would
+    // pass with the alias fix REVERTED -- proving nothing. So the fixture
+    // deliberately gives the group names that share no string with its id:
+    // id `race[]`, spoken_name `ethnicity`, name `Race Or Ethnicity`. The ONLY
+    // route from 'race' to that field is the []-alias fallback.
+    const withGroup = baseState()
+    withGroup.schema = {
+      ...schema,
+      sections: [
+        { id: 'sec1', label: 'One', order: 1, fields: ['a', 'b'] },
+        { id: 'sec2', label: 'Two', order: 2, fields: ['c', 'd', 'race[]'] },
+      ],
+      fields: [
+        ...schema.fields,
+        {
+          id: 'race[]',
+          name: 'Race Or Ethnicity',
+          spoken_name: 'ethnicity',
+          type: 'checkbox_group',
+          section_id: 'sec2',
+        },
+      ],
+    } as unknown as FormSchema
+
+    // Schema declares `race[]`; the model sends the bare `race`.
+    expect(
+      SchemaFormStateManager.resolveFieldForNavigation(withGroup, 'race')
+    ).toBe('race[]')
+
+    // And the exact id still resolves, unchanged.
+    expect(
+      SchemaFormStateManager.resolveFieldForNavigation(withGroup, 'race[]')
+    ).toBe('race[]')
+  })
+
+  it('resolves a bracket ADDED to a plain id, the other drift direction', () => {
+    // The mirror case: schema declares `c`, the model sends `c[]`. `c`'s own
+    // names ('field gamma' / 'Field C' / 'the third one') do not equal 'c[]',
+    // so again only the alias fallback can resolve it.
+    expect(
+      SchemaFormStateManager.resolveFieldForNavigation(baseState(), 'c[]')
+    ).toBe('c')
+  })
+
   it('returns null for an unknown identifier or empty input', () => {
     expect(SchemaFormStateManager.resolveFieldForNavigation(baseState(), 'nope')).toBeNull()
     expect(SchemaFormStateManager.resolveFieldForNavigation(baseState(), '')).toBeNull()

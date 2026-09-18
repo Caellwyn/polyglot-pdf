@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { findFieldWithAlias } from './fieldValue';
+import { findFieldWithAlias, sectionDeclaresField } from './fieldValue';
 import type { FormField } from '../types/schema';
 
 const field = (id: string, extra: Partial<FormField> = {}): FormField =>
@@ -67,12 +67,18 @@ describe('findFieldWithAlias', () => {
  * fails here instead of shipping as the next una9.
  *
  * The scan runs TREE-WIDE over frontend/src, and the allowlist below is the
- * complete set of sites that stay exact-only -- each with the reason. Note an
- * allowlist entry means "we have looked at this line", NOT "this line is safe":
- * one entry is a genuinely-safe post-resolution read, the other is a KNOWN
- * PRE-EXISTING GAP (bd polyglot-pdf-mwgim) listed so this guard does not fail
- * on a defect it did not introduce. Adding an entry is a deliberate act that
- * must carry a justification and say which of the two it is.
+ * complete set of sites that stay exact-only -- each with the reason it is
+ * safe. Adding an entry is a deliberate act that must carry a justification.
+ * (An entry may also record a KNOWN GAP rather than a safe site, so this guard
+ * does not fail on a pre-existing defect it did not introduce -- say which in
+ * the comment. There are none today: the one such entry, bd
+ * polyglot-pdf-mwgim's navigation resolver, is now FIXED and its entry removed.)
+ *
+ * SECOND SHAPE, same hazard (bd polyglot-pdf-db1en): a section's `fields` array
+ * holds field IDS, and an entry there can carry a different bracket form from
+ * the `field.id` it names. That is a MEMBERSHIP test, not a `.find`, so the
+ * lookup scan above cannot see it -- it is guarded separately at the bottom of
+ * this file via sectionDeclaresField.
  */
 describe('the set of exact-only schema lookups on a model-supplied id', () => {
   // Scanned TREE-WIDE, not over a hand-listed pair of files. Limiting the scan
@@ -95,15 +101,6 @@ describe('the set of exact-only schema lookups on a model-supplied id', () => {
     // fallback here would be dead code. This is genuinely SAFE.
     'const field = this.state.schema.fields.find(f => f.id === fieldId)!;':
       'post-resolution read of a schema-owned id (resolveFieldForNavigation)',
-    // KNOWN GAP, not a safe site -- tracked by bd polyglot-pdf-mwgim. Listed so
-    // this guard stays green on a PRE-EXISTING defect it did not introduce.
-    // resolveFieldForNavigation's first lookup is exact-only on a
-    // model-supplied identifier, and its fallbacks match spoken_name / name /
-    // spoken_aliases -- none of which is the bracket variant. So a switch_field
-    // naming `race` against a schema declaring `race[]` resolves only if a
-    // spoken name coincidentally matches. Remove this entry when mwgim lands.
-    'const exact = state.schema.fields.find(f => f.id === identifier);':
-      'KNOWN GAP (bd polyglot-pdf-mwgim): navigation resolver is not alias-aware',
 
     // findFieldWithAlias's OWN implementation -- it IS the alias fallback, so
     // routing it through itself would be infinite recursion.
@@ -180,6 +177,128 @@ describe('the set of exact-only schema lookups on a model-supplied id', () => {
     // A stale allowlist silently re-opens the hole it was excusing: if the
     // allowlisted line is edited or deleted, the entry must go too, or it sits
     // there ready to excuse a DIFFERENT line that happens to match it later.
+    const srcRoot = join(__dirname, '..', '..');
+    const all = sourceFiles(srcRoot)
+      .map((rel) => readFileSync(join(srcRoot, rel), 'utf-8'))
+      .join('\n');
+    for (const allowed of Object.keys(ALLOWED)) {
+      expect(all, `stale ALLOWED entry: ${allowed}`).toContain(allowed);
+    }
+  });
+});
+
+/**
+ * THE SECOND SHAPE: section.fields MEMBERSHIP (bd polyglot-pdf-db1en).
+ *
+ * A section's `fields` array holds field IDS, and an entry there can carry a
+ * different bracket form from the `field.id` it names. Asking "does this
+ * section declare this field" with an exact `includes` therefore silently
+ * answers NO for a field that plainly belongs to it.
+ *
+ * This is a membership test, not a `.find`, so the lookup scan above cannot see
+ * it -- which is exactly how extractSectionFields survived the una9 sweep that
+ * widened its five siblings. Guarded here on its own terms.
+ */
+describe('sectionDeclaresField', () => {
+  const section = { fields: ['name', 'race[]'] };
+
+  it('matches an exact entry', () => {
+    expect(sectionDeclaresField(section, 'name')).toBe(true);
+    expect(sectionDeclaresField(section, 'race[]')).toBe(true);
+  });
+
+  it('matches across the bracket drift, in BOTH directions', () => {
+    // section declares `race[]`, the field/caller says `race`
+    expect(sectionDeclaresField(section, 'race')).toBe(true);
+    // section declares `name`, the caller says `name[]`
+    expect(sectionDeclaresField(section, 'name[]')).toBe(true);
+  });
+
+  it('does not match a field the section does not declare', () => {
+    expect(sectionDeclaresField(section, 'other')).toBe(false);
+    expect(sectionDeclaresField(section, 'other[]')).toBe(false);
+  });
+
+  it('is safe on absent input', () => {
+    expect(sectionDeclaresField(null, 'name')).toBe(false);
+    expect(sectionDeclaresField(undefined, 'name')).toBe(false);
+    expect(sectionDeclaresField({}, 'name')).toBe(false);
+    expect(sectionDeclaresField(section, '')).toBe(false);
+  });
+});
+
+describe('the set of exact-only section.fields membership tests', () => {
+  // Same tree-wide discipline as the lookup scan: an exact
+  // `section.fields.includes(...)` answers "is this field in this section", and
+  // every consumer of that question degrades SILENTLY on a wrong NO (a section
+  // schema missing a field, a resume landing on the wrong section, a section
+  // validating complete with an answer missing). Route them through
+  // sectionDeclaresField.
+  // `?.` is matched as well as `.` (bd polyglot-pdf-a6cl2). The first version
+  // of this regex required a plain dot, so the ONE live optional-chain site --
+  // `s.fields?.includes(fieldId)` in webFormConnection's other_section gate --
+  // was invisible to the guard written to pin this exact set. That is the
+  // recurring shape of these misses: a guard enumerates over a CONVENTION, and
+  // the member that escapes is the one written slightly differently.
+  const MEMBERSHIP_RE = /\.fields\s*\??\s*\.includes\(/;
+
+  const ALLOWED: Record<string, string> = {
+    // sectionDeclaresField's OWN implementation -- it IS the alias-aware
+    // membership test, so routing it through itself would recurse.
+    'section.fields.includes(fieldId) ||': 'the helper implementing the test',
+    'section.fields.includes(baseId) ||': 'the helper implementing the test',
+    'section.fields.includes(aliasId)': 'the helper implementing the test',
+  };
+
+  function sourceFiles(root: string): string[] {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === 'dist') continue;
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) continue;
+        out.push(relative(root, full));
+      }
+    };
+    walk(root);
+    return out;
+  }
+
+  it('every section.fields membership test is alias-aware, or allowlisted', () => {
+    const srcRoot = join(__dirname, '..', '..');
+    const offenders: string[] = [];
+
+    for (const rel of sourceFiles(srcRoot)) {
+      readFileSync(join(srcRoot, rel), 'utf-8')
+        .split(/\r?\n/)
+        .forEach((line, i) => {
+          if (!MEMBERSHIP_RE.test(line)) return;
+          const trimmed = line.trim();
+          // Skip COMMENT lines. Prose describing this hazard (including the
+          // helper's own docstring, which quotes the bad shape to explain it)
+          // is not an occurrence of it, and flagging prose would make the only
+          // way to document the rule be to stop documenting it.
+          if (/^(\/\/|\*|\/\*)/.test(trimmed)) return;
+          if (ALLOWED[trimmed]) return;
+          offenders.push(`${rel}:${i + 1}  ${trimmed}`);
+        });
+    }
+
+    expect(
+      offenders,
+      'Exact `section.fields.includes(...)` membership test. A section.fields ' +
+        'entry can carry a different bracket form from the field.id it names ' +
+        '(bd polyglot-pdf-db1en), so this silently answers NO for a field that ' +
+        'does belong to the section. Use sectionDeclaresField, or allowlist the ' +
+        'line above with the reason it is safe.'
+    ).toEqual([]);
+  });
+
+  it('the allowlist itself is live -- every entry still exists in source', () => {
     const srcRoot = join(__dirname, '..', '..');
     const all = sourceFiles(srcRoot)
       .map((rel) => readFileSync(join(srcRoot, rel), 'utf-8'))
