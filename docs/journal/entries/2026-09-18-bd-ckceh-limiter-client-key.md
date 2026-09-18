@@ -56,9 +56,20 @@ decides nothing.
 
 - `test_rate_limit.py` (14) and the PII guard: green; mutation (the pair
   key restored): 2 red.
-- Full suite: SUITE_RESULT
+- Full suite (both services + repo-level): 6639 passed, 289 skipped.
 
-REVIEW_RECORD
+## Review record
+
+Fresh-eyes (Sonnet): two gaps -- the connection bucket was still described
+as "shared by everyone behind one Hosting egress" in the module docstring
+and `config-deployment.md` while this very change had measured the egress
+rotating; both rewritten (per request for browser traffic; the direct
+path's backstop). Opus cross-surface round 1: one gap -- the Hosting-append
+premise stated as fact on three tier-1/2 surfaces while the fix made it
+solely load-bearing; each now says it is assumed, what a wrong assumption
+means (under-limiting, never over-limiting) and that a refusal at the 31st
+call is the evidence. Round 2: NO-GAPS; its two nits folded in (the
+shared-budget comment in `config.py`; the signup row's log wording).
 
 ## Files
 
