@@ -34,7 +34,7 @@ import structlog
 
 from backend.utils.dev_file_logger import DEV_LOGGING_ENABLED, get_dev_logger
 
-_log = structlog.get_logger().bind(module="dev_console_routes")
+_log = structlog.get_logger(module="dev_console_routes")
 
 router = APIRouter(tags=["dev"])
 

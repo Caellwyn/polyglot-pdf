@@ -41,7 +41,7 @@ from backend.services.kit_gates import (
     require_visible as _require_visible,
 )
 
-_log = structlog.get_logger().bind(module="form_kit_routes")
+_log = structlog.get_logger(module="form_kit_routes")
 
 router = APIRouter(prefix="/api", tags=["form-kits"])
 

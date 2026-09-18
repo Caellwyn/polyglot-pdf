@@ -130,7 +130,7 @@ from admin_backend.services.admin_auth import (
 )
 from backend.services import links_store
 
-_log = structlog.get_logger().bind(module="admin_link_routes")
+_log = structlog.get_logger(module="admin_link_routes")
 
 router = APIRouter()
 

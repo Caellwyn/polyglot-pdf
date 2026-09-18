@@ -40,7 +40,7 @@ from backend.utils.confirmation_logger import resolve_edition_marker
 # never contains ".." or a separator. ONE definition serving both the client
 # and editor archive routes (qfyxr fresh-eyes: the regex was duplicated
 # byte-for-byte across the two route files).
-_log = structlog.get_logger().bind(module="kit_gates")
+_log = structlog.get_logger(module="kit_gates")
 
 MARKER_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 

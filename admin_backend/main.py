@@ -86,8 +86,14 @@ import structlog
 
 load_dotenv()
 
-from backend.config import get_settings, parse_extra_origins
+# FIRST project import, deliberately (bd polyglot-pdf-65jeu). Importing
+# backend.utils.logging applies structlog's processor chain at ITS import
+# time, so any logger created -- or line emitted -- while the modules below
+# are still being imported already renders as JSON through the PII-safe
+# exception processor. Pinned by tests/test_structlog_json_output.py.
 from backend.utils.logging import configure_logging
+
+from backend.config import get_settings, parse_extra_origins
 from backend.utils.validation_errors import install_validation_error_handler
 
 from admin_backend.routes import (
@@ -122,7 +128,7 @@ def _active_app_module() -> str:
 
 configure_logging()
 
-_log = structlog.get_logger().bind(module="admin_main")
+_log = structlog.get_logger(module="admin_main")
 
 app = FastAPI(title="Polyglot Admin API", version="0.1.0")
 # A 422 must never echo the request body back (bd polyglot-pdf-wfgjz);

@@ -18,7 +18,7 @@ from backend.services.ai_context import render_field_guidance
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
 
-_log = structlog.get_logger().bind(module="callback_handler")
+_log = structlog.get_logger(module="callback_handler")
 _dev_log = get_dev_logger()
 
 # Consecutive wholly-unknown update_form_fields rejections at which the tool

@@ -59,7 +59,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="identity_labels")
+_log = structlog.get_logger(module="identity_labels")
 
 # Per-uid TTL: long enough that a console session's several page loads in a
 # row all hit the cache, short enough that a changed/deleted account is not

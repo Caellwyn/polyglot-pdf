@@ -224,30 +224,38 @@ EXCEPTION_LOGGING_SITES = (
 )
 
 
-def configure_logging() -> None:
-	"""Configure stdlib logging and structlog.
+# ============================================================================
+# Structlog configuration -- applied at IMPORT time (bd polyglot-pdf-65jeu)
+# ============================================================================
+#
+# THE BUG THIS PREVENTS. `structlog.get_logger().bind(module=...)` at module
+# level instantiates the bound logger against whatever configuration exists AT
+# THAT MOMENT. Both apps import their route and service modules BEFORE calling
+# configure_logging(), so every such logger froze structlog's DEFAULT
+# processors -- ConsoleRenderer plus the stock exception renderer -- for the
+# life of the process. Two consequences, both observed live on staging
+# 2026-09-18: those lines reached Cloud Logging as textPayload, so the
+# telemetry sink (which filters on jsonPayload.event_type) never saw
+# ledger_export or form_session_ended; and the exception MESSAGE was rendered
+# by ConsoleRenderer, bypassing pii_safe_exception_processor entirely.
+#
+# THE TWO-PART FIX. (1) Every module-level logger is now created bind-free as
+# `structlog.get_logger(module=...)`, which returns a lazy proxy that resolves
+# its configuration on the FIRST LOG CALL rather than at creation -- pinned as
+# a set by backend/tests/unit/test_error_shape.py. (2) The configuration is
+# applied HERE, at import of this module, so even a future early `.bind()`
+# binds the real processor chain rather than the console default. Part 2 makes
+# part 1 unnecessary for correctness and part 1 makes part 2 unnecessary; each
+# alone closes the hole, and keeping both means a regression in either does
+# not reopen it.
+#
+# WHY NOT ONLY PART 2. Import ORDER would then be load-bearing: any module that
+# imports structlog and binds before this module is first imported would still
+# freeze the default. Part 1 removes that ordering dependency outright.
 
-	Logging level can be controlled via LOG_LEVEL environment variable.
-	If not set, defaults to INFO.
-	"""
-	
-	# Get log level from environment or default to INFO
-	log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
-	log_level = getattr(logging, log_level_str, logging.INFO)
-	# A DEPLOYED instance (K_SERVICE is set by Cloud Run) never runs below
-	# INFO: DEBUG-level lines from this app and its libraries can carry
-	# request and response payloads, and no deployed use for them exists
-	# (bd polyglot-pdf-wfgjz). Local dev keeps LOG_LEVEL free.
-	if os.getenv("K_SERVICE") and log_level < logging.INFO:
-		log_level = logging.INFO
-	
-	# Configure stdlib logging
-	logging.basicConfig(level=log_level, format="%(message)s")
-	
-	# Ensure root logger level is set
-	logging.getLogger().setLevel(log_level)
-	
-	# Configure structlog - let stdlib logging handle level filtering
+
+def _configure_structlog() -> None:
+	"""Install the processor chain. Idempotent -- safe to call repeatedly."""
 	structlog.configure(
 		processors=[
 			structlog.processors.add_log_level,
@@ -273,6 +281,39 @@ def configure_logging() -> None:
 		wrapper_class=structlog.stdlib.BoundLogger,  # Use stdlib bound logger, not filtering one
 		cache_logger_on_first_use=True,
 	)
+
+
+_configure_structlog()
+
+
+def configure_logging() -> None:
+	"""Configure stdlib logging and structlog.
+
+	Logging level can be controlled via LOG_LEVEL environment variable.
+	If not set, defaults to INFO.
+	"""
+	
+	# Get log level from environment or default to INFO
+	log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+	log_level = getattr(logging, log_level_str, logging.INFO)
+	# A DEPLOYED instance (K_SERVICE is set by Cloud Run) never runs below
+	# INFO: DEBUG-level lines from this app and its libraries can carry
+	# request and response payloads, and no deployed use for them exists
+	# (bd polyglot-pdf-wfgjz). Local dev keeps LOG_LEVEL free.
+	if os.getenv("K_SERVICE") and log_level < logging.INFO:
+		log_level = logging.INFO
+	
+	# Configure stdlib logging
+	logging.basicConfig(level=log_level, format="%(message)s")
+	
+	# Ensure root logger level is set
+	logging.getLogger().setLevel(log_level)
+	
+	# Configure structlog - let stdlib logging handle level filtering.
+	# Already applied at IMPORT time by _configure_structlog() below; this
+	# re-application is idempotent and keeps configure_logging() honest for a
+	# caller (a test) that reconfigured structlog in between.
+	_configure_structlog()
 
 	# Define filter to suppress binary dumps
 	class _BinarySuppressFilter(logging.Filter):

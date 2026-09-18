@@ -57,7 +57,7 @@ import structlog
 from fastapi import Depends, Header, HTTPException
 from pydantic import BaseModel, model_validator
 
-_log = structlog.get_logger().bind(module="admin_auth")
+_log = structlog.get_logger(module="admin_auth")
 
 # The custom claim granting admin-console access. Boolean, per the plan
 # ("Admin service" gating): a person either holds full admin access or does

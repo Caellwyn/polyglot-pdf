@@ -70,7 +70,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from admin_backend.services import error_stats
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 
-_log = structlog.get_logger().bind(module="admin_ops_routes")
+_log = structlog.get_logger(module="admin_ops_routes")
 
 router = APIRouter()
 

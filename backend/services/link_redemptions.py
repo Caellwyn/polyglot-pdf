@@ -46,7 +46,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="link_redemptions")
+_log = structlog.get_logger(module="link_redemptions")
 
 COLLECTION = "link_redemptions"
 

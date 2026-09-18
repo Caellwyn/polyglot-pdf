@@ -116,7 +116,7 @@ from backend.utils.confirmation_logger import (
     resolve_edition_marker,
 )
 
-_log = structlog.get_logger().bind(module="editor_kit_routes")
+_log = structlog.get_logger(module="editor_kit_routes")
 
 router = APIRouter(prefix="/api/editor", tags=["editor-kits"])
 

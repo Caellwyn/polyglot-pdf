@@ -108,7 +108,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="credit_ledger")
+_log = structlog.get_logger(module="credit_ledger")
 
 FIRMS_COLLECTION = "firms"
 LEDGER_SUBCOLLECTION = "ledger"

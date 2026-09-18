@@ -63,7 +63,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from admin_backend.services import bigquery_reports
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 
-_log = structlog.get_logger().bind(module="admin_report_routes")
+_log = structlog.get_logger(module="admin_report_routes")
 
 router = APIRouter()
 

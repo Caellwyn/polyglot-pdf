@@ -35,7 +35,7 @@ import structlog
 from fastapi import Depends, Header, HTTPException
 from pydantic import BaseModel
 
-_log = structlog.get_logger().bind(module="editor_auth")
+_log = structlog.get_logger(module="editor_auth")
 
 # The custom claim carrying a person's editor role. Named for THIS surface so a
 # voice-app account cannot grant editor access by accident, and so a future

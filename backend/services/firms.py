@@ -65,7 +65,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="firms")
+_log = structlog.get_logger(module="firms")
 
 _FIRMS_COLLECTION = "firms"
 

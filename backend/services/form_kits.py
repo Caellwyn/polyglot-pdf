@@ -20,7 +20,7 @@ import structlog
 
 from backend.config import get_settings
 
-_log = structlog.get_logger().bind(module="form_kit_store")
+_log = structlog.get_logger(module="form_kit_store")
 
 # A schema/pdf filename is kit-CONTROLLED (it comes from metadata.json or
 # index.json), so it is untrusted at every layer that turns it into a path: the

@@ -124,7 +124,7 @@ from admin_backend.services import audit_log, identity_labels
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from backend.services import credit_ledger, firms, plans
 
-_log = structlog.get_logger().bind(module="admin_firm_routes")
+_log = structlog.get_logger(module="admin_firm_routes")
 
 router = APIRouter()
 
