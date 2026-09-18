@@ -565,27 +565,28 @@ def test_refund_export_line_carries_exactly_LEDGER_EXPORT_FIELDS(
 def test_the_refund_and_the_status_flip_commit_ATOMICALLY(fake_db):
     """If the joined links-status write could fail independently of the
     ledger write, a refund could credit the firm while leaving status=minted
-    -- and the very next sweep pass would refund it again. Proven by making
-    the joined write explode and checking NEITHER side landed.
+    -- and the very next sweep pass would refund it again. This test asserts
+    only the POSITIVE case: a single refund_expired_link() call lands BOTH
+    the ledger balance bump and the links-status flip (see the idempotency
+    test above for the companion "both must already be committed" half of
+    this property). It does NOT inject a failure to prove the negative case
+    (neither side lands if the joined write fails) -- that is deferred as
+    separate coverage, see bd polyglot-pdf-sw2lv.
 
-    Mutation: move the tx.set(links_ref, ...) call outside
-    _apply_entry_writes's extra_writes hook (e.g. call it directly after
-    _txn(db.transaction()) returns) -- it would then commit even when this
-    fixture's forced failure fires, and this test's balance/status assertions
-    would go red only if the failure injection itself still worked; instead
-    verify by reverting the extra_writes wiring to call _mark_refunded
-    OUTSIDE the transaction body and observing the entry still commits with
-    status left at minted. Verified 2026-09-08 by moving the tx.set call
-    after _txn(db.transaction())."""
+    Mutation: delete the tx.set(links_ref, ...) call inside
+    _mark_refunded_and_extra (_apply_entry_writes's extra_writes hook) so
+    the status flip never happens at all -- red, status stays "minted".
+    Verified 2026-09-17.
+
+    NOTE: this test does NOT catch relocating that same tx.set(...) call to
+    run directly on fake_db (outside the transaction, e.g. right after
+    _txn(db.transaction()) returns) instead of inside the hook -- this
+    fake_db's transaction has no rollback-on-exception simulation, so a
+    write applied straight to the store lands identically to one buffered
+    into tx and committed, and the test stays green either way. Confirmed
+    2026-09-17 by making that exact change."""
     _mint(fake_db, credit_cost=2, open_deadline=500)
 
-    # Force the joined write to fail by making the links doc's collection
-    # name resolve somewhere _apply_entry_writes's extra_writes cannot reach:
-    # simplest is to monkeypatch STATUS_REFUNDED to something that still
-    # writes fine -- so instead we assert the POSITIVE case atomically
-    # commits both, which is the same property from the other side (see the
-    # idempotency test above for the "both must already be committed"
-    # half). This test pins that BOTH fields are visible after ONE call.
     credit_ledger.refund_expired_link(
         fake_db, "jti-1", actor="system:sweep", now=1000.0)
 
