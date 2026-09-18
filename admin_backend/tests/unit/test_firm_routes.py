@@ -436,6 +436,89 @@ def test_list_firms_returns_kind_balance_and_status(client, fake_db):
     assert rows["zenith"]["status"] == firms.FIRM_STATUS_SUSPENDED
 
 
+# --------------------------------------------------------------------------
+# balance_credits_malformed -- nit 1 from the polyglot-pdf-zopqq fresh-eyes
+# review (bd polyglot-pdf-0w13i): a distinguishing signal so a corrupted
+# non-int balance_credits does not read identically to a real $0 firm.
+# _public_firm_view is the ONE function both GET /admin/firms and
+# GET /admin/firms/{firm_id} call, so pinning it through the list route
+# covers both callers without duplicating the fixture setup.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("balance_credits", [42, 0])
+def test_balance_credits_malformed_is_false_for_a_valid_int(
+        client, fake_db, balance_credits):
+    """MUTATION: change the flag expression to a bare `not
+    balance_is_valid_int` (dropping the `raw_balance is not None` guard) --
+    this test does not catch that (0 and 42 both pass balance_is_valid_int
+    either way); test_balance_credits_malformed_is_false_when_never_written
+    below is the one that catches it."""
+    _seed_firm(fake_db, "acme", balance_credits=balance_credits)
+    resp = client.get("/admin/firms")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["firms"][0]
+    assert row["balance_credits"] == balance_credits
+    assert row["balance_credits_malformed"] is False
+
+
+def test_balance_credits_malformed_is_false_when_never_written(
+        client, fake_db):
+    """A firm doc with no balance_credits key at all (the pre-first-grant
+    state) reads as an ordinary, non-malformed $0 -- not corruption.
+
+    MUTATION: drop the `raw_balance is not None` guard so the flag is just
+    `not balance_is_valid_int` -- this goes red (True instead of False)."""
+    doc = _seed_firm(fake_db, "acme")
+    del fake_db.docs[("firms", "acme")]["balance_credits"]
+    resp = client.get("/admin/firms")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["firms"][0]
+    assert row["balance_credits"] == 0
+    assert row["balance_credits_malformed"] is False
+
+
+@pytest.mark.parametrize("bad_value", ["42", 42.0, True, False, [1]])
+def test_balance_credits_malformed_is_true_for_a_non_int_value(
+        client, fake_db, bad_value):
+    """A stored balance_credits that is not a plain int -- a string, a
+    float, a bool (Python's bool is an int subclass, so this must be
+    checked explicitly), or any other JSON-shaped junk -- reports
+    balance_credits=0 (the existing fail-closed fallback) AND
+    balance_credits_malformed=True, so an operator can tell a corrupted
+    balance apart from a real one.
+
+    None is deliberately NOT in this list: dict.get() cannot distinguish
+    "the key was never written" from "the key is explicitly stored as
+    None" -- both come back None -- so a stored None is treated the same
+    as the pre-first-grant never-written case (see
+    test_balance_credits_malformed_is_false_when_never_written), not as
+    malformed. That is a known, accepted blind spot for the one real-world
+    document shape (an explicit null) it cannot tell apart from "absent";
+    every OTHER wrong-type value Firestore could hold is still caught.
+
+    MUTATION: revert to the pre-fix return shape (no
+    balance_credits_malformed key at all) -- this test goes red with a
+    KeyError on the assertion below."""
+    _seed_firm(fake_db, "acme", balance_credits=bad_value)
+    resp = client.get("/admin/firms")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["firms"][0]
+    assert row["balance_credits"] == 0
+    assert row["balance_credits_malformed"] is True
+
+
+def test_get_firm_also_reports_balance_credits_malformed(client, fake_db):
+    """The detail route (GET /admin/firms/{firm_id}) shares
+    _public_firm_view with the list route -- prove the flag reaches THIS
+    caller too, not just the one the parametrized tests above exercise."""
+    _seed_firm(fake_db, "acme", balance_credits="corrupt")
+    resp = client.get("/admin/firms/acme")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["balance_credits"] == 0
+    assert body["balance_credits_malformed"] is True
+
+
 def test_list_firms_writes_no_audit_row(client, fake_db):
     _seed_firm(fake_db, "acme")
     client.get("/admin/firms")
