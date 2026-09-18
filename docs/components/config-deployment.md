@@ -1,45 +1,8 @@
 # Config & deployment
 
+*Last updated: 2026-09-17 (bd `polyglot-pdf-e1l5f`: collapsed the eight stacked stamps this doc had accumulated into one -- every fact worth keeping was already present as current-state prose in the body below; see the per-bead journal entries for the history.)*
+
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
-
-*Last updated: 2026-09-17 (bd polyglot-pdf-wobtv: the "Deploy preflight" paragraph -- the dirty-tree check is scoped to TRACKED paths only (`--untracked-files=no`); untracked files are noted on stderr, not refused, since a Cloud Build trigger run fetches only the named commit and never sees them.)*
-
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review round 4: the ONE ENGINE claim is scoped to the `deploy-*.sh` wrappers and the admin console, and the two surviving LOCAL engines -- `npm run deploy:demo` and `scripts/deploy-form-kit.sh` -- are named as the ungated exceptions (bd polyglot-pdf-1qzr8 owns their fate); `--set-secrets` no longer claims a caller-side `BACKEND_SECRETS` override, which the bash engine took with it.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 3: the form-kits rows say what the target actually does -- it reads the BUILD's checkout, no kit is tracked there, so it cannot succeed and no wrapper selects it implicitly any more (bd polyglot-pdf-wm7ga owns the source question); the contractor round-trip note no longer claims a local pull feeds the next deploy.) (bd polyglot-pdf-oqtm7 outer cross-surface review round 2: the post-deploy reachability check is named by its module, `scripts/verify_service_reachable.py` -- the `verify_service_publicly_reachable()` bash function it replaced no longer exists in any file.) (bd polyglot-pdf-oqtm7 outer cross-surface review round: the Cloud Build SA's role list gains `roles/datastore.indexAdmin` -- the `firestore-rules` target's index half is not covered by `roles/firebaserules.admin` (rules only) or by `roles/datastore.user` (read only).) (bd polyglot-pdf-oqtm7, E4.6: every `deploy-*.sh` is
-now a THIN wrapper that runs Cloud Build triggers -- the inline `gcloud run
-deploy` / `firebase deploy` / `gcloud builds submit --tag` stages are deleted,
-and `scripts/deploy_build_targets.sh` is the shared runner. `deploy-all.sh`
-keeps a sourced helper half (the channel-file parser `cloudbuild.yaml` uses).
-Two behaviours moved rather than being lost: the `firestore-rules` target now
-ships the composite INDEXES alongside the rules, and
-`deploy/channels/admin.env` gains `MONTHLY_TOPUP_SCHEDULER_SA_EMAIL`, which
-previously reached the service only through `deploy-admin.sh`'s inline env
-assembly.)*
-
-*Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the access-log paragraph -- the credential left the URL; the flag stays load-bearing through the one-deploy deprecation; `deploy/channels/*.env` CORS lists gained the voice app's Hosting origins for the socket's Origin check.)*
-
-*Last updated: 2026-09-16 (bd polyglot-pdf-j29z1, sprint 23 E2: the "Hosting security headers" section -- one header block on all five Hosting targets, the CSP in report-only mode with its connect-src inventory, and self-hosted fonts via scripts/fetch_fonts.py.)*
-
-*Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the "Deployed verbosity floors" bullet -- LOG_LEVEL clamped to INFO, the two dump knobs forced off, SEND_TRANSCRIPT ignored and the token file unwritten with K_SERVICE set; both apps install the value-free 422 handler from backend/utils/validation_errors.py at import.)*
-
-*Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd, sprint 23 F1: the root `Dockerfile` pins `python:3.12-slim` by digest, creates the non-root `app` user (uid 10001) that owns `/app/backend/logs` and `/app/logs/confirmations` before `USER app`, and installs `backend/requirements.txt` alone -- test tooling now lives in `backend/requirements-dev.txt`, which `cloudbuild.yaml`'s verify target installs. Pinned by `tests/test_dockerfile_app_module.py` and `tests/test_ci_security_job.py`.)*
-
-*Last updated: 2026-09-15 (bd polyglot-pdf-3bsyv: `frontend/vite.config.schema.ts`'s
-`base` is now `'/'` (absolute), not `'./'` -- see "Asset base MUST be
-absolute" under Frontend deploy below. No env var or deploy step changed.)*
-
-*Last updated: 2026-09-15 (bd polyglot-pdf-m1dlv, sprint 23 workstream D: new `scripts/audit/infra_posture.sh` -- a read-only, operator-run runbook that verifies the live `polyglot-demo-aa709` project against this doc and the offline IAM pins in `test_deployed_iam_envelope.py`/`test_admin_sa_iam_envelope.py`. No env var, deploy step, or config key changed; see "Live infrastructure posture (read-only)" below.)*
-
-*Last updated: 2026-09-16 (bd polyglot-pdf-jub5f, E4.4: the staging-before-demo
-promotion gate is finished end to end -- `admin_backend/services/
-promotion_gate.py::staging_verified` is the one pure predicate,
-`scripts/promotion_gate.py` is the build-step CLI `cloudbuild.yaml`'s
-`staging-verified-gate`/`admin-service-staging-gate` steps call, and
-`POST /admin/deploys` calls the same predicate for its own early refusal.
-Full explanation, including the no-recency decision and why the admin
-service is excluded from the route's early check, lives in
-[`../doctrine/promotion-tiers.md`](../doctrine/promotion-tiers.md#the-staging-before-demo-promotion-gate)
-rather than duplicated here. No config key or env var changed.)*
-
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
