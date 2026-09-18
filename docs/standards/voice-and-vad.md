@@ -108,12 +108,23 @@ playback clock **without setting `playbackBlocked`** (the model speaks a NEW
 generation on the same connection, so an unpaired block would kill it -- the
 nm7z trap; `flushAudioQueue` keeps the blocking behavior for the
 pause/section-switch paths and delegates the drain).
-A drain -- either path -- does NOT fire `window.vffOnAudioPlaybackEnd`: that event
-means "the model finished its turn naturally", and a barge-in is not a natural end
-(consumers such as the E2E harness's turn-detection waiter would otherwise be woken
-by an interruption). The suppression works by swapping a NARROWED `onended` onto
-each source BEFORE `stop()`, because `onended` is dispatched on a later task and no
-synchronously-cleared flag can suppress it (bd polyglot-pdf-8np5).
+A drain does NOT fire `window.vffOnAudioPlaybackEnd` **for the PCM sources it
+stops**: that event means "the model finished its turn naturally", and a barge-in
+is not a natural end (consumers such as the E2E harness's turn-detection waiter
+would otherwise be woken by an interruption). The suppression works by swapping a
+NARROWED `onended` onto each source BEFORE `stop()`, because `onended` is
+dispatched on a later task and no synchronously-cleared flag can suppress it (bd
+polyglot-pdf-8np5).
+
+**That scope is exact, not pedantic** (bd polyglot-pdf-l39al). A synthesized
+spell-back CLIP is not in the model's queue, so a drain does not stop it -- the
+drain's own comment anticipates a barge-in landing while a clip is still audible
+(bd polyglot-pdf-s1iex.4), and leaves `geminiIsSpeaking` set while
+`activeClipCount` is non-zero. When that clip's `release()` later runs it finds
+both counts at zero and DOES fire the event. So "a barge-in can never wake my
+turn-detection waiter" is the wrong reading: it can, in exactly the case this
+rationale names. The guarantee is about drained SOURCES, not about the manager
+as a whole.
 
 See [voice-ai.md](../components/voice-ai.md#barge-in).
 **Push-to-talk** (`setPushToTalkMode(true)`) is the ONLY mode -- there is no

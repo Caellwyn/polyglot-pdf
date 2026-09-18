@@ -54,6 +54,10 @@ class FakeAudioContext {
       getByteTimeDomainData: vi.fn(),
     }
   }
+  createMediaElementSource() {
+    // A clip source only needs connect/disconnect for attachClipElement.
+    return { connect: vi.fn(), disconnect: vi.fn() }
+  }
   resume = vi.fn(async () => { this.state = 'running' })
   suspend = vi.fn(async () => { this.state = 'suspended' })
   close = vi.fn(async () => {})
@@ -228,6 +232,42 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
       // here reproduces that deferred delivery.
       ctx.sources[0].onended?.()
       expect(endSpy).not.toHaveBeenCalled()
+    } finally {
+      delete (globalThis as any).window.vffOnAudioPlaybackEnd
+    }
+  })
+
+  // bd polyglot-pdf-l39al. The suppression above is scoped to the PCM sources
+  // the drain stops -- and that scope is exact, not pedantic. A synthesized
+  // spell-back CLIP is not in the model's queue, so a drain does not stop it
+  // (the drain's own comment anticipates a barge-in landing while a clip is
+  // still audible, bd s1iex.4). Its release then finds both counts at zero and
+  // DOES fire the event. Pinned here because docs/standards/voice-and-vad.md
+  // previously stated the suppression absolutely, which would have licensed a
+  // consumer to assume a barge-in can never wake its turn-detection waiter.
+  it('a CLIP alive across the drain still fires the event on its own release', async () => {
+    const mgr = createAudioManager()
+    await mgr.playAudio(pcmChunk())
+    const ctx = FakeAudioContext.instances[0]
+
+    // Attach a clip, so activeClipCount is non-zero when the drain lands.
+    const release = mgr.attachClipElement({} as HTMLAudioElement)
+
+    mgr.resetPlaybackClock()
+    // The drain left the clip audible. NB isSpeaking() is deliberately
+    // MODEL-only (it subtracts activeClipCount, audioManager.ts:951), so the
+    // clip's liveness is read via isAnyAudioPlaying() -- the union accessor.
+    expect(mgr.isAnyAudioPlaying()).toBe(true)
+
+    const endSpy = vi.fn()
+    ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
+    try {
+      // The drained SOURCE stays suppressed...
+      ctx.sources[0].onended?.()
+      expect(endSpy).not.toHaveBeenCalled()
+      // ...but the clip's own release is a real end, and does fire.
+      release()
+      expect(endSpy).toHaveBeenCalledTimes(1)
     } finally {
       delete (globalThis as any).window.vffOnAudioPlaybackEnd
     }
