@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
+*Last updated: 2026-09-18 (bd polyglot-pdf-vm2fu: `scripts/setup-telemetry.sh`'s sink-table detection now goes through a new `scripts/telemetry_bq_setup.py list-tables` subcommand instead of `bq ls --project_id=... --format=csv "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline swallowed stderr and treated an EMPTY listing as "no tables yet", indistinguishable from a `bq` CLI that failed to list at all (observed live: a broken `bq` shim on one machine returned nothing while the sink's stdout table was confirmed present via the same google-cloud-bigquery client this script already depends on for LOCATION derivation and the dataset-scoped IAM grants). `list-tables` exits non-zero with a message on any real API error, which the script now aborts on rather than silently reporting every gated cost view PENDING.)*
+
 *Last updated: 2026-09-17 (bd polyglot-pdf-k5w16: the sink-writer dataEditor grant call was doubling the `serviceAccount:` prefix on a re-run -- `gcloud logging sinks describe --format=value(writerIdentity)` already returns it prefixed, but the grant call always assumed a bare email -- aborting the script under `set -e` before any view was applied. `scripts/setup-telemetry.sh` now normalises WRITER_IDENTITY to a bare email once, right after both the create and update branches assign it. `telemetry_bq_setup.py grant-dataset-role` is also now idempotent-tolerant on the write path: an `update_dataset` failure whose message says the access entry already exists is logged and treated as success rather than aborting, on top of the pre-existing snapshot-based `already_granted` check. Separately, `sql/telemetry_views.sql`'s header wrongly claimed `CREATE VIEW` tolerates a not-yet-existent source table ("BigQuery views are late-bound") -- live-confirmed false: creating `income_month` before the sink's stderr-stream table existed failed with a 404 at CREATE time, not a successfully-created zero-row view. `setup-telemetry.sh` now applies each of the five views independently, gated on whether ITS OWN source table already exists, reporting the rest as pending and exiting 0 -- see the "Views" and "IAM" paragraphs below.)*
 
 *Last updated: 2026-09-17 (bd polyglot-pdf-vzvio: scripts/setup-telemetry.sh derives the telemetry dataset LOCATION from the Cloud Billing export dataset via new scripts/telemetry_bq_setup.py, instead of a hard-coded us-central1, and the sink-writer dataEditor + admin-backend-sa dataViewer grants move to that script's grant-dataset-role subcommand -- the BigQuery API's Dataset.access_entries -- instead of `bq add-iam-policy-binding`, which was exiting non-zero on at least one maintainer machine.)*
@@ -300,9 +302,15 @@ prints them directly to stdout) and the `run.googleapis.com/stderr` stream
 (`ledger_export` and the session events -- plain `structlog` calls that reach
 stdlib logging's root handler, which `backend/utils/logging.py`'s
 `configure_logging()` leaves at Python's default stream, stderr, having never
-passed `stream=`). `scripts/setup-telemetry.sh` discovers both table names
-with `bq ls` on the dataset and substitutes them into two separate SQL
-placeholders, `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}`.
+passed `stream=`). `scripts/setup-telemetry.sh` discovers both table names via
+`scripts/telemetry_bq_setup.py list-tables` (bd polyglot-pdf-vm2fu), NOT `bq
+ls` -- the old `bq ls ... 2>/dev/null | tail -n +2` pipeline swallowed stderr
+and treated an EMPTY listing as "no tables yet", indistinguishable from a
+`bq` CLI that failed to list at all (a broken shim, a DNS blip); a
+list-tables API error now aborts the script instead of silently reporting
+every gated view PENDING -- and substitutes the discovered names into two
+separate SQL placeholders, `${TELEMETRY_TABLE_STDOUT}` and
+`${TELEMETRY_TABLE_STDERR}`.
 
 **Views** (`sql/telemetry_views.sql`): `cost_by_firm_month`, `cost_by_kit_month`,
 `cost_by_employee_month` (all three read the nested usage-event shape from

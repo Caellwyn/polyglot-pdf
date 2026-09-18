@@ -2144,8 +2144,11 @@ a deploy script.
   `admin_backend/routes/credit_routes.py` and `sweep_routes.py`, never from the
   public backend) -- then applies `sql/telemetry_views.sql`'s five
   `CREATE OR REPLACE VIEW` statements via `bq query`, substituting `${DATASET}`,
-  `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}` (read back from
-  `bq ls` on the dataset, not hardcoded -- the sink writes TWO destination
+  `${TELEMETRY_TABLE_STDOUT}` and `${TELEMETRY_TABLE_STDERR}` (read back via
+  `scripts/telemetry_bq_setup.py list-tables` -- the python BigQuery client,
+  not `bq ls` and not hardcoded (bd polyglot-pdf-vm2fu: the old `bq ls`
+  pipeline swallowed stderr and could not tell a genuinely empty dataset
+  from a `bq` CLI that failed to list at all) -- the sink writes TWO destination
   tables, not one: usage events print to stdout
   (`structured_logger.py`'s `print(..., file=sys.stdout)`) while
   `ledger_export` and the session events go through plain `structlog` calls
