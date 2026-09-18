@@ -810,7 +810,7 @@ def check_doc_conventions(
 ) -> list[tuple[Path, str]]:
     """Scan tier-1 + tier-2 docs for forbidden current-state-only violations.
 
-    Returns a list of (doc_path, message) findings. The two patterns this
+    Returns a list of (doc_path, message) findings. The three patterns this
     detects are codified in CLAUDE.md "Doc maintenance rules":
       1. `Previously:`/`Prior:`/`Prior,`/`Earlier:`/`Earlier,` followed by a
          date, `Sprint NN`, "same day/week", or a bead-id reference --
@@ -820,6 +820,14 @@ def check_doc_conventions(
          entry is the chronological record; the doc is current-state only.
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
+      3. A STACKED `*Last updated:*` chain -- more than one such line in
+         the doc. Checks 1+2 catch a chain shaped like Previously:/Prior:/
+         Earlier: prose or a history-section heading; this one catches a
+         doc that instead grows a new `*Last updated:*` paragraph per bead
+         and never removes the old ones -- the same current-state-only
+         violation in a third shape neither of the other regexes was built
+         to see. A tier-1/tier-2 doc must carry exactly ONE
+         `*Last updated:*` line.
 
     The scan covers TIER1_DOCS (the specific files it names -- CLAUDE.md,
     docs/INDEX.md, docs/technical_guide.md -- NOT every docs/*.md top-level

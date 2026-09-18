@@ -71,6 +71,43 @@ stamp on any of them, or a stacked-stamp violation on any doc NOT listed,
 still fails the test. bd 4iyi6's own exit criteria require the allowlist
 to end up empty.
 
+**Cross-surface review round (fix-up pass).** The outer cross-surface
+review traced `check_doc_conventions()`'s new Check 3, the
+`KNOWN_STACKED_STAMP_DOCS` allowlist, the 7 new Routes rows, and the
+stamp/`**Tracks:**` line-order swap into every consumer (the freshness
+CLI, both CI-gate tests, the closeout skill, `doc-architecture.md`, and
+all seven documented route handlers) and returned one blocker plus two
+pre-existing findings:
+- **Adopted:** the `check_doc_conventions()` docstring said "The two
+  patterns this detects" and enumerated only checks 1 and 2, even though
+  this bead's own diff added check 3 above -- this diff is what made the
+  docstring wrong, and the function is the primary in-code spec for the
+  CI gate `tests/test_doc_freshness.py` pins prose against
+  (`_SITE_ANCHORS`). Fixed: docstring now says "three patterns" and lists
+  check 3 alongside 1 and 2. Comment-only; no behavior change; full
+  suites re-run green afterward.
+- **Deferred (pre-existing, filed as beads, not fixed here):**
+  `docs/components/admin-service.md`'s own `**Tracks:**` line omits
+  `deploy_routes.py`/`deploy_webhook.py`/`cloud_build.py`/
+  `promotion_gate.py` -- the four files backing the seven new Routes rows
+  -- so the freshness half of the checker can never flag this doc stale
+  when those files change (bd polyglot-pdf-31g1d, pre-existing on
+  `origin/dev`, worsened by this bead's new rows). And
+  `admin_backend/routes/deploy_routes.py`'s module docstring claims
+  `GATED_TARGETS` includes `admin-service`, but `deploy/targets.py`
+  defines it as `(backend-demo, frontend-demo)` only -- a pre-existing,
+  unchanged-on-`origin/dev` comment/code mismatch that wrongly asserts a
+  safety gate exists (bd polyglot-pdf-25np9).
+- **Refuted (reviewer's own report, not re-litigated):** the 8-doc
+  `KNOWN_STACKED_STAMP_DOCS` allowlist is non-weakening (verified against
+  the real corpus: a ninth stamp on a listed doc, or any stamp chain on
+  an unlisted doc, still fails); the stamp/`**Tracks:**` line-order swap
+  has no consumer that reads line order (both regexes are `MULTILINE`,
+  and the one positional reader in
+  `backend/tests/unit/test_deploy_channel_isolation.py` is token-shape
+  based, not line-position based) and two peer docs were already
+  stamp-first before this branch.
+
 ## Lessons
 
 A doc-convention checker built against two known violation shapes
