@@ -41,6 +41,14 @@ class _FakeAccessEntry:
         self.entity_id = entity_id
 
 
+class _FakeTable:
+    """Mirrors the one attribute telemetry_bq_setup.py's _list_tables reads
+    off a google.cloud.bigquery.Table/TableListItem: table_id."""
+
+    def __init__(self, table_id):
+        self.table_id = table_id
+
+
 class _FakeClient:
     """A minimal stand-in for google.cloud.bigquery.Client covering exactly
     the calls telemetry_bq_setup.py makes: get_dataset, list_tables,
@@ -644,6 +652,132 @@ def test_grant_dataset_role_fails_loudly_when_dataset_missing(fake_bigquery, cap
     assert exit_code == 1
     assert "ERROR" in capsys.readouterr().err
 
+
+
+# ---------------------------------------------------------------------------
+# list-tables (bd polyglot-pdf-vm2fu)
+# ---------------------------------------------------------------------------
+
+
+def test_list_tables_prints_one_table_id_per_line(fake_bigquery, capsys):
+    """The headline replacement for `bq ls`: every table in the dataset is
+    printed, one table id per line, via the same google-cloud-bigquery
+    client already used elsewhere in this module. Mutation: print something
+    other than table.table_id (e.g. the whole table object, or a CSV row) --
+    red (this test asserts the EXACT lines printed)."""
+    client = _FakeClient(
+        tables={
+            ("polyglot-demo", "polyglot_telemetry"): [
+                _FakeTable("run_googleapis_com_stdout"),
+                _FakeTable("run_googleapis_com_stderr"),
+            ],
+        },
+    )
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "list-tables",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+        ]
+    )
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        "run_googleapis_com_stdout",
+        "run_googleapis_com_stderr",
+    ]
+
+
+def test_list_tables_prints_nothing_and_exits_0_for_a_genuinely_empty_dataset(
+    fake_bigquery, capsys
+):
+    """A dataset that exists and holds zero tables is NOT an error -- it
+    prints nothing and exits 0, exactly like a real `bq ls` on an empty
+    dataset would. This is what distinguishes list-tables from the OLD `bq
+    ls ... 2>/dev/null` pipeline: that pipeline's EMPTY-on-error output is
+    indistinguishable from this EMPTY-on-genuinely-empty output UNLESS the
+    caller can tell success from failure -- which is exactly what exit_code
+    now provides. Mutation: exit non-zero whenever the table list is empty --
+    red (a real, freshly created, empty dataset would then always abort
+    setup-telemetry.sh)."""
+    client = _FakeClient(
+        tables={("polyglot-demo", "polyglot_telemetry"): []},
+    )
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "list-tables",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+        ]
+    )
+    assert exit_code == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_list_tables_fails_loudly_on_an_api_error_never_printing_an_empty_list(
+    fake_bigquery, capsys
+):
+    """THE headline bug fix: a real API failure (permission error, network
+    fault, a broken `bq` shim's equivalent) must be reported as a non-zero
+    exit with a message on stderr, and stdout must stay completely empty --
+    never an empty-but-successful-looking listing. This is the exact
+    ambiguity the bug report describes: `bq ls ... 2>/dev/null | tail -n +2`
+    could not tell "no tables yet" from "bq itself failed to list", so a
+    caller reading empty stdout treated both as PENDING. Mutation: catch the
+    exception and print an empty list with exit 0 instead of surfacing an
+    ERROR -- red (exit_code would be 0 and stdout would be '', identical to
+    the genuinely-empty-dataset test above with no way to tell them apart --
+    which is precisely the regression this subcommand exists to prevent)."""
+    client = _FakeClient(
+        list_tables_raises={
+            ("polyglot-demo", "polyglot_telemetry"): TimeoutError(
+                "deadline exceeded"
+            ),
+        },
+    )
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "list-tables",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+        ]
+    )
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    out, err = captured.out, captured.err
+    assert out == "", (
+        "list-tables printed something to stdout on an API error -- this "
+        "would read back to a caller identically to a genuinely empty "
+        "dataset, exactly the ambiguity this subcommand exists to remove"
+    )
+    assert "ERROR" in err
+    assert "polyglot_telemetry" in err
+
+
+def test_list_tables_passes_project_through_to_client(fake_bigquery):
+    """Same ambient-environment-avoidance contract as the other two
+    subcommands: _client must be constructed with the operator's --project.
+    Mutation: change the list-tables call site back to a bare `_client()` --
+    red."""
+    client = _FakeClient(
+        tables={("polyglot-demo", "polyglot_telemetry"): []},
+    )
+    fake_bigquery(client)
+    exit_code = telemetry_bq_setup.main(
+        [
+            "list-tables",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+        ]
+    )
+    assert exit_code == 0
+    assert fake_bigquery.project_calls == ["polyglot-demo"]
 
 
 # ---------------------------------------------------------------------------
