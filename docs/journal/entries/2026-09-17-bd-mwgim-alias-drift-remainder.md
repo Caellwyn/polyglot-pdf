@@ -107,7 +107,24 @@ assertion as a discovered bug -- read the accessor's contract first.
 - **`docs/standards/voice-and-vad.md`** -- scoped the drain suppression claim to
   drained SOURCES and stated the clip case explicitly (bd `l39al`).
 
-No CLAUDE.md changes. No other tracked docs were affected by this diff.
+Six other docs were flagged STALE because they track files this branch
+touched (`schemaFormState.ts`, `audioManager.ts`):
+`section-reset-deprecation`, `schema-key-visibility`, `stateless-architecture`,
+`terminology`, `ws-protocol`, `voice-ai`. All **reviewed and left as-is** --
+grepped each for every symbol this diff touches (`extractSectionFields`,
+`resolveFieldForNavigation`, `sectionDeclaresField`, `findFieldWithAlias`,
+`applyResume`, `firstIncompleteSection`, `vffOnAudioPlaybackEnd`) and none
+mentions any of them. The one near-miss is `voice-ai.md:38`, which does
+describe an end-of-turn event, but that is the BACKEND adapter's
+`on_processing_done` callback, not the client's `vffOnAudioPlaybackEnd` --
+different surface, unaffected. No stamp bumped on those six, per the rule that
+a stamp bump without a real prose review is itself a finding.
+
+Note the checker flags on file MTIME, not on truth, which is the same reason it
+could not have caught the `mwgim` sentence going stale one commit after it was
+written (see Lessons).
+
+No CLAUDE.md changes.
 
 ## Files touched
 
