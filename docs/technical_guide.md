@@ -991,6 +991,21 @@ is what both services run, so the selection has to happen at container start.
   channels' data, so this is that service's own staging tier -- it has no
   second Cloud Run service to rehearse against first. `deploy-admin.sh` runs
   this target and performs no part of the sequence itself.
+  **The FIRST deploy is a separate branch (bd polyglot-pdf-h1nvd):** Cloud Run
+  refuses `--no-traffic` on a service that does not exist yet ("--no-traffic
+  not supported when creating a new service"), so `admin-service-deploy-tagged`
+  checks whether `polyglot-admin` already resolves a URL (the same
+  `ADMIN_SERVICE_URL` lookup it already performs for the env block, whose
+  emptiness on a `2>/dev/null || true` describe IS the existence check) before
+  it deploys -- an empty result creates the service WITHOUT `--no-traffic`/
+  `--tag`, which lands 100% of traffic on that first revision immediately
+  (there is no previous revision for a tag to protect). The verify step
+  mirrors the branch: it checks whether a `candidate` tag actually exists on
+  the service's current traffic allocation
+  (`status.traffic[].tag`) rather than assuming one, and health-checks the
+  base URL directly when it does not. Every later run finds
+  `ADMIN_SERVICE_URL` non-empty and keeps the tagged no-traffic flow above
+  unchanged.
 - **Consumer:** the root `Dockerfile`'s
   `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT} --no-access-log`,
   plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must

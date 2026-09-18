@@ -807,12 +807,29 @@ steps:
         [ -n "$$CHANNEL_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$$CHANNEL_SECRETS")
         SA_FLAG=()
         [ -n "$$CHANNEL_SA" ] && SA_FLAG=(--service-account "$$CHANNEL_SA")
+        # FIRST-DEPLOY BRANCH (bd polyglot-pdf-h1nvd). Cloud Run refuses
+        # --no-traffic on a service that does not exist yet ("--no-traffic
+        # not supported when creating a new service"): there is no prior
+        # revision for a tag to protect, so the flag is meaningless on a
+        # create and gcloud errors rather than ignoring it. ADMIN_SERVICE_URL
+        # was already resolved above with the same describe call ("2>/dev/null
+        # || true" on a not-yet-deployed service resolves to empty), so its
+        # emptiness IS the existence check -- no second lookup needed. A
+        # first deploy therefore creates the service plainly and receives
+        # 100% traffic immediately (there is no previous revision to protect
+        # traffic FROM); every later run finds ADMIN_SERVICE_URL non-empty
+        # and keeps the tagged no-traffic flow unchanged.
+        NO_TRAFFIC_FLAG=(--no-traffic --tag candidate)
+        if [ -z "$$ADMIN_SERVICE_URL" ]; then
+          echo "polyglot-admin does not exist yet -- creating it WITHOUT --no-traffic/--tag (first deploy)."
+          NO_TRAFFIC_FLAG=()
+        fi
         gcloud run deploy polyglot-admin \
           --image "gcr.io/$PROJECT_ID/polyglot-backend:${_SHA}" \
           --region us-central1 --platform managed --allow-unauthenticated \
           --timeout=3600 --memory=1Gi --max-instances=3 --project "$PROJECT_ID" \
           --set-env-vars="$$BACKEND_ENV" \
-          --no-traffic --tag candidate \
+          "$${NO_TRAFFIC_FLAG[@]}" \
           "$${SA_FLAG[@]}" "$${SECRETS_FLAG[@]}"
 
   - id: admin-service-verify-tagged
@@ -826,14 +843,32 @@ steps:
         BASE_URL=$(gcloud run services describe polyglot-admin \
           --platform managed --region us-central1 --project "$PROJECT_ID" \
           --format 'value(status.url)')
-        TAG_URL=$(echo "$$BASE_URL" | sed -E "s#https://#https://candidate---#")
-        HEALTH_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$$TAG_URL/health" || echo "000")
+        # FIRST-DEPLOY BRANCH (bd polyglot-pdf-h1nvd). admin-service-deploy-tagged
+        # only attaches the "candidate" tag when a prior revision already
+        # existed (see its own first-deploy comment) -- a first deploy has no
+        # tagged revision distinct from the base URL, so a candidate---
+        # health check would probe a tag that was never created. Whether a
+        # "candidate" tag exists on the CURRENT revision (the one this build
+        # just deployed, whatever _SHA it is) tells us which case we are in --
+        # not "does the service exist" (true either way by this step) and not
+        # a build-local flag (no state carries between steps in Cloud Build).
+        CANDIDATE_TAG=$(gcloud run services describe polyglot-admin \
+          --platform managed --region us-central1 --project "$PROJECT_ID" \
+          --format 'value(status.traffic[].tag)' | tr ' ' '\n' | grep -x candidate || true)
+        if [ -n "$$CANDIDATE_TAG" ]; then
+          TARGET_URL=$(echo "$$BASE_URL" | sed -E "s#https://#https://candidate---#")
+          LABEL="tagged candidate"
+        else
+          TARGET_URL="$$BASE_URL"
+          LABEL="first-deploy (no candidate tag)"
+        fi
+        HEALTH_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$$TARGET_URL/health" || echo "000")
         if [ "$$HEALTH_STATUS" != "200" ]; then
-          echo "ABORT: the tagged candidate revision did not answer /health ($$HEALTH_STATUS)."
+          echo "ABORT: the $$LABEL revision did not answer /health ($$HEALTH_STATUS)."
           echo "Traffic was NOT shifted -- the previous revision is still live."
           exit 1
         fi
-        echo "Tagged candidate is healthy at $$TAG_URL"
+        echo "The $$LABEL revision is healthy at $$TARGET_URL"
 
   - id: admin-service-record-deployment
     # admin-service has NO separate staging target of its own (deploy-admin.sh:

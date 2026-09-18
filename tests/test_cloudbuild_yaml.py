@@ -781,6 +781,289 @@ def test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime(tmp_pa
     )
 
 
+def _run_admin_service_deploy_tagged_stub(
+    tmp_path, by_id, *, admin_describe_exit
+):
+    """Shared driver for the first-deploy vs. existing-service branch tests
+    below. Stubs `gcloud run services describe polyglot-admin` to either
+    resolve a URL (existing service) or fail (first deploy, bd
+    polyglot-pdf-h1nvd) via `admin_describe_exit`, and captures the full argv
+    of the final `gcloud run deploy` call. Mirrors
+    test_admin_service_deploy_tagged_actually_passes_live_urls_at_runtime's
+    stubbing pattern exactly (same fake-gcloud shape, same bash-visible tmp
+    path resolution, same driver script), differing only in what the
+    `polyglot-admin` describe case does.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-deploy-tagged"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("${_SHA}", "deadbeef")
+        .replace("$$", "$")
+    )
+
+    marker = tmp_path / "deploy_argv.txt"
+    fake_gcloud = tmp_path / "gcloud"
+    admin_case = (
+        "  exit 1"
+        if admin_describe_exit
+        else "  echo 'https://polyglot-admin-fake.a.run.app'"
+    )
+    fake_gcloud.write_text(
+        "#!/bin/bash\n"
+        "if [ \"$1 $2\" = \"run services\" ] && [ \"$3\" = \"describe\" ]; then\n"
+        "  case \"$4\" in\n"
+        f"    polyglot-admin)\n{admin_case}\n      ;;\n"
+        "    polyglot-backend) echo 'https://polyglot-backend-fake.a.run.app' ;;\n"
+        "    polyglot-backend-staging) echo 'https://polyglot-backend-staging-fake.a.run.app' ;;\n"
+        "    *) exit 1 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1 $2\" = \"run deploy\" ]; then\n"
+        f'  echo "$@" > "{marker.as_posix()}"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_gcloud.chmod(0o755)
+
+    bash_tmp_dir = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert bash_tmp_dir, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{bash_tmp_dir}:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-deploy-tagged crashed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert marker.exists(), (
+        "admin-service-deploy-tagged never reached the (stubbed) "
+        f"gcloud run deploy call:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    return marker.read_text(encoding="utf-8")
+
+
+def test_admin_service_first_deploy_omits_no_traffic_flags(tmp_path, by_id):
+    """bd polyglot-pdf-h1nvd exit criterion 1, first-deploy half: when
+    `polyglot-admin` does not exist yet (the stubbed describe call exits
+    non-zero, exactly like Cloud Run's real 404 on an unknown service), the
+    `gcloud run deploy` invocation must NOT carry --no-traffic or --tag --
+    Cloud Run refuses both on a create ("--no-traffic not supported when
+    creating a new service"). This is the direct regression test for the
+    bug: before the fix, this invocation carries the two flags
+    unconditionally and Cloud Run would reject it.
+    """
+    invoked = _run_admin_service_deploy_tagged_stub(
+        tmp_path, by_id, admin_describe_exit=True
+    )
+    assert "--no-traffic" not in invoked, (
+        f"first-deploy gcloud run deploy still carries --no-traffic, which "
+        f"Cloud Run refuses on a service create: {invoked!r}"
+    )
+    assert "--tag" not in invoked, (
+        f"first-deploy gcloud run deploy still carries --tag, which Cloud "
+        f"Run refuses on a service create: {invoked!r}"
+    )
+    # The rest of the env assembly must be unaffected by the branch -- this
+    # is a flags-only change, not a rewrite of what gets deployed.
+    assert "--image gcr.io/test-project/polyglot-backend:deadbeef" in invoked
+    assert "FORM_KITS_MODE=gcs" in invoked
+
+
+def test_admin_service_existing_service_keeps_no_traffic_flags(tmp_path, by_id):
+    """bd polyglot-pdf-h1nvd exit criterion 1, second half: once
+    `polyglot-admin` exists (the stubbed describe call resolves a URL, as it
+    always did before this bead), the tagged no-traffic flow is UNCHANGED --
+    the fix's existence check must not disable it for every later deploy.
+    """
+    invoked = _run_admin_service_deploy_tagged_stub(
+        tmp_path, by_id, admin_describe_exit=False
+    )
+    assert "--no-traffic" in invoked, (
+        f"existing-service gcloud run deploy dropped --no-traffic -- every "
+        f"deploy after the first must still land as an unverified, "
+        f"no-traffic tagged revision: {invoked!r}"
+    )
+    assert "--tag candidate" in invoked, (
+        f"existing-service gcloud run deploy dropped --tag candidate: {invoked!r}"
+    )
+
+
+def test_admin_service_verify_tagged_checks_base_url_on_first_deploy(by_id):
+    """admin-service-verify-tagged must not hardcode a candidate--- probe:
+    on the first-deploy branch above, no "candidate" tag was ever attached,
+    so a health check against candidate---<url> would probe a URL Cloud Run
+    never created. The step must branch on whether a candidate tag actually
+    exists on the service's current traffic allocation.
+    """
+    body = script_of(by_id["admin-service-verify-tagged"])
+    assert "status.traffic[].tag" in body, (
+        "admin-service-verify-tagged does not inspect the service's traffic "
+        "tags -- it cannot tell a first deploy (no candidate tag) from a "
+        "tagged deploy, and would probe a candidate--- URL that was never "
+        "created on the first deploy"
+    )
+    # Both branches must still reach a curl health check, and the abort path
+    # must still fire on a non-200.
+    assert body.count("curl -s -o /dev/null") == 1, (
+        "expected exactly one health-check curl invocation shared by both "
+        "branches"
+    )
+    assert "exit 1" in body
+
+
+def _run_admin_service_verify_tagged_stub(
+    tmp_path, by_id, *, candidate_tag_present
+):
+    """Executes admin-service-verify-tagged for real through a stubbed
+    `gcloud` and a stubbed `curl`, mirroring
+    `_run_admin_service_deploy_tagged_stub`'s pattern one step later in the
+    same build. `candidate_tag_present` selects which case the stubbed
+    `status.traffic[].tag` describe call answers: True == a tagged deploy
+    (candidate tag exists), False == the first-deploy branch (no tag was
+    ever attached, bd polyglot-pdf-h1nvd).
+
+    The stub `curl` writes the URL it was actually asked to probe to a
+    marker file, so the test can tell a candidate--- probe apart from a
+    base-URL probe regardless of how the script's branch condition is
+    spelled -- an inverted condition (e.g. probing candidate--- on a first
+    deploy) shows up directly as the wrong URL in the marker, not just as a
+    surviving substring in the source.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-verify-tagged"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("$$", "$")
+    )
+
+    curl_marker = tmp_path / "curl_url.txt"
+    fake_gcloud = tmp_path / "gcloud"
+    tag_line = "candidate" if candidate_tag_present else ""
+    fake_gcloud.write_text(
+        "#!/bin/bash\n"
+        "if [ \"$1 $2\" = \"run services\" ] && [ \"$3\" = \"describe\" ]; then\n"
+        "  for a in \"$@\"; do\n"
+        "    case \"$a\" in\n"
+        "      *status.url*) echo 'https://polyglot-admin-fake.a.run.app'; exit 0 ;;\n"
+        f"      *status.traffic*) echo '{tag_line}'; exit 0 ;;\n"
+        "    esac\n"
+        "  done\n"
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_gcloud.chmod(0o755)
+
+    fake_curl = tmp_path / "curl"
+    fake_curl.write_text(
+        "#!/bin/bash\n"
+        "for a in \"$@\"; do\n"
+        "  case \"$a\" in\n"
+        "    http*) echo -n \"$a\" > \"" + curl_marker.as_posix() + "\" ;;\n"
+        "  esac\n"
+        "done\n"
+        "echo -n 200\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_curl.chmod(0o755)
+
+    bash_tmp_dir = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert bash_tmp_dir, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{bash_tmp_dir}:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-verify-tagged failed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert curl_marker.exists(), (
+        "admin-service-verify-tagged never reached the (stubbed) curl health "
+        f"check:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    return curl_marker.read_text(encoding="utf-8")
+
+
+def test_admin_service_verify_tagged_probes_base_url_on_first_deploy(tmp_path, by_id):
+    """RUNTIME half of the source-text check above: when no "candidate" tag
+    exists on the service's current traffic (the first-deploy case, bd
+    polyglot-pdf-h1nvd), the health check must actually curl the BASE url,
+    not a candidate--- url that admin-service-deploy-tagged never created
+    on a first deploy. A substring check on the script's source text cannot
+    catch an inverted branch condition that still mentions
+    "status.traffic[].tag" and "exit 1" verbatim; this drives the real
+    bash and inspects the URL the stubbed curl actually received.
+    """
+    probed = _run_admin_service_verify_tagged_stub(
+        tmp_path, by_id, candidate_tag_present=False
+    )
+    assert probed == "https://polyglot-admin-fake.a.run.app/health", (
+        f"first-deploy verify probed the wrong URL: {probed!r}"
+    )
+
+
+def test_admin_service_verify_tagged_probes_candidate_url_when_tagged(tmp_path, by_id):
+    """Companion to the first-deploy case above: once a "candidate" tag
+    exists (every deploy after the first), the health check must still
+    probe the candidate--- url, exactly as it did before bd
+    polyglot-pdf-h1nvd -- the fix must not disable tagged verification for
+    the steady-state case.
+    """
+    probed = _run_admin_service_verify_tagged_stub(
+        tmp_path, by_id, candidate_tag_present=True
+    )
+    assert probed == "https://candidate---polyglot-admin-fake.a.run.app/health", (
+        f"tagged-deploy verify probed the wrong URL: {probed!r}"
+    )
+
+
 # Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
 # body ONLY if the name is one of these or is declared under `substitutions:`
 # in the file itself; everything else is a bash variable that MUST be written
