@@ -110,6 +110,53 @@ Breakdown:
   to update that comment's citation -- left open, not fixed inline here,
   since it touches a file this bead's diff does not otherwise change.
 
+## Cross-surface review round 2 (2026-09-18, second pass)
+
+A second Opus outer cross-surface review -- run on this bead's own diff
+after round 1 above landed -- returned `GAPS-FOUND (2)`. Both findings were
+about the round-1 NOTE's own text (not new production or test-logic
+issues), filed together as `polyglot-pdf-kwmvh`. Breakdown:
+
+- **ADOPTED (findings 1+2, bd `polyglot-pdf-kwmvh`):** the NOTE added in
+  round 1 reached the right conclusion (the SET test catches the
+  relocation) through a wrong mechanism, and misstated the state of
+  negative-case coverage.
+  - Finding 1: the NOTE claimed the relocated write "moves the write into a
+    bare module-level statement no writer function encloses." Reproduced on
+    a mutation of the worktree's own `credit_ledger.py` (backed up,
+    mutated, restored -- confirmed byte-identical to `origin/dev` after):
+    the SET test's `_enclosing_function()` walk actually attributes the
+    relocated write to `refund_expired_link`, an ordinary enclosing
+    `FunctionDef`, not `<module>`. The test fires because the write's
+    enclosing function NAME changed from the allowlisted
+    `_mark_refunded_and_extra` to the unlisted `refund_expired_link` -- a
+    set-membership mismatch, not a module-scope/unattributed issue.
+    Rewrote the NOTE to state this mechanism, and confirmed the mutation
+    reproduces the exact assertion the fixed NOTE now describes: 1 failed
+    (the SET test, naming `('backend/services/credit_ledger.py',
+    'refund_expired_link')`) / 27 passed.
+  - Finding 2: the test's docstring (the paragraph just above the NOTE)
+    said the failure-injection negative case was "deferred as separate
+    coverage, see bd polyglot-pdf-sw2lv" -- but
+    `admin_backend/tests/unit/test_sweep_routes.py::
+    test_a_forced_audit_failure_leaves_the_refund_uncommitted` already
+    covers exactly that case (forces the joined audit write to fail, then
+    asserts the balance is unchanged, the links record still reads
+    "minted", and no audit row landed). Replaced the "deferred" sentence
+    with a citation to that test.
+  - Closed `polyglot-pdf-kwmvh` as fixed by this round (fixing it here
+    rather than as a separate cycle, since it was filed against this
+    round's own diff).
+- **NOT RE-FILED (pre-existing, already routed):** the reviewer's finding 3
+  (the stale citation at
+  `admin_backend/tests/unit/test_admin_audit_coverage.py:225-228`) is
+  byte-identical to `origin/dev` and already tracked by the still-open
+  `polyglot-pdf-2eqlv` from round 1 -- confirmed, not touched here. Same for
+  the off-enum `work_class: "bugfix"` on `polyglot-pdf-o4h98`, already
+  tracked by the still-open `polyglot-pdf-71cw9`.
+- **Full suites re-run green after the fix:** backend (3888 passed, 195
+  skipped), admin_backend (721 passed), root (2046 passed, 94 skipped).
+
 ## Lessons
 
 The worktree for this bead (`sw2lv-1op3g-nits`) already existed with

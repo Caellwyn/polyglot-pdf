@@ -570,8 +570,12 @@ def test_the_refund_and_the_status_flip_commit_ATOMICALLY(fake_db):
     the ledger balance bump and the links-status flip (see the idempotency
     test above for the companion "both must already be committed" half of
     this property). It does NOT inject a failure to prove the negative case
-    (neither side lands if the joined write fails) -- that is deferred as
-    separate coverage, see bd polyglot-pdf-sw2lv.
+    (neither side lands if the joined write fails) -- that failure-injection
+    pin already exists one directory over, see
+    admin_backend/tests/unit/test_sweep_routes.py::
+    test_a_forced_audit_failure_leaves_the_refund_uncommitted, which forces
+    the joined audit write to fail and asserts the balance is unchanged, the
+    links record still reads "minted", and no audit row landed.
 
     Mutation: delete the tx.set(links_ref, ...) call inside
     _mark_refunded_and_extra (_apply_entry_writes's extra_writes hook) so
@@ -584,13 +588,22 @@ def test_the_refund_and_the_status_flip_commit_ATOMICALLY(fake_db):
     fake_db's transaction has no rollback-on-exception simulation, so a
     write applied straight to the store lands identically to one buffered
     into tx and committed, and THIS test alone stays green either way. That
-    relocation is not an actual coverage gap, though: it moves the write
-    into a bare module-level statement no writer function encloses, which
+    relocation is not an actual coverage gap, though:
     test_the_complete_set_of_links_status_writers_all_guard_terminal_states
-    below (the "SET" test) flags as an unattributed, unguarded writer --
-    that test fails on this exact mutation even though this one does not.
-    Confirmed 2026-09-17 by making that exact change and running the whole
-    file: 1 failed (the SET test), 27 passed (including this one)."""
+    below (the "SET" test) derives its writer set from each status-write's
+    ENCLOSING FUNCTION NAME (an AST walk keyed on the innermost enclosing
+    FunctionDef), and the relocation above keeps the write inside
+    refund_expired_link's own body but OUTSIDE _mark_refunded_and_extra --
+    so its enclosing function becomes the unlisted name
+    "refund_expired_link" instead of the allowlisted
+    "_mark_refunded_and_extra", not an unattributed/module-level write, and
+    the SET test's EXPECTED_WRITERS/ALLOWLISTED_NON_WRITERS membership check
+    fails on that unlisted (file, function) pair. That test fails on this
+    exact mutation even though this one does not. Confirmed 2026-09-17 by
+    making that exact change and running the whole file: 1 failed (the SET
+    test, naming ('backend/services/credit_ledger.py',
+    'refund_expired_link') as the unlisted writer), 27 passed (including
+    this one)."""
     _mint(fake_db, credit_cost=2, open_deadline=500)
 
     credit_ledger.refund_expired_link(
