@@ -374,7 +374,10 @@ until abuse is observed:
   front of that list; every proxy appends the address it saw, so only the
   tail is trustworthy). In production every browser call reaches Cloud Run
   through the Hosting `/api/**` rewrite, so the chain ends
-  `..., browser, hosting-egress`; a direct call to the run.app host ends
+  `..., browser, hosting-egress` (assumed; the standard proxy behaviour, not
+  yet verified on staging -- if Hosting passed a client header through
+  verbatim, browser traffic would be unlimited through Hosting, never
+  over-limited); a direct call to the run.app host ends
   `..., caller`. The CLIENT bucket is keyed on the second-to-last hop alone
   (`RATE_LIMIT_BUDGET`, default 30, per `RATE_LIMIT_WINDOW_SEC`, default 60):
   per browser through Hosting, unforgeable by the browser, and stable while

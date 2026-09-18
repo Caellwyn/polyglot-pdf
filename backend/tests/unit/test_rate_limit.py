@@ -5,9 +5,10 @@ Mutations (each RED): remove `Depends(rate_limited(...))` from any one of the
 three doors (the set pin names it and that door's own case fails); make the
 links/open refusal say "Too many requests" (the byte-identical pin); log an
 address on refusal (the kwarg pin); key the client bucket on the FIRST hop
-(the forged-hop cases); drop the connection bucket (the rotating-forge case);
-change `_take` to never refuse (every limit case); drop the LRU bound (the
-bounded-map case).
+(the forged-hop cases); key it on the last two hops joined, `prev|last`
+(the rotating-egress case, bd ckceh); drop the connection bucket (the
+rotating-forge case); change `_take` to never refuse (every limit case);
+drop the LRU bound (the bounded-map case).
 """
 from __future__ import annotations
 

@@ -45,9 +45,12 @@ measurement could not see the chain (the app logs no hops), only that the
 last hop rotates; if Hosting passed a client-supplied header through
 without appending, the client key through Hosting would be forgeable and
 the connection bucket -- rotating with the egress -- would not backstop it.
-The `hops` count on the next staging burst's refusal line settles it:
-2 or more hops through Hosting with a refusal at the 31st call means the
-browser hop is real and stable.
+The REFUSAL is the evidence, the `hops` count only names the hop: a
+hosted burst that IS refused at the 31st call, with `hops` of 2 or more on
+that line, means the browser hop is real and stable. A hosted burst that is
+never refused is consistent with both a verbatim passthrough (`hops=2`,
+forgeable key) and no browser hop at all (`hops=1`); `hops=2` on its own
+decides nothing.
 
 ## Verification
 
