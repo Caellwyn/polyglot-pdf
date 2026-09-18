@@ -578,13 +578,19 @@ def test_the_refund_and_the_status_flip_commit_ATOMICALLY(fake_db):
     the status flip never happens at all -- red, status stays "minted".
     Verified 2026-09-17.
 
-    NOTE: this test does NOT catch relocating that same tx.set(...) call to
+    NOTE: THIS test does NOT catch relocating that same tx.set(...) call to
     run directly on fake_db (outside the transaction, e.g. right after
     _txn(db.transaction()) returns) instead of inside the hook -- this
     fake_db's transaction has no rollback-on-exception simulation, so a
     write applied straight to the store lands identically to one buffered
-    into tx and committed, and the test stays green either way. Confirmed
-    2026-09-17 by making that exact change."""
+    into tx and committed, and THIS test alone stays green either way. That
+    relocation is not an actual coverage gap, though: it moves the write
+    into a bare module-level statement no writer function encloses, which
+    test_the_complete_set_of_links_status_writers_all_guard_terminal_states
+    below (the "SET" test) flags as an unattributed, unguarded writer --
+    that test fails on this exact mutation even though this one does not.
+    Confirmed 2026-09-17 by making that exact change and running the whole
+    file: 1 failed (the SET test), 27 passed (including this one)."""
     _mint(fake_db, credit_cost=2, open_deadline=500)
 
     credit_ledger.refund_expired_link(

@@ -66,6 +66,50 @@ both were filed together as `polyglot-pdf-sw2lv` and built here.
    merge-base-scoped fix is present in `tests/test_doc_freshness.py` and
    `scripts/check_doc_freshness.py`.
 
+## Cross-surface review round (2026-09-18)
+
+The Opus outer cross-surface review of this bead's own diff (fixing the
+`test_the_refund_and_the_status_flip_commit_ATOMICALLY` docstring, above)
+returned `GAPS-FOUND (1)`, plus two filed-but-non-blocking findings.
+Breakdown:
+
+- **ADOPTED (finding 1):** the NOTE this bead had just added to
+  `test_the_refund_and_the_status_flip_commit_ATOMICALLY`'s docstring
+  ("the test stays green either way") reads as a suite-wide coverage-gap
+  claim, but is only true of that one test in isolation -- a sibling test in
+  the same file,
+  `test_the_complete_set_of_links_status_writers_all_guard_terminal_states`
+  (the AST-derived "SET" test), DOES catch the exact relocation mutation
+  described, by attributing the relocated write to an unguarded/
+  unattributed writer. Re-verified independently on a scratch copy: pristine
+  file 28/28 green; with the write moved out of `_mark_refunded_and_extra`
+  to run directly on `links_ref` right after `_txn(db.transaction())`
+  returns, 1 failed (the SET test) / 27 passed (including the ATOMICALLY
+  test itself, confirming it alone does not catch it). Rewrote the NOTE to
+  name the SET test as the actual coverage for this case instead of implying
+  a suite-wide blind spot. Closed the reviewer's filed bead
+  `polyglot-pdf-h1u3l` as fixed by this round.
+- **DEFERRED, non-blocking (finding 2):** `polyglot-pdf-o4h98`'s backfilled
+  `work_class` metadata (added by this bead's own earlier round, see "What
+  shipped" item 2 above) used the value `"bugfix"`, which is off the closed
+  enum in `docs/standards/bead-tiers.md:56-58` (`docs-nit | comment-align |
+  cross-surface | local-bug | needs-plan | mechanical`); the correct value
+  is `local-bug`. `o4h98` is closed, so nothing live breaks, and the
+  reviewer filed `polyglot-pdf-71cw9` to correct the value and note that no
+  validator pins the enum -- left open, not fixed inline here, since it is
+  pre-existing paperwork on a closed bead, not a behavioral regression this
+  diff introduced.
+- **DEFERRED, non-blocking (finding 3):** an untouched file,
+  `admin_backend/tests/unit/test_admin_audit_coverage.py:225-228`, has a
+  comment citing the ATOMICALLY test as proof the refund hook "really does
+  run inside the commit, not alongside it" -- exactly the in-tx-vs-outside-
+  tx distinction the new NOTE (finding 1, above) now documents that test
+  cannot make on its own. The underlying claim is still true (the SET test
+  is the actual proof), only its cited evidence is stale; pre-existing on
+  `dev`, only made visible by this diff. Reviewer filed `polyglot-pdf-2eqlv`
+  to update that comment's citation -- left open, not fixed inline here,
+  since it touches a file this bead's diff does not otherwise change.
+
 ## Lessons
 
 The worktree for this bead (`sw2lv-1op3g-nits`) already existed with
