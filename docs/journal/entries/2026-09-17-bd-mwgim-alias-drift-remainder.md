@@ -75,6 +75,23 @@ equally true. When a guard claims completeness, ask what a member would have to
 look like to escape it -- and expect the answer to be "a rename or a different
 call shape", because those are the two cheapest ways for code to differ.
 
+**AND IT HAPPENED AGAIN, IN THIS PR, TO THE GUARD I WROTE FOR IT.** The new
+membership scan matched `\.fields\s*\.includes\(` -- which does not match
+`.fields?.includes(`. The single live optional-chain site
+(`webFormConnection.ts:2477`, the `other_section` gate) was therefore invisible
+to the guard written in the same commit to pin that exact set, and the outer
+review caught it. Worse, this PR is what made that site REACHABLE with a drifted
+id: before `mwgim`, navigation bailed at `unknown_field` before ever getting
+there. So the fix to one member of the set is what armed another.
+
+Three misses now, three different escape routes -- a renamed variable, a
+different call shape, an optional chain. The pattern is stable enough to state
+as a rule: **when you write a convention-matching guard, immediately ask what
+the same code would look like written slightly differently** -- `?.`, a rename,
+a destructure, a multi-line split -- and either widen the pattern or say in the
+comment that those escape. Guessing the variants up front is cheap; finding them
+one review round at a time is not.
+
 **The corollary: the follow-up beads from a review are the highest-yield beads
 in the store.** These three were filed by a reviewer that had just spent a full
 pass building a model of this exact code. Two of them found defects the original

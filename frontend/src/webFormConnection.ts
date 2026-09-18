@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, findFieldWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, findFieldWithAlias, sectionDeclaresField, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -2474,7 +2474,16 @@ export class WebFormConnection {
     // can switch_section first (sections and fields stay distinct units,
     // CLAUDE.md scar #5).
     if (!this.continuousSessionEnabled) {
-      const owningSection = this.state.schema.sections?.find(s => s.fields?.includes(fieldId));
+      // []-alias-aware membership (bd polyglot-pdf-a6cl2). fieldId arrives here
+      // already resolved by resolveFieldForNavigation -- which is NOW alias-aware
+      // (bd polyglot-pdf-mwgim) -- so it carries the SCHEMA's bracket form while
+      // a section.fields entry may carry the other one. An exact includes() then
+      // finds no owning section, and the handler falls through to ack
+      // found:true for a field this section-scoped session cannot actually
+      // reach, instead of telling the model to switch_section first.
+      const owningSection = this.state.schema.sections?.find(s =>
+        sectionDeclaresField(s, fieldId)
+      );
       if (owningSection && owningSection.id !== this.state.currentSectionId) {
         this.sendSwitchFieldResponse(request_id, false, {
           reason: 'other_section',

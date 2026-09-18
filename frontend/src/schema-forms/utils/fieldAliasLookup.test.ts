@@ -234,7 +234,13 @@ describe('the set of exact-only section.fields membership tests', () => {
   // schema missing a field, a resume landing on the wrong section, a section
   // validating complete with an answer missing). Route them through
   // sectionDeclaresField.
-  const MEMBERSHIP_RE = /\.fields\s*\.includes\(/;
+  // `?.` is matched as well as `.` (bd polyglot-pdf-a6cl2). The first version
+  // of this regex required a plain dot, so the ONE live optional-chain site --
+  // `s.fields?.includes(fieldId)` in webFormConnection's other_section gate --
+  // was invisible to the guard written to pin this exact set. That is the
+  // recurring shape of these misses: a guard enumerates over a CONVENTION, and
+  // the member that escapes is the one written slightly differently.
+  const MEMBERSHIP_RE = /\.fields\s*\??\s*\.includes\(/;
 
   const ALLOWED: Record<string, string> = {
     // sectionDeclaresField's OWN implementation -- it IS the alias-aware
