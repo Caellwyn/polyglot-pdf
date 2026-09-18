@@ -92,10 +92,28 @@ Exception-rendering row above -- because a source-level guard is structurally
 blind to a leak that happens at render time. Keep new logging on `_log.*` with redacted (`*_length`/`*_count`)
 kwargs, and don't read a green guard as proof a non-`_log` sink is clean.
 
+**The processor only guards a logger that actually USES it** (bd
+polyglot-pdf-65jeu). `structlog.get_logger().bind(module=...)` at module level
+binds whatever configuration exists at that moment, and both apps imported their
+route and service modules before calling `configure_logging()` -- so 49 loggers
+kept structlog's DEFAULT processors and rendered exceptions through
+`ConsoleRenderer`, MESSAGE and traceback included. For those loggers the
+guarantee above did not hold at all: the leak was invisible to
+`test_no_pii_logging.py`'s source-level grep (the call sites are clean) and to
+`test_error_shape.py`'s shape test (which exercised the configured chain, not
+the frozen one). Every module-level logger is now created bind-free as
+`structlog.get_logger(module=...)`, whose lazy proxy resolves configuration on
+the first LOG call; the chain is additionally applied at import of
+`backend/utils/logging.py`, which both `main.py` files import first.
+`tests/test_structlog_json_output.py` imports each real app in a fresh
+subprocess and asserts a sentinel exception message never appears in the output,
+and `test_error_shape.py` pins the module-level bind SET as empty.
+
 The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed in
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
+*Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: 49 module-level `structlog.get_logger().bind(...)` sites froze structlog's DEFAULT ConsoleRenderer -- which prints the exception MESSAGE -- onto their loggers, bypassing `pii_safe_exception_processor` entirely for those modules. All 49 are now bind-free `structlog.get_logger(module=...)`, the chain is applied at import of `backend/utils/logging.py`, and a subprocess test proves a sentinel message never reaches the output of either app.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the access-log row -- the WebSocket credential no longer rides the URL.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: two new per-surface rows -- the exception-message kwarg class (`error=str(exc)` banned on both services, `error_type=type(exc).__name__` sanctioned, exact per-site allowlist) and the trimmed `/health` payloads.)*

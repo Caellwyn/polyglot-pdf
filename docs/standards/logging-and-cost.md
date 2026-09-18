@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
+*Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
+
 *Last updated: 2026-09-18 (bd polyglot-pdf-vm2fu: `scripts/setup-telemetry.sh`'s sink-table detection now goes through a new `scripts/telemetry_bq_setup.py list-tables` subcommand instead of `bq ls --project_id=... --format=csv "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline swallowed stderr and treated an EMPTY listing as "no tables yet", indistinguishable from a `bq` CLI that failed to list at all (observed live: a broken `bq` shim on one machine returned nothing while the sink's stdout table was confirmed present via the same google-cloud-bigquery client this script already depends on for LOCATION derivation and the dataset-scoped IAM grants). `list-tables` exits non-zero with a message on any real API error, which the script now aborts on rather than silently reporting every gated cost view PENDING.)*
 
 *Last updated: 2026-09-17 (bd polyglot-pdf-k5w16: the sink-writer dataEditor grant call was doubling the `serviceAccount:` prefix on a re-run -- `gcloud logging sinks describe --format=value(writerIdentity)` already returns it prefixed, but the grant call always assumed a bare email -- aborting the script under `set -e` before any view was applied. `scripts/setup-telemetry.sh` now normalises WRITER_IDENTITY to a bare email once, right after both the create and update branches assign it. `telemetry_bq_setup.py grant-dataset-role` is also now idempotent-tolerant on the write path: an `update_dataset` failure whose message says the access entry already exists is logged and treated as success rather than aborting, on top of the pre-existing snapshot-based `already_granted` check. Separately, `sql/telemetry_views.sql`'s header wrongly claimed `CREATE VIEW` tolerates a not-yet-existent source table ("BigQuery views are late-bound") -- live-confirmed false: creating `income_month` before the sink's stderr-stream table existed failed with a 404 at CREATE time, not a successfully-created zero-row view. `setup-telemetry.sh` now applies each of the five views independently, gated on whether ITS OWN source table already exists, reporting the rest as pending and exiting 0 -- see the "Views" and "IAM" paragraphs below.)*
@@ -293,6 +295,28 @@ deliberately not yet in the filter: Epic 3 bead 8 (`setup-monitoring.sh`, not
 this bead) is what first wires `StructuredLogger.log_error` to a real call
 site, and it will land under the same nested `message.event_type` shape as
 usage events when it does.
+
+**A logger bound at IMPORT time never reaches the sink at all** (bd
+polyglot-pdf-65jeu). `structlog.get_logger().bind(module=...)` at module level
+instantiates the bound logger against the configuration current AT THAT MOMENT.
+Both apps import their route and service modules BEFORE calling
+`configure_logging()`, so all 49 such loggers kept structlog's DEFAULT
+processors -- `ConsoleRenderer` -- for the life of the process, and their lines
+reached Cloud Logging as **textPayload** (`2026-09-15 21:38:03 [info     ]
+ledger_export  amount=-1 ...`), not the `jsonPayload` the sink filter matches.
+Observed live on staging 2026-09-18: `ledger_export`, `form_session_ended`,
+`usage_rollup_written` and `sweep_expired_links_complete` were all invisible to
+BigQuery, so `income_month` (source: `ledger_export`) could not be built. Only
+`StructuredLogger._emit`'s usage events were unaffected, because that emitter
+prints its own `json.dumps` rather than going through the processor chain.
+The fix has two independent halves: every module-level logger is now created
+bind-free as `structlog.get_logger(module=...)` (a lazy proxy that resolves
+configuration on the first LOG call), and `backend/utils/logging.py` applies
+the chain at ITS OWN import, with both `main.py` files importing it FIRST --
+which also covers a module that logs during its own body, as
+`backend/services/auth.py` does with `firebase_admin_initialized`. Pinned by
+`tests/test_structlog_json_output.py` (a fresh subprocess import of each real
+app) and by the empty-set assertion in `backend/tests/unit/test_error_shape.py`.
 
 **The sink lands rows in TWO destination tables, not one** (bd
 polyglot-pdf-ih428): a Cloud Logging -> BigQuery sink names its destination
