@@ -33,11 +33,9 @@ on every operator machine:
      add-iam-policy-binding` in the shell script, since that call never used
      `bq` and gcloud is not implicated in the failure this bead fixes.
 
-Two subcommands:
+Three subcommands:
 
-    python scripts/telemetry_bq_setup.py resolve-location \
-        --project <PROJECT_ID> --dataset <DATASET> \
-        --billing-table <BILLING_PROJECT.BILLING_DATASET.TABLE>
+    python scripts/telemetry_bq_setup.py resolve-location         --project <PROJECT_ID> --dataset <DATASET>         --billing-table <BILLING_PROJECT.BILLING_DATASET.TABLE>
         Prints the LOCATION setup-telemetry.sh should create/expect the
         telemetry dataset in: the billing table's own dataset location. If
         the telemetry dataset ALREADY EXISTS, HOLDS AT LEAST ONE TABLE, and
@@ -51,14 +49,29 @@ Two subcommands:
         conflict -- there is nothing in it a mismatched location could
         strand -- so the billing dataset's location is printed either way.
 
-    python scripts/telemetry_bq_setup.py grant-dataset-role \
-        --project <PROJECT_ID> --dataset <DATASET> \
-        --member <serviceAccount:...> --role <roles/bigquery.xxx>
+    python scripts/telemetry_bq_setup.py grant-dataset-role         --project <PROJECT_ID> --dataset <DATASET>         --member <serviceAccount:...> --role <roles/bigquery.xxx>
         Grants ONE dataset-scoped role to ONE member via
         Dataset.access_entries + Client.update_dataset(["access_entries"]),
         replacing a `bq add-iam-policy-binding <dataset>` call. Idempotent:
         an access entry already granting this exact (role, member) pair is
         left as-is rather than duplicated.
+
+    python scripts/telemetry_bq_setup.py list-tables         --project <PROJECT_ID> --dataset <DATASET>
+        Prints one table id per line for every table in the dataset (bd
+        polyglot-pdf-vm2fu), via bigquery.Client.list_tables -- the SAME API
+        call setup-telemetry.sh's stdout/stderr sink-table detection used to
+        approximate with `bq ls ... 2>/dev/null | tail -n +2`. That shell
+        pipeline swallows stderr and treats an EMPTY listing as "no tables
+        yet", so a `bq` CLI that fails to list at all (a broken shim, a DNS
+        blip) reads back identically to a genuinely empty, not-yet-written
+        dataset -- the live bug this subcommand exists to fix. An empty
+        dataset (zero tables, confirmed via a successful API call) prints
+        nothing and exits 0; an API error (permission denied, dataset not
+        found, network fault) prints an ERROR line to stderr and exits 1 --
+        it must NEVER print an empty list on error, since the caller (this
+        module's own docstring's "Exit codes" paragraph, and
+        setup-telemetry.sh) treats a truly empty stdout as "no tables exist",
+        exactly the ambiguity this subcommand replaces.
 
 Exit codes: 0 success; 1 any failure (missing table/dataset, API error, a
 location conflict). Every failure prints a human-readable reason to stderr
@@ -364,6 +377,50 @@ def _grant_dataset_role(args: argparse.Namespace) -> int:
     return 0
 
 
+def _list_tables(args: argparse.Namespace) -> int:
+    """Print one table id per line for every table in --dataset (bd
+    polyglot-pdf-vm2fu).
+
+    Replaces setup-telemetry.sh's `bq ls --project_id=... --format=csv
+    "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline redirects stderr to
+    /dev/null and then treats an EMPTY result as "the dataset has no tables
+    yet", which is indistinguishable from "bq itself failed to list at all"
+    (a broken `bq` shim needing CLOUDSDK_PYTHON, a transient DNS blip). Both
+    were observed live producing an empty listing while a sink table
+    (run_googleapis_com_stdout) was actually present and confirmed via this
+    same google-cloud-bigquery client's list_tables call. This subcommand
+    goes through that client directly instead, so a genuine API failure is
+    reported as an ERROR and a non-zero exit -- never silently rendered as
+    an empty (and therefore misread as "no tables yet") stdout.
+
+    A dataset that exists and holds zero tables is not an error: it prints
+    nothing and exits 0, same as `bq ls` would for a real empty dataset --
+    the fix here is only that a FAILURE to list can no longer look like
+    that same empty-output shape.
+    """
+    from google.cloud import bigquery
+
+    client = _client(args.project)
+    if client is None:
+        return 1
+
+    dataset_ref = bigquery.DatasetReference(args.project, args.dataset)
+    try:
+        tables = list(client.list_tables(dataset_ref))
+    except Exception as exc:  # noqa: BLE001 -- surfaced, never swallowed
+        print(
+            "ERROR: could not list tables in dataset {}: {}".format(
+                dataset_ref, exc
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    for table in tables:
+        print(table.table_id)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -388,6 +445,16 @@ def main(argv: list[str] | None = None) -> int:
     grant.add_argument("--member", required=True)
     grant.add_argument("--role", required=True)
     grant.set_defaults(func=_grant_dataset_role)
+
+    list_tables_parser = sub.add_parser(
+        "list-tables",
+        help="Print one table id per line for every table in the dataset "
+        "(exit non-zero on an API error; never print an empty list on "
+        "failure), replacing `bq ls` for sink-table detection.",
+    )
+    list_tables_parser.add_argument("--project", required=True)
+    list_tables_parser.add_argument("--dataset", required=True)
+    list_tables_parser.set_defaults(func=_list_tables)
 
     args = parser.parse_args(argv)
     return args.func(args)

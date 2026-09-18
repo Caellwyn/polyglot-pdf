@@ -541,33 +541,41 @@ def test_sql_file_exists_and_is_applied_by_the_script():
 
 
 def test_script_discovers_both_stdout_and_stderr_tables_separately():
-    """bd polyglot-pdf-ih428: the sink writes usage events to a
-    run_googleapis_com_stdout table and ledger_export/session events to a
-    SEPARATE run_googleapis_com_stderr table (see the script's own section-6
-    comment for why). The script must discover BOTH table names from `bq
-    ls`, not `head -1` a single one and reuse it for every view. Mutation:
-    collapse TELEMETRY_TABLE_STDOUT/TELEMETRY_TABLE_STDERR back into one
-    TELEMETRY_TABLE variable fed by a single `bq ls | ... | head -1` -- red.
+    """bd polyglot-pdf-ih428 (table discovery must find BOTH tables) plus bd
+    polyglot-pdf-vm2fu (discovery must go through the python client, not `bq
+    ls`): the sink writes usage events to a run_googleapis_com_stdout table
+    and ledger_export/session events to a SEPARATE run_googleapis_com_stderr
+    table (see the script's own section-6 comment for why). The script must
+    discover BOTH table names from telemetry_bq_setup.py list-tables, not
+    `head -1` a single one and reuse it for every view, and not go through
+    `bq ls` at all (see test_table_detection_no_longer_calls_bq_ls below for
+    the negative half of that second requirement). Mutation: collapse
+    TELEMETRY_TABLE_STDOUT/TELEMETRY_TABLE_STDERR back into one
+    TELEMETRY_TABLE variable, or point both at the same grep filter -- red.
     """
     text = _script_text()
-    # A single `bq ls` call populates a shared CSV variable that both
-    # TELEMETRY_TABLE_STDOUT and TELEMETRY_TABLE_STDERR are then filtered
-    # from -- so the traceable requirement is that `bq ls` feeds a variable
-    # that BOTH assignments read from, and each assignment greps for its
-    # own distinct stream name.
-    csv_source = re.search(r'(\w+)=\$\(bq ls[^\n]*\)', text)
-    assert csv_source, "no variable is populated directly from `bq ls`"
-    csv_var = csv_source.group(1)
+    # A single telemetry_bq_setup.py list-tables call populates a shared
+    # variable that both TELEMETRY_TABLE_STDOUT and TELEMETRY_TABLE_STDERR
+    # are then filtered from -- so the traceable requirement is that the
+    # python subcommand feeds a variable that BOTH assignments read from,
+    # and each assignment greps for its own distinct stream name.
+    list_tables_source = re.search(
+        r'(\w+)=\$\("\$PYTHON_BIN" "\$SCRIPT_DIR/telemetry_bq_setup\.py" '
+        r'list-tables[^)]*\)', text)
+    assert list_tables_source, (
+        "no variable is populated directly from "
+        "telemetry_bq_setup.py list-tables")
+    tables_var = list_tables_source.group(1)
     stdout_line = re.search(
-        r'TELEMETRY_TABLE_STDOUT=\$\([^\n]*\$' + re.escape(csv_var) + r'[^\n]*\)', text)
+        r'TELEMETRY_TABLE_STDOUT=\$\([^\n]*\$' + re.escape(tables_var) + r'[^\n]*\)', text)
     stderr_line = re.search(
-        r'TELEMETRY_TABLE_STDERR=\$\([^\n]*\$' + re.escape(csv_var) + r'[^\n]*\)', text)
+        r'TELEMETRY_TABLE_STDERR=\$\([^\n]*\$' + re.escape(tables_var) + r'[^\n]*\)', text)
     assert stdout_line, (
-        "TELEMETRY_TABLE_STDOUT is not populated from the `bq ls` output "
-        "variable ({!r})".format(csv_var))
+        "TELEMETRY_TABLE_STDOUT is not populated from the list-tables output "
+        "variable ({!r})".format(tables_var))
     assert stderr_line, (
-        "TELEMETRY_TABLE_STDERR is not populated from the `bq ls` output "
-        "variable ({!r})".format(csv_var))
+        "TELEMETRY_TABLE_STDERR is not populated from the list-tables output "
+        "variable ({!r})".format(tables_var))
     # The two discovery pipelines must filter on DIFFERENT stream names, not
     # the same "stdout" grep reused twice.
     stdout_grep = re.search(r'grep -i "([^"]*)"', stdout_line.group(0))
@@ -578,7 +586,47 @@ def test_script_discovers_both_stdout_and_stderr_tables_separately():
     assert "stderr" in stderr_grep.group(1).lower()
     assert stdout_grep.group(1) != stderr_grep.group(1), (
         "the stdout and stderr table-discovery greps use the same filter -- "
-        "they must select different rows from `bq ls`")
+        "they must select different rows from the list-tables output")
+
+
+def test_table_detection_no_longer_calls_bq_ls():
+    """bd polyglot-pdf-vm2fu's headline fix: `bq ls` must no longer be the
+    mechanism setup-telemetry.sh uses to detect the sink's destination
+    tables. `bq ls ... 2>/dev/null | tail -n +2` swallows stderr and treats
+    an EMPTY listing as "no tables yet" -- indistinguishable from a `bq` CLI
+    that failed to list at all (a broken shim needing CLOUDSDK_PYTHON, a
+    transient DNS blip), which is exactly the live bug this bead fixes.
+    Mutation: reintroduce a `bq ls` invocation for table detection -- red."""
+    text = _script_text()
+    invocation_lines = [
+        line for line in text.splitlines()
+        if re.search(r'\bbq ls\b', line) and not line.strip().startswith("#")
+    ]
+    assert not invocation_lines, (
+        "scripts/setup-telemetry.sh still INVOKES `bq ls` for table "
+        "detection -- it must go through telemetry_bq_setup.py list-tables "
+        "instead (bd polyglot-pdf-vm2fu): {}".format(invocation_lines))
+
+
+def test_table_detection_aborts_on_a_list_tables_failure():
+    """The other half of bd polyglot-pdf-vm2fu's fix: when
+    telemetry_bq_setup.py list-tables fails (a real BigQuery API error), the
+    script must ABORT with a clear message, not silently treat the failure
+    as "no tables yet" and report every gated view PENDING. Mutation: drop
+    the `if ! ... ; then ... exit 1; fi` guard around the list-tables call
+    (or the `exit 1` inside it) so a failure falls through to empty
+    TELEMETRY_TABLE_STDOUT/STDERR instead of aborting -- red."""
+    text = _script_text()
+    call_block = re.search(
+        r'if ! TELEMETRY_TABLES=\$\("\$PYTHON_BIN" "\$SCRIPT_DIR/'
+        r'telemetry_bq_setup\.py" list-tables(?:[^\n]*\n){0,4}?'
+        r'[^\n]*\); then\n(?:[^\n]*\n){0,4}?\s*exit 1\n\s*fi',
+        text)
+    assert call_block, (
+        "a failed telemetry_bq_setup.py list-tables call does not abort "
+        "the script with `exit 1` -- it would continue with an empty/stale "
+        "TELEMETRY_TABLES and silently report every gated view PENDING "
+        "instead of surfacing the real API error")
 
 
 def test_script_substitutes_both_telemetry_table_placeholders_independently():
