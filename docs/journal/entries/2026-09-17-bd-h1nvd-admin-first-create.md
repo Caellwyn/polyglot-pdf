@@ -59,10 +59,54 @@ Two new tests in `tests/test_cloudbuild_yaml.py` stub `gcloud run services
 describe polyglot-admin` to fail (first deploy) or succeed (existing
 service) and capture the real `gcloud run deploy` argv, pinning that
 `--no-traffic`/`--tag` are absent in the first case and present in the
-second. A third test pins that `admin-service-verify-tagged` inspects
-`status.traffic[].tag` rather than assuming a tag exists. All three were
-confirmed red against the pre-fix `cloudbuild.yaml` (reverted, re-run,
-restored) before being trusted.
+second. A third test pins (by source-text substring) that
+`admin-service-verify-tagged` inspects `status.traffic[].tag` rather than
+assuming a tag exists. All three were confirmed red against the pre-fix
+`cloudbuild.yaml` (reverted, re-run, restored) before being trusted.
+
+### Round 2 (fresh-eyes fix pass, bd polyglot-pdf-h1nvd)
+
+The cross-surface review's one GAPS-FOUND finding: the third test above
+(source-text substring check) cannot catch an inverted branch condition in
+`admin-service-verify-tagged` -- a mutation that swaps which case probes
+the candidate--- URL vs. the base URL leaves all three of its substring
+assertions green, because the guard code (`status.traffic[].tag`, the curl
+call, `exit 1`) stays textually present either way.
+
+**Adopted:** two new runtime tests,
+`test_admin_service_verify_tagged_probes_base_url_on_first_deploy` and
+`test_admin_service_verify_tagged_probes_candidate_url_when_tagged`, added
+alongside (not replacing) the existing source-text test. They execute
+`admin-service-verify-tagged` for real through a stubbed `gcloud`
+(answering both the `status.url` and `status.traffic[].tag` describe
+calls) and a stubbed `curl` that records the URL it was actually asked to
+probe, then assert on that recorded URL. Mutation-verified: hand-inverting
+`if [ -n "$$CANDIDATE_TAG" ]` to `-z` in a copy of `cloudbuild.yaml` turned
+both new tests red (each asserting the opposite URL was probed) while the
+pre-existing source-text test stayed green, exactly as the reviewer
+predicted; reverted the mutation and reran to confirm all three (and the
+full 80-test file) pass clean.
+
+**Deferred (bead filed, not fixed here):** the reviewer's doc finding --
+`docs/components/config-deployment.md` (and possibly `admin-service.md`)
+still assert unconditionally that the admin-service target deploys a
+no-traffic tagged revision, which is false on the new first-deploy path.
+Both files are already claimed by the concurrent stamp-collapse bead
+`polyglot-pdf-e1l5f` (see "Deferred" section below); the reviewer correctly
+did not force past that collision guard. Bd `polyglot-pdf-yl022` carries
+the fact forward once e1l5f's claim clears (the reviewer filed it directly;
+verified it exists with correct exit criteria, so no duplicate was filed).
+
+**Rejected (no code change, refuted or non-actionable):** the reviewer's
+third note -- that this entry's own "Doc freshness" section below
+overstated `check_doc_freshness.py`'s result for `docs/technical_guide.md`
+-- was correct: a live rerun shows STALE (a same-commit, 16-second mtime
+gap between `deploy-admin.sh` and the doc trips the checker's
+mtime-vs-commit-time heuristic even though the doc's content is accurate).
+The checker is warn-only (exit 0) either way, and the reviewer classified
+this as a minor self-report inaccuracy rather than a rubric gap or
+blocker -- corrected in the "Doc freshness" section below rather than
+treated as a code fix.
 
 ## Deferred (not this bead)
 
@@ -106,8 +150,15 @@ that its work was complete and unmerged, not actively in flight.
   declared surfaces of a separate, already-complete unmerged claim
   (bd `polyglot-pdf-e1l5f`); see "Deferred" above.
 - `scripts/check_doc_freshness.py` run: reports pre-existing STALE entries
-  unrelated to this bead's changes (warn-only, exit 0); `docs/technical_guide.md`
-  itself reports OK.
+  unrelated to this bead's changes (warn-only, exit 0). CORRECTION (round 2
+  fresh-eyes fix): this entry originally claimed `docs/technical_guide.md`
+  itself reports OK -- it does not. The checker reports it STALE
+  (`deploy-admin.sh updated 2026-09-17 17:30`) because `deploy-admin.sh` and
+  the doc were committed 16 seconds apart in the same commit, which the
+  checker's mtime/commit-time comparison reads as staleness even though the
+  doc's content is accurate to the code (verified directly against
+  `cloudbuild.yaml`). A script quirk, not a real doc problem; the checker
+  is warn-only (exit 0) regardless.
 
 ## Files touched
 

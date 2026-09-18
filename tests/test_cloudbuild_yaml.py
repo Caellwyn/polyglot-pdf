@@ -936,6 +936,134 @@ def test_admin_service_verify_tagged_checks_base_url_on_first_deploy(by_id):
     assert "exit 1" in body
 
 
+def _run_admin_service_verify_tagged_stub(
+    tmp_path, by_id, *, candidate_tag_present
+):
+    """Executes admin-service-verify-tagged for real through a stubbed
+    `gcloud` and a stubbed `curl`, mirroring
+    `_run_admin_service_deploy_tagged_stub`'s pattern one step later in the
+    same build. `candidate_tag_present` selects which case the stubbed
+    `status.traffic[].tag` describe call answers: True == a tagged deploy
+    (candidate tag exists), False == the first-deploy branch (no tag was
+    ever attached, bd polyglot-pdf-h1nvd).
+
+    The stub `curl` writes the URL it was actually asked to probe to a
+    marker file, so the test can tell a candidate--- probe apart from a
+    base-URL probe regardless of how the script's branch condition is
+    spelled -- an inverted condition (e.g. probing candidate--- on a first
+    deploy) shows up directly as the wrong URL in the marker, not just as a
+    surviving substring in the source.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+
+    script = script_of(by_id["admin-service-verify-tagged"])
+    rendered = (
+        script.replace("${_TARGET}", "admin-service")
+        .replace("$$", "$")
+    )
+
+    curl_marker = tmp_path / "curl_url.txt"
+    fake_gcloud = tmp_path / "gcloud"
+    tag_line = "candidate" if candidate_tag_present else ""
+    fake_gcloud.write_text(
+        "#!/bin/bash\n"
+        "if [ \"$1 $2\" = \"run services\" ] && [ \"$3\" = \"describe\" ]; then\n"
+        "  for a in \"$@\"; do\n"
+        "    case \"$a\" in\n"
+        "      *status.url*) echo 'https://polyglot-admin-fake.a.run.app'; exit 0 ;;\n"
+        f"      *status.traffic*) echo '{tag_line}'; exit 0 ;;\n"
+        "    esac\n"
+        "  done\n"
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_gcloud.chmod(0o755)
+
+    fake_curl = tmp_path / "curl"
+    fake_curl.write_text(
+        "#!/bin/bash\n"
+        "for a in \"$@\"; do\n"
+        "  case \"$a\" in\n"
+        "    http*) echo -n \"$a\" > \"" + curl_marker.as_posix() + "\" ;;\n"
+        "  esac\n"
+        "done\n"
+        "echo -n 200\n",
+        encoding="utf-8", newline="\n",
+    )
+    fake_curl.chmod(0o755)
+
+    bash_tmp_dir = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert bash_tmp_dir, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{bash_tmp_dir}:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, str(driver)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        f"admin-service-verify-tagged failed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert curl_marker.exists(), (
+        "admin-service-verify-tagged never reached the (stubbed) curl health "
+        f"check:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    return curl_marker.read_text(encoding="utf-8")
+
+
+def test_admin_service_verify_tagged_probes_base_url_on_first_deploy(tmp_path, by_id):
+    """RUNTIME half of the source-text check above: when no "candidate" tag
+    exists on the service's current traffic (the first-deploy case, bd
+    polyglot-pdf-h1nvd), the health check must actually curl the BASE url,
+    not a candidate--- url that admin-service-deploy-tagged never created
+    on a first deploy. A substring check on the script's source text cannot
+    catch an inverted branch condition that still mentions
+    "status.traffic[].tag" and "exit 1" verbatim; this drives the real
+    bash and inspects the URL the stubbed curl actually received.
+    """
+    probed = _run_admin_service_verify_tagged_stub(
+        tmp_path, by_id, candidate_tag_present=False
+    )
+    assert probed == "https://polyglot-admin-fake.a.run.app/health", (
+        f"first-deploy verify probed the wrong URL: {probed!r}"
+    )
+
+
+def test_admin_service_verify_tagged_probes_candidate_url_when_tagged(tmp_path, by_id):
+    """Companion to the first-deploy case above: once a "candidate" tag
+    exists (every deploy after the first), the health check must still
+    probe the candidate--- url, exactly as it did before bd
+    polyglot-pdf-h1nvd -- the fix must not disable tagged verification for
+    the steady-state case.
+    """
+    probed = _run_admin_service_verify_tagged_stub(
+        tmp_path, by_id, candidate_tag_present=True
+    )
+    assert probed == "https://candidate---polyglot-admin-fake.a.run.app/health", (
+        f"tagged-deploy verify probed the wrong URL: {probed!r}"
+    )
+
+
 # Cloud Build's own built-in substitutions. A bare $NAME is legal in a step
 # body ONLY if the name is one of these or is declared under `substitutions:`
 # in the file itself; everything else is a bash variable that MUST be written
