@@ -19,6 +19,7 @@ const noAuthExpired = () => false;
 const FIRM_A = {
   firm_id: 'firm-a', name: 'Firm A', contact_email: 'a@example.com',
   kind: 'live' as const, status: 'active' as const, allowed_kits: [], balance_credits: 100,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 
@@ -46,6 +47,7 @@ function firmDetail(ledger: Array<{ ts: number }> = []) {
     firm_id: 'firm-a', name: 'Firm A', contact_email: 'a@example.com',
     kind: 'live' as const, status: 'active' as const, allowed_kits: [],
     balance_credits: 100,
+    balance_credits_malformed: false,
     plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
     ledger: ledger.map((row, i) => ({
       type: 'mint_debit', amount: -1, usd_amount: null, firm_kind: 'live' as const,

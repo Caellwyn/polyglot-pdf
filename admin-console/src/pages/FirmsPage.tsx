@@ -222,7 +222,17 @@ export const FirmsPage: React.FC<FirmsPageProps> = ({ onAuthExpired, onOpenFirm 
                     {firm.kind}
                   </span>
                 </td>
-                <td className="py-1 pr-4">{firm.balance_credits}</td>
+                <td className="py-1 pr-4">
+                  {firm.balance_credits}
+                  {firm.balance_credits_malformed && (
+                    <span
+                      className="ml-2 inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800"
+                      title="Stored balance is not a valid number -- this firm's balance may be wrong."
+                    >
+                      unreadable
+                    </span>
+                  )}
+                </td>
                 <td className="py-1 pr-4">{statusLabel(firm.status)}</td>
               </tr>
             ))}

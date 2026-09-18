@@ -246,7 +246,33 @@ def _get_firm_or_404(db, firm_id: str) -> dict:
 
 def _public_firm_view(firm_id: str, doc: dict) -> dict:
     """The fields a console list/detail view needs, in one place so the
-    list and detail routes cannot silently diverge on shape."""
+    list and detail routes cannot silently diverge on shape.
+
+    `balance_credits_malformed` (nit 1 from the polyglot-pdf-zopqq fresh-eyes
+    review, bd polyglot-pdf-0w13i) is a distinguishing signal for the
+    fail-closed `balance_credits` fallback just below: a stored value that
+    is present but not a plain int (a corrupted doc, a stray float/string/
+    bool written by something other than credit_ledger.append_entry) would
+    otherwise report the SAME `0` a real "$0 firm" reports, with nothing in
+    the response telling an operator the two apart. The key is present and
+    False on every normal firm (including one truly at a zero balance, or
+    one where the key was never written yet), and True only when a stored
+    value exists and fails the int check -- so a console can render a
+    "balance unreadable" badge instead of a trustworthy-looking $0 without
+    guessing from the number alone. Read-only diagnostic; it changes no
+    write path, and credit_ledger.append_entry remains the only writer of
+    balance_credits (scar #8's guard,
+    test_credit_ledger_is_the_only_module_that_writes_balance_credits).
+
+    KNOWN BLIND SPOT: dict.get() cannot distinguish "the key was never
+    written" from "the key is explicitly stored as None" -- both read back
+    as None -- so a doc that somehow stored balance_credits=None reads as
+    the ordinary never-written case, not as malformed. Every other wrong
+    type (str, float, bool, list, ...) is still caught."""
+    raw_balance = doc.get("balance_credits")
+    balance_is_valid_int = (
+        isinstance(raw_balance, int) and not isinstance(raw_balance, bool)
+    )
     return {
         "firm_id": firm_id,
         "name": doc.get("name"),
@@ -256,9 +282,14 @@ def _public_firm_view(firm_id: str, doc: dict) -> dict:
         "status": doc.get("status"),
         "allowed_kits": doc.get("allowed_kits")
         if isinstance(doc.get("allowed_kits"), list) else [],
-        "balance_credits": doc.get("balance_credits")
-        if isinstance(doc.get("balance_credits"), int)
-        and not isinstance(doc.get("balance_credits"), bool) else 0,
+        "balance_credits": raw_balance if balance_is_valid_int else 0,
+        # True only for a PRESENT-but-malformed stored value -- "the key was
+        # never written" (raw_balance is None) is the ordinary pre-first-
+        # grant state, not corruption, so it reads False like any other
+        # valid-zero firm.
+        "balance_credits_malformed": (
+            raw_balance is not None and not balance_is_valid_int
+        ),
         # A doc with no stored `plan` (the pre-backfill window, same as
         # `kind` above) reads as the maintainer's own default rather than
         # None -- a console page showing "no plan" for an unclassified firm

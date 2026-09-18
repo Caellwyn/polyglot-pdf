@@ -28,12 +28,14 @@ const FIRM_A = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: [],
   balance_credits: 120,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 const FIRM_B = {
   firm_id: 'firm-b', name: 'Beta Legal', contact_email: 'ops@beta.test',
   kind: 'mock' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 0,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 
@@ -70,6 +72,24 @@ describe('FirmsPage', () => {
     expect(within(table).getByText('live')).toBeInTheDocument();
     expect(within(table).getByText('mock')).toBeInTheDocument();
     expect(within(table).getByText('120')).toBeInTheDocument();
+  });
+
+  it('flags a firm whose stored balance is not a valid number, and does not flag a normal one', async () => {
+    // bd polyglot-pdf-0w13i (nit 1 from the zopqq review): a corrupted
+    // balance_credits must not read identically to a real $0/normal
+    // balance -- the route already sends balance_credits_malformed, this
+    // pins the console actually SURFACING it.
+    vi.mocked(listFirms).mockResolvedValue([
+      { ...FIRM_A, balance_credits_malformed: true },
+      FIRM_B,
+    ]);
+    render(<FirmsPage onAuthExpired={noAuthExpired} onOpenFirm={noOpenFirm} />);
+    const table = await screen.findByTestId('firms-table');
+
+    expect(within(table).getByText('unreadable')).toBeInTheDocument();
+    // Only ONE row is flagged -- FIRM_B's own balance_credits_malformed:
+    // false must not also render the badge.
+    expect(within(table).getAllByText('unreadable')).toHaveLength(1);
   });
 
   it('the create button is disabled until a kind is chosen', async () => {
