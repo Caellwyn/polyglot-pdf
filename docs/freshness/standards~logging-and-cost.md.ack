@@ -1,4 +1,4 @@
 doc: docs/standards/logging-and-cost.md
-verified: scripts/setup-monitoring.sh, scripts/setup-telemetry.sh
-because: Updated in this same bead (polyglot-pdf-e4dt8): the new Errors/close-events/monitoring section documents setup-monitoring.sh in full and records the ws_error clause added to setup-telemetry.sh's sink filter. The stale flag is a same-day ordering artifact -- the doc was stamped 2026-09-09 and both scripts were edited later that same day.
-sha: a3e18e74d
+verified: scripts/setup-telemetry.sh, scripts/telemetry_bq_setup.py, sql/telemetry_views.sql
+because: Updated in this same commit for bd polyglot-pdf-k5w16 -- Views/IAM paragraphs and new dated stamp already reflect the writer-identity prefix fix and per-view apply; flagged stale only by same-day stamp-vs-commit-time granularity.
+sha: b23b1658f
