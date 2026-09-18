@@ -375,9 +375,12 @@ until abuse is observed:
   tail is trustworthy). In production every browser call reaches Cloud Run
   through the Hosting `/api/**` rewrite, so the chain ends
   `..., browser, hosting-egress`; a direct call to the run.app host ends
-  `..., caller`. The CLIENT bucket is keyed on the last two hops
+  `..., caller`. The CLIENT bucket is keyed on the second-to-last hop alone
   (`RATE_LIMIT_BUDGET`, default 30, per `RATE_LIMIT_WINDOW_SEC`, default 60):
-  per browser through Hosting, unforgeable by the browser. The CONNECTION
+  per browser through Hosting, unforgeable by the browser, and stable while
+  Hosting's egress address changes -- it does on every request (measured on
+  staging 2026-09-18), so a key that includes the last hop never limits
+  browser traffic. The CONNECTION
   bucket is keyed on the last hop alone (`RATE_LIMIT_SHARED_BUDGET`, default
   600): shared by everyone behind one Hosting egress, and the backstop that
   caps a direct caller who rotates forged hops. A call the client bucket
