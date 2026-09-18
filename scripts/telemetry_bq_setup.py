@@ -329,6 +329,29 @@ def _grant_dataset_role(args: argparse.Namespace) -> int:
     try:
         client.update_dataset(dataset, ["access_entries"])
     except Exception as exc:  # noqa: BLE001
+        # IDEMPOTENT-TOLERANT (bd polyglot-pdf-k5w16). The already_granted
+        # check above compares against the dataset SNAPSHOT this process
+        # just read -- it cannot see a grant made concurrently (a second
+        # operator, or a retried run racing this one) between that read and
+        # this write, nor a live access entry shaped in a way this module's
+        # own _IAM_ROLE_TO_LEGACY_ACCESS_ROLE mapping does not (yet)
+        # recognize. BigQuery's API reports that case back as an ordinary
+        # exception from update_dataset, not a distinct type, so detect it
+        # by message text (the "already exists" / "duplicate" wording the
+        # API uses for a conflicting access entry) and treat it as success
+        # instead of aborting -- this bead's own live finding was exactly an
+        # abort HERE, under `set -e`, leaving the view-creation steps after
+        # it never run even though the grant itself was fine. Any OTHER
+        # error (a real permission failure, a malformed member, a network
+        # fault) still aborts loudly -- only the "it's already granted"
+        # shape is swallowed.
+        msg = str(exc).lower()
+        if "already exists" in msg or "duplicate" in msg:
+            print(
+                "{} already has {} on {} (reported by the API on write) "
+                "-- continuing.".format(args.member, args.role, dataset_ref)
+            )
+            return 0
         print(
             "ERROR: could not grant {} on {} to {}: {}".format(
                 args.role, dataset_ref, args.member, exc

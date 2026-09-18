@@ -326,6 +326,78 @@ def test_sink_step_resolves_writer_identity_on_both_branches():
         "`gcloud logging sinks describe ... --format=value(writerIdentity)`")
 
 
+def test_writer_identity_is_normalised_to_a_bare_email_before_the_grant():
+    """bd polyglot-pdf-k5w16 (the headline bug): the update-branch
+    `gcloud logging sinks describe --format=value(writerIdentity)` call
+    ALREADY returns the "serviceAccount:service-..." PREFIXED form, while
+    the create-branch grep pulls a BARE email out of `sinks create`'s own
+    output -- two different shapes landing in the same WRITER_IDENTITY
+    variable depending on which branch ran. The grant call below always
+    assumed the bare shape (`--member "serviceAccount:$WRITER_IDENTITY"`),
+    which doubled the prefix on the update branch and made the deployed
+    grant-dataset-role call fail outright (live error: "could not grant
+    roles/bigquery.dataEditor ... to
+    serviceAccount:serviceAccount:service-..."), aborting the script under
+    `set -e` before the view-creation step ever ran. Mutation: delete the
+    `WRITER_IDENTITY="${WRITER_IDENTITY#serviceAccount:}"` normalisation
+    line -- red (the sink-update-branch bare-prefix-stripped assertion
+    below would fail, and a functional run would reproduce the doubled
+    member string)."""
+    text = _script_text()
+    norm_line = re.search(
+        r'WRITER_IDENTITY="\$\{WRITER_IDENTITY#serviceAccount:\}"', text)
+    assert norm_line, (
+        "no WRITER_IDENTITY normalisation line found -- the grant call "
+        "below assumes a bare email and will double the prefix whenever "
+        "WRITER_IDENTITY already carries one (the update/re-run branch)")
+    # The normalisation must run AFTER both branches assign WRITER_IDENTITY
+    # (the if/else block) and BEFORE the grant call uses it -- otherwise it
+    # only protects one branch.
+    if_fi_end = text.index("fi\n", text.index('WRITER_IDENTITY=$(echo "$SINK_CREATE_OUTPUT"'))
+    grant_call = text.index('--member "serviceAccount:$WRITER_IDENTITY"')
+    assert if_fi_end < norm_line.start() < grant_call, (
+        "the normalisation line does not sit between the create/update "
+        "branches and the grant call that consumes WRITER_IDENTITY")
+
+
+def test_writer_identity_normalisation_uses_bash_prefix_strip_not_sed_or_cut():
+    """Pin the EXACT mechanism, not just that a normalisation line exists
+    (test_writer_identity_is_normalised_to_a_bare_email_before_the_grant
+    above already pins presence and position) -- bash's own
+    ${VAR#prefix} parameter expansion is a no-op when the prefix is
+    absent and strips it exactly once when present, which is exactly the
+    two input shapes (bare email from the create branch, prefixed email
+    from the update branch) this bead's bug report is about. Mutation:
+    change the expansion operator from `#` (strip shortest match from
+    the front) to `%` (strip from the back) or `##` (greedy) -- red
+    (`%serviceAccount:` would never match anywhere in a
+    "serviceAccount:service-..." string since that suffix never
+    appears at the END of the value, so the prefix would never be
+    stripped at all)."""
+    text = _script_text()
+    assert re.search(
+        r'WRITER_IDENTITY="\$\{WRITER_IDENTITY#serviceAccount:\}"',
+        text), (
+        "the normalisation does not use bash's ${VAR#prefix} form on "
+        "exactly 'serviceAccount:'")
+
+
+def test_grant_call_consumes_the_normalised_variable():
+    """The grant call must read the SAME WRITER_IDENTITY variable the
+    normalisation line just reassigned, not a separately-derived or
+    stale copy -- otherwise normalising the variable achieves nothing if
+    the grant call reads something else. Mutation: introduce a second
+    variable (e.g. NORMALISED_WRITER_IDENTITY) for the stripped value and
+    leave the grant call reading the original WRITER_IDENTITY -- red
+    (grep for a second variable name would need to also update this
+    test, but the grant call's own --member argument, pinned below,
+    would still show the untouched $WRITER_IDENTITY name either way).
+    """
+    text = _script_text()
+    assert 'serviceAccount:$WRITER_IDENTITY' in text, (
+        "the grant call's --member argument does not read "
+        "$WRITER_IDENTITY -- normalising a different variable would not "
+        "fix the doubled-prefix bug")
 def test_sink_uses_partitioned_tables():
     """Mutation: drop --use-partitioned-tables -- red (the views assume
     partition pruning on a month-range filter)."""
@@ -522,22 +594,94 @@ def test_script_substitutes_both_telemetry_table_placeholders_independently():
         "name) is still referenced somewhere in the script")
 
 
-def test_script_requires_both_tables_before_applying_views():
-    """If either the stdout or the stderr table is missing (sink has not
-    yet produced a row of that kind), the script must skip view creation
-    for BOTH rather than applying with one placeholder left as a literal
-    empty string. Mutation: change the guard from `||` to `&&` (only skip
-    when BOTH are missing) -- red."""
+def test_script_applies_each_view_independently_of_the_other_table(tmp_path):
+    """bd polyglot-pdf-k5w16: the OLD gate skipped EVERY view (all five)
+    whenever either sink destination table was missing -- an all-or-nothing
+    guard that, per this bead's own live finding, left every cost view
+    pending for days after only the stdout table had a row, because the
+    stderr table (ledger_export/session events) had not landed one yet.
+    The script must instead apply the views that only need
+    TELEMETRY_TABLE_STDOUT (cost_by_firm_month, cost_by_kit_month,
+    cost_by_employee_month) and the one that only needs
+    BILLING_EXPORT_TABLE (hosting_cost_by_service_month) even when
+    TELEMETRY_TABLE_STDERR is empty, and vice versa for income_month.
+    Mutation: reinstate a single combined `[ -z "$TELEMETRY_TABLE_STDOUT" ]
+    || [ -z "$TELEMETRY_TABLE_STDERR" ]` guard that exits before any
+    _apply_view call -- red (this test's per-view gating assertions below
+    would then find no _apply_view calls reachable when only one table is
+    missing)."""
     text = _script_text()
-    guard = re.search(
+    # No single guard may exit (or skip the whole apply step) on EITHER
+    # table alone before per-view gating gets a chance to run -- the only
+    # gate this early in the script is the BILLING_EXPORT_TABLE check
+    # (unrelated to the two sink tables).
+    combined_guard = re.search(
         r'if \[ -z "\$TELEMETRY_TABLE_STDOUT" \] (\|\||&&) '
         r'\[ -z "\$TELEMETRY_TABLE_STDERR" \]', text)
-    assert guard, "no guard found checking both TELEMETRY_TABLE_STDOUT/STDERR"
-    assert guard.group(1) == "||", (
-        "the both-tables guard uses {!r}, expected '||' -- with '&&' the "
-        "script would proceed to substitute an EMPTY table name into the "
-        "SQL when only one of the two tables exists yet".format(guard.group(1))
+    assert combined_guard is None, (
+        "a combined TELEMETRY_TABLE_STDOUT/STDERR guard still exists -- "
+        "this bead requires per-view gating instead of an all-or-nothing "
+        "exit before any view is applied")
+    # Each view name must be routed through _apply_view with the flag for
+    # the table it actually depends on (not hard-coded "true"/"false" for
+    # the wrong table).
+    assert re.search(
+        r'_apply_view "cost_by_firm_month"[^\n]*"\$STDOUT_OK"', text)
+    assert re.search(
+        r'_apply_view "cost_by_kit_month"[^\n]*"\$STDOUT_OK"', text)
+    assert re.search(
+        r'_apply_view "cost_by_employee_month"[^\n]*"\$STDOUT_OK"', text)
+    assert re.search(
+        r'_apply_view "income_month"[^\n]*"\$STDERR_OK"', text)
+    # hosting_cost_by_service_month depends on BILLING_EXPORT_TABLE only,
+    # which is already guaranteed non-empty by the earlier
+    # `if [ -z "$BILLING_EXPORT_TABLE" ]; then ... exit 0; fi` gate -- so it
+    # must always be attempted (gated "true"), never gated on either sink
+    # table's presence.
+    assert re.search(
+        r'_apply_view "hosting_cost_by_service_month" "[^"]*" "true"', text)
+    # STDOUT_OK/STDERR_OK must actually be DERIVED from the discovered
+    # table variables, not hard-coded literals.
+    assert re.search(
+        r'if \[ -n "\$TELEMETRY_TABLE_STDOUT" \]; then\s*\n\s*STDOUT_OK="true"',
+        text)
+    assert re.search(
+        r'if \[ -n "\$TELEMETRY_TABLE_STDERR" \]; then\s*\n\s*STDERR_OK="true"',
+        text)
+
+
+def test_script_exits_0_when_a_view_is_pending_but_reports_it():
+    """Exit criterion 2 of bd polyglot-pdf-k5w16: a re-run that creates some
+    views and finds others' source table still missing must exit 0 (this is
+    a normal, expected state on a fresh project -- not a failure) while
+    still telling the operator which views are pending. Mutation: make the
+    script `exit 1` whenever PENDING_VIEWS is non-empty -- red (that would
+    turn an expected, transient state into a hard failure understood by
+    `set -e` callers as broken)."""
+    text = _script_text()
+    assert "PENDING_VIEWS" in text
+    # The PENDING_VIEWS conditional block in the final summary must be
+    # EXACTLY an echo -- no exit statement of any kind inside it. Matched
+    # precisely (not just "does `exit 0` appear somewhere after this
+    # point", which a later, unrelated `exit 0` would satisfy even if this
+    # block itself exits early).
+    pending_block = re.search(
+        r'if \[ -n "\$PENDING_VIEWS" \]; then\n([^\n]*\n)*?fi\n', text)
+    assert pending_block, "no 'if [ -n \"$PENDING_VIEWS\" ]; then ... fi' block found"
+    assert "exit" not in pending_block.group(0), (
+        "the PENDING_VIEWS block contains an exit statement -- a pending "
+        "view (missing source table) must not itself trigger any exit; "
+        "the block found was: {!r}".format(pending_block.group(0)))
+    failed_gate = re.search(
+        r'if \[ -n "\$FAILED_VIEWS" \]; then\s*\n[^\n]*\n\s*exit 1', text)
+    assert failed_gate, (
+        "exit 1 is not gated on FAILED_VIEWS specifically -- a pending "
+        "view must not share the same exit path as an actual apply failure"
     )
+    assert text.rstrip().endswith("exit 0"), (
+        "the script's last statement is not an unconditional `exit 0` -- "
+        "a run with only pending (never failed) views must still exit "
+        "cleanly")
 
 
 def test_both_usage_strings_name_the_optional_second_argument():

@@ -268,6 +268,24 @@ else
     WRITER_IDENTITY=$(echo "$SINK_CREATE_OUTPUT" | grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.iam\.gserviceaccount\.com' | head -1)
 fi
 
+# NORMALISE WRITER_IDENTITY TO A BARE EMAIL (bd polyglot-pdf-k5w16). The two
+# branches above hand back DIFFERENT shapes for the same variable: the
+# re-run (update) branch reads `gcloud logging sinks describe
+# --format=value(writerIdentity)`, which already returns the
+# "serviceAccount:service-..." PREFIXED form, while the first-run (create)
+# branch greps the bare email straight out of `gcloud logging sinks
+# create`'s own output, with no prefix at all. The grant call below has
+# always assumed the bare-email shape (it does `serviceAccount:$WRITER_IDENTITY`
+# itself), which is correct for the create branch but DOUBLES the prefix on
+# the update/re-run branch -- exactly the failure this bead was filed for
+# (observed live on the first setup-telemetry.sh run after the sink already
+# existed: "could not grant roles/bigquery.dataEditor ... to
+# serviceAccount:serviceAccount:service-...", and the view-creation steps
+# after it never ran because of `set -e`). Strip a leading `serviceAccount:`
+# here, once, so every consumer below sees the same bare-email shape
+# regardless of which branch set it.
+WRITER_IDENTITY="${WRITER_IDENTITY#serviceAccount:}"
+
 # 4. Grant the sink's own writer identity roles/bigquery.dataEditor on the
 #    dataset. The block above resolves this identity on BOTH the create and
 #    the update path (a project-scoped service agent the sink itself
@@ -366,24 +384,116 @@ TELEMETRY_TABLES_CSV=$(bq ls --project_id="$PROJECT_ID" --format=csv "$DATASET" 
 TELEMETRY_TABLE_STDOUT=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stdout" | head -1 | cut -d',' -f1)
 TELEMETRY_TABLE_STDERR=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stderr" | head -1 | cut -d',' -f1)
 
-if [ -z "$TELEMETRY_TABLE_STDOUT" ] || [ -z "$TELEMETRY_TABLE_STDERR" ]; then
-    echo -e "${YELLOW}[NOTE]${NC} Not both sink destination tables exist yet under $DATASET."
-    echo -e "${YELLOW}[NOTE]${NC}   stdout table (usage events): ${TELEMETRY_TABLE_STDOUT:-not found}"
-    echo -e "${YELLOW}[NOTE]${NC}   stderr table (ledger_export/session events): ${TELEMETRY_TABLE_STDERR:-not found}"
-    echo -e "${YELLOW}[NOTE]${NC} The sink has not written a first row of one or both kinds -- re-run this"
-    echo -e "${YELLOW}[NOTE]${NC} script after the next deploy generates at least one usage AND one"
-    echo -e "${YELLOW}[NOTE]${NC} ledger_export/session event."
-    echo -e "${GREEN}[INFO]${NC} Telemetry sink + dataset + IAM setup complete for $PROJECT_ID (views pending)!"
-    exit 0
+if [ -z "$TELEMETRY_TABLE_STDOUT" ]; then
+    echo -e "${YELLOW}[NOTE]${NC} stdout table (usage events) does not exist yet under $DATASET -- the"
+    echo -e "${YELLOW}[NOTE]${NC} sink has not written a first usage row. cost_by_firm_month,"
+    echo -e "${YELLOW}[NOTE]${NC} cost_by_kit_month, and cost_by_employee_month are PENDING; re-run this"
+    echo -e "${YELLOW}[NOTE]${NC} script after the next deploy generates at least one usage event."
+fi
+if [ -z "$TELEMETRY_TABLE_STDERR" ]; then
+    echo -e "${YELLOW}[NOTE]${NC} stderr table (ledger_export/session events) does not exist yet under"
+    echo -e "${YELLOW}[NOTE]${NC} $DATASET -- the sink has not written a first row of that kind."
+    echo -e "${YELLOW}[NOTE]${NC} income_month is PENDING; re-run this script after the next mint or"
+    echo -e "${YELLOW}[NOTE]${NC} session-end event."
 fi
 
-echo -e "${GREEN}[INFO]${NC} Applying sql/telemetry_views.sql (stdout table: $DATASET.$TELEMETRY_TABLE_STDOUT, stderr table: $DATASET.$TELEMETRY_TABLE_STDERR)..."
-sed \
-    -e "s|\${DATASET}|$PROJECT_ID.$DATASET|g" \
-    -e "s|\${TELEMETRY_TABLE_STDOUT}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDOUT|g" \
-    -e "s|\${TELEMETRY_TABLE_STDERR}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDERR|g" \
-    -e "s|\${BILLING_EXPORT_TABLE}|$BILLING_EXPORT_TABLE|g" \
-    "$SCRIPT_DIR/../sql/telemetry_views.sql" \
-    | bq query --project_id="$PROJECT_ID" --use_legacy_sql=false
+# APPLY EACH VIEW WHOSE SOURCE TABLE ALREADY EXISTS, REPORT THE REST AS
+# PENDING, EXIT 0 (bd polyglot-pdf-k5w16). CREATE VIEW requires its
+# referenced table to exist (see sql/telemetry_views.sql's own corrected
+# header comment -- an earlier version of this script and that file both
+# claimed BigQuery views are late-bound at CREATE time, which is false and
+# was observed live: applying income_month before the stderr table existed
+# failed with "404 Not found: Table ...run_googleapis_com_stderr"). The
+# five views split into three source-table groups -- cost_by_firm_month,
+# cost_by_kit_month, and cost_by_employee_month need TELEMETRY_TABLE_STDOUT;
+# income_month needs TELEMETRY_TABLE_STDERR; hosting_cost_by_service_month
+# needs only BILLING_EXPORT_TABLE (already guaranteed non-empty by the
+# check above this block) -- so applying them ONE AT A TIME, gated on the
+# table each one actually reads, lets a project with only one sink stream
+# populated still get every view that stream can support, instead of the
+# previous all-or-nothing gate leaving every view pending until BOTH
+# streams existed.
+#
+# Each view's SQL is extracted from sql/telemetry_views.sql by slicing from
+# its own `CREATE OR REPLACE VIEW` line up to the next one (or end of file)
+# -- the same shape backend/tests/unit/test_telemetry_views.py's own
+# `_view_body` helper matches views by, so a view renamed or reordered
+# there is still found here without this script needing its own hand-kept
+# list of line ranges.
+_extract_view() {
+    # $1 = view name (e.g. cost_by_firm_month). Matches the literal
+    # `${DATASET}.<view_name>` marker text (via awk's index(), not a
+    # constructed regex -- a dynamic regex built from a shell variable that
+    # itself contains awk metacharacters like `$` is exactly the kind of
+    # thing that silently fails to match instead of erroring, which a
+    # literal substring search avoids).
+    local marker="\`\${DATASET}.$1\`"
+    awk -v marker="$marker" '
+        BEGIN { capture = 0 }
+        /^CREATE OR REPLACE VIEW/ {
+            if (capture) exit
+            if (index($0, marker) > 0) capture = 1
+        }
+        capture { print }
+    ' "$SCRIPT_DIR/../sql/telemetry_views.sql"
+}
 
-echo -e "${GREEN}[INFO]${NC} Telemetry setup complete for $PROJECT_ID!"
+CREATED_VIEWS=""
+PENDING_VIEWS=""
+FAILED_VIEWS=""
+
+_apply_view() {
+    # $1 = view name, $2 = human-readable reason to skip if table_ok=false,
+    # $3 = "true"/"false" whether this view's source table exists.
+    local view_name="$1"
+    local skip_reason="$2"
+    local table_ok="$3"
+    if [ "$table_ok" != "true" ]; then
+        echo -e "${YELLOW}[NOTE]${NC} Skipping $view_name -- $skip_reason"
+        PENDING_VIEWS="$PENDING_VIEWS $view_name"
+        return 0
+    fi
+    echo -e "${GREEN}[INFO]${NC} Applying $view_name..."
+    if _extract_view "$view_name" \
+        | sed \
+            -e "s|\${DATASET}|$PROJECT_ID.$DATASET|g" \
+            -e "s|\${TELEMETRY_TABLE_STDOUT}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDOUT|g" \
+            -e "s|\${TELEMETRY_TABLE_STDERR}|$PROJECT_ID.$DATASET.$TELEMETRY_TABLE_STDERR|g" \
+            -e "s|\${BILLING_EXPORT_TABLE}|$BILLING_EXPORT_TABLE|g" \
+        | bq query --project_id="$PROJECT_ID" --use_legacy_sql=false; then
+        CREATED_VIEWS="$CREATED_VIEWS $view_name"
+    else
+        echo -e "${RED}[ERROR]${NC} $view_name failed to apply -- see bq output above."
+        FAILED_VIEWS="$FAILED_VIEWS $view_name"
+    fi
+}
+
+if [ -n "$TELEMETRY_TABLE_STDOUT" ]; then
+    STDOUT_OK="true"
+else
+    STDOUT_OK="false"
+fi
+if [ -n "$TELEMETRY_TABLE_STDERR" ]; then
+    STDERR_OK="true"
+else
+    STDERR_OK="false"
+fi
+
+_apply_view "cost_by_firm_month" "stdout table not found yet" "$STDOUT_OK"
+_apply_view "cost_by_kit_month" "stdout table not found yet" "$STDOUT_OK"
+_apply_view "cost_by_employee_month" "stdout table not found yet" "$STDOUT_OK"
+_apply_view "hosting_cost_by_service_month" "BILLING_EXPORT_TABLE not given" "true"
+_apply_view "income_month" "stderr table not found yet" "$STDERR_OK"
+
+echo -e "${GREEN}[INFO]${NC} Telemetry setup complete for $PROJECT_ID."
+if [ -n "$CREATED_VIEWS" ]; then
+    echo -e "${GREEN}[INFO]${NC} Views created/updated:$CREATED_VIEWS"
+fi
+if [ -n "$PENDING_VIEWS" ]; then
+    echo -e "${YELLOW}[NOTE]${NC} Views pending (source table not ready yet):$PENDING_VIEWS"
+fi
+if [ -n "$FAILED_VIEWS" ]; then
+    echo -e "${RED}[ERROR]${NC} Views that failed to apply:$FAILED_VIEWS"
+    exit 1
+fi
+exit 0

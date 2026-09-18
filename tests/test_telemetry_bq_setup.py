@@ -53,7 +53,8 @@ class _FakeClient:
     ERROR rather than silently treated the same as "the dataset/table
     does not exist"."""
 
-    def __init__(self, datasets=None, tables=None, get_dataset_raises=None, list_tables_raises=None):
+    def __init__(self, datasets=None, tables=None, get_dataset_raises=None,
+                 list_tables_raises=None, update_dataset_raises=None):
         # {(project, dataset_id): _FakeDataset}
         self._datasets = dict(datasets or {})
         # {(project, dataset_id): [table_id, ...]}
@@ -61,6 +62,13 @@ class _FakeClient:
         # {(project, dataset_id): Exception instance}
         self._get_dataset_raises = dict(get_dataset_raises or {})
         self._list_tables_raises = dict(list_tables_raises or {})
+        # A single Exception instance (not keyed) update_dataset raises, if
+        # given -- bd polyglot-pdf-k5w16's idempotent-tolerant grant path:
+        # a test sets this to simulate the BigQuery API rejecting a WRITE
+        # as a duplicate/already-exists access entry (the race or
+        # unrecognized-shape case this module's own already_granted
+        # snapshot check cannot see coming).
+        self._update_dataset_raises = update_dataset_raises
         self.update_dataset_calls = []
 
     def get_dataset(self, ref):
@@ -79,6 +87,8 @@ class _FakeClient:
 
     def update_dataset(self, dataset, fields):
         self.update_dataset_calls.append((dataset, fields))
+        if self._update_dataset_raises is not None:
+            raise self._update_dataset_raises
         # Persist the mutation the way the real client would (the caller
         # already mutated `dataset.access_entries` in place before calling
         # this, so nothing else to do -- but we DO need it discoverable by
@@ -536,6 +546,81 @@ def test_grant_dataset_role_rejects_a_non_service_account_member(fake_bigquery, 
     assert exit_code == 1
     assert dataset.access_entries == []
     assert "ERROR" in capsys.readouterr().err
+
+
+def test_grant_dataset_role_is_idempotent_tolerant_on_an_already_exists_write_error(
+    fake_bigquery, capsys
+):
+    """bd polyglot-pdf-k5w16's second requirement: when the already_granted
+    SNAPSHOT check misses a grant that the API itself reports already
+    exists (a race with a concurrent grant, or a live access-entry shape
+    this module's own _IAM_ROLE_TO_LEGACY_ACCESS_ROLE mapping does not
+    recognize), update_dataset raising an "already exists"-shaped error
+    must be treated as SUCCESS (log and continue), not an aborted script --
+    this is exactly the live failure this bead was filed for: an abort at
+    the grant step under `set -e` left every view uncreated even though
+    the underlying grant was fine. Mutation: remove the "already exists" /
+    "duplicate" detection and let update_dataset's exception always fall
+    through to the ERROR branch -- red (exit_code would be 1 instead of 0,
+    and no "-- continuing." message would be printed)."""
+    dataset = _FakeDataset(location="US", access_entries=[])
+    client = _FakeClient(
+        datasets={("polyglot-demo", "polyglot_telemetry"): dataset},
+        update_dataset_raises=Exception(
+            "409 Already Exists: access entry for "
+            "admin-backend-sa@polyglot-demo.iam.gserviceaccount.com "
+            "already exists"
+        ),
+    )
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.dataViewer",
+        ]
+    )
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "continuing" in out.lower()
+
+
+def test_grant_dataset_role_still_fails_loudly_on_an_unrelated_write_error(
+    fake_bigquery, capsys
+):
+    """The idempotent-tolerant path above must NOT swallow every write
+    failure -- only the specific "it's already granted" shape. A real
+    permission error, network fault, or any other update_dataset failure
+    must still abort with an ERROR line, exactly as before this bead.
+    Mutation: widen the "already exists" detection to match on any
+    Exception regardless of message -- red (this test's PermissionError,
+    which contains neither "already exists" nor "duplicate", would then be
+    swallowed as success instead of surfaced as ERROR)."""
+    dataset = _FakeDataset(location="US", access_entries=[])
+    client = _FakeClient(
+        datasets={("polyglot-demo", "polyglot_telemetry"): dataset},
+        update_dataset_raises=PermissionError(
+            "403 caller does not have bigquery.datasets.update permission"
+        ),
+    )
+    fake_bigquery(client)
+
+    exit_code = telemetry_bq_setup.main(
+        [
+            "grant-dataset-role",
+            "--project", "polyglot-demo",
+            "--dataset", "polyglot_telemetry",
+            "--member", "serviceAccount:admin-backend-sa@polyglot-demo.iam.gserviceaccount.com",
+            "--role", "roles/bigquery.dataViewer",
+        ]
+    )
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "ERROR" in err
+    assert "could not grant" in err.lower()
 
 
 def test_grant_dataset_role_fails_loudly_when_dataset_missing(fake_bigquery, capsys):
