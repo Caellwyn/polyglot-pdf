@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
+*Last updated: 2026-09-17 (bd polyglot-pdf-k5w16: the sink-writer dataEditor grant call was doubling the `serviceAccount:` prefix on a re-run -- `gcloud logging sinks describe --format=value(writerIdentity)` already returns it prefixed, but the grant call always assumed a bare email -- aborting the script under `set -e` before any view was applied. `scripts/setup-telemetry.sh` now normalises WRITER_IDENTITY to a bare email once, right after both the create and update branches assign it. `telemetry_bq_setup.py grant-dataset-role` is also now idempotent-tolerant on the write path: an `update_dataset` failure whose message says the access entry already exists is logged and treated as success rather than aborting, on top of the pre-existing snapshot-based `already_granted` check. Separately, `sql/telemetry_views.sql`'s header wrongly claimed `CREATE VIEW` tolerates a not-yet-existent source table ("BigQuery views are late-bound") -- live-confirmed false: creating `income_month` before the sink's stderr-stream table existed failed with a 404 at CREATE time, not a successfully-created zero-row view. `setup-telemetry.sh` now applies each of the five views independently, gated on whether ITS OWN source table already exists, reporting the rest as pending and exiting 0 -- see the "Views" and "IAM" paragraphs below.)*
+
 *Last updated: 2026-09-17 (bd polyglot-pdf-vzvio: scripts/setup-telemetry.sh derives the telemetry dataset LOCATION from the Cloud Billing export dataset via new scripts/telemetry_bq_setup.py, instead of a hard-coded us-central1, and the sink-writer dataEditor + admin-backend-sa dataViewer grants move to that script's grant-dataset-role subcommand -- the BigQuery API's Dataset.access_entries -- instead of `bq add-iam-policy-binding`, which was exiting non-zero on at least one maintainer machine.)*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: the `/health` payload is status + the two probes and nothing else.)*
@@ -319,6 +321,8 @@ columns are pinned by `backend/tests/unit/test_telemetry_views.py` as a
 onto a column its source event does not emit fails there instead of shipping
 a silently-null dashboard column.
 
+**Each view is applied independently, gated on its OWN source table existing** (bd polyglot-pdf-k5w16). `CREATE VIEW` requires its referenced table to already exist -- "BigQuery views are late-bound" is true only for re-resolving a table reference at QUERY time, not at CREATE time, and an earlier version of this file and `sql/telemetry_views.sql` both got that backwards (live-confirmed: applying `income_month` before the sink's stderr-stream table existed failed with a 404, not a quietly-empty view). `scripts/setup-telemetry.sh` therefore extracts and applies each view's `CREATE OR REPLACE VIEW` statement on its own `bq query` call -- `cost_by_firm_month`/`cost_by_kit_month`/`cost_by_employee_month` gated on `TELEMETRY_TABLE_STDOUT`, `income_month` gated on `TELEMETRY_TABLE_STDERR`, and `hosting_cost_by_service_month` applied whenever `BILLING_EXPORT_TABLE` was given at all -- reporting any view whose table is not there yet as PENDING and still exiting 0, instead of the previous all-or-nothing gate that skipped every view until BOTH sink tables existed.
+
 **The dataset location is DERIVED from the Cloud Billing export dataset, not
 hard-coded** (bd polyglot-pdf-vzvio). BigQuery refuses to create a view that
 reads a table in a different location than its own dataset --
@@ -365,10 +369,32 @@ installed Python, which aborted the whole script (via `set -e`) before the
 views were ever applied. The helper grants the role through
 `google-cloud-bigquery`'s `Dataset.access_entries` + `Client.update_dataset`
 -- the same mechanism `bq add-iam-policy-binding` itself uses on a dataset
-target -- and is idempotent (an access entry already granting the exact
-role/member pair is left alone). `admin-backend-sa`'s project-level
+target -- and is idempotent two ways (bd polyglot-pdf-k5w16 added the
+second): a SNAPSHOT check before writing (an access entry already granting
+the exact role/member pair, in either its IAM-style or BigQuery's own
+normalized legacy READER/WRITER/OWNER form, is left alone -- no write
+attempted), and an update_dataset failure whose message says the entry
+already exists is treated as success rather than an abort (covers a
+concurrent grant racing this one, or a live entry shaped in a way the
+snapshot check does not recognize). `admin-backend-sa`'s project-level
 `roles/bigquery.jobUser` is unaffected: it was always granted via `gcloud
 projects add-iam-policy-binding`, which never used `bq`.
+
+**WRITER_IDENTITY is normalised to a bare email before that grant call**
+(bd polyglot-pdf-k5w16). The two branches above hand back DIFFERENT
+shapes for the same value: `gcloud logging sinks describe
+--format=value(writerIdentity)` (the re-run/update branch) already
+returns the `serviceAccount:service-...` PREFIXED form, while the
+create-branch grep pulls a bare email straight out of `sinks create`'s
+own output. The grant call always assumed the bare shape
+(`--member "serviceAccount:$WRITER_IDENTITY"`), which doubled the prefix
+on the update branch -- observed live 2026-09-17: the first re-run after
+PR #850 landed aborted with `could not grant roles/bigquery.dataEditor ...
+to serviceAccount:serviceAccount:service-...`, and `set -e` meant the
+view-creation step never ran even though the underlying grant was fine.
+`setup-telemetry.sh` now strips a leading `serviceAccount:` from
+WRITER_IDENTITY once, right after both branches assign it and before the
+grant call reads it.
 
 ## Errors, close events, and monitoring (bd polyglot-pdf-e4dt8, E3.8)
 

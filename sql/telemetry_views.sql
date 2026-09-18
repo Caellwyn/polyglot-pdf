@@ -4,11 +4,22 @@
 -- Applied by scripts/setup-telemetry.sh via `bq query`, NOT run by any
 -- deploy script. An operator runs the setup script by hand, under their own
 -- gcloud credentials, after the Cloud Logging sink (also declared by that
--- script) has had time to land at least one row of each event kind --
--- `bq query` on a view definition does not require the underlying tables to
--- exist yet (BigQuery views are late-bound), but the sink must be created
--- FIRST so the referenced tables are provisioned by the time anyone queries
--- these views.
+-- script) has had time to land at least one row of each event kind.
+--
+-- CREATING A VIEW DOES require its referenced table(s) to already exist
+-- (bd polyglot-pdf-k5w16, corrected 2026-09-17: an earlier version of this
+-- comment claimed the opposite). "BigQuery views are late-bound" is true
+-- only for a table a view's DEFINING QUERY references by name where that
+-- table does not exist YET at query-time re-resolution -- it does NOT mean
+-- `CREATE VIEW` itself tolerates a nonexistent table at creation time. Live
+-- confirmation, same date: applying this file's income_month view before the
+-- sink had written a stderr-stream row failed with "404 Not found: Table
+-- ...run_googleapis_com_stderr" -- a hard CREATE-time error, not a
+-- successfully created view that merely returned zero rows. This is exactly
+-- why scripts/setup-telemetry.sh discovers BOTH sink destination tables with
+-- `bq ls` before applying any view, and now applies each view whose source
+-- table already exists while reporting the rest as pending (rather than
+-- letting `set -e` abort the whole apply step on the first missing table).
 --
 -- WHERE THE COLUMNS COME FROM. Two different log shapes feed this dataset,
 -- and every view below is written against the shape its source event
