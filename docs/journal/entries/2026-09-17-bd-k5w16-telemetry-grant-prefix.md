@@ -77,6 +77,37 @@ on PATH (both the sink-create and sink-update branches, and both the
 "only stdout table exists" and "both tables exist" cases), confirming the
 exact substituted SQL each view receives and the exit code in each case.
 
+## Fresh-eyes fix-up round (2026-09-18)
+
+The Opus outer cross-surface review returned GAPS-FOUND (1) on the first
+pass. Breakdown of the round's findings:
+
+- **Adopted (fixed):** `tests/test_setup_telemetry_script.py`'s
+  `test_grant_call_consumes_the_normalised_variable` did not actually catch
+  the mutation its own docstring named (a second, decoupled variable for the
+  normalised value, e.g. `NORMALISED_WRITER_IDENTITY`, left the grant call
+  reading the stale `WRITER_IDENTITY`) -- the old assertion was a bare
+  substring check (`'serviceAccount:$WRITER_IDENTITY' in text`) that stays
+  green regardless of what the normalisation line's LHS is named. Rewrote
+  the test to capture the normalisation line's LHS variable name via regex
+  and assert the grant call substitutes that SAME name, so it actually goes
+  red under the named mutation. Mutation-verified both ways: reverting to
+  the old decoupled-variable shape now fails the test (confirmed against an
+  in-place mutation of `scripts/setup-telemetry.sh`, then restored), and the
+  test still passes unmodified against the shipped script.
+- **Deferred (filed as bd polyglot-pdf-jr8u9):** three pre-existing/cosmetic
+  findings the reviewer surfaced but classified as nit or pre-existing --
+  the stale "views are late-bound" sentence still standing at
+  `scripts/setup-telemetry.sh:361` (contradicts this bead's own corrected
+  claim 40 lines below in the same file), a missing blank line between two
+  test functions (fixed as an incidental side effect of the rewrite above,
+  but tracked in case others remain nearby), and the hardcoded `"true"` gate
+  argument on the `hosting_cost_by_service_month` `_apply_view` call that
+  makes its `skip_reason` string dead text. None of the three change
+  behavior, so none were fixed inline in this round.
+- **Rejected:** none -- the reviewer's one blocker-level finding was
+  confirmed correct by independent mutation testing, not refuted.
+
 ## Lessons
 
 Two of this repo's own scar-tissue patterns recurred here:

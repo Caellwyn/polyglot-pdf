@@ -383,21 +383,36 @@ def test_writer_identity_normalisation_uses_bash_prefix_strip_not_sed_or_cut():
 
 
 def test_grant_call_consumes_the_normalised_variable():
-    """The grant call must read the SAME WRITER_IDENTITY variable the
-    normalisation line just reassigned, not a separately-derived or
-    stale copy -- otherwise normalising the variable achieves nothing if
-    the grant call reads something else. Mutation: introduce a second
-    variable (e.g. NORMALISED_WRITER_IDENTITY) for the stripped value and
-    leave the grant call reading the original WRITER_IDENTITY -- red
-    (grep for a second variable name would need to also update this
-    test, but the grant call's own --member argument, pinned below,
-    would still show the untouched $WRITER_IDENTITY name either way).
+    """The grant call must read the SAME variable name the normalisation
+    line's LHS just reassigned, not a separately-derived or stale copy --
+    otherwise normalising the variable achieves nothing if the grant call
+    reads something else. Mutation: introduce a second variable (e.g.
+    NORMALISED_WRITER_IDENTITY) for the stripped value and leave the grant
+    call reading the original WRITER_IDENTITY -- red. This test captures
+    the normalisation line's LHS variable name via regex (rather than
+    hardcoding "WRITER_IDENTITY" on both sides), so it actually fails
+    under that mutation -- a bare substring check for
+    'serviceAccount:$WRITER_IDENTITY' would stay green even after the
+    mutation, since the mutation only changes the normalisation LHS, not
+    the (still-unchanged) grant call text. This test instead asserts that
+    whatever name the normalisation LHS assigns is the name the grant
+    call's --member argument actually substitutes.
     """
     text = _script_text()
-    assert 'serviceAccount:$WRITER_IDENTITY' in text, (
-        "the grant call's --member argument does not read "
-        "$WRITER_IDENTITY -- normalising a different variable would not "
-        "fix the doubled-prefix bug")
+    norm_match = re.search(
+        r'^(\w+)="\$\{\1#serviceAccount:\}"', text, re.MULTILINE)
+    assert norm_match, (
+        'no VAR="${VAR#serviceAccount:}" normalisation line found')
+    normalised_var = norm_match.group(1)
+    assert (f'serviceAccount:${normalised_var}"' in text
+            or f'serviceAccount:${{{normalised_var}}}"' in text), (
+        f"the normalisation line strips the prefix on {normalised_var}, "
+        f"but the grant call's --member argument does not read "
+        f"${normalised_var} -- normalising a different variable than the "
+        f"one the grant call consumes would not fix the doubled-prefix "
+        f"bug")
+
+
 def test_sink_uses_partitioned_tables():
     """Mutation: drop --use-partitioned-tables -- red (the views assume
     partition pruning on a month-range filter)."""
