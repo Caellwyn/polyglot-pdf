@@ -51,6 +51,7 @@ const FIRM_DETAIL = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: ['w7'],
   balance_credits: 120,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
   // No doc_id: GET /admin/firms/{firm_id}'s ledger rows are the persisted
   // credit_ledger document verbatim (backend/services/credit_ledger.py's

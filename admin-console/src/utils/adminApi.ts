@@ -516,6 +516,11 @@ export interface FirmRow {
   status: FirmStatus | null;
   allowed_kits: string[];
   balance_credits: number;
+  /** True only when the STORED balance_credits value exists but is not a
+   * plain int (a corrupted doc) -- false for a real $0 balance or a firm
+   * that never had the key written (backend/admin_backend/routes/
+   * firm_routes.py's _public_firm_view; bd polyglot-pdf-0w13i). */
+  balance_credits_malformed: boolean;
   plan: FirmPlan;
 }
 
@@ -601,6 +606,9 @@ export interface FirmDetail {
   status: FirmStatus | null;
   allowed_kits: string[];
   balance_credits: number;
+  /** Same fail-closed distinguishing flag as FirmRow's -- see its
+   * comment. */
+  balance_credits_malformed: boolean;
   plan: FirmPlan;
   ledger: LedgerEntry[];
   ledger_truncated: boolean;

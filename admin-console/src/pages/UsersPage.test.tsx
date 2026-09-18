@@ -59,12 +59,14 @@ const FIRM_A = {
   firm_id: 'firm-a', name: 'Acme LLP', contact_email: 'ops@acme.test',
   kind: 'live' as const, status: 'active' as const, allowed_kits: [],
   balance_credits: 100,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 const FIRM_B = {
   firm_id: 'firm-b', name: null, contact_email: 'ops@beta.test',
   kind: 'mock' as const, status: 'active' as const, allowed_kits: [],
   balance_credits: 0,
+  balance_credits_malformed: false,
   plan: { tier: 'starter' as const, monthly_credits: 35, rollover: false },
 };
 

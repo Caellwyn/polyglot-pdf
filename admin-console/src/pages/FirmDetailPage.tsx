@@ -480,6 +480,15 @@ export const FirmDetailPage: React.FC<FirmDetailPageProps> = ({
           </div>
           <div className="mt-2 text-2xl font-semibold text-gray-900" data-testid="firm-balance">
             {firm.balance_credits} credits
+            {firm.balance_credits_malformed && (
+              <span
+                className="ml-3 inline-block rounded px-2 py-0.5 text-xs font-medium align-middle bg-red-100 text-red-800"
+                title="Stored balance is not a valid number -- this firm's balance may be wrong."
+                data-testid="firm-balance-malformed"
+              >
+                unreadable
+              </span>
+            )}
           </div>
 
           {/* Allowed kits */}
