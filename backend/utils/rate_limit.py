@@ -35,10 +35,12 @@ per door, both taken from the END of the chain:
      caller can forge that entry, which is why bucket 2 exists. Budget
      `RATE_LIMIT_BUDGET` per `RATE_LIMIT_WINDOW_SEC`.
   2. the CONNECTION bucket, keyed on the last hop alone -- unforgeable on
-     both paths. It is shared by everyone behind one Hosting egress, so its
-     budget is wide (`RATE_LIMIT_SHARED_BUDGET`): it is the backstop that
-     caps a direct caller who rotates forged hops, and a botnet's aggregate
-     through one egress, at that rate per instance.
+     both paths. Through Hosting that hop is a different egress address on
+     every request (the staging measurement above), so for browser traffic
+     this bucket is effectively per request and never bites; its wide
+     budget (`RATE_LIMIT_SHARED_BUDGET`) is the backstop for the DIRECT path
+     only: it caps a direct caller who rotates forged second-to-last hops
+     at that rate per instance.
 
 A request is refused when EITHER bucket is empty; a request the client
 bucket refuses does not draw on the connection bucket, so one abuser behind
@@ -144,7 +146,7 @@ def rate_limited(door: str, *, status_code: int, detail: str) -> Callable:
         shared = int(settings.RATE_LIMIT_SHARED_BUDGET)
         window = float(settings.RATE_LIMIT_WINDOW_SEC)
         client_key, connection_key = client_keys(request)
-        hops = len(forwarded_hops(request))
+        hops = len(forwarded_hops(request))  # the chain length, logged on refusal
         now = time.monotonic()
         refused_by = None
         # ORDER MATTERS: the client bucket first, and the connection bucket only

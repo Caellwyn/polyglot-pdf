@@ -382,10 +382,11 @@ until abuse is observed:
   staging 2026-09-18), so a key that includes the last hop never limits
   browser traffic. The CONNECTION
   bucket is keyed on the last hop alone (`RATE_LIMIT_SHARED_BUDGET`, default
-  600): shared by everyone behind one Hosting egress, and the backstop that
-  caps a direct caller who rotates forged hops. A call the client bucket
-  refuses never draws on the connection bucket, so one abuser behind
-  Hosting cannot drain it for everyone. `RATE_LIMIT_ENABLED=false` turns the
+  600): for browser traffic that hop rotates with Hosting's egress, so the
+  bucket is effectively per request there and never bites; it is the backstop
+  for the direct path, capping a caller who rotates forged second-to-last
+  hops. A call the client bucket refuses never draws on the connection
+  bucket. `RATE_LIMIT_ENABLED=false` turns the
   limiter off (the test suite does). The per-door maps are LRU-bounded.
   An over-budget caller on the two oracle-sensitive doors gets the door's own
   404 phrase, byte-identical to a wrong token or a miss; on the disclaimer door
