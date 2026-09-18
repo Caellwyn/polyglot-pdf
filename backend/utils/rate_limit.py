@@ -14,8 +14,14 @@ caller can seed: a client may send `X-Forwarded-For: 9.9.9.9` and every
 proxy on the way APPENDS the address it saw, so only the hops at the END are
 trustworthy -- Cloud Run's front end appends the address that connected to
 it; the Firebase Hosting `/api/**` rewrite (the path every browser call
-takes in production) appends the browser's address before Hosting's own
-egress connects to Cloud Run. So:
+takes in production) is ASSUMED to append the browser's address before
+Hosting's own egress connects to Cloud Run -- the standard proxy behaviour,
+but not yet verified on staging: the measurement below saw only the last
+hop rotate, not the chain. If Hosting passed a client-supplied header
+through verbatim instead, the client key through Hosting would be
+caller-forgeable and the connection bucket (rotating with the egress)
+could not backstop it; the `hops` count on a staging refusal line, WITH a
+refusal at the 31st call, is what settles it (bd polyglot-pdf-ckceh). So:
 
   direct call to run.app:   [<anything the caller sent>..., CALLER]
   browser through Hosting:  [<anything the browser sent>..., BROWSER, HOSTING_EGRESS]
@@ -25,15 +31,22 @@ attacker a fresh bucket per request); the last hop alone would make every
 browser user behind one Hosting egress share a bucket. Hence two buckets
 per door, both taken from the END of the chain:
 
-  1. the CLIENT bucket, keyed on the last TWO hops (`prev|last`): through
-     Hosting that is (browser, egress) -- unforgeable by the browser; on a
-     direct call a caller can forge the second-to-last entry, which is why
-     bucket 2 exists. Budget `RATE_LIMIT_BUDGET` per `RATE_LIMIT_WINDOW_SEC`.
+  1. the CLIENT bucket, keyed on the SECOND-TO-LAST hop alone (the last
+     hop when there is only one): through Hosting that is the browser's
+     address as Hosting appended it -- unforgeable by the browser, and
+     STABLE while Hosting's egress address changes (measured on staging
+     2026-09-18: 48 requests through the rewrite arrived from 48 distinct
+     egress addresses, so any key that includes the last hop is fresh on
+     every request and never limits browser traffic). On a direct call a
+     caller can forge that entry, which is why bucket 2 exists. Budget
+     `RATE_LIMIT_BUDGET` per `RATE_LIMIT_WINDOW_SEC`.
   2. the CONNECTION bucket, keyed on the last hop alone -- unforgeable on
-     both paths. It is shared by everyone behind one Hosting egress, so its
-     budget is wide (`RATE_LIMIT_SHARED_BUDGET`): it is the backstop that
-     caps a direct caller who rotates forged hops, and a botnet's aggregate
-     through one egress, at that rate per instance.
+     both paths. Through Hosting that hop is a different egress address on
+     every request (the staging measurement above), so for browser traffic
+     this bucket is effectively per request and never bites; its wide
+     budget (`RATE_LIMIT_SHARED_BUDGET`) is the backstop for the DIRECT path
+     only: it caps a direct caller who rotates forged second-to-last hops
+     at that rate per instance.
 
 A request is refused when EITHER bucket is empty; a request the client
 bucket refuses does not draw on the connection bucket, so one abuser behind
@@ -86,17 +99,18 @@ def forwarded_hops(request: Request) -> list:
 
 
 def client_keys(request: Request) -> Tuple[str, str]:
-    """(client_key, connection_key): the last two hops joined, and the last
-    hop alone. With no forwarded chain (local dev) the socket peer is both."""
+    """(client_key, connection_key): the second-to-last hop (the last when
+    the chain has one), and the last hop. With no forwarded chain (local
+    dev) the socket peer is both."""
     hops = forwarded_hops(request)
     if hops:
         last = hops[-1]
-        prev = hops[-2] if len(hops) >= 2 else "-"
+        client_key = hops[-2] if len(hops) >= 2 else last
     else:
         client = request.client
         last = client.host if client and client.host else "unknown"
-        prev = "-"
-    return prev + "|" + last, last
+        client_key = last
+    return client_key, last
 
 
 def _take(door: str, kind: str, key: str, budget: int, window_sec: float, now: float) -> bool:
@@ -138,6 +152,7 @@ def rate_limited(door: str, *, status_code: int, detail: str) -> Callable:
         shared = int(settings.RATE_LIMIT_SHARED_BUDGET)
         window = float(settings.RATE_LIMIT_WINDOW_SEC)
         client_key, connection_key = client_keys(request)
+        hops = len(forwarded_hops(request))  # the chain length, logged on refusal
         now = time.monotonic()
         refused_by = None
         # ORDER MATTERS: the client bucket first, and the connection bucket only
@@ -153,9 +168,11 @@ def rate_limited(door: str, *, status_code: int, detail: str) -> Callable:
         if refused_by is None:
             return
         # Counts and names only -- the addresses are keys, never log values.
+        # hops: the chain LENGTH (a count) -- how the staging burst proves
+        # which hop the client key came from.
         _log.warning("rate_limited", door=door, bucket=refused_by,
                      budget=budget if refused_by == "client" else shared,
-                     window_sec=window)
+                     window_sec=window, hops=hops)
         raise HTTPException(status_code=status_code, detail=detail)
 
     # The access matrix's ungated-door pin finds the dependency by this mark.

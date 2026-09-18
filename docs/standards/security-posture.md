@@ -100,7 +100,7 @@ claimless Firebase token, app admin) are asserted per route.
 | `POST /api/form-kits/{kit_id}/retire` | `require_auth` + manager + owner + private | 404 employee / other firm / claimless |
 | `POST /api/links/mint` | `require_auth` | 403 client link (no uid), claimless, editor |
 | `POST /api/links/open` | none; the token IS the credential; per-address rate limit (`o2fub`) | uniform 404 on any refusal, including over budget |
-| `POST /api/signup/check` | none; answers 204 or the uniform 404; per-address rate limit | never lists; over budget is the same 404; logs the address length only |
+| `POST /api/signup/check` | none; answers 204 or the uniform 404; per-address rate limit | never lists; over budget is the same 404; the handler logs the address length only and the limiter's refusal line logs door, bucket, budget and hop count only |
 | `POST /api/fill-pdf`, `POST /api/resume-form` | `require_auth`; byte-accurate body caps; parse timeout | 403 claimless/editor; 413 over cap; 408 on a hung parse |
 | `POST /api/tts/notice` | `require_auth` (free door, no redemption) | 403 |
 | `POST /api/tts/spellback`, `POST /api/tts/intro` | `require_paid_client_work` (redeems the client link) | 403 / 404 |
@@ -215,9 +215,12 @@ Recorded here so they are not rediscovered as findings.
 - **Rate limiting is a per-instance limiter plus an instance ceiling**, not a
   network-edge control: the buckets reset on autoscale and a distributed
   caller spreads around them. The keys are the tail of the forwarded chain
-  (per browser behind Hosting; per connecting address as the backstop), so a
-  forged `X-Forwarded-For` prefix buys nothing, but everyone behind one
-  Hosting egress shares the wide connection bucket. Cloud Armor is deferred
+  (the browser hop Hosting is assumed to append -- unverified on staging as
+  of 2026-09-18, and if wrong the limiter under-limits browser traffic, never
+  over-limits it; the connecting address as the backstop),
+  so a forged `X-Forwarded-For` prefix buys nothing; Hosting's egress address
+  changes per request, so the connection bucket only ever bites a direct
+  caller. Cloud Armor is deferred
   until abuse is observed (`config-deployment.md`, "Rate limiting on the
   unauthenticated doors").
 - **Two project Owners are the same person's two accounts** (a sole

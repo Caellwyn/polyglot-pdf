@@ -374,15 +374,22 @@ until abuse is observed:
   front of that list; every proxy appends the address it saw, so only the
   tail is trustworthy). In production every browser call reaches Cloud Run
   through the Hosting `/api/**` rewrite, so the chain ends
-  `..., browser, hosting-egress`; a direct call to the run.app host ends
-  `..., caller`. The CLIENT bucket is keyed on the last two hops
+  `..., browser, hosting-egress` (assumed; the standard proxy behaviour, not
+  yet verified on staging -- if Hosting passed a client header through
+  verbatim, browser traffic would be unlimited through Hosting, never
+  over-limited); a direct call to the run.app host ends
+  `..., caller`. The CLIENT bucket is keyed on the second-to-last hop alone
   (`RATE_LIMIT_BUDGET`, default 30, per `RATE_LIMIT_WINDOW_SEC`, default 60):
-  per browser through Hosting, unforgeable by the browser. The CONNECTION
+  per browser through Hosting, unforgeable by the browser, and stable while
+  Hosting's egress address changes -- it does on every request (measured on
+  staging 2026-09-18), so a key that includes the last hop never limits
+  browser traffic. The CONNECTION
   bucket is keyed on the last hop alone (`RATE_LIMIT_SHARED_BUDGET`, default
-  600): shared by everyone behind one Hosting egress, and the backstop that
-  caps a direct caller who rotates forged hops. A call the client bucket
-  refuses never draws on the connection bucket, so one abuser behind
-  Hosting cannot drain it for everyone. `RATE_LIMIT_ENABLED=false` turns the
+  600): for browser traffic that hop rotates with Hosting's egress, so the
+  bucket is effectively per request there and never bites; it is the backstop
+  for the direct path, capping a caller who rotates forged second-to-last
+  hops. A call the client bucket refuses never draws on the connection
+  bucket. `RATE_LIMIT_ENABLED=false` turns the
   limiter off (the test suite does). The per-door maps are LRU-bounded.
   An over-budget caller on the two oracle-sensitive doors gets the door's own
   404 phrase, byte-identical to a wrong token or a miss; on the disclaimer door

@@ -226,8 +226,10 @@ class Settings(BaseModel):
 	# test suite (conftest). A weak, deliberate interim -- see the module.
 	RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
 	RATE_LIMIT_BUDGET: int = int(os.getenv("RATE_LIMIT_BUDGET", "30"))
-	# The connection bucket (the last forwarded hop alone -- shared by every
-	# browser behind one Hosting egress): wide, the backstop against forged hops.
+	# The connection bucket (the last forwarded hop alone): wide, the DIRECT
+	# path's backstop against a caller rotating forged hops. Through Hosting
+	# that hop is a different egress address per request (measured on staging
+	# 2026-09-18), so it never bites browser traffic.
 	RATE_LIMIT_SHARED_BUDGET: int = int(os.getenv("RATE_LIMIT_SHARED_BUDGET", "600"))
 	RATE_LIMIT_WINDOW_SEC: float = float(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 

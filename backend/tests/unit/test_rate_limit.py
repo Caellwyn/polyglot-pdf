@@ -5,9 +5,10 @@ Mutations (each RED): remove `Depends(rate_limited(...))` from any one of the
 three doors (the set pin names it and that door's own case fails); make the
 links/open refusal say "Too many requests" (the byte-identical pin); log an
 address on refusal (the kwarg pin); key the client bucket on the FIRST hop
-(the forged-hop cases); drop the connection bucket (the rotating-forge case);
-change `_take` to never refuse (every limit case); drop the LRU bound (the
-bounded-map case).
+(the forged-hop cases); key it on the last two hops joined, `prev|last`
+(the rotating-egress case, bd ckceh); drop the connection bucket (the
+rotating-forge case); change `_take` to never refuse (every limit case);
+drop the LRU bound (the bounded-map case).
 """
 from __future__ import annotations
 
@@ -95,14 +96,24 @@ def _req(xff=None, peer="127.0.0.1"):
     return req
 
 
-def test_the_keys_are_the_last_two_hops_and_the_last_hop():
-    assert rate_limit.client_keys(_req("203.0.113.9, 198.51.100.7")) == ("203.0.113.9|198.51.100.7", "198.51.100.7")
+def test_the_keys_are_the_second_to_last_hop_and_the_last_hop():
+    assert rate_limit.client_keys(_req("203.0.113.9, 198.51.100.7")) == ("203.0.113.9", "198.51.100.7")
     # A forged prefix changes neither key: only the end of the chain counts.
-    assert rate_limit.client_keys(_req("9.9.9.9, 203.0.113.9, 198.51.100.7")) == ("203.0.113.9|198.51.100.7", "198.51.100.7")
+    assert rate_limit.client_keys(_req("9.9.9.9, 203.0.113.9, 198.51.100.7")) == ("203.0.113.9", "198.51.100.7")
     # A direct caller (one hop) is keyed on itself twice over.
-    assert rate_limit.client_keys(_req("203.0.113.9")) == ("-|203.0.113.9", "203.0.113.9")
+    assert rate_limit.client_keys(_req("203.0.113.9")) == ("203.0.113.9", "203.0.113.9")
     # No chain at all (local dev): the socket peer.
-    assert rate_limit.client_keys(_req(None, peer="127.0.0.1")) == ("-|127.0.0.1", "127.0.0.1")
+    assert rate_limit.client_keys(_req(None, peer="127.0.0.1")) == ("127.0.0.1", "127.0.0.1")
+
+
+def test_a_browser_behind_a_rotating_hosting_egress_is_still_one_client(client, tiny_budget, monkeypatch):
+    """Measured on staging (2026-09-18): Hosting's egress address differs on
+    every request. The client key is the browser hop alone, so the 4th call
+    is refused even though the last hop never repeats. Mutation: key on
+    `prev|last` -> red (every call would be 204)."""
+    _allow_all_signups(monkeypatch)
+    codes = [_signup(client, "203.0.113.9, 198.51.100.%d" % (10 + i)) for i in range(4)]
+    assert codes == [204, 204, 204, 404]
 
 
 def test_a_forged_first_hop_does_not_open_a_fresh_bucket(client, tiny_budget, monkeypatch):
@@ -178,7 +189,8 @@ def test_the_refusal_log_line_carries_no_address(client, tiny_budget, monkeypatc
     calls = [c for c in mock_log.warning.call_args_list if c.args and c.args[0] == "rate_limited"]
     assert len(calls) == 1
     _, kwargs = calls[0]
-    assert set(kwargs) == {"door", "bucket", "budget", "window_sec"}
+    assert set(kwargs) == {"door", "bucket", "budget", "window_sec", "hops"}
+    assert kwargs["hops"] == 2
     assert "203.0.113.9" not in repr(kwargs) and "198.51.100.7" not in repr(kwargs)
 
 
