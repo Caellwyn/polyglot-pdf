@@ -60,6 +60,7 @@ function makeManager() {
     setPushToTalkHeld: vi.fn(),
     getCurrentSectionId: vi.fn(() => 'section_1'),
     getCompletedSectionIds: vi.fn(() => new Set<string>()),
+    isPaused: vi.fn(() => false),
     getAudioManager: vi.fn(() => ({
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),

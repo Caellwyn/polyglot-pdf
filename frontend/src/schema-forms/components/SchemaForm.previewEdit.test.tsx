@@ -117,8 +117,12 @@ async function mountInPreview() {
   await act(async () => {});
   fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
   // PreviewPane is React.lazy -- wait for the lazy chunk to resolve and the
-  // real overlay chain to mount.
-  await screen.findByTestId('pdf-field-overlay-f1');
+  // real overlay chain to mount. findByTestId's own internal retry timeout
+  // defaults to 1000ms regardless of the enclosing test's timeout budget, so
+  // LAZY_MOUNT_TIMEOUT_MS must be passed here too -- otherwise this query
+  // still times out under full-suite fork contention even in a test given
+  // 20s to run (bd polyglot-pdf-630ej/8urce/qta6l).
+  await screen.findByTestId('pdf-field-overlay-f1', {}, { timeout: LAZY_MOUNT_TIMEOUT_MS });
 }
 
 describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
@@ -171,7 +175,7 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
 
     // Live repaint: the f2 overlay now paints the copied value.
     expect(screen.getByTestId('pdf-field-overlay-f2').textContent).toBe('Ramanujan');
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 
   it('Esc dismisses the popover', async () => {
     await mountInPreview();
@@ -181,7 +185,7 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
 
     await user.keyboard('{Escape}');
     expect(screen.queryByTestId('pdf-field-edit-popover-f1')).toBeNull();
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 
   it('click-outside dismisses; the X button dismisses', async () => {
     await mountInPreview();
@@ -196,7 +200,7 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
     await user.click(screen.getByTestId('pdf-field-overlay-f1'));
     await user.click(screen.getByRole('button', { name: 'Close editor' }));
     expect(screen.queryByTestId('pdf-field-edit-popover-f1')).toBeNull();
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 
   it('clicking a different overlay moves the editor to that field', async () => {
     await mountInPreview();
@@ -208,7 +212,7 @@ describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
     await user.click(screen.getByTestId('pdf-field-overlay-f2'));
     expect(screen.queryByTestId('pdf-field-edit-popover-f1')).toBeNull();
     expect(screen.getByTestId('pdf-field-edit-popover-f2')).toBeTruthy();
-  });
+  }, LAZY_MOUNT_TIMEOUT_MS);
 });
 
 /**
