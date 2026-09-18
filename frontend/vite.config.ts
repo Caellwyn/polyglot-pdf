@@ -10,6 +10,22 @@ export default defineConfig({
 	// environment (bd polyglot-pdf-uov.1).
 	test: {
 		environment: 'jsdom',
+		setupFiles: ['./src/setupTests.ts'],
+		// Cap fork concurrency: unbounded forks (default = CPU count) each boot
+		// a full jsdom environment, and on many-core machines that oversubscribes
+		// the box -- findBy*/waitFor calls (1s default) and hook/test timeouts
+		// (5s default) intermittently starve under the contention, producing a
+		// different failing file each run despite every file passing cleanly in
+		// isolation (bd polyglot-pdf-630ej, sdds1, 8urce, qta6l, sw5vl).
+		poolOptions: {
+			forks: {
+				maxForks: 8,
+			},
+		},
+		// A modest bump gives the FS-walk guard in sessionCredential.test.ts and
+		// the heavy overlay/preview render suites headroom under the capped pool
+		// without masking a real regression (still fails long before a hang).
+		testTimeout: 10000,
 		coverage: {
 			// v8 provider + @vitest/coverage-v8. Opt-in via `vitest run --coverage`
 			// (npm run test:coverage); not forced on every `vitest run` so the CI
