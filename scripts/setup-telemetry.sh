@@ -355,11 +355,23 @@ echo -e "${GREEN}[INFO]${NC} Granting roles/bigquery.dataViewer (dataset-scoped)
 # which reach stdlib logging's default stream via
 # backend/utils/logging.py's configure_logging() -- see that function and
 # sql/telemetry_views.sql's header for the full split). Neither name is
-# hand-picked here: both are read back from the dataset with `bq ls`
-# (NOT `gcloud logging sinks describe`, which reports the sink's own config,
-# not its destination tables). Either or both may not exist yet on a
-# freshly created sink (BigQuery views are late-bound, so applying a view
-# against a not-yet-existent table is fine) -- if EITHER is missing, the
+# hand-picked here: both are read back from the dataset via
+# telemetry_bq_setup.py list-tables (bd polyglot-pdf-vm2fu), NOT `bq ls`
+# (NOT `gcloud logging sinks describe` either, which reports the sink's own
+# config, not its destination tables). `bq ls ... 2>/dev/null | tail -n +2`
+# was the ORIGINAL mechanism here, and it has a real bug: it swallows stderr
+# and treats an EMPTY listing as "no tables yet", so a `bq` CLI that fails
+# to list at all (a broken shim needing CLOUDSDK_PYTHON, a transient DNS
+# blip) reads back identically to a genuinely empty, not-yet-written
+# dataset -- live-observed reporting every cost view PENDING while the
+# stdout table was confirmed present via the SAME google-cloud-bigquery
+# client this script already requires for LOCATION derivation and the IAM
+# grants above. `telemetry_bq_setup.py list-tables` exits non-zero with a
+# message on any real API error instead, which `set -e` below turns into an
+# immediate abort -- an operator seeing a clear ERROR, not a script that
+# quietly proceeds believing the dataset is empty. Either or both tables may
+# genuinely not exist yet on a freshly created sink (a real empty dataset,
+# confirmed by a SUCCESSFUL list-tables call) -- if EITHER is missing, the
 # operator is told to re-run this step once the sink has produced a row of
 # the corresponding kind, since running with only one of the two present
 # would leave the other stream's views permanently empty and silently so.
@@ -379,10 +391,18 @@ if [ -z "$BILLING_EXPORT_TABLE" ]; then
     exit 0
 fi
 
-TELEMETRY_TABLES_CSV=$(bq ls --project_id="$PROJECT_ID" --format=csv "$DATASET" 2>/dev/null | tail -n +2)
+# list-tables aborts (exit 1, message on stderr) on a real API error --
+# `set -e` turns that straight into a script abort here, rather than the
+# old `bq ls ... 2>/dev/null` pipeline's silent "empty listing" ambiguity
+# between "no tables yet" and "bq itself could not list".
+if ! TELEMETRY_TABLES=$("$PYTHON_BIN" "$SCRIPT_DIR/telemetry_bq_setup.py" list-tables \
+    --project "$PROJECT_ID" --dataset "$DATASET"); then
+    echo -e "${RED}[ERROR]${NC} could not list tables in $DATASET -- see message above. Aborting rather than reporting every view PENDING against an unknown table state."
+    exit 1
+fi
 
-TELEMETRY_TABLE_STDOUT=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stdout" | head -1 | cut -d',' -f1)
-TELEMETRY_TABLE_STDERR=$(echo "$TELEMETRY_TABLES_CSV" | grep -i "stderr" | head -1 | cut -d',' -f1)
+TELEMETRY_TABLE_STDOUT=$(echo "$TELEMETRY_TABLES" | grep -i "stdout" | head -1)
+TELEMETRY_TABLE_STDERR=$(echo "$TELEMETRY_TABLES" | grep -i "stderr" | head -1)
 
 if [ -z "$TELEMETRY_TABLE_STDOUT" ]; then
     echo -e "${YELLOW}[NOTE]${NC} stdout table (usage events) does not exist yet under $DATASET -- the"
