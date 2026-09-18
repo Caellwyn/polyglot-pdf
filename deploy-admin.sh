@@ -17,6 +17,18 @@
 # never serves a single request; the previous good revision keeps serving
 # throughout. That is this service's staging tier.
 #
+# THE FIRST DEPLOY IS A DIFFERENT BRANCH (bd polyglot-pdf-h1nvd). Cloud Run
+# refuses --no-traffic on a service that does not exist yet, so
+# admin-service-deploy-tagged (cloudbuild.yaml) checks whether polyglot-admin
+# already resolves a URL before it deploys: if not, it creates the service
+# WITHOUT --no-traffic/--tag, which lands 100% of traffic on that first
+# revision immediately (there is no previous revision to protect traffic
+# from). admin-service-verify-tagged mirrors the branch -- it health-checks
+# the base URL directly when no "candidate" tag exists rather than probing a
+# tag that was never created. Every later run finds the service already
+# exists and keeps the tagged no-traffic-then-shift flow described above
+# unchanged.
+#
 # WHERE ITS CONFIG LIVES NOW. Everything this script used to assemble inline
 # and pass as BACKEND_EXTRA_ENV is in deploy/channels/admin.env
 # (APP_MODULE, CORS_EXTRA_ORIGINS, and the three Scheduler/Pub-Sub caller
