@@ -75,6 +75,26 @@ def _call_lines(fn: ast.FunctionDef, name: str) -> list[int]:
     )
 
 
+def _nested_callables(fn: ast.FunctionDef) -> list[str]:
+    """Nested `def`/`async def`/lambda inside `fn`, if any.
+
+    `ast.walk` descends into nested function bodies, so a call written inside
+    a closure would be attributed to `extract()` by LINE NUMBER while actually
+    running on a different schedule (or not at all). There are none today, and
+    this keeps it that way loudly rather than leaving the assumption unstated
+    (fresh-eyes finding).
+    """
+    out: list[str] = []
+    for node in ast.walk(fn):
+        if node is fn:
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.append(node.name)
+        elif isinstance(node, ast.Lambda):
+            out.append(f"<lambda at line {node.lineno}>")
+    return out
+
+
 def test_extract_calls_derive_before_repair():
     """The pin. A reorder inside extract() fails HERE, with no kit required."""
     fn = _extract_fn()
@@ -99,6 +119,28 @@ def test_extract_calls_derive_before_repair():
         "Derivation re-files every field into derived divisions, so repairing "
         "first means repair reconciles references against the PRE-derivation "
         "layout and derivation then overwrites the section ids it just fixed."
+    )
+
+
+def test_extract_has_no_nested_callables():
+    """The line-ordering comparison assumes a FLAT function body.
+
+    `ast.walk` descends into nested `def`s and lambdas, so a call inside a
+    closure would be counted as "inside extract()" and ordered by its line
+    number -- even though a closure runs when it is CALLED, not where it is
+    written. That would let a genuine reorder hide behind a helper.
+
+    There are no nested callables in `extract()` today, so rather than
+    document the assumption and hope, this fails the moment one appears.
+    If a closure is ever introduced deliberately, the fix is to teach
+    `_call_lines` to skip nested bodies -- not to delete this test.
+    """
+    fn = _extract_fn()
+    nested = _nested_callables(fn)
+    assert not nested, (
+        "extract() now contains nested callables, which the ordering pin's "
+        f"line-number comparison does not account for: {nested}. Teach "
+        "_call_lines to ignore nested bodies before allowing this."
     )
 
 
