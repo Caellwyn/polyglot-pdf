@@ -89,9 +89,14 @@ plain rename still fails. The pin is tightened, not traded.
 
 ## Doc freshness
 
-No tracked docs affected: this diff touches one test file and nothing under
-`docs/`. The test's own docstring is updated in place, which is where this
-file's history of defeats is deliberately recorded.
+No tier-1/tier-2 docs affected: the only source file this diff touches is a
+TEST, so nothing tracked by `check_doc_freshness.py` moved. (The diff does add
+this entry under `docs/journal/`, which is tier 3 and is the chronological
+record rather than a tracked current-state doc.)
+
+The test's own docstring is updated in place, which is where this file's
+history of defeats is deliberately recorded -- that docstring is the load-
+bearing prose here, not anything under `docs/`.
 
 No CLAUDE.md changes.
 
