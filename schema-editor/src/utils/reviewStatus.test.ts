@@ -129,6 +129,77 @@ describe('reviewStatus review targets (the pinned count predicate, s18 C1)', () 
     expect(isCountedReviewed(signedSeeing, lintError)).toBe(false);
   });
 
+  // bd polyglot-pdf-fyc7 / ufj7, Opus cross-surface finding. checkFieldComplete
+  // gained two error classes; this predicate is the COUNT mirror, and the strip,
+  // the review filter and the "Next to review" jump are one predicate by design
+  // ("M + N = T, always"). If only the row-status side learns a new error, the
+  // strip reports a form fully reviewed while a red row sits in the list and the
+  // jump refuses to stop on it. These pin the two sides moving together.
+  it('a sibling WIDGET COLLISION keeps a signed-off field out of the count', () => {
+    const collided = completeField({
+      type: 'checkbox_group', pdf_field_name: undefined,
+      options: [
+        { label: 'A', value: 'a', pdf_field_name: 'r[0]' },
+        { label: 'B', value: 'b', pdf_field_name: 'r[0]' },
+      ],
+    } as Partial<FormField>);
+    const signed = withReviewStatus(collided, 'reviewed_correct', []);
+    expect(isCountedReviewed(signed, [])).toBe(false);
+    expect(isReviewTargetFromFindings(signed, [])).toBe(true);
+    expect(reviewCounts([signed], undefined))
+      .toEqual({ reviewed: 0, toReview: 1, total: 1, percentage: 0 });
+  });
+
+  it('a STRAY field-level name on a checkbox_group keeps it out of the count', () => {
+    // v2 forbids a field-level pdf_field_name on checkbox_group outright, and
+    // the old gate let it short-circuit the whole scan -- so a group with every
+    // option unmapped counted as REVIEWED.
+    const stray = completeField({
+      type: 'checkbox_group', pdf_field_name: 'form1[0].bad[0]',
+      options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+    } as Partial<FormField>);
+    const signed = withReviewStatus(stray, 'reviewed_correct', []);
+    expect(isCountedReviewed(signed, [])).toBe(false);
+    expect(reviewCounts([signed], undefined))
+      .toEqual({ reviewed: 0, toReview: 1, total: 1, percentage: 0 });
+  });
+
+  it('a field-level name on a RADIO still counts reviewed (the shared-name shape)', () => {
+    // The false-positive guard: one field-level name with per-option export
+    // codes is the genuine AcroForm radio group. It must stay countable, or the
+    // strip would redden every real radio group in every kit.
+    const sharedName = completeField({
+      type: 'radio', pdf_field_name: 'm',
+      options: [
+        { label: 'Single', value: 'single', pdf_on_value: 'S' },
+        { label: 'Married', value: 'married', pdf_on_value: 'M' },
+      ],
+    } as Partial<FormField>);
+    const signed = withReviewStatus(sharedName, 'reviewed_correct', []);
+    expect(isCountedReviewed(signed, [])).toBe(true);
+    expect(reviewCounts([signed], undefined))
+      .toEqual({ reviewed: 1, toReview: 0, total: 1, percentage: 100 });
+  });
+
+  it('DEGRADES rather than throws on a malformed options array', () => {
+    // bd polyglot-pdf-93p8: a throw here propagates out through reviewCounts
+    // into App.liveStats and blanks the WHOLE strip, instead of degrading one
+    // field's count. The collision + unmapped scans added by fyc7/ufj7 read
+    // only the normalized name list, so neither can dereference a null entry.
+    for (const bad of [
+      'not-a-list',
+      [null, 'junk', 42],
+      [{ label: 'A', value: 'a' }, null],
+    ]) {
+      const f = completeField({
+        type: 'checkbox_group', pdf_field_name: undefined, options: bad,
+      } as unknown as Partial<FormField>);
+      const signed = withReviewStatus(f, 'reviewed_correct', []);
+      expect(() => isCountedReviewed(signed, [])).not.toThrow();
+      expect(() => reviewCounts([signed], undefined)).not.toThrow();
+    }
+  });
+
   it('an unmapped CHOICE field never counts reviewed (the uncovered-rule clause)', () => {
     // A radio/checkbox_group/select whose field AND options all lack a PDF
     // widget is genuinely unfillable, yet NO backend lint rule errors on it

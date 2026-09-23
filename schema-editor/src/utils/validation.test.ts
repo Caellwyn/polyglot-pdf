@@ -236,10 +236,15 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
       expect(status.isComplete).toBe(false);
     });
 
-    it('ACCEPTS a real radio group: one widget, distinct export codes', () => {
-      // NOT a defect. A shared name with per-option pdf_on_value is exactly
-      // how an AcroForm radio group is authored -- the backend writes the /AS
-      // appearance state. Flagging this would redden every radio in every kit.
+    it('FLAGS option-level claimants even when they carry distinct export codes', () => {
+      // The carve-out I first wrote (exempt distinct pdf_on_values as "a real
+      // radio group") was WRONG and blessed the defect -- Opus cross-surface
+      // review. The /AS write that consumes pdf_on_value runs only where an
+      // option has NO pdf_field_name and inherits the FIELD-level name; that
+      // shape never reaches this check. Once options carry their OWN name the
+      // filler resolves BY NAME and ignores pdf_on_value entirely, so both
+      // claimants write to one widget and the last wins. The backend's
+      // dump-widget-multiclaim agrees: ERROR, no pdf_on_value exemption.
       const status = checkFieldComplete(field('marital', {
         ...complete,
         type: 'radio',
@@ -247,6 +252,23 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
         options: [
           { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'S' },
           { value: 'married', label: 'Married', pdf_field_name: 'm', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors.some(e => e.includes('More than one answer choice'))).toBe(true);
+    });
+
+    it('does NOT flag the genuine shared-NAME radio shape (field-level name)', () => {
+      // THIS is the real AcroForm radio group: ONE field-level name, options
+      // differing by export code and carrying no pdf_field_name of their own.
+      // It is the /AS path, it fills correctly, and it must stay clean --
+      // this is the false-positive guard the carve-out was reaching for.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: 'm',
+        options: [
+          { value: 'single', label: 'Single', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_on_value: 'M' },
         ],
       } as Partial<FormField>));
       expect(status.errors).toEqual([]);
@@ -282,12 +304,13 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
       expect(status.errors).toHaveLength(1);
     });
 
-    it('does NOT apply the collision rule to a select (fresh-eyes finding)', () => {
-      // A select is ONE combobox widget: it fills by substituting a string
-      // into /V (resolve_select_fill_value) and never reads
-      // options[].pdf_field_name. So a shared per-option name there cannot
-      // cause the fill-time collision the message describes -- flagging it
-      // would name a consequence that cannot happen for this type.
+    it('FLAGS a select too -- the backend gate refuses that shape', () => {
+      // I first excluded select on fill-mechanics grounds (a combobox is one
+      // widget, so the collision cannot bite at fill time). That left the
+      // editor GREEN on a shape the dump-loaded publish gate refuses as a hard
+      // dump-widget-multiclaim ERROR -- which has no type filter. Green here
+      // and refused there is the worse failure: the point of this check is to
+      // tell the author before publish what publish will say.
       const status = checkFieldComplete(field('state', {
         ...complete,
         type: 'select',
@@ -297,7 +320,7 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
           { value: 'ak', label: 'Alaska', pdf_field_name: 'combo' },
         ],
       } as Partial<FormField>));
-      expect(status.errors.some(e => e.includes('share one PDF widget'))).toBe(false);
+      expect(status.errors.some(e => e.includes('More than one answer choice'))).toBe(true);
     });
 
     it('does not flag DIFFERENT widgets, nor a single claimant', () => {

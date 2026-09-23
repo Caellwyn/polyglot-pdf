@@ -197,59 +197,53 @@ export function checkFieldComplete(
     }
 
     // ALWAYS-ON sibling-collision check (bd polyglot-pdf-fyc7). Two options of
-    // one choice field claiming the SAME PDF widget silently mis-fill: on a
-    // checkbox_group, ticking option A also ticks B's box; on a select/radio
-    // the last-processed claimant wins and overwrites the other's value. The
+    // one choice field claiming the SAME PDF widget silently mis-fill. The
     // dropdown that creates mappings already refuses to offer a sibling-claimed
     // widget (bd p2bd criterion 1), but that only stops NEW duplicates made
     // through that one UI path -- a schema that arrives with one already baked
     // in (hand-edited JSON, a legacy export, an import from another tool)
-    // rendered fully GREEN with nothing wrong on screen. This check is the
-    // always-on half, and it runs with no backend dump loaded.
+    // rendered fully GREEN. This is the always-on half; it needs no backend
+    // dump.
     //
-    // A SHARED NAME IS NOT AUTOMATICALLY WRONG. A real AcroForm radio group is
-    // exactly one widget name whose options differ by EXPORT CODE
-    // (option.pdf_on_value) -- the /AS appearance-state write the backend's
-    // radio arm performs. So a collision is only a defect when the claimants do
-    // NOT disambiguate: flag a shared name only where two or more options carry
-    // the same pdf_field_name AND fail to carry distinct non-empty
-    // pdf_on_values. Flagging every shared name would redden every legitimate
-    // radio group in every shipped kit -- a detector whose false positives
-    // outnumber its catches gets ignored, which is worse than not having it.
+    // MIRRORS THE BACKEND RULE EXACTLY, and the earlier attempts at being
+    // cleverer than it were both wrong (Opus cross-surface review):
     //
-    // SCOPED to radio + checkbox_group, NOT select (fresh-eyes finding). A
-    // select is ONE combobox widget: it fills by substituting a STRING into
-    // /V (resolve_select_fill_value), and never reads options[].pdf_field_name
-    // at all. So two select options carrying the same per-option widget name
-    // cannot produce the fill-time collision this message describes -- the
-    // message would name a consequence that cannot happen for that type.
-    // Radio (per-kid /AS write) and checkbox_group (independent widgets) are
-    // the two shapes where a shared name really does mis-fill.
-    const collisionApplies =
-      field.type === 'radio' || field.type === 'checkbox_group';
-    const byWidget = new Map<string, Array<{ label: string; on: string }>>();
+    //   schema_lint.dump-widget-multiclaim -- "this PDF box is claimed by more
+    //   than one answer choice on field X, so filling it will misbehave" --
+    //   is an ERROR for 2+ OPTION-level claimants, with NO pdf_on_value
+    //   exemption and NO field-type filter.
+    //
+    // 1. NO pdf_on_value CARVE-OUT. I first exempted claimants carrying
+    //    distinct export codes, reasoning that is a real AcroForm radio group.
+    //    It is not -- and the mistake blessed the very defect this check
+    //    exists to catch. The /AS appearance-state write that consumes
+    //    pdf_on_value (find_widget_by_state) runs ONLY on the branch where an
+    //    option has NO pdf_field_name of its own and inherits the FIELD-level
+    //    name (pdf_fill_routes.py, the radio arm). A field-level name is never
+    //    bucketed here, so that shape never reaches this loop. When options DO
+    //    carry their own pdf_field_name the filler goes to find_widget BY NAME
+    //    and never reads pdf_on_value at all: every claimant writes its own
+    //    is_selected to the same widget and the last one processed wins.
+    // 2. NO select EXCLUSION. Excluding select on fill-mechanics grounds (a
+    //    combobox is one widget, so the collision cannot bite at fill time)
+    //    left the editor GREEN on a shape the dump-loaded publish gate REFUSES
+    //    as a hard ERROR. Green here and refused there is worse than a
+    //    strictly-true-but-moot flag, and the whole point of this check is to
+    //    tell the author before publish what publish will say.
+    const byWidget = new Map<string, string[]>();
     for (const o of options) {
       const widget = o?.pdf_field_name;
       if (typeof widget !== 'string' || widget === '') continue;
-      const on = typeof o?.pdf_on_value === 'string' ? o.pdf_on_value : '';
       const label = o?.label || String(o?.value ?? '?');
       const bucket = byWidget.get(widget);
-      if (bucket) bucket.push({ label, on });
-      else byWidget.set(widget, [{ label, on }]);
+      if (bucket) bucket.push(label);
+      else byWidget.set(widget, [label]);
     }
-    for (const [widget, claimants] of collisionApplies ? byWidget : []) {
+    for (const [widget, claimants] of byWidget) {
       if (claimants.length < 2) continue;
-      // Distinct, non-empty export codes on EVERY claimant = a real radio
-      // group, correctly authored. Anything else (a blank code, or two
-      // claimants sharing one code) cannot be told apart at fill time.
-      const codes = claimants.map(c => c.on);
-      const disambiguated =
-        codes.every(c => c !== '') && new Set(codes).size === codes.length;
-      if (disambiguated) continue;
-      const names = claimants.map(c => c.label).join(', ');
       errors.push(
-        `Options share one PDF widget "${widget}" without distinct export ` +
-        `values, so filling one would change the other: ${names}`,
+        `More than one answer choice claims the PDF box "${widget}", so ` +
+        `filling one would change the other: ${claimants.join(', ')}`,
       );
     }
   } else if (!field.pdf_field_name) {

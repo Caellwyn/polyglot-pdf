@@ -38,7 +38,16 @@ import {
  * The counts derive from the PINNED predicate (reviewStatus.isCountedReviewed:
  * reviewed_correct, not demoted by the ack gate or the timeliness rule, no
  * field lint ERROR) -- one definition shared with the field list's jump, so
- * the strip and the rows can never disagree. "M to review" is a CONTROL:
+ * the strip and the rows can never disagree.
+ *
+ * THAT IS AN INVARIANT TO MAINTAIN, NOT A PROPERTY THAT HOLDS BY ITSELF.
+ * isCountedReviewed's uncovered-structural-error clause RE-IMPLEMENTS
+ * checkFieldComplete's error classes rather than calling it, so an error class
+ * added to one and not the other splits them: rows paint red while this strip
+ * reports the form fully reviewed and "Next to review" refuses to stop on the
+ * red row. That is precisely what bd polyglot-pdf-fyc7 / ufj7 did before the
+ * cross-surface review caught it. Adding an error class means updating BOTH,
+ * and reviewStatus.ts's docstring carries the list. "M to review" is a CONTROL:
  * click jumps to the next review target; right-click (or the filter toggle)
  * filters the field list to flagged fields -- the overview that used to
  * justify a pane.
