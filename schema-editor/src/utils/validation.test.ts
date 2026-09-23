@@ -160,6 +160,101 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
     expect(status.isComplete).toBe(true);
   });
 
+  // bd polyglot-pdf-fyc7. The dropdown that CREATES mappings already refuses to
+  // offer a sibling-claimed widget, but that only stops new duplicates made
+  // through that one UI path. A schema arriving with one already baked in --
+  // hand-edited JSON, a legacy export, an import from another tool -- rendered
+  // fully GREEN while two options silently claimed one PDF widget.
+  describe('sibling options sharing one PDF widget (bd fyc7)', () => {
+    it('FLAGS two checkbox_group options claiming the same widget', () => {
+      // The fill-time consequence: ticking White also ticks Black's box.
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[0]' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+      expect(status.errors[0]).toContain('r[0]');
+      expect(status.errors[0]).toContain('White, Black');
+      expect(status.isComplete).toBe(false);
+    });
+
+    it('ACCEPTS a real radio group: one widget, distinct export codes', () => {
+      // NOT a defect. A shared name with per-option pdf_on_value is exactly
+      // how an AcroForm radio group is authored -- the backend writes the /AS
+      // appearance state. Flagging this would redden every radio in every kit.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toEqual([]);
+      expect(status.isComplete).toBe(true);
+    });
+
+    it('FLAGS a shared widget when the export codes are also identical', () => {
+      // Same code on both claimants: the fill cannot tell them apart either.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'X' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm', pdf_on_value: 'X' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+      expect(status.errors[0]).toContain('Single, Married');
+    });
+
+    it('FLAGS a shared widget when only ONE claimant carries an export code', () => {
+      // A partially-authored group: the blank claimant has nothing to write.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+    });
+
+    it('does not flag DIFFERENT widgets, nor a single claimant', () => {
+      const distinct = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[1]' },
+        ],
+      } as Partial<FormField>));
+      expect(distinct.errors).toEqual([]);
+    });
+
+    it('is not thrown off by a malformed options array', () => {
+      // Same render-path safety as the rest of this function: a throw here is
+      // a BLANK SCREEN, not a wrong number (bd polyglot-pdf-8bjdx).
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [null, 'junk', { value: 'w', label: 'W', pdf_field_name: 'r[0]' }],
+      } as unknown as Partial<FormField>));
+      expect(Array.isArray(status.errors)).toBe(true);
+    });
+  });
+
   it('names the specific unmapped options of a partially-mapped group', () => {
     const status = checkFieldComplete(field('race', {
       ...complete,

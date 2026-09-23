@@ -170,6 +170,52 @@ export function checkFieldComplete(
         errors.push(`Options missing a PDF widget mapping: ${names}`);
       }
     }
+
+    // ALWAYS-ON sibling-collision check (bd polyglot-pdf-fyc7). Two options of
+    // one choice field claiming the SAME PDF widget silently mis-fill: on a
+    // checkbox_group, ticking option A also ticks B's box; on a select/radio
+    // the last-processed claimant wins and overwrites the other's value. The
+    // dropdown that creates mappings already refuses to offer a sibling-claimed
+    // widget (bd p2bd criterion 1), but that only stops NEW duplicates made
+    // through that one UI path -- a schema that arrives with one already baked
+    // in (hand-edited JSON, a legacy export, an import from another tool)
+    // rendered fully GREEN with nothing wrong on screen. This check is the
+    // always-on half, and it runs with no backend dump loaded.
+    //
+    // A SHARED NAME IS NOT AUTOMATICALLY WRONG. A real AcroForm radio group is
+    // exactly one widget name whose options differ by EXPORT CODE
+    // (option.pdf_on_value) -- the /AS appearance-state write the backend's
+    // radio arm performs. So a collision is only a defect when the claimants do
+    // NOT disambiguate: flag a shared name only where two or more options carry
+    // the same pdf_field_name AND fail to carry distinct non-empty
+    // pdf_on_values. Flagging every shared name would redden every legitimate
+    // radio group in every shipped kit -- a detector whose false positives
+    // outnumber its catches gets ignored, which is worse than not having it.
+    const byWidget = new Map<string, Array<{ label: string; on: string }>>();
+    for (const o of options) {
+      const widget = o?.pdf_field_name;
+      if (typeof widget !== 'string' || widget === '') continue;
+      const on = typeof o?.pdf_on_value === 'string' ? o.pdf_on_value : '';
+      const label = o?.label || String(o?.value ?? '?');
+      const bucket = byWidget.get(widget);
+      if (bucket) bucket.push({ label, on });
+      else byWidget.set(widget, [{ label, on }]);
+    }
+    for (const [widget, claimants] of byWidget) {
+      if (claimants.length < 2) continue;
+      // Distinct, non-empty export codes on EVERY claimant = a real radio
+      // group, correctly authored. Anything else (a blank code, or two
+      // claimants sharing one code) cannot be told apart at fill time.
+      const codes = claimants.map(c => c.on);
+      const disambiguated =
+        codes.every(c => c !== '') && new Set(codes).size === codes.length;
+      if (disambiguated) continue;
+      const names = claimants.map(c => c.label).join(', ');
+      errors.push(
+        `Options share one PDF widget "${widget}" without distinct export ` +
+        `values, so filling one would change the other: ${names}`,
+      );
+    }
   } else if (!field.pdf_field_name) {
     errors.push('Missing PDF field name');
   }
