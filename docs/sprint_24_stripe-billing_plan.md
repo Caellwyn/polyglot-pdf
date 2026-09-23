@@ -2,7 +2,7 @@
 
 **Epic:** `polyglot-pdf-m5exr`
 **Approved:** 2026-09-23 (maintainer, in-session: first draft 2026-09-17, revised the same week after the maintainer's answers, approved as revised)
-**Beads filed:** 2026-09-23 -- 5.1a `2c0kn`, 5.1b `6sezh`, 5.2 `7q77g`, 5.3 `65sra`, 5.4 `v56ef`, 5.5 `jnxg9`, 5.6 `cf2mx`, 5.7 `gf8ne`, 5.8 `t1s4g`; plan doc `33fst`. Head of the epic (start here): `polyglot-pdf-2c0kn`. Do not claim any child until the bead-server migration is done.
+**Beads filed:** 2026-09-23 -- 5.1a `2c0kn`, 5.1b `6sezh`, 5.2 `7q77g`, 5.3 `65sra`, 5.4 `v56ef`, 5.5 `jnxg9`, 5.6 `cf2mx`, 5.7 `gf8ne`, 5.8 `t1s4g`; plan doc `33fst`. Head of the epic (start here): `polyglot-pdf-2c0kn`. The maintainer asked (2026-09-23) that no child be claimed until the beads tracker has finished moving to its new server; the maintainer starts the first session on the head bead.
 **Program plan:** [`sprint_22_admin-console_plan.md`](sprint_22_admin-console_plan.md), section "Epic 5" -- this document is that epic's own `/plan-epic` pass and supersedes the outline there.
 
 ---
