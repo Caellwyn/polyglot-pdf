@@ -149,6 +149,71 @@ def _assignment_int(text: str, name: str) -> int:
     return int(m.group(1))
 
 
+def _risky_role_re() -> "re.Pattern[str]":
+    m = re.search(r"^RISKY_ROLE_RE='([^']+)'\s*$", _text(), re.MULTILINE)
+    assert m, "RISKY_ROLE_RE= assignment not found"
+    # The pattern is a POSIX ERE evaluated by bash's =~; everything it uses
+    # (anchors, alternation, character class, escaped dot) means the same in
+    # Python's re, so the SHIPPED pattern itself is what gets exercised.
+    return re.compile(m.group(1))
+
+
+# Roles that reach object data project-wide -- the bucket inherits them and
+# public access prevention does not block them (bd polyglot-pdf-fuao2). The
+# first three are exactly what the live check found on polyglot-demo-aa709.
+@pytest.mark.parametrize("role", [
+    "roles/storage.objectViewer",
+    "roles/editor",
+    "roles/cloudbuild.builds.builder",
+    "roles/owner",
+    "roles/storage.admin",
+    "roles/storage.objectAdmin",
+    "roles/storage.objectCreator",
+])
+def test_guard_flags_roles_that_reach_objects(role):
+    assert _risky_role_re().search(role), (
+        f"{role} reaches every object in the bucket but the guard would allow "
+        f"a service account to hold it")
+
+
+@pytest.mark.parametrize("role", [
+    "roles/logging.logWriter",
+    "roles/run.invoker",
+    "roles/secretmanager.secretAccessor",
+    "roles/datastore.user",
+    # anchored: a role merely CONTAINING a risky name must not match
+    "roles/editorLite",
+    "roles/storage",
+])
+def test_guard_does_not_flag_unrelated_roles(role):
+    assert not _risky_role_re().search(role), (
+        f"{role} does not reach object data; flagging it would refuse "
+        f"legitimate projects")
+
+
+def test_guard_checks_service_accounts_and_runs_before_create():
+    """The guard must inspect SERVICE ACCOUNTS, exit non-zero, and run before
+    the bucket can be created -- a guard placed after `create` would leave the
+    exposed bucket behind on refusal."""
+    text = _text()
+    lines = text.splitlines()
+    guard = next(i for i, l in enumerate(lines)
+                 if l.startswith("RISKY=$(gcloud projects get-iam-policy"))
+    create = next(i for i, l in enumerate(lines)
+                  if 'gcloud storage buckets create "$BUCKET"' in l)
+    describe = next(i for i, l in enumerate(lines)
+                    if l.startswith('if gcloud storage buckets describe "$BUCKET"'))
+    assert guard < describe < create, "the guard must run before any bucket work"
+    m = re.search(r'if \[ -n "\$RISKY" \]; then\n(.*?)\nfi', text, re.DOTALL)
+    assert m and re.search(r"^\s*exit [1-9]", m.group(1), re.MULTILINE), (
+        "a non-empty RISKY list must exit non-zero")
+    block = "\n".join(lines[guard:guard + 10])
+    assert '"$member" == serviceAccount:*' in block, (
+        "the guard must scope to serviceAccount members (human owners are "
+        "expected on any project)")
+    assert '"$role" =~ $RISKY_ROLE_RE' in block
+
+
 def test_refuses_the_retired_project():
     text = _text()
     m = re.search(r'if \[ "\$PROJECT_ID" = "polyglot-forms-919f2" \]; then\n(.*?)\nfi',

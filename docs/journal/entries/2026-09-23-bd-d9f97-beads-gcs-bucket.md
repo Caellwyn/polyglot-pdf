@@ -63,6 +63,26 @@ the inherited-access posture and points at fuao2. Also filed:
 polyglot-pdf-95pln (P2) -- `scripts/audit/infra_posture.sh` never re-checks the
 new bucket, so its settings are verified once and never again.
 
+**Maintainer decision: a dedicated project (option A).** Rather than narrow the
+live app's permissions (option B: changing a deployed identity's IAM, scar #7,
+and staging-verified before it is safe), the store moves to its own project,
+`polyglot-beads`, where no service account holds any role -- nothing
+inherits. The empty bucket in polyglot-demo-aa709 was deleted (confirmed empty,
+all versions, first). Option B stays worth doing on its own merits -- the app
+can read unrelated buckets today -- and is tracked separately.
+
+**The rule is now enforced, not just documented.** Before any bucket work the
+script reads the target project's IAM policy and refuses (exit 4) if any
+SERVICE ACCOUNT holds a project-level role reaching object data (owner,
+editor, any storage.*, cloudbuild.builds.builder). It checks the property,
+not a project name, so it also catches a future grant on the dedicated
+project. Run live against polyglot-demo-aa709 it refused, named exactly the
+three accounts the reviewer found, and created nothing. The role pattern is
+tested by compiling the SHIPPED pattern and exercising it both ways (every
+risky role matches; unrelated and merely-similar roles do not); five
+mutations -- drop storage.*, unanchor, no exit, check all members, move the
+guard after create -- each applied and each went red.
+
 ## Lessons
 
 **Scope the evidence to the claim, again.** Every setting appears three times

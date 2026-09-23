@@ -30,18 +30,21 @@
 #   - lifecycle: delete NONCURRENT versions 30 days after they stop being
 #     current. Bounds the cost of versioning; live objects are never touched.
 #
-# ACCESS: the operator reaches the store with their own credentials (Dolt reads
-# Application Default Credentials -- a new machine needs
-# `gcloud auth application-default login` once). This script grants no one
-# anything, BUT a bucket also inherits every PROJECT-level storage role, and
-# public access prevention does not stop those. Before the store holds data,
-# confirm no deployed identity holds a project-wide storage role on the target
-# project -- on polyglot-demo-aa709 the public backend SA holds
-# roles/storage.objectViewer project-wide and so can read this bucket
-# (bd polyglot-pdf-fuao2, which gates the cutover). Cloud-session access to the
-# store is decided separately (bd polyglot-pdf-91a72).
+# ACCESS -- WHY THE STORE GETS ITS OWN PROJECT. This script grants no one
+# anything, but a bucket also inherits every PROJECT-level storage role, and
+# public access prevention does not stop those. The app project
+# polyglot-demo-aa709 is the wrong home: its public backend SA holds
+# roles/storage.objectViewer project-wide, and its default compute and legacy
+# Cloud Build accounts hold broader project roles, so all of them would reach
+# every bead body (bd polyglot-pdf-fuao2). The store therefore lives in a
+# DEDICATED project, polyglot-beads, where no deployed identity holds any
+# role. Keep it that way: never grant a service account a project-level
+# storage role there. The operator reaches the store with their own
+# credentials (Dolt reads Application Default Credentials -- a new machine
+# needs `gcloud auth application-default login` once). Cloud-session access is
+# decided separately (bd polyglot-pdf-91a72).
 #
-# Usage: scripts/setup-beads-remote.sh <PROJECT_ID>
+# Usage: scripts/setup-beads-remote.sh polyglot-beads
 #
 # ASCII only.
 
@@ -72,6 +75,29 @@ NONCURRENT_DAYS=30
 
 echo -e "${GREEN}[INFO]${NC} Project:  $PROJECT_ID"
 echo -e "${GREEN}[INFO]${NC} Bucket:   $BUCKET ($LOCATION)"
+
+# --- 0. Refuse a project where a service account inherits storage access ---
+# The property this store depends on (see ACCESS above), checked live rather
+# than by project name: no SERVICE ACCOUNT may hold a project-level role that
+# reaches object data, because the bucket inherits it and public access
+# prevention does not block it. Human owners are expected and are not checked.
+# A failed policy read aborts the script (set -e + pipefail): fail closed.
+RISKY_ROLE_RE='^roles/(owner|editor|storage\.[A-Za-z]+|cloudbuild\.builds\.builder)$'
+RISKY=$(gcloud projects get-iam-policy "$PROJECT_ID" \
+    --flatten='bindings[].members' \
+    --format='value(bindings.role,bindings.members)' \
+    | while IFS=$'\t' read -r role member; do
+        if [[ "$member" == serviceAccount:* && "$role" =~ $RISKY_ROLE_RE ]]; then
+            echo "  $role  $member"
+        fi
+    done)
+if [ -n "$RISKY" ]; then
+    echo -e "${RED}[ERROR]${NC} Service accounts on $PROJECT_ID hold project-wide roles that"
+    echo "        would reach every object in $BUCKET:"
+    echo "$RISKY"
+    echo "        Use a dedicated project with no such grants (polyglot-beads)."
+    exit 4
+fi
 
 # --- 1. Create only if absent ---------------------------------------------
 if gcloud storage buckets describe "$BUCKET" --project="$PROJECT_ID" >/dev/null 2>&1; then
