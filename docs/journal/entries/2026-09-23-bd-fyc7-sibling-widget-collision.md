@@ -80,6 +80,44 @@ So the lesson is narrower and sharper than "the carve-out is the work":
   story; the backend's lint rule was three lines long and said the opposite.
   Read the rule, do not re-derive it.
 
+**THE SET HAD FOUR MEMBERS, AND I FOUND THEM ONE ROUND AT A TIME.** This is
+the part worth carrying forward. The bead named one predicate. Three
+successive outer-review rounds each found the next member of the same set:
+
+1. `checkFieldComplete` -- the row status (the bead's target).
+2. `hasUncoveredStructuralError` -- the COUNT mirror, in the same file family.
+   Teaching only the row means rows paint red while the strip reports the form
+   fully reviewed and "Next to review" skips them.
+3. The same mirror's ORDERING. I fixed member 2 and wrote tests, but my
+   collision case used a checkbox_group with no field-level name and my
+   field-level-name case used a CLEAN radio. The COMBINATION was untested and
+   all 117 editor tests passed with the bug present.
+4. `publish_readiness.has_uncovered_structural_error` -- a THIRD mirror, in
+   Python, one surface further out. Its docstring opens "The exact mirror of
+   reviewStatus.ts ... and it MUST [match], or a field counts reviewed in the
+   STAMP while the open editor renders it red." It fed the readiness block in
+   `metadata.json`, which the kit CATALOGUE renders -- so one saved kit would
+   show two different completion percentages.
+
+Each time I believed I had fixed "the" predicate. The tell I kept missing is
+in the code itself: every one of these files says in its own docstring that it
+mirrors another. **A file that declares itself a mirror is a set member by
+construction** -- grep for the claim, not for the symbol.
+
+**AND THE NET THAT SHOULD HAVE CAUGHT IT WAS BLIND BY CONSTRUCTION.** There is
+a shared parity fixture consumed by both the TS and Python halves, created
+because "prose could not hold the mirror together... only a shared expectation
+catches that class of drift." It passed green through three rounds of me
+changing one side. Its non-triviality guard checks case COUNT and that both
+outcomes appear -- neither can detect a missing DIMENSION. So a fixture whose
+entire purpose was catching this drift had no case for any of the new classes.
+
+The generalizable form: **a set-pinning test pins the members you thought of.**
+Adding an error class to a mirrored predicate means adding a fixture case, and
+no count-based non-triviality guard will remind you. Verified by mutating the
+NET rather than the code -- reverting the Python reddens four of the six new
+cases, each named.
+
 **The related trap, still true: an error class added to one predicate and not
 its mirror splits an invariant.** `checkFieldComplete` (row status) and
 `hasUncoveredStructuralError` (the count) re-implement the same question
