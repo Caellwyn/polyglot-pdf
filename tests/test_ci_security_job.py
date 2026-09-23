@@ -86,13 +86,29 @@ def _install_lines():
                 yield path.relative_to(REPO_ROOT).as_posix(), line.strip()
 
 
+# The ONE deliberate exception (bd polyglot-pdf-lwka0): ci.yml's
+# backend-runtime-install job installs backend/requirements.txt ALONE, on
+# purpose, to prove the runtime file resolves in a clean environment the way
+# the deploy image does -- it never runs pytest, so it is not one of the
+# "pytest runner" lines this test polices. Named explicitly (not pattern-
+# matched, not a blanket "ignore ci.yml") so a SECOND bare-runtime install
+# line added anywhere still trips this test (CLAUDE.md scar #8: enumerate the
+# set, don't loosen the check to swallow the whole class).
+DELIBERATE_RUNTIME_ONLY_INSTALLS = (
+    (".github/workflows/ci.yml", "run: pip install -r backend/requirements.txt"),
+)
+
+
 def test_every_pytest_runner_installs_the_dev_requirements():
     """pytest lives in requirements-dev.txt now; a runner or a dev script
     that installs only requirements.txt has no test runner. The .bat mirrors
     of the .sh scripts are part of this set (CLAUDE.md scar #8)."""
     lines = list(_install_lines())
     assert len(lines) >= 8, "the install-line scan is vacuous: " + repr(lines)
-    bare = [(f, l) for f, l in lines if "requirements-dev" not in l]
+    bare = [
+        (f, l) for f, l in lines
+        if "requirements-dev" not in l and (f, l) not in DELIBERATE_RUNTIME_ONLY_INSTALLS
+    ]
     assert not bare, "these still install the runtime file alone: " + repr(bare)
     for runner in (CI, CLOUDBUILD):
         assert "backend/requirements-dev.txt" in runner.read_text(encoding="utf-8")
