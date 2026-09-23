@@ -1,8 +1,10 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt backend/requirements-dev.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
+**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt backend/requirements-dev.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml .github/dependabot.yml tests/test_dependabot_config.py
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit, semgrep), pinned by `tests/test_ci_security_job.py`.)*
+
+*Last updated: 2026-09-23 (bd polyglot-pdf-lwka0: `.github/dependabot.yml`'s `all-pip-backend` group now excludes google-genai, websockets, uvicorn, fastapi and starlette -- both via `exclude-patterns` on the group and a top-level `ignore:` entry per package -- so an automatic grouped Dependabot PR can never carry a version bump of any of the five; a bump of one of them is a deliberate, voice-harness-gated bead (see `docs/doctrine/promotion-tiers.md`). Pinned by `tests/test_dependabot_config.py`, which parses the YAML rather than text-matching it. `ci.yml` also gained a `backend-runtime-install` job that installs `backend/requirements.txt` ALONE (no `requirements-dev.txt`, no cache) in a fresh runner and imports `backend.main`, matching the Cloud Run image's own install -- an unresolvable or broken runtime-only dependency set now fails the PR instead of surfacing only at deploy time. `tests/test_ci_security_job.py`'s pytest-runner scan carries one named exception for that job's line, since it deliberately never runs pytest.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-21m1y: the no-real-Firestore guard, autouse in both `backend/tests/conftest.py` and `admin_backend/tests/conftest.py`). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for the THIRD collected suite (`admin_backend/tests`)'s closeout details.*
 
