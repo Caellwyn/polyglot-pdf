@@ -31,13 +31,13 @@
 --      under `message`, and every context/cost/count field (firm_id,
 --      employee_id, kit_id, channel, model, usage_kind, cost_estimate_usd,
 --      ...) is nested ANOTHER level down inside `message.metadata`. So a
---      usage row's cost is `jsonPayload.message.metadata.cost_estimate_usd`,
---      not `jsonPayload.cost_estimate_usd`.
+--      usage row's cost is at JSON path `$.message.metadata.cost_estimate_usd`,
+--      not `$.cost_estimate_usd`.
 --   2. ledger_export, emitted by backend/services/credit_ledger.py through
 --      plain structlog (`_log.info(LEDGER_EXPORT_EVENT, event_type=...,
 --      ...)`). structlog's JSONRenderer (backend/utils/logging.py) puts
 --      every bound key at the TOP LEVEL of the JSON line, so a ledger row's
---      firm is `jsonPayload.firm_id`, not nested under any `message` or
+--      firm is at JSON path `$.firm_id`, not nested under any `message` or
 --      `metadata` object. This is a genuinely different shape from (1), not
 --      a typo -- backend/tests/unit/test_telemetry_views.py pins both shapes
 --      by deriving the expected column set from log_schemas.USAGE_CONTEXT_KEYS
@@ -45,28 +45,60 @@
 --      rather than hand-listing them here, so this file and those constants
 --      cannot silently drift apart.
 --
--- ACCESSOR SHAPE: DIRECT FIELD ACCESS, NOT JSON_VALUE (bd polyglot-pdf-vqgkj).
--- A Cloud Logging -> BigQuery sink materializes `jsonPayload` as a RECORD
--- (STRUCT) column with one individually-typed sub-field per JSON key seen so
--- far, NOT as a single JSON or STRING column -- this is documented sink
--- behavior (schema auto-detection from the LogEntry's structured payload),
--- and it is what backend/utils/log_schemas.py's "single column shape"
--- comment and structured_logger.py's own docstring both presuppose. Every
--- view below therefore reads columns via plain struct dot-access
--- (`jsonPayload.message.metadata.firm_id`, `jsonPayload.firm_id`, ...), the
--- SAME pattern hosting_cost_by_service_month already uses for
--- `service.description` / `resource.name`. JSON_VALUE is wrong here: it
--- requires a JSON or STRING argument, and would either fail view creation
--- outright against the STRUCT the sink actually produces, or -- if pointed
--- at an already-STRING sub-field -- re-parse that string's contents as JSON
--- and return NULL for any value that is not itself valid JSON (e.g. the
--- bare word `live`), silently zeroing every filtered view with no error.
--- Numeric sub-fields (`cost_estimate_usd`, `usd_amount`, `amount`) are typed
--- FLOAT64/INT64 directly by the sink's schema inference (the emitted JSON
--- carries a numeric literal, not a quoted string), so those are read with a
--- SAFE_CAST to FLOAT64 only to normalize INT64 sources -- no string CAST is
--- needed or correct. String sub-fields (firm_id, channel, usage_kind, ...)
--- are read as-is.
+-- ACCESSOR SHAPE: JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path'), NOT
+-- STRUCT DOT-ACCESS (bd polyglot-pdf-0fus0, supersedes bd polyglot-pdf-vqgkj's
+-- direct-field-access fix). A Cloud Logging -> BigQuery sink materializes
+-- `jsonPayload` as a RECORD (STRUCT) column, but it INFERS that STRUCT's
+-- sub-fields from the rows it has actually received, and SKIPS any field
+-- whose value was null in every row seen so far -- this is documented sink
+-- schema-auto-detection behavior, and vqgkj's own dot-access fix (2026-09-09)
+-- was written and merged before either sink table existed anywhere to check
+-- it against. LIVE 2026-09-23, with both sink tables finally populated:
+-- creating income_month failed with "400 Field name channel does not exist
+-- in STRUCT<firm_id STRING, timestamp STRING, level STRING, ...> at
+-- [13:15]" -- the stderr table's very first row (a subscription_grant
+-- top-up written by the admin service, which serves both channels and so
+-- writes channel=None/null by design) never gave the sink a non-null
+-- `channel` value to infer a column from, so `jsonPayload.channel` does not
+-- exist as a struct field AT ALL and any view referencing it directly
+-- cannot be CREATEd -- a hard schema error, not the silently-empty-column
+-- failure mode vqgkj's comment (correctly) warned JSON_VALUE-on-a-STRING
+-- would cause. Every nullable field has this same trap waiting (usd_amount
+-- is null on debits/refunds/promo; link_jti null on grants; kit_id null on
+-- TTS usage; employee_id null on staff sessions) -- whichever field happens
+-- to be null across every row landed so far blocks the view, and the
+-- failure is ORDER-DEPENDENT: a later row can add the column silently, so
+-- this recurs on any fresh dataset without warning.
+--
+-- The fix: `TO_JSON_STRING(jsonPayload)` first serializes the CURRENT
+-- STRUCT (whatever sub-fields it happens to have inferred so far) back to a
+-- JSON string -- this always succeeds regardless of which fields exist,
+-- because it walks the struct's actual schema rather than assuming one.
+-- `JSON_VALUE(that_string, '$.path')` then extracts the path if present and
+-- returns NULL (not an error) if it is absent, which is exactly the
+-- resilience this bead needs: a view that references a field skipped by
+-- inference now returns NULL for it instead of failing to CREATE at all.
+-- This is a different call shape from what vqgkj's comment warned against:
+-- that comment considered JSON_VALUE applied DIRECTLY to the STRUCT column
+-- (a type error) or to an already-extracted STRING sub-field (re-parses the
+-- string's contents as JSON, wrongly) -- neither is what happens here.
+-- `TO_JSON_STRING(jsonPayload)` re-serializes the whole top-level STRUCT
+-- into ONE valid JSON document every time (struct-to-JSON conversion, not a
+-- parse of a value that might not itself be JSON), and `JSON_VALUE` then
+-- parses that guaranteed-valid document, not a bare scalar like the string
+-- `live`. This is the same accessor shape the ad-hoc verification queries
+-- written during this epic already use successfully against both live
+-- tables. Numeric sub-fields (`cost_estimate_usd`, `usd_amount`, `amount`)
+-- come back out of JSON_VALUE as STRING regardless of the sink's original
+-- inferred type, so those are read with SAFE_CAST to FLOAT64 (not just to
+-- normalize an INT64 source, as under dot-access, but because JSON_VALUE
+-- itself never returns a typed number). String sub-fields (firm_id,
+-- channel, usage_kind, ...) are used as JSON_VALUE returns them, no cast
+-- needed. hosting_cost_by_service_month is UNCHANGED by this bead -- it
+-- reads the Cloud Billing export table, a normal (non-sink-inferred) BigQuery
+-- table with a fixed schema Google publishes, so `service.description` /
+-- `resource.name` direct field access there was never the bug this bead
+-- fixes and stays exactly as it was.
 --
 -- THE SINK LANDS ROWS IN TWO TABLES, NOT ONE (bd polyglot-pdf-ih428). A
 -- Cloud Logging -> BigQuery sink names its destination table per LOG ID
@@ -91,9 +123,9 @@
 --     therefore the sink's run_googleapis_com_stderr table.
 --
 -- So the three cost views below (which filter on the NESTED
--- jsonPayload.message.event_type shape, i.e. usage events) read
+-- $.message.event_type JSON path, i.e. usage events) read
 -- `${TELEMETRY_TABLE_STDOUT}`, and income_month (which filters on the flat
--- jsonPayload.event_type = 'ledger_export' shape) reads
+-- $.event_type = 'ledger_export' shape) reads
 -- `${TELEMETRY_TABLE_STDERR}` -- substituting the same single table into
 -- both would leave one set of views permanently and silently empty (no
 -- BigQuery error; the JSON path simply never matches). setup-telemetry.sh
@@ -116,13 +148,13 @@
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_firm_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  jsonPayload.message.metadata.firm_id AS firm_id,
-  jsonPayload.message.metadata.channel AS channel,
-  jsonPayload.message.metadata.usage_kind AS usage_kind,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.firm_id') AS firm_id,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.channel') AS channel,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.usage_kind') AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.cost_estimate_usd') AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE jsonPayload.message.event_type IN (
+WHERE JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.event_type') IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, firm_id, channel, usage_kind;
@@ -133,13 +165,13 @@ GROUP BY month, firm_id, channel, usage_kind;
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_kit_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  jsonPayload.message.metadata.kit_id AS kit_id,
-  jsonPayload.message.metadata.channel AS channel,
-  jsonPayload.message.metadata.usage_kind AS usage_kind,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.kit_id') AS kit_id,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.channel') AS channel,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.usage_kind') AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.cost_estimate_usd') AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE jsonPayload.message.event_type IN (
+WHERE JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.event_type') IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, kit_id, channel, usage_kind;
@@ -151,14 +183,14 @@ GROUP BY month, kit_id, channel, usage_kind;
 CREATE OR REPLACE VIEW `${DATASET}.cost_by_employee_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  jsonPayload.message.metadata.employee_id AS employee_id,
-  jsonPayload.message.metadata.firm_id AS firm_id,
-  jsonPayload.message.metadata.channel AS channel,
-  jsonPayload.message.metadata.usage_kind AS usage_kind,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.employee_id') AS employee_id,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.firm_id') AS firm_id,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.channel') AS channel,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.usage_kind') AS usage_kind,
   COUNT(*) AS call_count,
-  SUM(SAFE_CAST(jsonPayload.message.metadata.cost_estimate_usd AS FLOAT64)) AS cost_usd
+  SUM(SAFE_CAST(JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.metadata.cost_estimate_usd') AS FLOAT64)) AS cost_usd
 FROM `${TELEMETRY_TABLE_STDOUT}`
-WHERE jsonPayload.message.event_type IN (
+WHERE JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.message.event_type') IN (
   'gemini_api_response', 'text_ai_usage', 'tts_usage'
 )
 GROUP BY month, employee_id, firm_id, channel, usage_kind;
@@ -169,7 +201,10 @@ GROUP BY month, employee_id, firm_id, channel, usage_kind;
 -- Cloud Billing detailed export table (Epic 3 bead 7, maintainer console
 -- step, NOT this bead), filtered to the two SKU families this app actually
 -- pays for. Returns zero rows until that export is enabled -- it is not
--- retroactive.
+-- retroactive. UNCHANGED by bd polyglot-pdf-0fus0: this is a normal,
+-- Google-published, fixed-schema BigQuery table, not a sink-inferred one,
+-- so the schema-independence problem this bead fixes does not apply here --
+-- direct struct field access is correct and stays as-is.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE VIEW `${DATASET}.hosting_cost_by_service_month` AS
 SELECT
@@ -200,12 +235,12 @@ GROUP BY month, gcp_service, resource_name;
 CREATE OR REPLACE VIEW `${DATASET}.income_month` AS
 SELECT
   FORMAT_TIMESTAMP('%Y-%m', timestamp) AS month,
-  jsonPayload.type AS entry_type,
-  jsonPayload.channel AS channel,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.type') AS entry_type,
+  JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.channel') AS channel,
   COUNT(*) AS entry_count,
-  SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64)) AS usd_amount
+  SUM(SAFE_CAST(JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.usd_amount') AS FLOAT64)) AS usd_amount
 FROM `${TELEMETRY_TABLE_STDERR}`
-WHERE jsonPayload.event_type = 'ledger_export'
-  AND jsonPayload.type IN ('purchase', 'subscription_grant')
-  AND jsonPayload.firm_kind = 'live'
+WHERE JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.event_type') = 'ledger_export'
+  AND JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.type') IN ('purchase', 'subscription_grant')
+  AND JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.firm_kind') = 'live'
 GROUP BY month, entry_type, channel;
