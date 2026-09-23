@@ -1,5 +1,6 @@
 """sql/telemetry_views.sql -- the income filter + column provenance
-(Epic 3 bead 6, E3.6, exit criterion 1).
+(Epic 3 bead 6, E3.6, exit criterion 1; schema-independence fix bd
+polyglot-pdf-0fus0).
 
 WHY THIS FILE PARSES THE SQL TEXT DIRECTLY. No CI step runs `bq query`
 (there is no live BigQuery project to run it against in a test), so a
@@ -14,16 +15,28 @@ mock-firm entries") depends on this, and this bead inherits that half of it
 explicitly (bd body: "Inherits Epic 3 criterion 5 (income filter half)").
 
 THE COLUMN-PROVENANCE CHECK IS DERIVED, NOT HAND-LISTED (CLAUDE.md scar #8:
-enumerate the set mechanically). Every column each view references under
-jsonPayload.message.metadata.* must be a member of
-log_schemas.USAGE_CONTEXT_KEYS (plus the fixed cost/count/usage_kind keys
-StructuredLogger._emit always writes), and every column referenced under
-flat jsonPayload.* (the ledger_export shape) must be a member of
-credit_ledger.LEDGER_EXPORT_FIELDS. A view that references a column neither
-event actually emits would silently return NULL for that column forever
-(BigQuery does not error on referencing a JSON path that never appears) --
-exactly the kind of gap this test exists to catch before it reaches a
-dashboard as a quietly-empty column.
+enumerate the set mechanically). Every field each view reads at JSON path
+$.message.metadata.* must be a member of log_schemas.USAGE_CONTEXT_KEYS
+(plus the fixed cost/count/usage_kind keys StructuredLogger._emit always
+writes), and every field read at flat JSON path $.* (the ledger_export
+shape) must be a member of credit_ledger.LEDGER_EXPORT_FIELDS. A view that
+references a field neither event actually emits would silently return NULL
+for that field forever (JSON_VALUE returns NULL, not an error, for an
+absent path) -- exactly the kind of gap this test exists to catch before it
+reaches a dashboard as a quietly-empty column.
+
+ACCESSOR SHAPE (bd polyglot-pdf-0fus0, supersedes bd polyglot-pdf-vqgkj):
+every jsonPayload field is read via
+JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path'), NOT struct dot-access
+(jsonPayload.path). A Cloud Logging -> BigQuery sink infers jsonPayload's
+STRUCT sub-fields from the rows it has actually received and SKIPS any
+field that was null in every row so far, so a view referencing a
+skipped field via dot-access fails to CREATE at all (a hard schema error,
+observed live 2026-09-23 against a real sink table) -- JSON_VALUE against
+the struct's own re-serialized JSON string returns NULL for a missing path
+instead, which is what makes every view resilient to whichever field
+happens to be null in the first rows landed. See sql/telemetry_views.sql's
+own header comment for the full mechanism and the live error text.
 
 ASCII only.
 """
@@ -56,17 +69,25 @@ USAGE_FIXED_KEYS = {
 }
 
 # The complete set of columns a usage-event view is allowed to reference
-# under jsonPayload.message.metadata.*
+# under JSON path $.message.metadata.*
 ALLOWED_USAGE_METADATA_COLUMNS = frozenset(USAGE_CONTEXT_KEYS) | USAGE_FIXED_KEYS
 
 # The complete set of columns a ledger_export-event view is allowed to
-# reference under flat jsonPayload.*
+# reference under flat JSON path $.*
 ALLOWED_LEDGER_COLUMNS = frozenset(LEDGER_EXPORT_FIELDS)
 
 # event_type is a structural key on both shapes (used to select the rows
 # in the first place, not as a GROUP BY / SUM target), so it is permitted
 # wherever it appears without needing a schema entry of its own.
 STRUCTURAL_KEYS = {"event_type", "timestamp"}
+
+# Every JSON_VALUE(...) call this file's views make reads TO_JSON_STRING
+# (jsonPayload) as its first argument and a JSONPath string literal
+# ('$.foo' or '$.message.metadata.foo') as its second. This regex captures
+# the JSONPath so the column-provenance checks below can derive the actual
+# field name regardless of accessor syntax.
+JSON_VALUE_CALL = re.compile(
+    r"JSON_VALUE\(\s*TO_JSON_STRING\(jsonPayload\)\s*,\s*'\$((?:\.\w+)+)'\s*\)")
 
 
 def _sql_text() -> str:
@@ -97,6 +118,18 @@ ALL_VIEW_NAMES = (
     "income_month",
 )
 
+# The four views that read the Cloud Logging sink tables and must therefore
+# use the schema-independent JSON_VALUE accessor. hosting_cost_by_service_month
+# is excluded -- it reads the Cloud Billing export, a fixed-schema Google
+# table, not a sink-inferred one, so its direct struct field access
+# (service.description, resource.name) is correct and untouched by this bead.
+SINK_BACKED_VIEW_NAMES = (
+    "cost_by_firm_month",
+    "cost_by_kit_month",
+    "cost_by_employee_month",
+    "income_month",
+)
+
 
 def test_every_named_view_exists_in_the_sql_file():
     """The five views the bead's description names, all present. Mutation:
@@ -106,31 +139,56 @@ def test_every_named_view_exists_in_the_sql_file():
         _view_body(text, name)  # raises (via assert) if missing
 
 
-def test_no_view_wraps_a_jsonPayload_accessor_in_JSON_VALUE():
-    """bd polyglot-pdf-vqgkj: a Cloud Logging -> BigQuery sink materializes
-    `jsonPayload` as a RECORD (STRUCT) with individually-typed sub-fields,
-    NOT as a JSON or STRING column -- JSON_VALUE's first argument must be
-    JSON or STRING, so JSON_VALUE(jsonPayload...) either fails view creation
-    against the STRUCT the sink actually produces, or (if pointed at an
-    already-STRING sub-field) re-parses that string's own contents as JSON
-    and silently returns NULL for any value that is not itself valid JSON
-    (e.g. the bare word `live`) -- the exact silent-zero-rows failure mode
-    this bead's three-shape work exists to prevent, one layer down. Every
-    jsonPayload field is read via plain struct dot-access instead. Checks
-    the five view BODIES (the actual SQL statements), not the file's prose
-    comments, which legitimately name JSON_VALUE to document why it must
-    not be used. Mutation: wrap any jsonPayload.* accessor back in
-    JSON_VALUE(...) inside a view body -- red."""
+def test_sink_backed_views_read_jsonPayload_only_via_JSON_VALUE_on_TO_JSON_STRING():
+    """bd polyglot-pdf-0fus0: a Cloud Logging -> BigQuery sink INFERS
+    jsonPayload's STRUCT sub-fields from the rows it has actually received,
+    and skips any field that was null in every row so far -- a view that
+    references such a field via plain struct dot-access (jsonPayload.foo)
+    cannot be CREATEd at all (a hard schema error: "Field name channel does
+    not exist in STRUCT<...>", observed live 2026-09-23). Every field must
+    instead be read via JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path'),
+    which returns NULL (not an error) for a path the sink has not inferred
+    a column for yet. Checks the four SINK-BACKED view bodies (the actual
+    SQL statements), not the file's prose comments, and not
+    hosting_cost_by_service_month (a fixed-schema billing-export table,
+    unaffected by sink inference). Mutation: replace any
+    JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.foo') call in a sink-backed
+    view body with plain jsonPayload.foo dot-access -- red (both because the
+    bare accessor appears, and because the JSON_VALUE call count drops)."""
     text = _sql_text()
-    for name in ALL_VIEW_NAMES:
+    for name in SINK_BACKED_VIEW_NAMES:
         body = _view_body(text, name)
-        assert "JSON_VALUE" not in body, (
-            "{} uses JSON_VALUE on a jsonPayload accessor. The Cloud "
-            "Logging -> BigQuery sink materializes jsonPayload as a "
-            "RECORD/STRUCT, not JSON/STRING -- read fields via plain "
-            "struct dot-access (jsonPayload.foo, "
-            "jsonPayload.message.metadata.bar) instead, per bd "
-            "polyglot-pdf-vqgkj.".format(name))
+        # No bare struct dot-access on jsonPayload anywhere in the body.
+        assert not re.search(r"\bjsonPayload\.\w", body), (
+            "{} references jsonPayload via plain struct dot-access. A "
+            "Cloud Logging -> BigQuery sink skips inferring a column for "
+            "any field that was null in every row landed so far, which "
+            "makes a dot-access reference to that field fail CREATE VIEW "
+            "outright -- read every field via "
+            "JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path') instead, "
+            "per bd polyglot-pdf-0fus0.".format(name))
+        # And JSON_VALUE(TO_JSON_STRING(jsonPayload), ...) is actually used
+        # (not merely absent of dot-access because the body was gutted).
+        assert JSON_VALUE_CALL.search(body), (
+            "{} has no JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path') "
+            "call at all -- expected the schema-independent accessor "
+            "shape.".format(name))
+
+
+def test_hosting_cost_view_keeps_direct_struct_access():
+    """hosting_cost_by_service_month reads the Cloud Billing export table
+    (a fixed, Google-published schema, not a sink-inferred one), so its
+    direct struct field access (service.description, resource.name) is
+    correct and must NOT be rewritten to the sink views' JSON_VALUE
+    accessor -- there is no jsonPayload column on this table at all.
+    Mutation: change service.description to
+    JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.service_description') --
+    red (jsonPayload does not exist on the billing export schema)."""
+    text = _sql_text()
+    body = _view_body(text, "hosting_cost_by_service_month")
+    assert "service.description" in body
+    assert "resource.name" in body
+    assert "jsonPayload" not in body
 
 
 def test_income_month_hardcodes_the_live_firm_kind_filter():
@@ -139,7 +197,7 @@ def test_income_month_hardcodes_the_live_firm_kind_filter():
     text = _sql_text()
     body = _view_body(text, "income_month")
     assert re.search(
-        r"jsonPayload\.firm_kind\s*=\s*'live'", body), (
+        r"'\$\.firm_kind'\)\s*=\s*'live'", body), (
         "income_month's WHERE clause does not hard-code firm_kind = 'live'. "
         "This is Epic 3's exit criterion 5 (income filter half) and must "
         "live in the VIEW DEFINITION, not a caller's query.")
@@ -153,8 +211,8 @@ def test_income_month_filters_to_purchase_and_subscription_grant_only():
     text = _sql_text()
     body = _view_body(text, "income_month")
     type_filter = re.search(
-        r"jsonPayload\.type\s+IN\s+\(([^)]*)\)", body)
-    assert type_filter, "income_month has no jsonPayload.type IN (...) filter"
+        r"'\$\.type'\)\s+IN\s+\(([^)]*)\)", body)
+    assert type_filter, "income_month has no $.type IN (...) filter"
     types = {t.strip().strip("'") for t in type_filter.group(1).split(",")}
     assert types == {"purchase", "subscription_grant"}, (
         "income_month's type filter is {}, expected exactly "
@@ -163,31 +221,37 @@ def test_income_month_filters_to_purchase_and_subscription_grant_only():
 
 def test_income_month_filters_to_the_ledger_export_event_type():
     """income_month must scope to ledger_export rows specifically (the
-    shared sink table also carries usage rows) -- flat jsonPayload.event_type,
+    shared sink table also carries usage rows) -- flat $.event_type,
     matching how credit_ledger.py actually emits it. Mutation: drop this
-    filter, or point it at jsonPayload.message.event_type (the WRONG shape
-    for this event) -- red."""
+    filter, or point it at $.message.event_type (the WRONG shape for this
+    event) -- red."""
     text = _sql_text()
     body = _view_body(text, "income_month")
     assert re.search(
-        r"jsonPayload\.event_type\s*=\s*'ledger_export'",
+        r"'\$\.event_type'\)\s*=\s*'ledger_export'",
         body), (
-        "income_month does not filter on the flat jsonPayload.event_type = "
+        "income_month does not filter on the flat $.event_type = "
         "'ledger_export' -- without it the view would aggregate usage rows "
-        "too, which have no jsonPayload.type/usd_amount at all")
+        "too, which have no $.type/$.usd_amount at all")
 
 
 def _usage_metadata_columns_referenced(body: str) -> set:
-    return set(re.findall(
-        r"jsonPayload\.message\.metadata\.(\w+)", body))
+    return {
+        path.split(".")[-1]
+        for path in JSON_VALUE_CALL.findall(body)
+        if path.startswith(".message.metadata.")
+    }
 
 
 def _ledger_columns_referenced(body: str) -> set:
-    """Flat jsonPayload.<col> references, excluding the nested
-    message.metadata.* accessor (which the regex below would otherwise
-    also match as jsonPayload.message)."""
-    all_refs = set(re.findall(r"jsonPayload\.(\w+)", body))
-    return all_refs - {"message"}
+    """Flat JSON_VALUE(..., '$.<col>') references, excluding the nested
+    $.message.* accessor (which belongs to the usage-event shape, not
+    ledger_export's)."""
+    return {
+        path[1:]  # strip the leading "."
+        for path in JSON_VALUE_CALL.findall(body)
+        if path.count(".") == 1
+    }
 
 
 def test_usage_views_reference_only_columns_the_usage_events_emit():
@@ -196,7 +260,7 @@ def test_usage_views_reference_only_columns_the_usage_events_emit():
     jsonPayload.message.metadata -- derived from log_schemas.
     USAGE_CONTEXT_KEYS plus the fixed count/cost keys, never hand-listed
     here. Mutation: add a reference to a column the usage envelope does not
-    have (e.g. jsonPayload.message.metadata.session_id) to any of the three
+    have (e.g. $.message.metadata.session_id) to any of the three
     views -- red."""
     text = _sql_text()
     for name in ("cost_by_firm_month", "cost_by_kit_month", "cost_by_employee_month"):
@@ -214,16 +278,16 @@ def test_usage_views_reference_only_columns_the_usage_events_emit():
 
 def test_usage_views_filter_on_the_nested_usage_event_types():
     """Each cost-by-* view must scope to the three usage event_types via the
-    NESTED jsonPayload.message.event_type accessor (StructuredLogger._emit's
-    shape), not the flat one (which is ledger_export's shape and would
-    silently match zero usage rows). Mutation: change
-    jsonPayload.message.event_type to jsonPayload.event_type in any of the
-    three views -- red."""
+    NESTED $.message.event_type JSON path (StructuredLogger._emit's shape),
+    not the flat one (which is ledger_export's shape and would silently
+    match zero usage rows). Mutation: change
+    $.message.event_type to $.event_type in any of the three views --
+    red."""
     text = _sql_text()
     for name in ("cost_by_firm_month", "cost_by_kit_month", "cost_by_employee_month"):
         body = _view_body(text, name)
-        assert "jsonPayload.message.event_type" in body, (
-            "{} does not filter on jsonPayload.message.event_type".format(name)
+        assert "'$.message.event_type'" in body, (
+            "{} does not filter on JSON path $.message.event_type".format(name)
         )
         for usage_event in ("gemini_api_response", "text_ai_usage", "tts_usage"):
             assert "'{}'".format(usage_event) in body, (
@@ -235,8 +299,8 @@ def test_usage_views_filter_on_the_nested_usage_event_types():
 def test_income_view_references_only_columns_ledger_export_emits():
     """income_month may reference ONLY columns credit_ledger.py's
     LEDGER_EXPORT_FIELDS actually puts on the ledger_export log line.
-    Mutation: reference jsonPayload.employee_id (a real usage-event column,
-    but NOT one ledger_export emits) in income_month -- red."""
+    Mutation: reference $.employee_id (a real usage-event column, but NOT
+    one ledger_export emits) in income_month -- red."""
     text = _sql_text()
     body = _view_body(text, "income_month")
     referenced = _ledger_columns_referenced(body) - STRUCTURAL_KEYS
