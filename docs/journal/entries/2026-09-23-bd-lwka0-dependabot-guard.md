@@ -251,6 +251,41 @@ previously lacked.
       `test_every_suite_root_is_gated.py` (106 tests) green in isolation
       too.
 
+11. Round-8 outer cross-surface review fix (same PR): the reviewer traced
+    all six handoff contracts plus one it added on its own (this branch's
+    stale merge-base) and found one GAP, classified blocker; three more
+    findings were nits the reviewer filed itself.
+    - **Adopted:** Finding 1 -- `docs/doctrine/promotion-tiers.md:67` and
+      the matching docstring in `tests/test_dependabot_config.py` cited
+      `@vitejs/plugin-react` as `^6.1.1` and `@vitejs/plugin-react-swc` as
+      `^4.3.3` for `frontend/package.json`. Those were the pre-revert
+      `#863` values inherited from this branch's stale merge-base
+      (`801f4615b`, before dev's `#867` revert); after merging `origin/dev`
+      into the branch (merge, not reset -- confirmed clean via
+      `git diff origin/dev...HEAD --stat` showing only this branch's own 7
+      files both before and after the merge), the real current values are
+      `^4.3.0` and `^4.2.0`. Corrected both citations to the post-merge
+      values and added a dated docstring note explaining the drift, so a
+      future reader is not confused by the version mismatch between this
+      note and the SECOND FOLLOW-UP note above it. Docstring-only change
+      (no code/assertion logic touched), so no mutation-verify applies;
+      reran `tests/test_dependabot_config.py` plus
+      `test_ci_security_job.py`, `test_cloudbuild_yaml.py` and
+      `test_every_suite_root_is_gated.py` (106 tests), the full backend
+      suite (3898 passed, 195 skipped, 4 deselected) and the full
+      root-level suite (2105 passed, 94 skipped) from the worktree after
+      the merge and the fix -- all green, matching the prior baseline.
+    - **Rejected:** none.
+    - **Nit findings deferred, not fixed here** (already filed by the
+      reviewer, no new bundling bead needed): Finding 2
+      (`polyglot-pdf-l7qb4`, `backend-runtime-install` importing only
+      `backend.main`, not `admin_backend.main`), Finding 3
+      (`polyglot-pdf-fcaat`, no equivalent Dependabot guard for the pip
+      packages range-capped by the five gated ones), Finding 4
+      (`polyglot-pdf-j4hxu`, `branch-protection-setup.md`'s stale
+      required-status-checks claim -- pre-existing, unrelated to this
+      bead's diff).
+
 ## Lessons
 
 The bead names a real, general pattern worth restating: a mock proves the

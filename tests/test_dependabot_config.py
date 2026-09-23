@@ -46,7 +46,7 @@ peer dependency) and @vitejs/plugin-react (range-coupled to vite's
 supported-version range the same way) in the catch-all npm groups.
 schema-editor and admin-console pin @vitest/ui and @vitest/coverage-v8
 exactly; @vitejs/plugin-react stays on a caret range (^4.3.1 in
-schema-editor/admin-console, ^6.1.1 in frontend) but is still coupled to
+schema-editor/admin-console, ^4.3.0 in frontend) but is still coupled to
 vite's supported range, so a vitest/vite bump would either drag the excluded
 package along anyway or open a red, peer-conflicted PR -- the guard leaked on
 its own coupling. @vitest/* and @vitejs/plugin-react are folded into the same
@@ -55,7 +55,7 @@ in this file that checks the set automatically covers them too.
 
 SECOND FOLLOW-UP SCOPE ADDITION 2026-09-23 (outer cross-surface review of
 this same bead, round 2): frontend/package.json also declares
-@vitejs/plugin-react-swc (^4.3.3), the SWC-based variant of
+@vitejs/plugin-react-swc (^4.2.0), the SWC-based variant of
 @vitejs/plugin-react, with the identical peerDependencies.vite coupling
 (admin-console and schema-editor do not declare it -- they use
 @vitejs/plugin-react alone). The first follow-up above added
@@ -64,6 +64,16 @@ TS_TOOLCHAIN_PACKAGES set, and therefore into the exclude-patterns/ignore
 lists of all three npm update entries in dependabot.yml (not just frontend's),
 matching how @vitejs/plugin-react itself is already excluded everywhere even
 though admin-console and schema-editor are the only two that declare it.
+
+THIRD FOLLOW-UP SCOPE ADDITION 2026-09-23 (round-8 outer cross-surface
+review): this branch's merge-base predated PR #867, dev's revert of the
+#862/#863/#864 TS-toolchain bumps -- so frontend/package.json here still
+carried the pre-revert ^6.1.1 / ^4.3.3 versions for @vitejs/plugin-react and
+@vitejs/plugin-react-swc when the SECOND FOLLOW-UP note above was written.
+Merging origin/dev into this branch picked up the revert; the versions cited
+above are now the current (reverted) ones (^4.3.0 / ^4.2.0). The exclusion
+mechanism itself was never version-dependent, so this is a prose correction
+only, not a behavior change.
 
 The npm tests below mirror the pip tests above exactly: enumerate the
 TS-toolchain packages once, then check every npm group and every npm
