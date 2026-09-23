@@ -1,6 +1,6 @@
 # Config & deployment
 
-*Last updated: 2026-09-17 (bd `polyglot-pdf-e1l5f`: collapsed the eight stacked stamps this doc had accumulated into one -- every fact worth keeping was already present as current-state prose in the body below; see the per-bead journal entries for the history.)*
+*Last updated: 2026-09-23 (bd `polyglot-pdf-mxzkf`: noted the `roles/run.admin` grant is project-wide, mirroring the script comment added by bd `polyglot-pdf-nacfo.1`.)*
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
@@ -535,7 +535,10 @@ be the gate crying wolf.
   `scripts/setup-cloud-build.sh` (sibling of `scripts/setup-admin-service.sh`),
   which now does three things instead of just creating triggers: creates the
   SA, grants it a role per class of build step (`roles/run.admin` to deploy
-  Cloud Run revisions, `roles/firebasehosting.admin` for the Hosting targets,
+  Cloud Run revisions -- PROJECT-WIDE, because Cloud Run IAM has no role
+  narrower than `run.admin` for managing revisions across the multiple
+  named services this build deploys, unlike the resource-scoped `actAs`
+  bindings below -- `roles/firebasehosting.admin` for the Hosting targets,
   `roles/firebaserules.admin` for `firestore-rules`' RULES half and
   `roles/datastore.indexAdmin` for its COMPOSITE-INDEX half -- the rules role
   does not cover indexes and `roles/datastore.user` carries only the read

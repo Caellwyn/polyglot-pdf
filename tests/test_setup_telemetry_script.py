@@ -912,3 +912,34 @@ def test_repo_root_is_computed_before_the_python_probe_runs():
     assert probe_call_pos != -1, "find_telemetry_python is never invoked"
     assert repo_root_pos < probe_call_pos, (
         "REPO_ROOT must be assigned before find_telemetry_python is called")
+
+
+def test_hosting_cost_view_skip_reason_does_not_restate_the_removed_gate():
+    """bd polyglot-pdf-jr8u9 (deferred nit 3 from bd polyglot-pdf-k5w16's
+    outer review): hosting_cost_by_service_month's _apply_view call is
+    always gated "true" (BILLING_EXPORT_TABLE is already guaranteed
+    non-empty by the earlier `if [ -z "$BILLING_EXPORT_TABLE" ]; then ...
+    exit 0; fi` gate near the top of the view-application section), so its
+    skip_reason argument can never actually be printed. The skip_reason
+    text must not read as if BILLING_EXPORT_TABLE could still be missing
+    at this call site -- that phrasing describes a state this line can
+    never observe and misleads a reader into thinking the gate is live.
+    Mutation: restore the string to "BILLING_EXPORT_TABLE not given" --
+    red (this test's negative assertion is written against exactly that
+    string)."""
+    text = _script_text()
+    match = re.search(
+        r'_apply_view "hosting_cost_by_service_month" "([^"]*)" "true"',
+        text)
+    assert match, (
+        "hosting_cost_by_service_month's _apply_view call (gated \"true\") "
+        "was not found")
+    skip_reason = match.group(1)
+    assert skip_reason != "BILLING_EXPORT_TABLE not given", (
+        "the skip_reason still claims BILLING_EXPORT_TABLE might be "
+        "missing at this call site, but it is unconditionally gated "
+        "\"true\" and BILLING_EXPORT_TABLE is already guaranteed "
+        "non-empty here -- this text can never actually print")
+    assert "unreachable" in skip_reason.lower(), (
+        "the skip_reason should document that this branch is dead "
+        "(gated \"true\" unconditionally), not read as a live condition")
