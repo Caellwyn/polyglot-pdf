@@ -39,7 +39,8 @@ settings only" path, and left every setting identical. The bucket's
 metageneration counter does increment on re-apply -- a metadata bookkeeping
 write, not a settings change.
 
-`tests/test_setup_beads_remote_script.py` (12 tests) pins the script text.
+`tests/test_setup_beads_remote_script.py` pins the script text (12 tests at
+this stage; 32 after the guard below).
 
 **Review outcome.** Fresh-eyes: `NO-GAPS`, round 1, including a read-only
 check of the live bucket. The Opus cross-surface review found what neither the
@@ -71,17 +72,30 @@ inherits. The empty bucket in polyglot-demo-aa709 was deleted (confirmed empty,
 all versions, first). Option B stays worth doing on its own merits -- the app
 can read unrelated buckets today -- and is tracked separately.
 
-**The rule is now enforced, not just documented.** Before any bucket work the
-script reads the target project's IAM policy and refuses (exit 4) if any
-SERVICE ACCOUNT holds a project-level role reaching object data (owner,
-editor, any storage.*, cloudbuild.builds.builder). It checks the property,
-not a project name, so it also catches a future grant on the dedicated
-project. Run live against polyglot-demo-aa709 it refused, named exactly the
-three accounts the reviewer found, and created nothing. The role pattern is
-tested by compiling the SHIPPED pattern and exercising it both ways (every
-risky role matches; unrelated and merely-similar roles do not); five
-mutations -- drop storage.*, unanchor, no exit, check all members, move the
-guard after create -- each applied and each went red.
+**The rule is enforced, not just documented -- on the second try.** The first
+guard was a BLOCKLIST of risky roles (owner, editor, storage.*,
+cloudbuild.builds.builder) held by service accounts, read from the project
+policy only. It worked live against polyglot-demo-aa709 (refused, named the
+three accounts). The round-2 Opus review then showed it was the wrong shape:
+49 non-Google predefined roles grant `storage.objects.get` and matched none of
+it (firebase.*, run.builder, dataflow.worker, the new admin/reader/writer...);
+`roles/viewer` reaches objects through every UBLA bucket's default
+projectViewer -> legacyObjectReader binding; custom roles never match a
+`^roles/` anchor; `group:` and workload-identity principals skipped the
+`serviceAccount:` check entirely; and a bucket inherits ORG- and FOLDER-level
+grants the project policy does not show.
+
+The guard is now an ALLOWLIST of who may hold roles anywhere up the
+hierarchy: human users, Workspace domains (humans only), and Google-managed
+service agents. Any other principal holding ANY role refuses, and it reads
+`get-ancestors-iam-policy`, so org and folder grants count. That read needs
+org-level IAM access; without it the script stops before touching anything
+(verified live as caellwyn@gmail.com: exit 1, no bucket). Tests extract the
+SHIPPED `case` patterns and check real member strings both ways, including
+the three accounts found on the app project and look-alikes of the allowed
+agents. Five mutations -- allow groups, broaden the agent pattern, read the
+project policy only, drop the exit, move the guard after create -- each
+applied and each went red. 32 tests.
 
 ## Lessons
 
@@ -101,6 +115,14 @@ different bucket. Provisioning a sensitive store in a shared project has to
 ask who inherits access, not only what the new resource grants. It took the
 reviewer whose mandate is to follow things OUT of the diff to see it; the
 in-diff review, correctly, found nothing wrong with the script.
+
+**I wrote a blocklist while this repo's memory says "allowlist."** The lesson
+was already recorded (pin message text with an allowlist; guard the property,
+not the code shape) and I still reached for a list of bad roles first,
+because it was concrete and it passed a live test. A live test against the
+ONE project I had in hand proved the list caught that project's three
+accounts -- not that the list was complete. When the property is "nobody but
+X", encode "nobody but X".
 
 **Parse, don't grep, anything that can destroy data.** The lifecycle rule is
 checked by parsing the heredoc JSON: `isLive: false` versus `true` is the

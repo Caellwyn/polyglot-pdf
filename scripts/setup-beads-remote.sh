@@ -38,8 +38,8 @@
 # Cloud Build accounts hold broader project roles, so all of them would reach
 # every bead body (bd polyglot-pdf-fuao2). The store therefore lives in a
 # DEDICATED project, polyglot-beads, where no deployed identity holds any
-# role. Keep it that way: never grant a service account a project-level
-# storage role there. The operator reaches the store with their own
+# role. Keep it that way: grant roles there only to human users -- never to a
+# service account, group, or other non-human principal, whatever the role. The operator reaches the store with their own
 # credentials (Dolt reads Application Default Credentials -- a new machine
 # needs `gcloud auth application-default login` once). Cloud-session access is
 # decided separately (bd polyglot-pdf-91a72).
@@ -76,26 +76,46 @@ NONCURRENT_DAYS=30
 echo -e "${GREEN}[INFO]${NC} Project:  $PROJECT_ID"
 echo -e "${GREEN}[INFO]${NC} Bucket:   $BUCKET ($LOCATION)"
 
-# --- 0. Refuse a project where a service account inherits storage access ---
+# --- 0. Refuse unless only humans and Google's own agents hold roles -------
 # The property this store depends on (see ACCESS above), checked live rather
-# than by project name: no SERVICE ACCOUNT may hold a project-level role that
-# reaches object data, because the bucket inherits it and public access
-# prevention does not block it. Human owners are expected and are not checked.
-# A failed policy read aborts the script (set -e + pipefail): fail closed.
-RISKY_ROLE_RE='^roles/(owner|editor|storage\.[A-Za-z]+|cloudbuild\.builds\.builder)$'
-RISKY=$(gcloud projects get-iam-policy "$PROJECT_ID" \
-    --flatten='bindings[].members' \
-    --format='value(bindings.role,bindings.members)' \
-    | while IFS=$'\t' read -r role member; do
-        if [[ "$member" == serviceAccount:* && "$role" =~ $RISKY_ROLE_RE ]]; then
-            echo "  $role  $member"
+# than by project name. It is an ALLOWLIST of who may hold roles, not a list
+# of risky roles: dozens of predefined roles reach object data (firebase.*,
+# run.builder, dataflow.worker, roles/viewer via the bucket's default
+# projectViewer binding, custom roles, roles that can grant themselves more),
+# and a role list is always one entry short. So ANY role held by any other
+# principal -- a deployed service account, a group (groups can contain service
+# accounts), a workload-identity principal, a deleted principal, allUsers --
+# refuses.
+#
+# It reads the ANCESTORS policy (project + folders + organization), because a
+# bucket inherits org- and folder-level grants too. That read needs
+# organization-level IAM read access; without it the command fails and the
+# script stops (set -e + pipefail): fail closed. Run it as an org admin.
+is_allowed_member() {
+    case "$1" in
+        user:*) return 0 ;;          # a human account
+        domain:*) return 0 ;;        # every human user of a Workspace domain
+        serviceAccount:service-*@gcp-sa-*.iam.gserviceaccount.com) return 0 ;;
+        serviceAccount:*@cloudservices.gserviceaccount.com) return 0 ;;
+        serviceAccount:service-*@gs-project-accounts.iam.gserviceaccount.com) return 0 ;;
+        *) return 1 ;;               # anything else holding any role refuses
+    esac
+}
+DISALLOWED=$(gcloud projects get-ancestors-iam-policy "$PROJECT_ID" \
+    --flatten='policy.bindings[].members' \
+    --format='value(type,id,policy.bindings.role,policy.bindings.members)' \
+    | tr -d '\r' \
+    | while IFS=$'\t' read -r level id role member; do
+        [ -z "$level$role$member" ] && continue   # blank output line
+        if ! is_allowed_member "$member"; then
+            echo "  [$level $id]  $role  $member"
         fi
     done)
-if [ -n "$RISKY" ]; then
-    echo -e "${RED}[ERROR]${NC} Service accounts on $PROJECT_ID hold project-wide roles that"
-    echo "        would reach every object in $BUCKET:"
-    echo "$RISKY"
-    echo "        Use a dedicated project with no such grants (polyglot-beads)."
+if [ -n "$DISALLOWED" ]; then
+    echo -e "${RED}[ERROR]${NC} Principals other than humans and Google service agents hold"
+    echo "        roles that $BUCKET would inherit:"
+    echo "$DISALLOWED"
+    echo "        Use a dedicated project where none do (polyglot-beads)."
     exit 4
 fi
 

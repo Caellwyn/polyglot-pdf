@@ -149,69 +149,87 @@ def _assignment_int(text: str, name: str) -> int:
     return int(m.group(1))
 
 
-def _risky_role_re() -> "re.Pattern[str]":
-    m = re.search(r"^RISKY_ROLE_RE='([^']+)'\s*$", _text(), re.MULTILINE)
-    assert m, "RISKY_ROLE_RE= assignment not found"
-    # The pattern is a POSIX ERE evaluated by bash's =~; everything it uses
-    # (anchors, alternation, character class, escaped dot) means the same in
-    # Python's re, so the SHIPPED pattern itself is what gets exercised.
-    return re.compile(m.group(1))
+def _allowed_member_patterns() -> list[str]:
+    """The `case` arms of is_allowed_member() that `return 0`, as shipped.
+
+    Bash `case` patterns are shell globs; for the characters these patterns
+    use (literal text, `*`, `@`, `.`, `-`, `:`) Python's fnmatchcase has the
+    same meaning, so the SHIPPED patterns are what get exercised.
+    """
+    m = re.search(r"^is_allowed_member\(\) \{\n(.*?)\n\}", _text(),
+                  re.MULTILINE | re.DOTALL)
+    assert m, "is_allowed_member() not found"
+    pats = re.findall(r"^\s*(\S+)\) return 0 ;;", m.group(1), re.MULTILINE)
+    assert pats, "no allowing case arms found"
+    return pats
 
 
-# Roles that reach object data project-wide -- the bucket inherits them and
-# public access prevention does not block them (bd polyglot-pdf-fuao2). The
-# first three are exactly what the live check found on polyglot-demo-aa709.
-@pytest.mark.parametrize("role", [
-    "roles/storage.objectViewer",
-    "roles/editor",
-    "roles/cloudbuild.builds.builder",
-    "roles/owner",
-    "roles/storage.admin",
-    "roles/storage.objectAdmin",
-    "roles/storage.objectCreator",
+def _allowed(member: str) -> bool:
+    from fnmatch import fnmatchcase
+    return any(fnmatchcase(member, p) for p in _allowed_member_patterns())
+
+
+# Principals that must REFUSE whatever role they hold. The first three are
+# exactly what the live check found on polyglot-demo-aa709; the rest are the
+# evasions the round-2 review found in the earlier role-blocklist design.
+@pytest.mark.parametrize("member", [
+    "serviceAccount:polyglot-backend-sa@polyglot-demo-aa709.iam.gserviceaccount.com",
+    "serviceAccount:775682479028-compute@developer.gserviceaccount.com",
+    "serviceAccount:775682479028@cloudbuild.gserviceaccount.com",
+    "serviceAccount:anything@polyglot-beads.iam.gserviceaccount.com",
+    "group:admins@caellwynai.com",          # groups can contain service accounts
+    "principal://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/subject/s",
+    "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/*",
+    "deleted:serviceAccount:old@x.iam.gserviceaccount.com?uid=1",
+    "allUsers",
+    "allAuthenticatedUsers",
+    # look-alikes of the allowed Google agents must not slip through
+    "serviceAccount:evil@gcp-sa-cloudbuild.iam.gserviceaccount.com",
+    "serviceAccount:service-1@my-project.iam.gserviceaccount.com",
+    "",
 ])
-def test_guard_flags_roles_that_reach_objects(role):
-    assert _risky_role_re().search(role), (
-        f"{role} reaches every object in the bucket but the guard would allow "
-        f"a service account to hold it")
+def test_non_human_principals_are_refused(member):
+    assert not _allowed(member), (
+        f"{member!r} would be ALLOWED to hold roles the bucket inherits; any "
+        f"role it holds could reach object data")
 
 
-@pytest.mark.parametrize("role", [
-    "roles/logging.logWriter",
-    "roles/run.invoker",
-    "roles/secretmanager.secretAccessor",
-    "roles/datastore.user",
-    # anchored: a role merely CONTAINING a risky name must not match
-    "roles/editorLite",
-    "roles/storage",
+@pytest.mark.parametrize("member", [
+    "user:josh@caellwynai.com",
+    "user:caellwyn@gmail.com",
+    "domain:caellwynai.com",
+    "serviceAccount:service-123@gcp-sa-cloudbuild.iam.gserviceaccount.com",
+    "serviceAccount:123@cloudservices.gserviceaccount.com",
+    "serviceAccount:service-123@gs-project-accounts.iam.gserviceaccount.com",
 ])
-def test_guard_does_not_flag_unrelated_roles(role):
-    assert not _risky_role_re().search(role), (
-        f"{role} does not reach object data; flagging it would refuse "
-        f"legitimate projects")
+def test_humans_and_google_agents_are_allowed(member):
+    assert _allowed(member), (
+        f"{member!r} is a human or a Google-managed agent present on normal "
+        f"projects; refusing it would make the script unusable")
 
 
-def test_guard_checks_service_accounts_and_runs_before_create():
-    """The guard must inspect SERVICE ACCOUNTS, exit non-zero, and run before
-    the bucket can be created -- a guard placed after `create` would leave the
-    exposed bucket behind on refusal."""
+def test_guard_reads_ancestors_and_runs_before_create():
+    """Reads the ANCESTORS policy (org/folder grants are inherited too), exits
+    non-zero on any disallowed principal, is role-agnostic, and runs before
+    any bucket work -- a guard after `create` would leave the bucket behind."""
     text = _text()
     lines = text.splitlines()
     guard = next(i for i, l in enumerate(lines)
-                 if l.startswith("RISKY=$(gcloud projects get-iam-policy"))
+                 if l.startswith("DISALLOWED=$(gcloud projects "))
+    assert "get-ancestors-iam-policy" in lines[guard], (
+        "the guard must read the ancestors policy, not the project's alone")
     create = next(i for i, l in enumerate(lines)
                   if 'gcloud storage buckets create "$BUCKET"' in l)
     describe = next(i for i, l in enumerate(lines)
                     if l.startswith('if gcloud storage buckets describe "$BUCKET"'))
     assert guard < describe < create, "the guard must run before any bucket work"
-    m = re.search(r'if \[ -n "\$RISKY" \]; then\n(.*?)\nfi', text, re.DOTALL)
+    m = re.search(r'if \[ -n "\$DISALLOWED" \]; then\n(.*?)\nfi', text, re.DOTALL)
     assert m and re.search(r"^\s*exit [1-9]", m.group(1), re.MULTILINE), (
-        "a non-empty RISKY list must exit non-zero")
-    block = "\n".join(lines[guard:guard + 10])
-    assert '"$member" == serviceAccount:*' in block, (
-        "the guard must scope to serviceAccount members (human owners are "
-        "expected on any project)")
-    assert '"$role" =~ $RISKY_ROLE_RE' in block
+        "a non-empty DISALLOWED list must exit non-zero")
+    loop = "\n".join(lines[guard:guard + 12])
+    assert 'if ! is_allowed_member "$member"; then' in loop
+    assert "$role" not in loop.split("is_allowed_member")[1].split("then")[0], (
+        "membership, not role, decides refusal -- the check must stay role-agnostic")
 
 
 def test_refuses_the_retired_project():
