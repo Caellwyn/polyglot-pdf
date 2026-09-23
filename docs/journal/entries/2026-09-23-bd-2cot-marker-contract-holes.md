@@ -1,7 +1,7 @@
 ---
 date: 2026-09-23
 bead: polyglot-pdf-2cot
-title: "The fourth and fifth ways through one contract test"
+title: "The third, fourth and fifth ways through one contract test"
 tags: [testing, conventions, schema-editor]
 ---
 
@@ -62,7 +62,17 @@ honest answers are "these two literals are identical" or "I cannot tell".
 **Count the ways through, not the times you fixed it.** This file's own
 docstring already recorded two prior defeats -- a comment satisfying the
 pattern, and a duplicate declaration -- each found by review and each fixed.
-These beads are the third and fourth. The pattern is that a *scraping* guard
+These beads are the third and fourth. A FIFTH arrived during this very PR:
+the use-site guard I added for o6io excluded comments by testing whether a
+line STARTED with `//`, `*` or `#`, which missed a block-comment
+continuation and a mention inside a string -- so a relocated constant could
+satisfy its own pin with any prose mention. Fresh-eyes caught it, and the
+structural strip that replaced it then had its own ordering bug (a `#`
+inside a string ate the rest of the line, deleting a real use), caught on
+the next round.
+
+That is the honest shape of this file: five holes, two of them mine, each
+fix correct and none final. The pattern is that a *scraping* guard
 has an open-ended attack surface: every syntactic form the language permits is
 another way for the source text to say something the regex reads differently.
 Each fix is correct and none is final. The useful response is not to keep
