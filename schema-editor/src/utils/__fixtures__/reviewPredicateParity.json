@@ -20,15 +20,27 @@
   "cases": [
     {
       "name": "unreviewed field never counts",
-      "field": { "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]" },
+      "field": {
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]"
+      },
       "findings": [],
       "expected": false
     },
     {
       "name": "plain sign-off counts",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": true
@@ -36,8 +48,14 @@
     {
       "name": "needs_followup never counts",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "needs_followup" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "needs_followup"
+        }
       },
       "findings": [],
       "expected": false
@@ -45,101 +63,224 @@
     {
       "name": "a lint ERROR excludes a signed-off field",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [
-        { "severity": "ERROR", "rule": "field-unbacked", "path": "fields[0] (id=a)", "message": "no widget", "field_id": "a" }
+        {
+          "severity": "ERROR",
+          "rule": "field-unbacked",
+          "path": "fields[0] (id=a)",
+          "message": "no widget",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "a WARNING the sign-off stamped does NOT demote",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
         "_review": {
           "status": "reviewed_correct",
-          "seen_fingerprints": ["help-instructions-too-long|a|fields[] (id=a).help.instructions"]
+          "seen_fingerprints": [
+            "help-instructions-too-long|a|fields[] (id=a).help.instructions"
+          ]
         }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "help-instructions-too-long", "path": "fields[0] (id=a).help.instructions", "message": "long", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "help-instructions-too-long",
+          "path": "fields[0] (id=a).help.instructions",
+          "message": "long",
+          "field_id": "a"
+        }
       ],
       "expected": true
     },
     {
       "name": "a finding NEWER than the sign-off demotes (timeliness)",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [] }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "help-details-oversize",
+          "path": "fields[0] (id=a).help.details",
+          "message": "big",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "absent seen_fingerprints is grandfathered (no timeliness claim)",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "help-details-oversize",
+          "path": "fields[0] (id=a).help.details",
+          "message": "big",
+          "field_id": "a"
+        }
       ],
       "expected": true
     },
     {
       "name": "drift with NO ack is gated",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [] }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "guidance-identity-stale",
+          "path": "fields[0] (id=a).help[identity:@identity]",
+          "message": "drifted",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "sign-off THEN drift THEN ack counts -- the ack gate is the stale rule's sole owner",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "@identity" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": [],
+          "ackSha1": "@identity"
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "guidance-identity-stale",
+          "path": "fields[0] (id=a).help[identity:@identity]",
+          "message": "drifted",
+          "field_id": "a"
+        }
       ],
       "expected": true
     },
     {
       "name": "an ack for a SUPERSEDED identity stays gated",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "guidance_ack_sha1": "0000000000000000000000000000000000000000" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": [],
+          "guidance_ack_sha1": "0000000000000000000000000000000000000000"
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "guidance-identity-stale",
+          "path": "fields[0] (id=a).help[identity:@identity]",
+          "message": "drifted",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "an acked field with an UNRELATED new finding still demotes",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "@identity" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": [],
+          "ackSha1": "@identity"
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" },
-        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "guidance-identity-stale",
+          "path": "fields[0] (id=a).help[identity:@identity]",
+          "message": "drifted",
+          "field_id": "a"
+        },
+        {
+          "severity": "WARNING",
+          "rule": "help-details-oversize",
+          "path": "fields[0] (id=a).help.details",
+          "message": "big",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "choice field with an unmapped option is a structural error",
       "field": {
-        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
-        "options": [{ "value": "x", "pdf_field_name": "X[0]" }, { "value": "y" }],
-        "_review": { "status": "reviewed_correct" }
+        "id": "c",
+        "type": "select",
+        "name": "C",
+        "spoken_name": "c",
+        "options": [
+          {
+            "value": "x",
+            "pdf_field_name": "X[0]"
+          },
+          {
+            "value": "y"
+          }
+        ],
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": false
@@ -147,9 +288,23 @@
     {
       "name": "choice field with every option mapped counts",
       "field": {
-        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
-        "options": [{ "value": "x", "pdf_field_name": "X[0]" }, { "value": "y", "pdf_field_name": "Y[0]" }],
-        "_review": { "status": "reviewed_correct" }
+        "id": "c",
+        "type": "select",
+        "name": "C",
+        "spoken_name": "c",
+        "options": [
+          {
+            "value": "x",
+            "pdf_field_name": "X[0]"
+          },
+          {
+            "value": "y",
+            "pdf_field_name": "Y[0]"
+          }
+        ],
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": true
@@ -157,9 +312,19 @@
     {
       "name": "choice field mapped at the FIELD level counts",
       "field": {
-        "id": "c", "type": "select", "name": "C", "spoken_name": "c", "pdf_field_name": "C[0]",
-        "options": [{ "value": "x" }],
-        "_review": { "status": "reviewed_correct" }
+        "id": "c",
+        "type": "select",
+        "name": "C",
+        "spoken_name": "c",
+        "pdf_field_name": "C[0]",
+        "options": [
+          {
+            "value": "x"
+          }
+        ],
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": true
@@ -167,35 +332,68 @@
     {
       "name": "a NON-choice field with no widget is not a structural error here",
       "field": {
-        "id": "t", "type": "text", "name": "T", "spoken_name": "t",
-        "_review": { "status": "reviewed_correct" }
+        "id": "t",
+        "type": "text",
+        "name": "T",
+        "spoken_name": "t",
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": true
     },
     {
       "name": "a field with no type at all is uncovered",
-      "field": { "id": "a", "name": "A", "_review": { "status": "reviewed_correct" } },
+      "field": {
+        "id": "a",
+        "name": "A",
+        "_review": {
+          "status": "reviewed_correct"
+        }
+      },
       "findings": [],
       "expected": false
     },
     {
       "name": "a LITERAL (non-@identity) ackSha1 for a superseded identity stays gated (bd polyglot-pdf-eh2i)",
       "field": {
-        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
-        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "0000000000000000000000000000000000000000" }
+        "id": "a",
+        "type": "text",
+        "name": "A",
+        "spoken_name": "a",
+        "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": [],
+          "ackSha1": "0000000000000000000000000000000000000000"
+        }
       },
       "findings": [
-        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+        {
+          "severity": "WARNING",
+          "rule": "guidance-identity-stale",
+          "path": "fields[0] (id=a).help[identity:@identity]",
+          "message": "drifted",
+          "field_id": "a"
+        }
       ],
       "expected": false
     },
     {
       "name": "options containing null/non-object entries is a structural error, not a crash (bd polyglot-pdf-93p8)",
       "field": {
-        "id": "c", "type": "radio", "name": "C", "spoken_name": "c",
-        "options": [null, "junk"],
-        "_review": { "status": "reviewed_correct" }
+        "id": "c",
+        "type": "radio",
+        "name": "C",
+        "spoken_name": "c",
+        "options": [
+          null,
+          "junk"
+        ],
+        "_review": {
+          "status": "reviewed_correct"
+        }
       },
       "findings": [],
       "expected": false
@@ -203,9 +401,194 @@
     {
       "name": "a non-array options value degrades instead of throwing (bd polyglot-pdf-93p8, polyglot-pdf-wjes)",
       "field": {
-        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
+        "id": "c",
+        "type": "select",
+        "name": "C",
+        "spoken_name": "c",
         "options": "not-a-list",
-        "_review": { "status": "reviewed_correct" }
+        "_review": {
+          "status": "reviewed_correct"
+        }
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "cbg with a STRAY field-level pdf_field_name never counts (ufj7)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "cbg_stray",
+        "type": "checkbox_group",
+        "pdf_field_name": "form1[0].bad[0]",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": "r[0]"
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_field_name": "r[1]"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "two OPTIONS claiming one widget never counts (fyc7)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "collide",
+        "type": "checkbox_group",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": "r[0]"
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_field_name": "r[0]"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "a field-level name does NOT hide a collision on a radio (pq32y)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "radio_collide",
+        "type": "radio",
+        "pdf_field_name": "m",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": "r[0]"
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_field_name": "r[0]"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "a field-level name does NOT hide a collision on a select (pq32y)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "select_collide",
+        "type": "select",
+        "pdf_field_name": "m",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": "r[0]"
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_field_name": "r[0]"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "the genuine shared-NAME radio group still counts (false-positive guard)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "radio_shared",
+        "type": "radio",
+        "pdf_field_name": "m",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_on_value": "A"
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_on_value": "B"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "field-level PLUS EXACTLY ONE option on one widget stays benign (groups-of-one)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "groups_of_one",
+        "type": "radio",
+        "pdf_field_name": "w[0]",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": "w[0]"
+          }
+        ]
       },
       "findings": [],
       "expected": true

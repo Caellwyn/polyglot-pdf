@@ -211,23 +211,60 @@ def has_uncovered_structural_error(field: Dict[str, Any]) -> bool:
         exempts choice types (identity legitimately lives per option) and the
         widget-claim rules need a non-empty claim to fire, so this genuinely
         unfillable shape earns a red row with no count-excluding lint ERROR;
-      - a field with no id or no type at all (hand-edited/drifted kits).
+      - a field with no id or no type at all (hand-edited/drifted kits);
+      - a checkbox_group carrying a FIELD-LEVEL pdf_field_name, which v2
+        forbids outright. That rule is Pydantic _collect_v2_problems, not a
+        LintFinding, so no lint ERROR excludes it (bd polyglot-pdf-ufj7);
+      - two or more OPTIONS claiming the same widget. The backend's own
+        dump-widget-multiclaim covers it but is DUMP-GATED, so it cannot fire
+        in this schema-only clause (bd polyglot-pdf-fyc7).
 
     Derived from the SCHEMA alone, exactly like the client's. Retire the
     choice-mapping half once the backend rule ships (bd polyglot-pdf-xuub) --
     in BOTH implementations, together.
+
+    NOTE THE ORDERING, and keep it identical to the client's. A field-level
+    pdf_field_name on select/radio suppresses ONLY the unmapped-option scan
+    (that is the legitimate shared-name shape, where options need no own
+    name). It must NOT suppress the collision scan. Getting that wrong is how
+    the client drifted -- a radio with a field-level name AND two options
+    claiming one widget counted reviewed while the row painted red
+    (bd polyglot-pdf-pq32y).
     """
     if not field.get("id") or not field.get("type"):
         return True
     options = field.get("options")
     options = options if isinstance(options, list) else []
-    if (field.get("type") not in _CHOICE_TYPES or not options
-            or field.get("pdf_field_name")):
+    field_type = field.get("type")
+    if field_type not in _CHOICE_TYPES or not options:
         return False
-    return any(
-        not (o.get("pdf_field_name") if isinstance(o, dict) else None)
-        for o in options
+
+    is_checkbox_group = field_type == "checkbox_group"
+    if is_checkbox_group and field.get("pdf_field_name"):
+        return True
+    suppress_unmapped_scan = (
+        not is_checkbox_group and bool(field.get("pdf_field_name"))
     )
+
+    # Normalize once, then read only the normalized list -- a null/non-dict
+    # entry degrades this field's count instead of raising out through the
+    # readiness stamp (the Python half of bd polyglot-pdf-93p8).
+    names = [
+        (o.get("pdf_field_name") if isinstance(o, dict) else None)
+        for o in options
+    ]
+
+    seen: set = set()
+    for name in names:
+        if not isinstance(name, str) or name == "":
+            continue
+        if name in seen:
+            return True
+        seen.add(name)
+
+    if suppress_unmapped_scan:
+        return False
+    return any(not name for name in names)
 
 
 def is_counted_reviewed(
