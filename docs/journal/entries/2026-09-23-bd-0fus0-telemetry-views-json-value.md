@@ -81,6 +81,52 @@ unlisted column reference to a usage view and separately to `income_month`
 suite (3891 passed) and root suite (2054 passed) both green with no other
 regressions; `closeout_prep.py`'s combined run: 6675 passed.
 
+### Cross-surface review round (post-fresh-eyes)
+
+The Opus cross-surface review traced all four handoff contracts (the SQL
+accessor change into `bigquery_reports.py`, `report_routes.py`, the
+admin-console TS types + `CostReportsPage.tsx`, `setup-telemetry.sh`,
+`test_setup_telemetry_script.py`, the PII-sweep/inventory scripts, and the
+plan doc's `firm_kind = 'live'` citation) plus two it found on its own (the
+stale-comment sites and the output column type contract), and additionally
+ran live, read-only BigQuery dry runs of all four rewritten view bodies
+against the real `polyglot-demo-aa709.polyglot_telemetry` tables to confirm
+they resolve and their output schemas match what the consumers expect.
+Verdict: GAPS-FOUND (1). Breakdown of this round:
+
+- **Adopted (0 code changes needed):** none -- the one rubric-level finding
+  is a deploy-gating fact, not a code defect (below).
+- **Reject/no-op (0):** none.
+- **Deferred as PENDING-DEPLOY (1) -- exit criterion 2:** "A live re-run of
+  `scripts/setup-telemetry.sh` creates all five views (`income_month`
+  included) on `polyglot-demo-aa709`." The reviewer confirmed live that
+  `income_month` does not exist yet and the four existing views still carry
+  the pre-fix definitions (no `TO_JSON_STRING`). This requires
+  `gcloud logging sinks create/update` and `bq` calls against the shared
+  demo/staging project -- on this repo's NEVER list for an agent to run
+  unilaterally (CLAUDE.md: "NEVER run any deploy script, gcloud/firebase
+  mutating command"). The code and SQL are finished and mutation-verified
+  (exit criterion 1, above); criterion 2 needs an operator to run
+  `scripts/setup-telemetry.sh polyglot-demo-aa709 <BILLING_EXPORT_TABLE>`
+  from this branch post-merge (or pre-merge, since the script reads local
+  SQL) and is marked PENDING-DEPLOY, not a code gap.
+- **Filed as beads, not fixed here (2 nits, pre-existing):** the reviewer's
+  own two non-handoff findings were already correctly routed to beads
+  rather than inline fixes: `polyglot-pdf-krh42` (two admin-console
+  comments still quote the superseded
+  `SUM(SAFE_CAST(jsonPayload.usd_amount AS FLOAT64))` form -- comment-only,
+  their nullability claim is still true) and a duplicate docs-drift finding
+  (`polyglot-pdf-okfx8`, closed as a duplicate of the pre-existing
+  `polyglot-pdf-i7urr`, `?channel=` optionality on
+  `/admin/reports/income`). Neither warranted an inline fix in this bead:
+  both are nits/pre-existing per the review-flow triage rule, and both
+  already have exactly one bead each.
+
+Re-verified full backend suite (3891 passed, 195 skipped, 4 deselected) and
+root suite (2054 passed, 94 skipped) both green after this round, matching
+the pre-review counts with no regressions. No production code changed in
+this round.
+
 ## Lessons
 
 A prior bead reasoning correctly about a live system's behavior from
