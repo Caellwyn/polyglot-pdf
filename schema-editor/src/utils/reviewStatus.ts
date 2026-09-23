@@ -376,7 +376,20 @@ function hasUncoveredStructuralError(field: FormField): boolean {
   // the jump are one predicate by design; they must move together.
   const isCheckboxGroup = field.type === 'checkbox_group';
   if (isCheckboxGroup && field.pdf_field_name) return true;
-  if (!isCheckboxGroup && field.pdf_field_name) return false;
+
+  // NOTE THE ORDERING, and mirror checkFieldComplete's exactly. A field-level
+  // name on select/radio suppresses only the UNMAPPED-OPTION scan (that is the
+  // legitimate shared-name shape, where options need no own name). It must NOT
+  // suppress the COLLISION scan, which runs unconditionally on the row-status
+  // side. Returning false here for the whole predicate was the SAME invariant
+  // break as round 1, surviving for a second shape: a radio carrying a
+  // field-level name AND two options claiming one widget painted a red row
+  // while the strip counted it reviewed and the jump skipped it (Opus
+  // cross-surface round 2). The backend agrees this shape is an ERROR --
+  // schema_lint registers the field-level claim as kind "field" and each
+  // option as "option[i]", so 2+ option claimants fire dump-widget-multiclaim;
+  // its benign carve-out covers only field-level PLUS EXACTLY ONE option.
+  const suppressUnmappedScan = !isCheckboxGroup && Boolean(field.pdf_field_name);
 
   // NORMALIZE ONCE, then read only from the normalized list. The raw entries
   // are never touched by an array callback below, so a non-array `options` or
@@ -397,6 +410,7 @@ function hasUncoveredStructuralError(field: FormField): boolean {
     seen.add(name);
   }
 
+  if (suppressUnmappedScan) return false;
   return names.some(name => !name);
 }
 

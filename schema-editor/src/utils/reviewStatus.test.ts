@@ -181,6 +181,46 @@ describe('reviewStatus review targets (the pinned count predicate, s18 C1)', () 
       .toEqual({ reviewed: 1, toReview: 0, total: 1, percentage: 100 });
   });
 
+  // Opus cross-surface round 2. THE COMBINATION neither earlier case covered:
+  // the collision test used a checkbox_group with no field-level name, and the
+  // field-level-name test used a CLEAN shared-name radio. A radio carrying BOTH
+  // a field-level name and colliding options fell through the gate and counted
+  // as reviewed while the row painted red -- the same invariant break as round
+  // 1, surviving for a second shape. Parametrized over both affected types, so
+  // the fix is pinned for each rather than sampled (repo scar: mutation-verify
+  // per parametrization, not per test).
+  for (const type of ['radio', 'select'] as const) {
+    it(`a field-level name does NOT hide a collision on a ${type}`, () => {
+      const collided = completeField({
+        type, pdf_field_name: 'm',
+        options: [
+          { label: 'A', value: 'a', pdf_field_name: 'r[0]' },
+          { label: 'B', value: 'b', pdf_field_name: 'r[0]' },
+        ],
+      } as Partial<FormField>);
+      const signed = withReviewStatus(collided, 'reviewed_correct', []);
+      expect(isCountedReviewed(signed, [])).toBe(false);
+      expect(isReviewTargetFromFindings(signed, [])).toBe(true);
+      expect(reviewCounts([signed], undefined))
+        .toEqual({ reviewed: 0, toReview: 1, total: 1, percentage: 0 });
+    });
+
+    it(`a field-level name still suppresses the UNMAPPED scan on a ${type}`, () => {
+      // The other half of the same gate: this IS the legitimate shared-name
+      // shape, and it must stay countable or the strip reddens every real
+      // radio group in every kit.
+      const shared = completeField({
+        type, pdf_field_name: 'm',
+        options: [
+          { label: 'A', value: 'a', pdf_on_value: 'A' },
+          { label: 'B', value: 'b', pdf_on_value: 'B' },
+        ],
+      } as Partial<FormField>);
+      const signed = withReviewStatus(shared, 'reviewed_correct', []);
+      expect(isCountedReviewed(signed, [])).toBe(true);
+    });
+  }
+
   it('DEGRADES rather than throws on a malformed options array', () => {
     // bd polyglot-pdf-93p8: a throw here propagates out through reviewCounts
     // into App.liveStats and blanks the WHOLE strip, instead of degrading one
