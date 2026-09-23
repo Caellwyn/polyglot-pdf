@@ -81,7 +81,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="runtime_config")
+_log = structlog.get_logger(module="runtime_config")
 
 COLLECTION = "app_config"
 

@@ -14,7 +14,7 @@ import structlog
 
 from .field_utils import strip_field_id_from_hint
 
-_log = structlog.get_logger().bind(module="request_coordinator")
+_log = structlog.get_logger(module="request_coordinator")
 
 
 # Sentinel distinguishing "the frontend did not answer the next-field-hint

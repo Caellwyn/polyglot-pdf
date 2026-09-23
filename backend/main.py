@@ -9,6 +9,15 @@ import structlog
 # Load environment variables from .env file (if it exists)
 load_dotenv()
 
+# FIRST project import, deliberately (bd polyglot-pdf-65jeu). Importing
+# backend.utils.logging applies structlog's processor chain at ITS import
+# time, so any logger created -- or line emitted -- while the route and
+# service modules below are still being imported already renders as JSON
+# through the PII-safe exception processor. backend/services/auth.py logs
+# firebase_admin_initialized during its own module body, which is exactly
+# the case this ordering covers. Pinned by tests/test_structlog_json_output.py.
+from .utils.logging import configure_logging
+
 from .config import browser_origins, get_settings
 from .routes import websocket_routes, link_routes, signup_routes
 from .routes import pdf_fill_routes
@@ -23,13 +32,12 @@ from .utils.confirmation_logger import (
     flush_confirmation_sink,
 )
 from .services.firms import firms_store_status
-from .utils.logging import configure_logging
 from .utils.validation_errors import install_validation_error_handler
 
 
 configure_logging()
 
-_log = structlog.get_logger().bind(module="main")
+_log = structlog.get_logger(module="main")
 
 app = FastAPI(title="Web Form Voice Filler API", version="0.1.0")
 # A 422 must never echo the request body back (bd polyglot-pdf-wfgjz);

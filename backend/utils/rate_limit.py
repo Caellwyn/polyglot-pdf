@@ -78,7 +78,7 @@ from fastapi import HTTPException, Request
 
 from ..config import get_settings
 
-_log = structlog.get_logger().bind(module="rate_limit")
+_log = structlog.get_logger(module="rate_limit")
 
 # (door, bucket-kind) -> OrderedDict{key: (tokens, last_refill_monotonic)}
 _buckets: Dict[Tuple[str, str], "OrderedDict[str, Tuple[float, float]]"] = {}

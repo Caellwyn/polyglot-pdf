@@ -448,3 +448,147 @@ def test_the_exception_site_walk_covers_the_admin_service():
     widened the sibling PII sweep the same way)."""
     assert set(_EXCEPTION_SWEEP_ROOTS) == {"backend", "admin_backend"}
     assert all((REPO_ROOT / r).is_dir() for r in _EXCEPTION_SWEEP_ROOTS)
+
+
+# ============================================================================
+# The EARLY-BIND set (bd polyglot-pdf-65jeu)
+# ============================================================================
+#
+# structlog.get_logger().bind(...) at MODULE level instantiates the bound
+# logger against the configuration current at that moment. Both apps import
+# their route and service modules before calling configure_logging(), so every
+# such logger froze structlog's DEFAULT processors -- ConsoleRenderer, and the
+# stock exception renderer that prints the MESSAGE -- for the life of the
+# process. Observed live on staging 2026-09-18: ledger_export,
+# form_session_ended, usage_rollup_written and sweep_expired_links_complete
+# all landed in Cloud Logging as textPayload, so the telemetry sink (which
+# filters on jsonPayload.event_type) never saw them, and
+# pii_safe_exception_processor was bypassed for those loggers entirely.
+#
+# The fix creates every module-level logger bind-free, as
+# structlog.get_logger(module=...): that returns a lazy proxy which resolves
+# its configuration on the first LOG call, not at creation. This test pins the
+# SET (CLAUDE.md scar #8) -- it re-derives every module-level site from the
+# AST and asserts the set is EMPTY, so one new early bind fails CI rather than
+# silently dropping another event stream out of the sink.
+#
+# Loggers built INSIDE a function or method (self._log = ... in an __init__)
+# are deliberately not covered: they run long after configure_logging(), so
+# they bind the real chain. Only module-level binds are early.
+
+_EARLY_BIND_SWEEP_ROOTS = ("backend", "admin_backend")
+
+
+def _module_level_bind_sites():
+    """Every module-level `structlog.get_logger().bind(...)`, from the AST.
+
+    Derived, never hand-listed (memory: enumerate the block, don't hand-list
+    it). Only top-level ASSIGNMENTS are inspected: a bind inside a function or
+    class body executes at CALL time, after configuration, and is safe.
+    """
+    sites = set()
+    paths = []
+    for root in _EARLY_BIND_SWEEP_ROOTS:
+        paths += sorted((REPO_ROOT / root).rglob("*.py"))
+    for path in paths:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if "/tests/" in rel:
+            continue
+        if "scripts" in rel.split("/"):  # operator probes, either service
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in tree.body:  # MODULE LEVEL ONLY
+            if not isinstance(node, ast.Assign):
+                continue
+            value = node.value
+            if not (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "bind"
+            ):
+                continue
+            inner = value.func.value
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == "get_logger"
+                and isinstance(inner.func.value, ast.Name)
+                and inner.func.value.id == "structlog"
+            ):
+                sites.add((rel, node.lineno))
+    return sites
+
+
+def test_no_module_level_structlog_bind_anywhere():
+    """The early-bind set is EMPTY across both deployed services.
+
+    A module-level .bind() freezes ConsoleRenderer onto that logger, which
+    both drops its events out of the BigQuery telemetry sink (textPayload, not
+    jsonPayload) and bypasses pii_safe_exception_processor for its
+    exceptions.
+    """
+    sites = _module_level_bind_sites()
+    assert not sites, (
+        "Module-level structlog .bind() freezes the DEFAULT (console) "
+        "processors onto that logger -- its events render as textPayload and "
+        "never reach the telemetry sink, and its exceptions bypass "
+        "pii_safe_exception_processor. Use structlog.get_logger(module=...) "
+        "instead, whose lazy proxy resolves configuration on first log call. "
+        "Offending site(s): " + ", ".join(
+            "{}:{}".format(rel, line) for rel, line in sorted(sites)
+        )
+    )
+
+
+def test_the_early_bind_enumeration_actually_finds_sites(tmp_path):
+    """Guard the guard.
+
+    test_no_module_level_structlog_bind_anywhere asserts an EMPTY set, so a
+    walk that silently found nothing -- a typo in the attribute name, a
+    filter that excluded everything -- would pass forever while the real
+    regression shipped. Feed the walker a file in the offending shape and
+    require it to be seen.
+    """
+    fake_root = tmp_path / "backend"
+    fake_root.mkdir()
+    (fake_root / "offender.py").write_text(
+        "import structlog\n_log = structlog.get_logger().bind(module='x')\n",
+        encoding="utf-8",
+    )
+    # A runtime bind (inside a function) must NOT be reported: it is safe.
+    (fake_root / "safe.py").write_text(
+        "import structlog\n\n\ndef f():\n"
+        "    return structlog.get_logger().bind(module='y')\n",
+        encoding="utf-8",
+    )
+
+    found = set()
+    for path in sorted(fake_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            value = node.value
+            if not (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "bind"
+            ):
+                continue
+            inner = value.func.value
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == "get_logger"
+                and isinstance(inner.func.value, ast.Name)
+                and inner.func.value.id == "structlog"
+            ):
+                found.add(path.name)
+
+    assert found == {"offender.py"}, (
+        "The AST walk must flag a module-level bind and ignore a runtime one; "
+        "got {}".format(sorted(found))
+    )

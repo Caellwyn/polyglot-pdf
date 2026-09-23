@@ -37,7 +37,7 @@ from backend.services.form_kits import (
 	get_form_kit_store,
 )
 
-_log = structlog.get_logger().bind(module="pdf_fill_routes")
+_log = structlog.get_logger(module="pdf_fill_routes")
 
 
 # Upper bound on a resume upload (bd polyglot-pdf-dft1). The shipped kits are

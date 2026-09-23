@@ -48,7 +48,7 @@ from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from backend.services import runtime_config
 
-_log = structlog.get_logger().bind(module="admin_config_routes")
+_log = structlog.get_logger(module="admin_config_routes")
 
 router = APIRouter()
 

@@ -74,7 +74,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="link_tokens")
+_log = structlog.get_logger(module="link_tokens")
 
 # Bumped only for a BREAKING payload change. Verification refuses an unknown
 # version outright rather than guessing, so an old link fails closed instead

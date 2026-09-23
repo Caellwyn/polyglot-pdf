@@ -29,7 +29,7 @@ from .callback_handler import CallbackHandler
 from .validator_service import ValidatorService, WHOLE_FORM_PRO_SI
 
 # Logger for service-level diagnostics
-_log = structlog.get_logger().bind(service="FormFillingService")
+_log = structlog.get_logger(service="FormFillingService")
 
 
 class FormFillingService:

@@ -51,7 +51,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="bigquery_reports")
+_log = structlog.get_logger(module="bigquery_reports")
 
 # The dataset scripts/setup-telemetry.sh creates (bd polyglot-pdf-rd3s8).
 # us-central1, per that script and this bead's own "no new grant" note --

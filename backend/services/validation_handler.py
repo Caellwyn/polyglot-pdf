@@ -12,7 +12,7 @@ from backend.models.form_models import FormField
 from backend.utils.fuzzy_field_matcher import fuzzy_match_hint
 from backend.utils.field_validator import validate_updates
 
-_log = structlog.get_logger().bind(module="validation_handler")
+_log = structlog.get_logger(module="validation_handler")
 
 # Max rejected field ids recorded on a single validation_failures line. The
 # caller collapses multi-field calls to one key before validation, so this is a

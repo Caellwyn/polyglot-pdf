@@ -64,7 +64,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="kit_commercials")
+_log = structlog.get_logger(module="kit_commercials")
 
 COLLECTION = "kits"
 

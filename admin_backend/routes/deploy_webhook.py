@@ -122,7 +122,7 @@ from admin_backend.services.admin_auth import (
 )
 from deploy.targets import target_family
 
-_log = structlog.get_logger().bind(module="admin_deploy_webhook")
+_log = structlog.get_logger(module="admin_deploy_webhook")
 
 router = APIRouter()
 

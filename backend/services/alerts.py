@@ -68,7 +68,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="alerts")
+_log = structlog.get_logger(module="alerts")
 
 COLLECTION = "alerts"
 

@@ -23,7 +23,7 @@ from ..utils.confirmation_logger import (
 	log_disclaimer_acceptance as write_durable_acceptance_record,
 )
 
-_log = structlog.get_logger().bind(module="disclaimer_routes")
+_log = structlog.get_logger(module="disclaimer_routes")
 
 router = APIRouter(prefix="/api", tags=["disclaimer"])
 

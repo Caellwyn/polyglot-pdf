@@ -152,7 +152,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="usage_rollups")
+_log = structlog.get_logger(module="usage_rollups")
 
 FIRMS_COLLECTION = "firms"
 KITS_COLLECTION = "kits"

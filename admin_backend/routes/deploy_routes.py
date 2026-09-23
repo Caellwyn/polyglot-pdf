@@ -105,7 +105,7 @@ from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from admin_backend.services.promotion_gate import staging_verified
 from deploy.targets import CHANNEL_BY_TARGET, GATED_TARGETS, TARGETS, target_family
 
-_log = structlog.get_logger().bind(module="admin_deploy_routes")
+_log = structlog.get_logger(module="admin_deploy_routes")
 
 router = APIRouter()
 

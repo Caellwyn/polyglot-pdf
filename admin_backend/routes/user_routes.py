@@ -61,7 +61,7 @@ from admin_backend.services.admin_auth import (
     resolve_target_firm,
 )
 
-_log = structlog.get_logger().bind(module="admin_user_routes")
+_log = structlog.get_logger(module="admin_user_routes")
 
 router = APIRouter()
 

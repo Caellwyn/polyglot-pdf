@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Literal
 
-_log = structlog.get_logger().bind(module="confirmation_logger")
+_log = structlog.get_logger(module="confirmation_logger")
 
 # Confirmation log directory (separate from application logs). Overridable via
 # the CONFIRMATION_LOG_DIR env var so tests can redirect writes to a tmp dir

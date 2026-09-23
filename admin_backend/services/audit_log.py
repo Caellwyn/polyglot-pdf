@@ -62,7 +62,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="audit_log")
+_log = structlog.get_logger(module="audit_log")
 
 COLLECTION = "admin_audit_log"
 

@@ -10,7 +10,7 @@ import structlog
 
 from backend.ports.live_ai_port import ILiveAI
 
-_log = structlog.get_logger().bind(module="audio_handler")
+_log = structlog.get_logger(module="audio_handler")
 
 
 class AudioHandler:

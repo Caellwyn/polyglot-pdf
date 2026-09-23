@@ -23,7 +23,7 @@ from ..utils.structured_logger import get_logger as get_structured_logger
 import structlog
 
 # Structured logger for websocket routes
-_log = structlog.get_logger().bind(router="websocket_routes")
+_log = structlog.get_logger(router="websocket_routes")
 
 
 router = APIRouter(prefix="/ws", tags=["websocket"])

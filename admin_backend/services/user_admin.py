@@ -46,7 +46,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="user_admin")
+_log = structlog.get_logger(module="user_admin")
 
 # THE ALLOWLIST. The only two custom claims these routes may write. Kept as a
 # frozenset rather than two literals so the rule is one object a test can

@@ -75,7 +75,7 @@ from admin_backend.services.admin_auth import (
     require_app_admin_or_owning_manager,
 )
 
-_log = structlog.get_logger().bind(module="admin_usage_routes")
+_log = structlog.get_logger(module="admin_usage_routes")
 
 router = APIRouter()
 

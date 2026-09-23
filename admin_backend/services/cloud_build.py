@@ -85,7 +85,7 @@ from __future__ import annotations
 
 import structlog
 
-_log = structlog.get_logger().bind(module="cloud_build")
+_log = structlog.get_logger(module="cloud_build")
 
 # "polyglot-<target>" -- the exact trigger-naming convention scripts/
 # setup-cloud-build.sh's own TARGETS loop provisions (name="polyglot-$target").

@@ -85,7 +85,7 @@ from typing import Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="links_store")
+_log = structlog.get_logger(module="links_store")
 
 COLLECTION = "links"
 

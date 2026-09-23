@@ -153,7 +153,7 @@ from admin_backend.services.admin_auth import (
 )
 from backend.services import credit_ledger, plans
 
-_log = structlog.get_logger().bind(module="admin_credit_routes")
+_log = structlog.get_logger(module="admin_credit_routes")
 
 router = APIRouter()
 

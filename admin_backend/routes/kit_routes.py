@@ -80,7 +80,7 @@ from admin_backend.services import audit_log
 from admin_backend.services.admin_auth import AdminActor, require_app_admin
 from backend.services import kit_commercials
 
-_log = structlog.get_logger().bind(module="admin_kit_routes")
+_log = structlog.get_logger(module="admin_kit_routes")
 
 router = APIRouter()
 

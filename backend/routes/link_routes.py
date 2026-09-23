@@ -87,7 +87,7 @@ from backend.services.runtime_config import credits_enforced as _rc_credits_enfo
 from backend.services.runtime_config import minting_enabled as _rc_minting_enabled
 from backend.services.usage_rollups import record_link_minted
 
-_log = structlog.get_logger().bind(module="link_routes")
+_log = structlog.get_logger(module="link_routes")
 
 router = APIRouter(prefix="/api/links", tags=["client-links"])
 

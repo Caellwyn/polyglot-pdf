@@ -66,7 +66,7 @@ from admin_backend.services.admin_auth import (
 )
 from backend.services import credit_ledger
 
-_log = structlog.get_logger().bind(module="sweep_routes")
+_log = structlog.get_logger(module="sweep_routes")
 
 router = APIRouter()
 

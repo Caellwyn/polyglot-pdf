@@ -79,7 +79,7 @@ from typing import Any, Optional
 
 import structlog
 
-_log = structlog.get_logger().bind(module="error_stats")
+_log = structlog.get_logger(module="error_stats")
 
 _ERROR_REPORTING_BASE = "https://clouderrorreporting.googleapis.com/v1beta1"
 
