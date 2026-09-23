@@ -5,7 +5,10 @@
 # The five deploy-sensitive backend packages below are excluded from the
 # all-pip-backend group (bd polyglot-pdf-lwka0): two grouped batches in a row
 # (#816/#817/#819/#822, reverted by #830; #865, reverted the same day) broke
-# deploys after landing on dev, because the unit suites stub every one of
+# dev's BUILD after landing -- never a deployed environment (#830's own
+# revert body says "dev does not build"; the backend pins contradicted each
+# other so pip install itself failed with ResolutionImpossible) -- because
+# the unit suites stub every one of
 # these five and cannot validate a real bump. Every one of those PRs was
 # actually RED in the job that mattered (e.g. #865 failed backend pytest,
 # unresolvable on websockets==17.1) and was merged by hand anyway -- CI
@@ -30,23 +33,31 @@
 # the gated bead calls for it. Pinned + mutation-verified by
 # tests/test_dependabot_config.py.
 #
-# The four TypeScript-toolchain packages excluded from every npm group below
-# (typescript, @types/node, vite, vitest) are the same fix for the same
-# reason (bd polyglot-pdf-lwka0 scope addition, 2026-09-23): the same morning
-# #862/#863/#864 (grouped npm bumps in admin-console, frontend and
-# schema-editor) broke all three front-end type-checks after landing on dev
-# -- the TypeScript bump dropped the downlevelIteration and baseUrl compiler
-# options the tsconfigs still set (TS5102), and the updated Node type
-# definitions broke every node:* import and __dirname use in the vitest
-# files (TS2591/TS2304). Each of the three PRs was RED in the matching
-# frontend job (#863 failed at `npm run typecheck` with those exact TS5102
-# errors) and was merged by hand anyway; all four bumps were reverted
-# together in #867. typescript, @types/node, vite and vitest pin the TS surface every
-# front-end package compiles and tests against, so a real bump of any of them
-# needs a deliberate, reviewed bead the same way the five backend packages
-# do -- not an automatic grouped PR. A human bumps them by hand when that
-# bead calls for it. Pinned + mutation-verified by
-# tests/test_dependabot_config.py.
+# The TypeScript-toolchain packages excluded from every npm group below
+# (typescript, @types/node, vite, vitest, plus @vitest/* and
+# @vitejs/plugin-react) are the same fix for the same reason (bd
+# polyglot-pdf-lwka0 scope addition, 2026-09-23): #862/#863/#864 (grouped npm
+# bumps in admin-console, frontend and schema-editor, opened together on
+# 2026-09-19 and merged together on 2026-09-23) broke all three front-end
+# type-checks after landing on dev -- the TypeScript bump dropped the
+# downlevelIteration and baseUrl compiler options the tsconfigs still set
+# (TS5102), and the updated Node type definitions broke every node:* import
+# and __dirname use in the vitest files (TS2591/TS2304). Each of the three
+# PRs was RED in the matching frontend job (#863 failed at `npm run
+# typecheck` with those exact TS5102 errors) and was merged by hand anyway;
+# all four bumps (plus the backend pip bump, #865) were reverted together in
+# #867. typescript, @types/node, vite and vitest pin the TS surface every
+# front-end package compiles and tests against, so a real bump of any of
+# them needs a deliberate, reviewed bead the same way the five backend
+# packages do -- not an automatic grouped PR. @vitest/ui and
+# @vitest/coverage-v8 require an EXACT matching vitest version (peer dep),
+# and @vitejs/plugin-react is version-coupled to vite the same way, so
+# excluding vitest/vite alone without also excluding these leaves Dependabot
+# free to try bumping the peer-locked packages on their own, which either
+# drags vitest/vite along anyway or opens a PR with an unresolvable
+# peer-dependency lockfile -- the same red-PR shape this guard exists to
+# stop. A human bumps them by hand when that bead calls for it. Pinned +
+# mutation-verified by tests/test_dependabot_config.py.
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -82,11 +93,15 @@ updates:
           - "@types/node"
           - "vite"
           - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
       - dependency-name: "vite"
       - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
@@ -100,11 +115,15 @@ updates:
           - "@types/node"
           - "vite"
           - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
       - dependency-name: "vite"
       - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
@@ -118,11 +137,15 @@ updates:
           - "@types/node"
           - "vite"
           - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
       - dependency-name: "vite"
       - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

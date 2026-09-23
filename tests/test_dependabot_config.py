@@ -1,11 +1,15 @@
 """Pin the Dependabot deploy-sensitive-package guard (bd polyglot-pdf-lwka0).
 
-Two grouped Dependabot pip batches broke deploys after landing on dev
-(#816/#817/#819/#822, reverted by #830; #865, reverted the same day): the
-unit suites stub google-genai, websockets, uvicorn, fastapi and starlette
-completely, so a real version bump of any of them cannot be validated by the
-suite at all -- only by running the voice harness against a deployed staging
-environment. Every one of those PRs was actually RED in the job that
+Two grouped Dependabot pip batches broke dev's BUILD after landing
+(#816/#817/#819/#822, reverted by #830; #865, reverted the same day) --
+never a deployed environment: #830's own revert body says "dev does not
+build" (the backend pins contradicted each other, so pip install itself
+failed with ResolutionImpossible) and #867 (the #865 revert) hit the same
+failure shape on the staging verify build's install step, before any deploy
+ran. The unit suites stub google-genai, websockets, uvicorn, fastapi and
+starlette completely, so a real version bump of any of them cannot be
+validated by the suite at all -- only by running the voice harness against a
+deployed staging environment. Every one of those PRs was actually RED in the job that
 mattered (e.g. #865 failed backend pytest on an unresolvable websockets==
 17.1 pin) and was merged by hand anyway -- CI here is informational, not a
 merge gate (see docs/standards/testing.md), so this exclusion does not rely
@@ -22,21 +26,35 @@ exclude-patterns or the top-level ignore list fails
 test_all_five_packages_are_excluded_from_every_pip_group /
 test_all_five_packages_are_fully_ignored.
 
-SCOPE ADDITION 2026-09-23 (same bead, same-day bead-body amendment): the same
-morning's grouped npm bumps (#862 admin-console, #863 frontend, #864
-schema-editor) broke all three front-end type-checks on dev the same way --
+SCOPE ADDITION 2026-09-23 (same bead, same-day bead-body amendment): the
+grouped npm bumps #862 (admin-console), #863 (frontend) and #864
+(schema-editor) -- opened together on 2026-09-19 and merged together on
+2026-09-23 -- broke all three front-end type-checks on dev the same way --
 typescript and @types/node (which pin the TS surface, along with vite and
 vitest) landed via an automatic grouped update. Each PR was actually RED in
 its matching frontend job (#863 failed `npm run typecheck` with the exact
 TS5102 downlevelIteration/baseUrl errors) and was merged by hand anyway --
 the unit suites don't type-check against a bumped TS toolchain the way tsc /
 vite build do in a real PR, so CI's advisory status (not its color) is why
-these landed. All four bumps were reverted together in #867. The npm tests
-below mirror the pip tests above exactly: enumerate the four TS-toolchain
-packages once, then check every npm group and every npm update's ignore:
-list against that one set.
+these landed. All four bumps (plus the backend pip bump, #865) were reverted
+together in #867.
 
-Mutation-verified: removing any one of the four from an npm group's
+FOLLOW-UP SCOPE ADDITION 2026-09-23 (cross-surface review of this same
+bead): excluding typescript/vite/vitest alone left @vitest/ui and
+@vitest/coverage-v8 (which require an exact matching vitest version via a
+peer dependency) and @vitejs/plugin-react (peer-coupled to vite the same
+way) in the catch-all npm groups. schema-editor and admin-console pin all
+three of these exactly, so a vitest/vite bump would either drag the excluded
+package along anyway or open a red, peer-conflicted PR -- the guard leaked
+on its own coupling. @vitest/* and @vitejs/plugin-react are folded into the
+same TS_TOOLCHAIN_PACKAGES set below rather than a second constant, so every
+test in this file that checks the set automatically covers them too.
+
+The npm tests below mirror the pip tests above exactly: enumerate the
+TS-toolchain packages once, then check every npm group and every npm
+update's ignore: list against that one set.
+
+Mutation-verified: removing any one package from an npm group's
 exclude-patterns or ignore: list fails
 test_all_ts_toolchain_packages_are_excluded_from_every_npm_group /
 test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update.
@@ -67,6 +85,8 @@ TS_TOOLCHAIN_PACKAGES = (
     "@types/node",
     "vite",
     "vitest",
+    "@vitest/*",
+    "@vitejs/plugin-react",
 )
 
 

@@ -109,6 +109,45 @@ previously lacked.
      regressions this bead introduced.
    - **Rejected:** none -- every GAP finding was actionable and adopted; no
      finding was refuted.
+7. Round-4 outer cross-surface review fix (same PR, a later review pass after
+   the npm-scope addition landed): the reviewer traced the npm-scope
+   contracts and found two more GAPs.
+   - **Adopted:** Finding 1 (blocker) -- `@vitest/ui` and `@vitest/coverage-v8`
+     require an EXACT matching `vitest` version via a peer dependency, and
+     `@vitejs/plugin-react` is version-coupled to `vite` the same way;
+     schema-editor and admin-console pin all three exactly (verified via
+     `node -e "...package.json).peerDependencies"` against the installed
+     `node_modules`). Excluding only `vite`/`vitest` left Dependabot free to
+     bump the peer-locked packages alone, reproducing the same red,
+     peer-conflicted-lockfile PR shape this whole guard exists to stop. Added
+     `"@vitest/*"` and `"@vitejs/plugin-react"` to `exclude-patterns` and
+     `ignore:` in all three npm groups in `.github/dependabot.yml`, and folded
+     both into the existing `TS_TOOLCHAIN_PACKAGES` tuple in
+     `tests/test_dependabot_config.py` (not a second constant), so every
+     existing test against that set covers them automatically. Mutation-
+     verified by removing `@vitest/*` from one npm group's `exclude-patterns`
+     and, separately, from one npm update's `ignore:` list, confirming each
+     failure and restoring.
+   - **Adopted:** Finding 2 (doc-accuracy GAP) -- `docs/doctrine/
+     promotion-tiers.md` said the pip-package batches "broke the deployed
+     `/ws/fill` handshake" and that the npm bumps landed "the morning after"
+     the pip exclusion. Both are false: verified via `gh pr view 830/867
+     --json body` (both revert bodies say "dev does not build" -- a pip
+     `ResolutionImpossible` and front-end type-check failures, never a
+     deployed break) and `gh pr view 862/863/864 --json createdAt,mergedAt`
+     (all three created together on 2026-09-19, merged within 4 minutes of
+     each other on 2026-09-23 -- the same day as, not the morning after, the
+     pip exclusion in this same PR). The same "broke deploys after landing on
+     dev" phrasing was also in `.github/dependabot.yml`'s comment and
+     `tests/test_dependabot_config.py`'s docstring; corrected all three
+     together (CLAUDE.md scar #8) to say `dev`'s build/typecheck broke, never
+     a deployed environment.
+   - **Rejected:** none.
+   - Two more findings from this round (a nit about the `ci.yml` job-name
+     parity overstatement and website-routing.md mis-citation, and a
+     pre-existing branch-protection doc claim) were already filed by the
+     reviewer as `polyglot-pdf-em0bf` and `polyglot-pdf-cn6v7`; no new bead
+     needed.
 
 ## Lessons
 
@@ -142,12 +181,18 @@ Recorded in the closeout ping.
 
 - `.github/dependabot.yml` -- exclude-patterns + ignore: for the five
   deploy-sensitive packages, plus (round 2) the same for the four
-  TS-toolchain packages across all three npm groups.
+  TS-toolchain packages across all three npm groups; round 4 added
+  `@vitest/*` and `@vitejs/plugin-react` to close the peer-dependency gap,
+  plus a comment-wording fix ("broke deploys" -> "broke dev's build").
 - `.github/workflows/ci.yml` -- new `backend-runtime-install` job.
 - `tests/test_dependabot_config.py` -- new, pins the exclusion; round 2 added
-  the mirrored npm/TS-toolchain enumerated set and four tests.
+  the mirrored npm/TS-toolchain enumerated set and four tests; round 4 folded
+  `@vitest/*`/`@vitejs/plugin-react` into `TS_TOOLCHAIN_PACKAGES` and fixed the
+  same "broke deploys" docstring wording.
 - `tests/test_ci_security_job.py` -- one named exception for the new job's
   install line.
 - `docs/doctrine/promotion-tiers.md` -- voice-harness-gated bump note; round 2
-  added the matching npm/TS-toolchain paragraph and stamp update.
+  added the matching npm/TS-toolchain paragraph and stamp update; round 4
+  corrected the false "broke the deployed /ws/fill handshake" and "morning
+  after" claims and added the peer-dependency-package note.
 - `docs/standards/testing.md` -- Tracks line + current-state prose entry.
