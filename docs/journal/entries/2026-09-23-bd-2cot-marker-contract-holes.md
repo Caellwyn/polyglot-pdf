@@ -71,14 +71,14 @@ structural strip that replaced it then had its own ordering bug (a `#`
 inside a string ate the rest of the line, deleting a real use), caught on
 the next round.
 
-That is the honest shape of this file: five holes, two of them mine, each
-fix correct and none final. The pattern is that a *scraping* guard
-has an open-ended attack surface: every syntactic form the language permits is
+That is the honest shape of this file: five holes, two of them mine, each fix
+correct and none final. The pattern is that a *scraping* guard has an
+open-ended attack surface -- every syntactic form the language permits is
 another way for the source text to say something the regex reads differently.
-Each fix is correct and none is final. The useful response is not to keep
-patching in silence but to write each defeat into the docstring as it happens,
-which this file does, so the next reader sees the shape of the problem rather
-than four unrelated-looking conditions.
+The useful response is not to keep patching in silence but to write each
+defeat into the docstring as it happens, which this file does, so the next
+reader sees the shape of the problem rather than a pile of
+unrelated-looking conditions.
 
 **When tightening a guard, verify the protection it ALREADY gave.** It is easy
 to narrow a pattern and silently lose an existing catch. I re-ran the original
@@ -99,5 +99,9 @@ No CLAUDE.md changes.
 
 - `schema-editor/src/utils/markerNames.contract.test.ts` -- whole-RHS anchor on
   the declaration capture (2cot); new case requiring each scraped constant to
-  be used in its own file (o6io); docstring extended with the third defence and
-  the reproduction that motivated it.
+  be used in its own file (o6io); that case's comment-exclusion rewritten from
+  a line-prefix test to a structural strip (fresh-eyes round 1), then the strip
+  reordered so strings go before line comments and made escape-aware, since a
+  `#` inside a string was eating a real use (bd `polyglot-pdf-k0qh9`, round 2);
+  docstring extended with the third defence and the reproduction that motivated
+  it.
