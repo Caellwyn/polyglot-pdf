@@ -1,16 +1,21 @@
 """Pin the Dependabot deploy-sensitive-package guard (bd polyglot-pdf-lwka0).
 
-Two grouped Dependabot pip batches landed on dev with green CI and broke
-deploys anyway (#816/#817/#819/#822, reverted by #830; #865, reverted the same
-day): the unit suites stub google-genai, websockets, uvicorn, fastapi and
-starlette completely, so a real version bump of any of them cannot be
-validated by the suite at all -- only by running the voice harness against a
-deployed staging environment. This test PARSES .github/dependabot.yml (not a
-text pin) so it survives reformatting, and fails if any of the five packages
-is ever removed from the exclusion, matching CLAUDE.md scar #8 ("enumerate the
-set before fixing any of it"): the five packages are enumerated ONCE here and
-checked as a set, not as five separate ad hoc assertions that could each be
-dropped independently without the test noticing the class shrank.
+Two grouped Dependabot pip batches broke deploys after landing on dev
+(#816/#817/#819/#822, reverted by #830; #865, reverted the same day): the
+unit suites stub google-genai, websockets, uvicorn, fastapi and starlette
+completely, so a real version bump of any of them cannot be validated by the
+suite at all -- only by running the voice harness against a deployed staging
+environment. Every one of those PRs was actually RED in the job that
+mattered (e.g. #865 failed backend pytest on an unresolvable websockets==
+17.1 pin) and was merged by hand anyway -- CI here is informational, not a
+merge gate (see docs/standards/testing.md), so this exclusion does not rely
+on CI having been green; it stops the bump from being proposed at all. This
+test PARSES .github/dependabot.yml (not a text pin) so it survives
+reformatting, and fails if any of the five packages is ever removed from the
+exclusion, matching CLAUDE.md scar #8 ("enumerate the set before fixing any
+of it"): the five packages are enumerated ONCE here and checked as a set,
+not as five separate ad hoc assertions that could each be dropped
+independently without the test noticing the class shrank.
 
 Mutation-verified: removing any one of the five from either the group's
 exclude-patterns or the top-level ignore list fails
@@ -21,12 +26,15 @@ SCOPE ADDITION 2026-09-23 (same bead, same-day bead-body amendment): the same
 morning's grouped npm bumps (#862 admin-console, #863 frontend, #864
 schema-editor) broke all three front-end type-checks on dev the same way --
 typescript and @types/node (which pin the TS surface, along with vite and
-vitest) landed via an automatic grouped update that green CI could not catch
-because the unit suites don't type-check against a bumped TS toolchain the
-way tsc / vite build do in a real PR. All four bumps were reverted together
-in #867. The npm tests below mirror the pip tests above exactly: enumerate
-the four TS-toolchain packages once, then check every npm group and every
-npm update's ignore: list against that one set.
+vitest) landed via an automatic grouped update. Each PR was actually RED in
+its matching frontend job (#863 failed `npm run typecheck` with the exact
+TS5102 downlevelIteration/baseUrl errors) and was merged by hand anyway --
+the unit suites don't type-check against a bumped TS toolchain the way tsc /
+vite build do in a real PR, so CI's advisory status (not its color) is why
+these landed. All four bumps were reverted together in #867. The npm tests
+below mirror the pip tests above exactly: enumerate the four TS-toolchain
+packages once, then check every npm group and every npm update's ignore:
+list against that one set.
 
 Mutation-verified: removing any one of the four from an npm group's
 exclude-patterns or ignore: list fails

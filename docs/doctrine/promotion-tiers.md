@@ -42,15 +42,23 @@ unit suites cannot validate at all (every test stubs the SDK the Live adapter
 is written against, and stubs the WebSocket/ASGI stack around it), so a real
 bump can only be checked by actually running the voice path. `.github/
 dependabot.yml` excludes all five from the automatic grouped pip update for
-exactly this reason -- two grouped batches landed on `dev` CI-green and broke
-the deployed `/ws/fill` handshake anyway (`#816`/`#817`/`#819`/`#822`, reverted
-by `#830`; `#865`, reverted the same day). Bumping one of these five is a
-deliberate bead: land the version pin, deploy to staging, and run the
-[voice harness](../../.claude/skills/voice-harness/SKILL.md) against
+exactly this reason -- two grouped batches broke the deployed `/ws/fill`
+handshake anyway after landing on `dev` (`#816`/`#817`/`#819`/`#822`, reverted
+by `#830`; `#865`, reverted the same day). **Every one of those PRs was
+actually RED in CI** in the job that mattered (`#865` failed `backend pytest`
+outright, with pip's `ResolutionImpossible` on `websockets==17.1`) and was
+merged by hand anyway, because CI on this repo is informational, not a merge
+gate (see [`testing.md`](../standards/testing.md)) -- so CI did catch the
+break; the process gap is that a red PR can still be merged, which is a
+separate, still-open question for the maintainer (bd `polyglot-pdf-9ywia`).
+This exclusion's job is to stop the bump from being proposed at all, not to
+compensate for a CI signal that was in fact already there. Bumping one of
+these five is a deliberate bead: land the version pin, deploy to staging, and
+run the [voice harness](../../.claude/skills/voice-harness/SKILL.md) against
 `polyglot-app-staging.web.app` before asking for a demo deploy -- never through
 the routine grouped-Dependabot-PR path the other four pip/npm groups use.
 
-**A version bump of typescript, `@types/node`, vite or vitest is the same kind of gate** (same bead, same-day bead-body amendment): the morning after the five pip packages above were excluded, three grouped npm bumps (`#862`/`#863`/`#864`, one each for admin-console, frontend and schema-editor) landed on `dev` CI-green and broke all three front-end type-checks anyway -- a TypeScript major bump dropped compiler options the tsconfigs still set, and updated Node type definitions broke `node:*` imports and `__dirname` use in the vitest files. All four bumps were reverted together in `#867`. `.github/dependabot.yml` excludes these four packages from every npm group (frontend, schema-editor, admin-console) for the same reason the five pip packages are excluded: the unit suites do not type-check against a bumped TS toolchain the way `tsc`/`vite build` do in a real PR, so a real bump needs a deliberate reviewed bead, not the routine grouped-Dependabot-PR path.
+**A version bump of typescript, `@types/node`, vite or vitest is the same kind of gate** (same bead, same-day bead-body amendment): the morning after the five pip packages above were excluded, three grouped npm bumps (`#862`/`#863`/`#864`, one each for admin-console, frontend and schema-editor) broke all three front-end type-checks anyway after landing on `dev` -- a TypeScript major bump dropped compiler options the tsconfigs still set, and updated Node type definitions broke `node:*` imports and `__dirname` use in the vitest files. Each PR was RED in its matching frontend job (`#863` failed `npm run typecheck` with the exact TS5102 `downlevelIteration`/`baseUrl` errors) and was merged by hand anyway, the same informational-CI gap as the pip packages above. All four bumps were reverted together in `#867`. `.github/dependabot.yml` excludes these four packages from every npm group (frontend, schema-editor, admin-console) for the same reason the five pip packages are excluded: the unit suites do not type-check against a bumped TS toolchain the way `tsc`/`vite build` do in a real PR -- and CI's typecheck step did catch it, red, before the PR was merged anyway -- so a real bump needs a deliberate reviewed bead, not the routine grouped-Dependabot-PR path.
 
 ## What is separate, and what is NOT
 

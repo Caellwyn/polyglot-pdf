@@ -8,17 +8,29 @@ tags: [testing, doctrine, conventions]
 
 ## Trigger
 
-Two grouped Dependabot pip batches landed on `dev` with green CI and broke
-deploys anyway: `#816`/`#817`/`#819`/`#822` (reverted by `#830`) and `#865`
-(reverted the same day, a fastapi/starlette major-version jump 0.48 -> 1.6).
+Two grouped Dependabot pip batches broke deploys after landing on `dev`:
+`#816`/`#817`/`#819`/`#822` (reverted by `#830`) and `#865` (reverted the same
+day, a fastapi/starlette major-version jump 0.48 -> 1.6). Every one of these
+PRs was actually RED in CI in the job that mattered -- `#865` failed `backend
+pytest` outright at the install step, with pip's `ResolutionImpossible` on
+`websockets==17.1` -- and was merged by hand anyway: CI on this repo is
+informational, not a merge gate (`docs/standards/testing.md`), so this was
+never a case of a break with no CI signal at all. The outer cross-surface
+review on this same PR corrected an earlier draft of this entry that had
+wrongly attributed the breaks to CI being green; the still-open process gap
+-- that a red PR can still be merged -- is a separate, maintainer-facing
+question filed as bd `polyglot-pdf-9ywia`.
 The unit suites stub google-genai, websockets, uvicorn, fastapi and starlette
 completely -- every test that touches the Live adapter, the WebSocket
 handshake, or the ASGI stack runs against a mock, not the real package -- so a
 real version bump of any of these five cannot be validated by the suite at
-all. Separately, the verify build installs `backend/requirements.txt` alone in
-a clean `python:3.12` image while CI has only ever installed
-`requirements-dev.txt` (which happens to pull in `requirements.txt`), so an
-unresolvable runtime-only dependency set had no CI signal before this bead.
+all regardless of whether CI is red or green for an unrelated reason.
+Separately, the verify build installs `backend/requirements.txt` alone in
+a clean `python:3.12` image while CI's `backend-tests` job installs
+`requirements-dev.txt` (which happens to pull in `requirements.txt`), so
+`backend-runtime-install` (below) is a second, isolated signal for an
+unresolvable runtime-only dependency set, not a new class of detection CI
+previously lacked.
 
 ## What shipped
 
@@ -38,11 +50,14 @@ unresolvable runtime-only dependency set had no CI signal before this bead.
 3. `ci.yml` gained a `backend-runtime-install` job that installs ONLY
    `backend/requirements.txt` in a fresh runner (no pip cache, no dev extras)
    and imports `backend.main`, mirroring what the deploy image's uvicorn
-   process does. An unresolvable or import-broken runtime dependency set now
-   fails the PR instead of surfacing only at deploy time.
-   `tests/test_ci_security_job.py`'s pytest-runner scan gained one named
-   exception for this job's install line, since it deliberately never runs
-   pytest and was never meant to be one of the lines that test polices.
+   process does. This is a second, isolated signal for an unresolvable or
+   import-broken runtime dependency set -- the `backend-tests` job's own
+   install step already fails on exactly this class today (e.g. `#865`'s
+   `ResolutionImpossible` on `websockets==17.1`), it is just mixed in with
+   `requirements-dev.txt`'s pins there. `tests/test_ci_security_job.py`'s
+   pytest-runner scan gained one named exception for this job's install
+   line, since it deliberately never runs pytest and was never meant to be
+   one of the lines that test polices.
 4. Docs: `docs/doctrine/promotion-tiers.md`'s "Why staging exists" section now
    names the five packages and says a bump of any of them is a deliberate,
    voice-harness-gated bead (staging deploy, run the voice harness against it,
@@ -66,6 +81,34 @@ unresolvable runtime-only dependency set had no CI signal before this bead.
    turn and confirming each corresponding test fails, then restoring.
    `docs/doctrine/promotion-tiers.md` gained a matching paragraph and stamp
    update noting the npm-side gate.
+6. Round-3 outer cross-surface review fix (same PR): the outer reviewer
+   traced all four handoff contracts plus the two round-1 contracts and
+   found one GAP (Finding 1) plus two pre-existing/nit findings it filed as
+   beads rather than fixing here.
+   - **Adopted:** Finding 1 -- corrected the "landed on dev with green CI"
+     claim everywhere it appeared (`.github/dependabot.yml` x2,
+     `tests/test_dependabot_config.py` x2, `docs/doctrine/promotion-tiers.md`
+     x2 plus the "Why staging exists" prose, `docs/standards/testing.md`'s
+     stamp, `.github/workflows/ci.yml`'s `backend-runtime-install` comment,
+     and this journal entry's Trigger and item 3). Verified independently
+     against `gh pr checks` for every cited PR (`#816`/`#817`/`#819`/`#822`/
+     `#865`/`#862`/`#863`/`#864`): each had a RED job in the suite that
+     should have caught the break, and was merged by hand anyway -- CI here
+     is informational (`docs/standards/testing.md`), not a merge gate, so
+     the corrected claim is that CI already caught these and the real gap is
+     that a red PR can still merge (a maintainer process question, filed as
+     bd `polyglot-pdf-9ywia`, not fixed in this bead).
+   - **Deferred (filed as beads, not fixed here):** Finding 2, the
+     `backend-runtime-install` job importing only `backend.main` and missing
+     `admin_backend.main` (which the same image and requirements file also
+     serve) -- filed as bd `polyglot-pdf-3kaqw`. Finding 3, the
+     `docs/standards/security-posture.md` supply-chain row not reflecting
+     that nine packages (including the internet-facing fastapi, starlette,
+     uvicorn, websockets) now get no Dependabot signal at all -- filed as bd
+     `polyglot-pdf-01kiz`. Both are nits against pre-existing text, not
+     regressions this bead introduced.
+   - **Rejected:** none -- every GAP finding was actionable and adopted; no
+     finding was refuted.
 
 ## Lessons
 

@@ -57,8 +57,13 @@ jobs:
     # `python:3.12` image. An unresolvable or conflicting runtime pin set
     # (the class of break a grouped Dependabot bump on google-genai /
     # websockets / uvicorn / fastapi / starlette produced before -- see
-    # .github/dependabot.yml) now fails this job on the PR instead of
-    # surfacing only at deploy time.
+    # .github/dependabot.yml; #865's backend-tests job already failed at this
+    # exact install step with pip's ResolutionImpossible on websockets==17.1,
+    # and was merged red anyway, since CI here is informational, not a merge
+    # gate) still fails this job on the PR. This job adds a second, isolated
+    # signal of the same break (no requirements-dev.txt pins in the mix), not
+    # a NEW class of detection CI previously lacked -- see
+    # docs/standards/testing.md for the informational-CI caveat.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

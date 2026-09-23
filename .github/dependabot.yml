@@ -4,9 +4,15 @@
 #
 # The five deploy-sensitive backend packages below are excluded from the
 # all-pip-backend group (bd polyglot-pdf-lwka0): two grouped batches in a row
-# (#816/#817/#819/#822, reverted by #830; #865, reverted the same day) landed
-# on dev with green CI and broke deploys anyway, because the unit suites stub
-# every one of these five and cannot validate a real bump.
+# (#816/#817/#819/#822, reverted by #830; #865, reverted the same day) broke
+# deploys after landing on dev, because the unit suites stub every one of
+# these five and cannot validate a real bump. Every one of those PRs was
+# actually RED in the job that mattered (e.g. #865 failed backend pytest,
+# unresolvable on websockets==17.1) and was merged by hand anyway -- CI
+# caught these, but CI here is advisory (see docs/standards/testing.md), not
+# a merge gate, so a red PR going in is a separate, still-open process gap
+# (bd polyglot-pdf-9ywia). This exclusion stops the bump from being proposed
+# at all; it does not depend on CI being green in the first place.
 #   - google-genai: the Live adapter (backend/adapters/live_ai_gemini.py) is
 #     written against the vendored docs/genai_docs 2.8 reference; every test
 #     stubs the SDK.
@@ -28,12 +34,14 @@
 # (typescript, @types/node, vite, vitest) are the same fix for the same
 # reason (bd polyglot-pdf-lwka0 scope addition, 2026-09-23): the same morning
 # #862/#863/#864 (grouped npm bumps in admin-console, frontend and
-# schema-editor) landed on dev with green CI and broke all three front-end
-# type-checks -- the TypeScript bump dropped the downlevelIteration and
-# baseUrl compiler options the tsconfigs still set (TS5102), and the updated
-# Node type definitions broke every node:* import and __dirname use in the
-# vitest files (TS2591/TS2304). All four bumps were reverted together in
-# #867. typescript, @types/node, vite and vitest pin the TS surface every
+# schema-editor) broke all three front-end type-checks after landing on dev
+# -- the TypeScript bump dropped the downlevelIteration and baseUrl compiler
+# options the tsconfigs still set (TS5102), and the updated Node type
+# definitions broke every node:* import and __dirname use in the vitest
+# files (TS2591/TS2304). Each of the three PRs was RED in the matching
+# frontend job (#863 failed at `npm run typecheck` with those exact TS5102
+# errors) and was merged by hand anyway; all four bumps were reverted
+# together in #867. typescript, @types/node, vite and vitest pin the TS surface every
 # front-end package compiles and tests against, so a real bump of any of them
 # needs a deliberate, reviewed bead the same way the five backend packages
 # do -- not an automatic grouped PR. A human bumps them by hand when that
