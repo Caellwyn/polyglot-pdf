@@ -215,9 +215,9 @@ Recorded here so they are not rediscovered as findings.
 - **Rate limiting is a per-instance limiter plus an instance ceiling**, not a
   network-edge control: the buckets reset on autoscale and a distributed
   caller spreads around them. The keys are the tail of the forwarded chain
-  (the browser hop Hosting is assumed to append -- unverified on staging as
-  of 2026-09-18, and if wrong the limiter under-limits browser traffic, never
-  over-limits it; the connecting address as the backstop),
+  (the browser hop Hosting appends -- verified on staging 2026-09-23 by a
+  hosted burst refused from the 31st call with a two-hop chain on every
+  refusal; the connecting address as the backstop),
   so a forged `X-Forwarded-For` prefix buys nothing; Hosting's egress address
   changes per request, so the connection bucket only ever bites a direct
   caller. Cloud Armor is deferred

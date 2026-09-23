@@ -14,14 +14,11 @@ caller can seed: a client may send `X-Forwarded-For: 9.9.9.9` and every
 proxy on the way APPENDS the address it saw, so only the hops at the END are
 trustworthy -- Cloud Run's front end appends the address that connected to
 it; the Firebase Hosting `/api/**` rewrite (the path every browser call
-takes in production) is ASSUMED to append the browser's address before
-Hosting's own egress connects to Cloud Run -- the standard proxy behaviour,
-but not yet verified on staging: the measurement below saw only the last
-hop rotate, not the chain. If Hosting passed a client-supplied header
-through verbatim instead, the client key through Hosting would be
-caller-forgeable and the connection bucket (rotating with the egress)
-could not backstop it; the `hops` count on a staging refusal line, WITH a
-refusal at the 31st call, is what settles it (bd polyglot-pdf-ckceh). So:
+takes in production) appends the browser's address before Hosting's own
+egress connects to Cloud Run -- verified on staging 2026-09-23: a burst of
+48 hosted calls from one browser address with no forwarded header was
+refused from the 31st call, every refusal logging `hops=2` (bd
+polyglot-pdf-ckceh). So:
 
   direct call to run.app:   [<anything the caller sent>..., CALLER]
   browser through Hosting:  [<anything the browser sent>..., BROWSER, HOSTING_EGRESS]
