@@ -6,9 +6,10 @@ never a deployed environment: #830's own revert body says "dev does not
 build" (the backend pins contradicted each other, so pip install itself
 failed with ResolutionImpossible) and #867 (the #865 revert) hit the same
 failure shape on the staging verify build's install step, before any deploy
-ran. The unit suites never exercise what a bump of these changes (every test
-stubs the Gemini SDK, none starts uvicorn or the websockets library, and
-FastAPI/Starlette run only under the in-process TestClient), so a real
+ran. The unit suites never exercise what a bump of these changes (every test CI
+runs (-m "not external") stubs the Gemini SDK, none starts uvicorn or the
+websockets library, and FastAPI/Starlette run only in-process, via TestClient
+or httpx.ASGITransport, never under a real ASGI server), so a real
 version bump cannot be validated by the suite -- only by running the voice
 harness on the local stack with the new pins and then a manual voice
 test-drive on staging. Every one of those PRs was actually RED in the job that
@@ -64,8 +65,8 @@ this same bead, round 2): frontend/package.json also declares
 @vitejs/plugin-react but missed its SWC sibling. Folded into the same
 TS_TOOLCHAIN_PACKAGES set, and therefore into the exclude-patterns/ignore
 lists of all three npm update entries in dependabot.yml (not just frontend's),
-matching how @vitejs/plugin-react itself is already excluded everywhere even
-though admin-console and schema-editor are the only two that declare it.
+matching how @vitejs/plugin-react itself is already excluded everywhere all
+three of which declare it.
 
 THIRD FOLLOW-UP SCOPE ADDITION 2026-09-23 (round-8 outer cross-surface
 review): this branch's merge-base predated PR #867, dev's revert of the

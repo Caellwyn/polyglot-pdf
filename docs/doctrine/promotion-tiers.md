@@ -38,7 +38,7 @@ deploy can no longer take the demo down.
 
 **A version bump of google-genai, websockets, uvicorn, fastapi or starlette is
 voice-harness-gated** (bd `polyglot-pdf-lwka0`): those five are the ones the
-unit suites cannot validate: the unit suites never exercise what a bump of these changes (every test stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI and Starlette run only under the in-process TestClient, never a real ASGI server), so a real bump cannot be validated by the suite, so a real
+unit suites cannot validate (every test CI runs (`-m "not external"`) stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI/Starlette run only in-process (TestClient or httpx.ASGITransport), never under a real ASGI server), so a real
 bump can only be checked by running the voice path. `.github/
 dependabot.yml` excludes all five from the automatic grouped pip update for
 exactly this reason -- two grouped batches broke `dev`'s BUILD anyway after
