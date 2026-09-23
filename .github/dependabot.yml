@@ -8,8 +8,7 @@
 # dev's BUILD after landing -- never a deployed environment (#830's own
 # revert body says "dev does not build"; the backend pins contradicted each
 # other so pip install itself failed with ResolutionImpossible) -- because
-# the unit suites stub every one of
-# these five and cannot validate a real bump. Every one of those PRs was
+# the unit suites never exercise what a bump of these changes (every test stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI and Starlette run only under the in-process TestClient, never a real ASGI server), so a real bump cannot be validated by the suite. Every one of those PRs was
 # actually RED in the job that mattered (e.g. #865 failed backend pytest,
 # unresolvable on websockets==17.1) and was merged by hand anyway -- CI
 # caught these, but CI here is advisory (see docs/standards/testing.md), not
@@ -22,10 +21,10 @@
 #   - websockets, uvicorn: the /ws/fill handshake broke on a websockets bump
 #     before (see docs/components/websocket-routing.md).
 #   - fastapi, starlette: #865 was a major-version jump (0.48 -> 1.6) that
-#     unit tests could not catch.
-# A bump of any of these five must go through a deliberate bead that runs the
-# voice harness against staging before merge (see
-# docs/doctrine/promotion-tiers.md) -- never through an automatic grouped PR.
+#     the in-process TestClient could not tell from the old one (no test
+#     runs a real ASGI server).
+# A bump of any of these five must go through a deliberate bead: run the voice harness on the LOCAL stack with the new pins (it only runs against localhost), deploy to staging, and do a manual voice test-drive there before any demo deploy
+# (see docs/doctrine/promotion-tiers.md) -- never through an automatic grouped PR.
 # The ignore: entries below (no versions: key means "ignore every version")
 # are what actually stop Dependabot from opening a PR for these packages; the
 # exclude-patterns: entry keeps them out of the all-pip-backend group too, in
@@ -45,8 +44,9 @@
 # and __dirname use in the vitest files (TS2591/TS2304). Each of the three
 # PRs was RED in the matching frontend job (#863 failed at `npm run
 # typecheck` with those exact TS5102 errors) and was merged by hand anyway;
-# all four bumps (plus the backend pip bump, #865) were reverted together in
-# #867. typescript, @types/node, vite and vitest pin the TS surface every
+# all four grouped bumps of that morning (the three npm ones and the backend
+# pip bump #865) were reverted together in #867, as #830 had reverted the
+# previous batch of four (pip plus the same TypeScript-toolchain bump). typescript, @types/node, vite and vitest pin the TS surface every
 # front-end package compiles and tests against, so a real bump of any of
 # them needs a deliberate, reviewed bead the same way the five backend
 # packages do -- not an automatic grouped PR. @vitest/ui and

@@ -6,10 +6,12 @@ never a deployed environment: #830's own revert body says "dev does not
 build" (the backend pins contradicted each other, so pip install itself
 failed with ResolutionImpossible) and #867 (the #865 revert) hit the same
 failure shape on the staging verify build's install step, before any deploy
-ran. The unit suites stub google-genai, websockets, uvicorn, fastapi and
-starlette completely, so a real version bump of any of them cannot be
-validated by the suite at all -- only by running the voice harness against a
-deployed staging environment. Every one of those PRs was actually RED in the job that
+ran. The unit suites never exercise what a bump of these changes (every test
+stubs the Gemini SDK, none starts uvicorn or the websockets library, and
+FastAPI/Starlette run only under the in-process TestClient), so a real
+version bump cannot be validated by the suite -- only by running the voice
+harness on the local stack with the new pins and then a manual voice
+test-drive on staging. Every one of those PRs was actually RED in the job that
 mattered (e.g. #865 failed backend pytest on an unresolvable websockets==
 17.1 pin) and was merged by hand anyway -- CI here is informational, not a
 merge gate (see docs/standards/testing.md), so this exclusion does not rely
@@ -36,8 +38,8 @@ its matching frontend job (#863 failed `npm run typecheck` with the exact
 TS5102 downlevelIteration/baseUrl errors) and was merged by hand anyway --
 the unit suites don't type-check against a bumped TS toolchain the way tsc /
 vite build do in a real PR, so CI's advisory status (not its color) is why
-these landed. All four bumps (plus the backend pip bump, #865) were reverted
-together in #867.
+these landed. All four grouped bumps of that morning (three npm, one pip: #865) were
+reverted together in #867, as #830 had reverted the previous four.
 
 FOLLOW-UP SCOPE ADDITION 2026-09-23 (cross-surface review of this same
 bead): excluding typescript/vite/vitest alone left @vitest/ui and
