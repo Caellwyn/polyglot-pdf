@@ -44,6 +44,42 @@ jobs:
         # (the `external` marker needs real Gemini creds CI does not have).
         run: pytest -q -m "not external"
 
+  backend-runtime-install:
+    name: backend runtime requirements (deploy-image parity)
+    runs-on: ubuntu-latest
+    # Installs ONLY backend/requirements.txt -- the file the Cloud Run image
+    # installs -- in a fresh checkout with no other job's pip cache or
+    # requirements-dev.txt pollution (bd polyglot-pdf-lwka0). backend-tests
+    # above installs requirements-dev.txt, which pulls in requirements.txt via
+    # `-r requirements.txt`, so the two files' pins have always resolved
+    # together in that job; this job is the one place CI proves the RUNTIME
+    # file alone still resolves, matching the verify build's clean
+    # `python:3.12` image. An unresolvable or conflicting runtime pin set
+    # (the class of break a grouped Dependabot bump on google-genai /
+    # websockets / uvicorn / fastapi / starlette produced before -- see
+    # .github/dependabot.yml; #865's backend-tests job already failed at this
+    # exact install step with pip's ResolutionImpossible on websockets==17.1,
+    # and was merged red anyway, since CI here is informational, not a merge
+    # gate) still fails this job on the PR. This job adds a second, isolated
+    # signal of the same break (no requirements-dev.txt pins in the mix), not
+    # a NEW class of detection CI previously lacked -- see
+    # docs/standards/testing.md for the informational-CI caveat.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install backend runtime requirements only (no cache, no dev extras)
+        run: pip install -r backend/requirements.txt
+      - name: Import the FastAPI app to prove the runtime set is actually usable
+        # A pip resolve can succeed while the installed set still can't import
+        # (e.g. a transitive ABI mismatch) -- import backend.main the same way
+        # pytest.ini's `pythonpath = .` does, so a merely-resolvable-on-paper
+        # set doesn't pass silently. Run from the repo root (not
+        # `backend/`): main.py uses relative imports (`from .utils...`), so it
+        # must be imported as the `backend.main` package, not the bare module.
+        run: python -c "import backend.main"
+
   frontend-tests:
     name: frontend vitest
     runs-on: ubuntu-latest

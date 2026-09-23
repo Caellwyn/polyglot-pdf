@@ -1,8 +1,10 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt backend/requirements-dev.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
+**Tracks:** pytest.ini backend/tests/conftest.py admin_backend/tests/conftest.py tests/conftest.py backend/requirements.txt backend/requirements-dev.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml .github/dependabot.yml tests/test_dependabot_config.py
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-ikdnd: the pytest pins moved to `backend/requirements-dev.txt` (which pulls in `requirements.txt`); every pytest runner -- `ci.yml`, `cloudbuild.yaml`, the dev scripts -- installs the dev file, and the image installs `requirements.txt` alone. `ci.yml` also gained an INFORMATIONAL `security` job (pip-audit, npm audit x3, detect-secrets on the PR's files, bandit, semgrep), pinned by `tests/test_ci_security_job.py`.)*
+
+*Last updated: 2026-09-23 (bd polyglot-pdf-lwka0: `.github/dependabot.yml`'s `all-pip-backend` group now excludes google-genai, websockets, uvicorn, fastapi and starlette -- both via `exclude-patterns` on the group and a top-level `ignore:` entry per package -- so an automatic grouped Dependabot PR can never carry a version bump of any of the five; a bump of one of them is a deliberate, voice-harness-gated bead (see `docs/doctrine/promotion-tiers.md`). Pinned by `tests/test_dependabot_config.py`, which parses the YAML rather than text-matching it. `ci.yml` also gained a `backend-runtime-install` job that installs `backend/requirements.txt` ALONE (no `requirements-dev.txt`, no cache) in a fresh runner and imports `backend.main`, matching the Cloud Run image's own install -- this is a second, isolated signal for an unresolvable or broken runtime-only dependency set (the `backend-tests` job's own install step already failed on exactly this class before this bead, e.g. `#865`'s `ResolutionImpossible` on `websockets==17.1`, and that red PR was still merged by hand, since CI here is informational, not a merge gate; the still-open process gap that a red PR can merge is bd `polyglot-pdf-9ywia`). `tests/test_ci_security_job.py`'s pytest-runner scan carries one named exception for that job's line, since it deliberately never runs pytest. Same-day bead-body amendment: typescript, `@types/node`, vite, vitest, `@vitest/*` and `@vitejs/plugin-react` are excluded the same way from every npm group (frontend, schema-editor, admin-console), after `#862`/`#863`/`#864` broke front-end type-checks and were reverted in `#867`; the matching `TS_TOOLCHAIN_PACKAGES` set and three tests live in the same `tests/test_dependabot_config.py`.)*
 
 *Last updated: 2026-09-15 (bd polyglot-pdf-21m1y: the no-real-Firestore guard, autouse in both `backend/tests/conftest.py` and `admin_backend/tests/conftest.py`). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for the THIRD collected suite (`admin_backend/tests`)'s closeout details.*
 
@@ -329,10 +331,14 @@ gates — no threshold is enforced and a low number is not a closeout blocker.
 Coverage artifacts (`.coverage`, `coverage/`) are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
-backend pytest suite (`-m "not external"`) plus all three vitest suites --
-`frontend`, `schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each
-preceded by its own `tsc --noEmit` typecheck step, on every PR. A fifth job,
-`security` (bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
+backend pytest suite (`-m "not external"`), a second `backend-runtime-install`
+job that installs `backend/requirements.txt` alone (no test-tooling pins) in a
+fresh environment and imports the app to catch an unresolvable or
+un-importable deploy-image dependency set before it reaches Cloud Run (bd
+polyglot-pdf-lwka0), plus all three vitest suites -- `frontend`,
+`schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each preceded
+by its own `tsc --noEmit` typecheck step, on every PR. A sixth job, `security`
+(bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
 audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
 against `.secrets.baseline`, bandit, and semgrep (Python + TypeScript
 rulesets); every one of its scanner steps is `continue-on-error`, so it

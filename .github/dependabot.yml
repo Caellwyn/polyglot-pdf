@@ -1,6 +1,71 @@
 # Weekly, grouped dependency updates (sprint 23, bd polyglot-pdf-ikdnd).
 # Informational like ci.yml: a Dependabot PR still goes through the normal
 # review + merge gate; nothing here auto-merges.
+#
+# The five deploy-sensitive backend packages below are excluded from the
+# all-pip-backend group (bd polyglot-pdf-lwka0): two grouped batches in a row
+# (#816/#817/#819/#822, reverted by #830; #865, reverted the same day) broke
+# dev's BUILD after landing -- never a deployed environment (#830's own
+# revert body says "dev does not build"; the backend pins contradicted each
+# other so pip install itself failed with ResolutionImpossible) -- because
+# the unit suites never exercise what a bump of these changes (every test CI runs (-m "not external") stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI/Starlette run only in-process (TestClient or httpx.ASGITransport), never under a real ASGI server), so a real bump cannot be validated by the suite. Every one of those PRs was
+# actually RED in the job that mattered (e.g. #865 failed backend pytest,
+# unresolvable on websockets==17.1) and was merged by hand anyway -- CI
+# caught these, but CI here is advisory (see docs/standards/testing.md), not
+# a merge gate, so a red PR going in is a separate, still-open process gap
+# (bd polyglot-pdf-9ywia). This exclusion stops the bump from being proposed
+# at all; it does not depend on CI being green in the first place.
+#   - google-genai: the Live adapter (backend/adapters/live_ai_gemini.py) is
+#     written against the vendored docs/genai_docs 2.8 reference; every test
+#     CI runs (-m "not external") stubs the SDK.
+#   - websockets, uvicorn: the /ws/fill handshake broke on a websockets bump
+#     before (see docs/components/websocket-routing.md).
+#   - fastapi, starlette: #865 was a major-version jump (0.48 -> 1.6) that
+#     the in-process TestClient could not tell from the old one (no test
+#     runs a real ASGI server).
+# A bump of any of these five must go through a deliberate bead: run the voice harness on the LOCAL stack with the new pins (it only runs against localhost), deploy to staging, and do a manual voice test-drive there before any demo deploy
+# (see docs/doctrine/promotion-tiers.md) -- never through an automatic grouped PR.
+# The ignore: entries below (no versions: key means "ignore every version")
+# are what actually stop Dependabot from opening a PR for these packages; the
+# exclude-patterns: entry keeps them out of the all-pip-backend group too, in
+# case the ignore list is ever narrowed later. A human bumps them by hand when
+# the gated bead calls for it. Pinned + mutation-verified by
+# tests/test_dependabot_config.py.
+#
+# The TypeScript-toolchain packages excluded from every npm group below
+# (typescript, @types/node, vite, vitest, plus @vitest/*, @vitejs/plugin-react
+# and @vitejs/plugin-react-swc) are the same fix for the same reason (bd
+# polyglot-pdf-lwka0 scope addition, 2026-09-23): #862/#863/#864 (grouped npm
+# bumps in admin-console, frontend and schema-editor, opened together on
+# 2026-09-19 and merged together on 2026-09-23) broke all three front-end
+# type-checks after landing on dev -- the TypeScript bump dropped the
+# downlevelIteration and baseUrl compiler options the tsconfigs still set
+# (TS5102), and the updated Node type definitions broke every node:* import
+# and __dirname use in the vitest files (TS2591/TS2304). Each of the three
+# PRs was RED in the matching frontend job (#863 failed at `npm run
+# typecheck` with those exact TS5102 errors) and was merged by hand anyway;
+# all four grouped bumps of that morning (the three npm ones and the backend
+# pip bump #865) were reverted together in #867, as #830 had reverted the
+# previous batch of four (pip plus the same TypeScript-toolchain bump). typescript, @types/node, vite and vitest pin the TS surface every
+# front-end package compiles and tests against, so a real bump of any of
+# them needs a deliberate, reviewed bead the same way the five backend
+# packages do -- not an automatic grouped PR. @vitest/ui and
+# @vitest/coverage-v8 require an EXACT matching vitest version (peer dep),
+# and @vitejs/plugin-react is range-coupled to vite's supported-version
+# range the same way (it stays on a caret range, not an exact pin), so
+# excluding vitest/vite alone without also excluding these leaves Dependabot
+# free to try bumping the peer-locked packages on their own, which either
+# drags vitest/vite along anyway or opens a PR with an unresolvable
+# peer-dependency lockfile -- the same red-PR shape this guard exists to
+# stop. @vitejs/plugin-react-swc (frontend/package.json only; admin-console
+# and schema-editor use @vitejs/plugin-react instead) has the identical
+# peerDependencies.vite coupling and was missed in the original scope
+# addition (found by the lwka0 outer cross-surface review, 2026-09-23) --
+# folded into the same exclusion/ignore lists as its non-SWC sibling in every
+# npm update entry, even the two that do not declare it today, so the guard
+# does not have to be re-added the day one of them switches to the SWC
+# variant. A human bumps it by hand when that bead calls for it. Pinned +
+# mutation-verified by tests/test_dependabot_config.py.
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -11,6 +76,18 @@ updates:
       all-pip-backend:
         patterns:
           - "*"
+        exclude-patterns:
+          - "google-genai"
+          - "websockets"
+          - "uvicorn"
+          - "fastapi"
+          - "starlette"
+    ignore:
+      - dependency-name: "google-genai"
+      - dependency-name: "websockets"
+      - dependency-name: "uvicorn"
+      - dependency-name: "fastapi"
+      - dependency-name: "starlette"
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
@@ -19,6 +96,22 @@ updates:
       all-npm-frontend:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
@@ -27,6 +120,22 @@ updates:
       all-npm-schema-editor:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
@@ -35,6 +144,22 @@ updates:
       all-npm-admin-console:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/*"
+      - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
