@@ -97,6 +97,18 @@ agents. Five mutations -- allow groups, broaden the agent pattern, read the
 project policy only, drop the exit, move the guard after create -- each
 applied and each went red. 32 tests.
 
+Round 3 then found the agent patterns matched Google agents of ANY project by
+shape. An agent acts for its own project, and the app project's Vertex AI
+agent can be driven by the public backend SA (roles/aiplatform.user) -- so a
+grant to it would readmit exactly the identity this store moved away from.
+Agents are now pinned: project agents to THIS project's number (read and
+validated as numeric first -- an empty number would turn the patterns into
+wildcards), org/folder agents to the very row they appear on. The tests now
+run the SHIPPED function in real bash rather than imitating its globs in
+Python, since the mix of quoted-literal and unquoted-glob parts in the `case`
+patterns is exactly what an imitation would get wrong; cases include the app
+project's real agent numbers. Five more mutations, each red. 40 tests.
+
 ## Lessons
 
 **Scope the evidence to the claim, again.** Every setting appears three times

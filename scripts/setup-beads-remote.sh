@@ -91,15 +91,32 @@ echo -e "${GREEN}[INFO]${NC} Bucket:   $BUCKET ($LOCATION)"
 # bucket inherits org- and folder-level grants too. That read needs
 # organization-level IAM read access; without it the command fails and the
 # script stops (set -e + pipefail): fail closed. Run it as an org admin.
+#
+# Google service agents are allowed only when they belong to THIS project (by
+# project number) or to the very folder/org row they appear on. An agent of
+# ANOTHER project acts for that project: the app project's Vertex AI agent,
+# for one, can be driven by the public backend SA (roles/aiplatform.user), so
+# allowing agents by shape alone would readmit the identity this store moved
+# away from.
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)' | tr -d '\r')
+if ! [[ "$PROJECT_NUMBER" =~ ^[0-9]+$ ]]; then
+    echo -e "${RED}[ERROR]${NC} Could not read the project number of $PROJECT_ID."
+    exit 1
+fi
+# Args: member, level (project|folder|organization), id of that level's row.
 is_allowed_member() {
-    case "$1" in
-        user:*) return 0 ;;          # a human account
-        domain:*) return 0 ;;        # every human user of a Workspace domain
-        serviceAccount:service-*@gcp-sa-*.iam.gserviceaccount.com) return 0 ;;
-        serviceAccount:*@cloudservices.gserviceaccount.com) return 0 ;;
-        serviceAccount:service-*@gs-project-accounts.iam.gserviceaccount.com) return 0 ;;
-        *) return 1 ;;               # anything else holding any role refuses
+    local member="$1" level="$2" id="$3"
+    case "$member" in
+        user:*|domain:*) return 0 ;;   # human accounts / a Workspace domain's humans
+        "serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-"*".iam.gserviceaccount.com") return 0 ;;
+        "serviceAccount:${PROJECT_NUMBER}@cloudservices.gserviceaccount.com") return 0 ;;
+        "serviceAccount:service-${PROJECT_NUMBER}@gs-project-accounts.iam.gserviceaccount.com") return 0 ;;
     esac
+    case "$level:$member" in
+        "organization:serviceAccount:service-org-${id}@gcp-sa-"*".iam.gserviceaccount.com") return 0 ;;
+        "folder:serviceAccount:service-folder-${id}@gcp-sa-"*".iam.gserviceaccount.com") return 0 ;;
+    esac
+    return 1                           # anything else holding any role refuses
 }
 DISALLOWED=$(gcloud projects get-ancestors-iam-policy "$PROJECT_ID" \
     --flatten='policy.bindings[].members' \
@@ -107,7 +124,7 @@ DISALLOWED=$(gcloud projects get-ancestors-iam-policy "$PROJECT_ID" \
     | tr -d '\r' \
     | while IFS=$'\t' read -r level id role member; do
         [ -z "$level$role$member" ] && continue   # blank output line
-        if ! is_allowed_member "$member"; then
+        if ! is_allowed_member "$member" "$level" "$id"; then
             echo "  [$level $id]  $role  $member"
         fi
     done)

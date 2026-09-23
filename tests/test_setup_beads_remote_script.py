@@ -22,8 +22,11 @@ ASCII only.
 """
 from __future__ import annotations
 
+import functools
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -149,63 +152,107 @@ def _assignment_int(text: str, name: str) -> int:
     return int(m.group(1))
 
 
-def _allowed_member_patterns() -> list[str]:
-    """The `case` arms of is_allowed_member() that `return 0`, as shipped.
+# The project number the tests pretend polyglot-beads has, and the real org id.
+_OWN = "111111111111"
+_ORG = "879824377574"
+# polyglot-demo-aa709's real project number: its agents are FOREIGN here.
+_APP = "775682479028"
 
-    Bash `case` patterns are shell globs; for the characters these patterns
-    use (literal text, `*`, `@`, `.`, `-`, `:`) Python's fnmatchcase has the
-    same meaning, so the SHIPPED patterns are what get exercised.
+# (member, level, row id) -> must it be refused?  The level/id are the row the
+# member appears on in the ancestors policy.
+_REFUSE = [
+    # exactly what the live check found on the app project
+    (f"serviceAccount:polyglot-backend-sa@polyglot-demo-aa709.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:{_APP}-compute@developer.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:{_APP}@cloudbuild.gserviceaccount.com", "project", "polyglot-beads"),
+    # round-2 evasions of the earlier role-blocklist design
+    ("serviceAccount:anything@polyglot-beads.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    ("group:admins@caellwynai.com", "organization", _ORG),
+    ("principal://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/subject/s", "project", "polyglot-beads"),
+    ("principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/*", "project", "polyglot-beads"),
+    ("deleted:serviceAccount:old@x.iam.gserviceaccount.com?uid=1", "project", "polyglot-beads"),
+    ("allUsers", "project", "polyglot-beads"),
+    ("allAuthenticatedUsers", "project", "polyglot-beads"),
+    # round-3: Google agents of ANOTHER project act for that project -- the app
+    # project's Vertex agent can be driven by the public backend SA
+    (f"serviceAccount:service-{_APP}@gcp-sa-aiplatform.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:{_APP}@cloudservices.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:service-{_APP}@gs-project-accounts.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    # an org/folder agent is allowed only on ITS OWN row
+    ("serviceAccount:service-org-999@gcp-sa-cloudasset.iam.gserviceaccount.com", "organization", _ORG),
+    (f"serviceAccount:service-org-{_ORG}@gcp-sa-cloudasset.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    ("serviceAccount:service-folder-5@gcp-sa-x.iam.gserviceaccount.com", "folder", "6"),
+    # look-alikes of the agent shapes
+    ("serviceAccount:evil@gcp-sa-cloudbuild.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:service-{_OWN}@my-project.iam.gserviceaccount.com", "project", "polyglot-beads"),
+]
+_ALLOW = [
+    ("user:josh@caellwynai.com", "organization", _ORG),
+    ("user:caellwyn@gmail.com", "project", "polyglot-beads"),
+    ("domain:caellwynai.com", "organization", _ORG),
+    (f"serviceAccount:service-{_OWN}@gcp-sa-cloudbuild.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:{_OWN}@cloudservices.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:service-{_OWN}@gs-project-accounts.iam.gserviceaccount.com", "project", "polyglot-beads"),
+    (f"serviceAccount:service-org-{_ORG}@gcp-sa-cloudasset.iam.gserviceaccount.com", "organization", _ORG),
+    ("serviceAccount:service-folder-6@gcp-sa-x.iam.gserviceaccount.com", "folder", "6"),
+]
+
+
+@functools.lru_cache(maxsize=1)
+def _verdicts() -> dict:
+    """Run the SHIPPED is_allowed_member() in real bash over every case, once.
+
+    Real bash, not a Python imitation: the function's patterns mix quoted
+    (literal) and unquoted (glob) parts, and that quoting is exactly what an
+    imitation would get wrong.
     """
-    m = re.search(r"^is_allowed_member\(\) \{\n(.*?)\n\}", _text(),
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash is not available")
+    m = re.search(r"^is_allowed_member\(\) \{\n.*?\n\}\n", _text(),
                   re.MULTILINE | re.DOTALL)
     assert m, "is_allowed_member() not found"
-    pats = re.findall(r"^\s*(\S+)\) return 0 ;;", m.group(1), re.MULTILINE)
-    assert pats, "no allowing case arms found"
-    return pats
+    driver = (
+        f"PROJECT_NUMBER={_OWN}\n" + m.group(0) +
+        "while IFS='|' read -r member level id; do\n"
+        '  if is_allowed_member "$member" "$level" "$id"; then echo allow;'
+        " else echo deny; fi\n"
+        "done\n"
+    )
+    cases = _REFUSE + _ALLOW
+    stdin = "".join(f"{mem}|{lvl}|{rid}\n" for mem, lvl, rid in cases).encode()
+    out = subprocess.run([bash, "-c", driver], input=stdin,
+                         capture_output=True, check=True).stdout.decode().split()
+    assert len(out) == len(cases), f"driver returned {out!r}"
+    return dict(zip(cases, out))
 
 
-def _allowed(member: str) -> bool:
-    from fnmatch import fnmatchcase
-    return any(fnmatchcase(member, p) for p in _allowed_member_patterns())
+@pytest.mark.parametrize("case", _REFUSE, ids=[c[0][:60] for c in _REFUSE])
+def test_non_human_and_foreign_principals_are_refused(case):
+    assert _verdicts()[case] == "deny", (
+        f"{case} would be ALLOWED to hold roles the bucket inherits; any role "
+        f"it holds could reach object data")
 
 
-# Principals that must REFUSE whatever role they hold. The first three are
-# exactly what the live check found on polyglot-demo-aa709; the rest are the
-# evasions the round-2 review found in the earlier role-blocklist design.
-@pytest.mark.parametrize("member", [
-    "serviceAccount:polyglot-backend-sa@polyglot-demo-aa709.iam.gserviceaccount.com",
-    "serviceAccount:775682479028-compute@developer.gserviceaccount.com",
-    "serviceAccount:775682479028@cloudbuild.gserviceaccount.com",
-    "serviceAccount:anything@polyglot-beads.iam.gserviceaccount.com",
-    "group:admins@caellwynai.com",          # groups can contain service accounts
-    "principal://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/subject/s",
-    "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/*",
-    "deleted:serviceAccount:old@x.iam.gserviceaccount.com?uid=1",
-    "allUsers",
-    "allAuthenticatedUsers",
-    # look-alikes of the allowed Google agents must not slip through
-    "serviceAccount:evil@gcp-sa-cloudbuild.iam.gserviceaccount.com",
-    "serviceAccount:service-1@my-project.iam.gserviceaccount.com",
-    "",
-])
-def test_non_human_principals_are_refused(member):
-    assert not _allowed(member), (
-        f"{member!r} would be ALLOWED to hold roles the bucket inherits; any "
-        f"role it holds could reach object data")
+@pytest.mark.parametrize("case", _ALLOW, ids=[c[0][:60] for c in _ALLOW])
+def test_humans_and_own_google_agents_are_allowed(case):
+    assert _verdicts()[case] == "allow", (
+        f"{case} is a human or this project's/row's own Google agent; refusing "
+        f"it would make the script unusable")
 
 
-@pytest.mark.parametrize("member", [
-    "user:josh@caellwynai.com",
-    "user:caellwyn@gmail.com",
-    "domain:caellwynai.com",
-    "serviceAccount:service-123@gcp-sa-cloudbuild.iam.gserviceaccount.com",
-    "serviceAccount:123@cloudservices.gserviceaccount.com",
-    "serviceAccount:service-123@gs-project-accounts.iam.gserviceaccount.com",
-])
-def test_humans_and_google_agents_are_allowed(member):
-    assert _allowed(member), (
-        f"{member!r} is a human or a Google-managed agent present on normal "
-        f"projects; refusing it would make the script unusable")
+def test_project_number_is_read_and_validated_before_the_guard():
+    text = _text()
+    lines = text.splitlines()
+    read = next(i for i, l in enumerate(lines)
+                if l.startswith("PROJECT_NUMBER=$(gcloud projects describe"))
+    guard = next(i for i, l in enumerate(lines) if l.startswith("DISALLOWED=$("))
+    assert read < guard
+    m = re.search(r'if ! \[\[ "\$PROJECT_NUMBER" =~ \^\[0-9\]\+\$ \]\]; then\n(.*?)\nfi',
+                  text, re.DOTALL)
+    assert m and re.search(r"^\s*exit [1-9]", m.group(1), re.MULTILINE), (
+        "an unreadable/non-numeric project number must stop the script -- an "
+        "empty PROJECT_NUMBER would turn the agent patterns into wildcards")
 
 
 def test_guard_reads_ancestors_and_runs_before_create():
@@ -227,7 +274,9 @@ def test_guard_reads_ancestors_and_runs_before_create():
     assert m and re.search(r"^\s*exit [1-9]", m.group(1), re.MULTILINE), (
         "a non-empty DISALLOWED list must exit non-zero")
     loop = "\n".join(lines[guard:guard + 12])
-    assert 'if ! is_allowed_member "$member"; then' in loop
+    assert 'if ! is_allowed_member "$member" "$level" "$id"; then' in loop, (
+        "the guard must pass the row's level and id, or org/folder agents "
+        "cannot be pinned to their own row")
     assert "$role" not in loop.split("is_allowed_member")[1].split("then")[0], (
         "membership, not role, decides refusal -- the check must stay role-agnostic")
 
