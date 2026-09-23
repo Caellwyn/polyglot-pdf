@@ -45,13 +45,25 @@ bead): excluding typescript/vite/vitest alone left @vitest/ui and
 peer dependency) and @vitejs/plugin-react (range-coupled to vite's
 supported-version range the same way) in the catch-all npm groups.
 schema-editor and admin-console pin @vitest/ui and @vitest/coverage-v8
-exactly; @vitejs/plugin-react stays on a caret range (^4.3.1) but is still
-coupled to vite's supported range, so a vitest/vite bump would either drag
-the excluded package along anyway or open a red, peer-conflicted PR -- the
-guard leaked on its own coupling. @vitest/* and @vitejs/plugin-react are
-folded into the same TS_TOOLCHAIN_PACKAGES set below rather than a second
-constant, so every test in this file that checks the set automatically
-covers them too.
+exactly; @vitejs/plugin-react stays on a caret range (^4.3.1 in
+schema-editor/admin-console, ^6.1.1 in frontend) but is still coupled to
+vite's supported range, so a vitest/vite bump would either drag the excluded
+package along anyway or open a red, peer-conflicted PR -- the guard leaked on
+its own coupling. @vitest/* and @vitejs/plugin-react are folded into the same
+TS_TOOLCHAIN_PACKAGES set below rather than a second constant, so every test
+in this file that checks the set automatically covers them too.
+
+SECOND FOLLOW-UP SCOPE ADDITION 2026-09-23 (outer cross-surface review of
+this same bead, round 2): frontend/package.json also declares
+@vitejs/plugin-react-swc (^4.3.3), the SWC-based variant of
+@vitejs/plugin-react, with the identical peerDependencies.vite coupling
+(admin-console and schema-editor do not declare it -- they use
+@vitejs/plugin-react alone). The first follow-up above added
+@vitejs/plugin-react but missed its SWC sibling. Folded into the same
+TS_TOOLCHAIN_PACKAGES set, and therefore into the exclude-patterns/ignore
+lists of all three npm update entries in dependabot.yml (not just frontend's),
+matching how @vitejs/plugin-react itself is already excluded everywhere even
+though admin-console and schema-editor are the only two that declare it.
 
 The npm tests below mirror the pip tests above exactly: enumerate the
 TS-toolchain packages once, then check every npm group and every npm
@@ -90,6 +102,7 @@ TS_TOOLCHAIN_PACKAGES = (
     "vitest",
     "@vitest/*",
     "@vitejs/plugin-react",
+    "@vitejs/plugin-react-swc",
 )
 
 

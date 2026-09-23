@@ -331,10 +331,14 @@ gates — no threshold is enforced and a low number is not a closeout blocker.
 Coverage artifacts (`.coverage`, `coverage/`) are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
-backend pytest suite (`-m "not external"`) plus all three vitest suites --
-`frontend`, `schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each
-preceded by its own `tsc --noEmit` typecheck step, on every PR. A fifth job,
-`security` (bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
+backend pytest suite (`-m "not external"`), a second `backend-runtime-install`
+job that installs `backend/requirements.txt` alone (no test-tooling pins) in a
+fresh environment and imports the app to catch an unresolvable or
+un-importable deploy-image dependency set before it reaches Cloud Run (bd
+polyglot-pdf-lwka0), plus all three vitest suites -- `frontend`,
+`schema-editor`, and `admin-console` (bd polyglot-pdf-b6943) -- each preceded
+by its own `tsc --noEmit` typecheck step, on every PR. A sixth job, `security`
+(bd polyglot-pdf-ikdnd), runs pip-audit on the runtime pins, `npm
 audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
 against `.secrets.baseline`, bandit, and semgrep (Python + TypeScript
 rulesets); every one of its scanner steps is `continue-on-error`, so it

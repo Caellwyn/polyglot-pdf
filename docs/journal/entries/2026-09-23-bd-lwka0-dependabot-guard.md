@@ -194,6 +194,63 @@ previously lacked.
      (`ld4o0`, `3kaqw`, `01kiz`, `em0bf`, `88tcg`, `cn6v7`) already covers
      every other outstanding item, so no new nits bead was filed.
 
+10. Round-7 outer cross-surface review fix (same PR): the reviewer traced
+    every handoff contract plus two it added on its own (the CI-job list in
+    `docs/standards/testing.md` and the "CI is not a merge gate" claim) and
+    found two GAPs, both classified blocker.
+    - **Adopted:** Finding 1 -- `@vitejs/plugin-react-swc`
+      (`frontend/package.json`, `^4.3.3`, `peerDependencies.vite: "^4 || ^5
+      || ^6 || ^7"`) was still missing from `.github/dependabot.yml`'s
+      npm exclude-patterns/ignore lists and from `TS_TOOLCHAIN_PACKAGES` in
+      `tests/test_dependabot_config.py` -- the same peer-coupling gap bd
+      `polyglot-pdf-ld4o0` had already filed against a prior round, now
+      fixed directly instead of deferred again. Folded `@vitejs/plugin-
+      react-swc` into the exclude-patterns and `ignore:` lists of all three
+      npm update entries (frontend, schema-editor, admin-console) -- even
+      the two that do not declare the package today, matching how its non-
+      SWC sibling is already excluded everywhere -- and into
+      `TS_TOOLCHAIN_PACKAGES`, so every existing test against that set
+      covers it automatically; updated the `.github/dependabot.yml` comment
+      and the test docstring accordingly. Also updated
+      `docs/doctrine/promotion-tiers.md`'s matching paragraph (package list
+      and the `@vitejs/plugin-react` version-range detail) for consistency.
+      Mutation-verified: reverted the exclude-patterns/ignore additions
+      (keeping the enumerated-set addition in the test), reran
+      `tests/test_dependabot_config.py`, and confirmed the three tests that
+      check "excluded from every npm group" / "ignored in every npm update"
+      failed with `AssertionError: ... does not exclude or ignore
+      TS-toolchain package '@vitejs/plugin-react-swc'`; restored and
+      reconfirmed 7/7 green. Closed bd `polyglot-pdf-ld4o0` as fixed here
+      rather than leaving it open as a stale duplicate of this round's
+      finding.
+    - **Adopted:** Finding 2 -- `docs/standards/testing.md`'s "CI is
+      informational and non-blocking" paragraph still said "A fifth job,
+      `security`" after the `backend-runtime-install` job (added earlier in
+      this same bead) made `security` the sixth job. Corrected the sentence
+      to describe `backend-runtime-install` and renumber `security` to
+      "sixth". Also applied the equivalent fix to
+      `docs/doctrine/promotion-tiers.md`'s matching TS-toolchain-package
+      list for consistency, though that was not itself part of either
+      finding.
+    - **Rejected:** none.
+    - **Nit findings deferred, not fixed here** (already filed by the
+      reviewer): Finding 3 (`polyglot-pdf-0yida`, `backend-runtime-install`
+      importing only `backend.main`, not `admin_backend.main` -- a near-
+      duplicate of already-open bd `polyglot-pdf-3kaqw` filed by round 2;
+      left both open rather than silently merging one closed, since neither
+      this bead's contract nor the reviewer's report asked for a bead-
+      dedup pass), Finding 4 (`polyglot-pdf-uhfzg`, Dependabot's `ignore:`
+      also suppressing security-update PRs for the gated packages -- a
+      near-duplicate of already-open bd `polyglot-pdf-01kiz`), and Finding
+      5 (`polyglot-pdf-r1emv`, the stale `branch-protection-setup.md`
+      required-status-checks claim -- a near-duplicate of already-open bd
+      `polyglot-pdf-cn6v7`). Re-ran the full root-level suite and the full
+      backend suite from the worktree after the fix -- both green, matching
+      the prior baseline; `tests/test_dependabot_config.py`,
+      `test_ci_security_job.py`, `test_cloudbuild_yaml.py` and
+      `test_every_suite_root_is_gated.py` (106 tests) green in isolation
+      too.
+
 ## Lessons
 
 The bead names a real, general pattern worth restating: a mock proves the
@@ -230,14 +287,16 @@ Recorded in the closeout ping.
   `@vitest/*` and `@vitejs/plugin-react` to close the peer-dependency gap,
   plus a comment-wording fix ("broke deploys" -> "broke dev's build"); round
   6 fixed the comment's "@vitejs/plugin-react is version-coupled to vite"
-  overclaim to "range-coupled".
+  overclaim to "range-coupled"; round 7 added `@vitejs/plugin-react-swc` to
+  close the remaining peer-coupling gap.
 - `.github/workflows/ci.yml` -- new `backend-runtime-install` job.
 - `tests/test_dependabot_config.py` -- new, pins the exclusion; round 2 added
   the mirrored npm/TS-toolchain enumerated set and four tests; round 4 folded
   `@vitest/*`/`@vitejs/plugin-react` into `TS_TOOLCHAIN_PACKAGES` and fixed the
   same "broke deploys" docstring wording; round 6 fixed the docstring's "pin
   all three of these exactly" overclaim (only `@vitest/ui` and
-  `@vitest/coverage-v8` are exact; `@vitejs/plugin-react` is a caret range).
+  `@vitest/coverage-v8` are exact; `@vitejs/plugin-react` is a caret range);
+  round 7 folded `@vitejs/plugin-react-swc` into `TS_TOOLCHAIN_PACKAGES`.
 - `tests/test_ci_security_job.py` -- one named exception for the new job's
   install line.
 - `docs/doctrine/promotion-tiers.md` -- voice-harness-gated bump note; round 2
@@ -245,5 +304,8 @@ Recorded in the closeout ping.
   corrected the false "broke the deployed /ws/fill handshake" and "morning
   after" claims and added the peer-dependency-package note; round 6 fixed the
   "pin all three exactly" overclaim (`@vitejs/plugin-react` is a caret range,
-  not an exact pin).
-- `docs/standards/testing.md` -- Tracks line + current-state prose entry.
+  not an exact pin); round 7 added `@vitejs/plugin-react-swc` to the package
+  list and its version-range detail.
+- `docs/standards/testing.md` -- Tracks line + current-state prose entry;
+  round 7 fixed the CI-job-count claim ("A fifth job, `security`" ->
+  names `backend-runtime-install` and renumbers `security` to sixth).

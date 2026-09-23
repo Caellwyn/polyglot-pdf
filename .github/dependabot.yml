@@ -34,8 +34,8 @@
 # tests/test_dependabot_config.py.
 #
 # The TypeScript-toolchain packages excluded from every npm group below
-# (typescript, @types/node, vite, vitest, plus @vitest/* and
-# @vitejs/plugin-react) are the same fix for the same reason (bd
+# (typescript, @types/node, vite, vitest, plus @vitest/*, @vitejs/plugin-react
+# and @vitejs/plugin-react-swc) are the same fix for the same reason (bd
 # polyglot-pdf-lwka0 scope addition, 2026-09-23): #862/#863/#864 (grouped npm
 # bumps in admin-console, frontend and schema-editor, opened together on
 # 2026-09-19 and merged together on 2026-09-23) broke all three front-end
@@ -57,7 +57,14 @@
 # free to try bumping the peer-locked packages on their own, which either
 # drags vitest/vite along anyway or opens a PR with an unresolvable
 # peer-dependency lockfile -- the same red-PR shape this guard exists to
-# stop. A human bumps them by hand when that bead calls for it. Pinned +
+# stop. @vitejs/plugin-react-swc (frontend/package.json only; admin-console
+# and schema-editor use @vitejs/plugin-react instead) has the identical
+# peerDependencies.vite coupling and was missed in the original scope
+# addition (found by the lwka0 outer cross-surface review, 2026-09-23) --
+# folded into the same exclusion/ignore lists as its non-SWC sibling in every
+# npm update entry, even the two that do not declare it today, so the guard
+# does not have to be re-added the day one of them switches to the SWC
+# variant. A human bumps it by hand when that bead calls for it. Pinned +
 # mutation-verified by tests/test_dependabot_config.py.
 version: 2
 updates:
@@ -96,6 +103,7 @@ updates:
           - "vitest"
           - "@vitest/*"
           - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -103,6 +111,7 @@ updates:
       - dependency-name: "vitest"
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
@@ -118,6 +127,7 @@ updates:
           - "vitest"
           - "@vitest/*"
           - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -125,6 +135,7 @@ updates:
       - dependency-name: "vitest"
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
@@ -140,6 +151,7 @@ updates:
           - "vitest"
           - "@vitest/*"
           - "@vitejs/plugin-react"
+          - "@vitejs/plugin-react-swc"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -147,6 +159,7 @@ updates:
       - dependency-name: "vitest"
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
+      - dependency-name: "@vitejs/plugin-react-swc"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
