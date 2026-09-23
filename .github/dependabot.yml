@@ -1,6 +1,28 @@
 # Weekly, grouped dependency updates (sprint 23, bd polyglot-pdf-ikdnd).
 # Informational like ci.yml: a Dependabot PR still goes through the normal
 # review + merge gate; nothing here auto-merges.
+#
+# The five deploy-sensitive backend packages below are excluded from the
+# all-pip-backend group (bd polyglot-pdf-lwka0): two grouped batches in a row
+# (#816/#817/#819/#822, reverted by #830; #865, reverted the same day) landed
+# on dev with green CI and broke deploys anyway, because the unit suites stub
+# every one of these five and cannot validate a real bump.
+#   - google-genai: the Live adapter (backend/adapters/live_ai_gemini.py) is
+#     written against the vendored docs/genai_docs 2.8 reference; every test
+#     stubs the SDK.
+#   - websockets, uvicorn: the /ws/fill handshake broke on a websockets bump
+#     before (see docs/components/websocket-routing.md).
+#   - fastapi, starlette: #865 was a major-version jump (0.48 -> 1.6) that
+#     unit tests could not catch.
+# A bump of any of these five must go through a deliberate bead that runs the
+# voice harness against staging before merge (see
+# docs/doctrine/promotion-tiers.md) -- never through an automatic grouped PR.
+# The ignore: entries below (no versions: key means "ignore every version")
+# are what actually stop Dependabot from opening a PR for these packages; the
+# exclude-patterns: entry keeps them out of the all-pip-backend group too, in
+# case the ignore list is ever narrowed later. A human bumps them by hand when
+# the gated bead calls for it. Pinned + mutation-verified by
+# tests/test_dependabot_config.py.
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -11,6 +33,18 @@ updates:
       all-pip-backend:
         patterns:
           - "*"
+        exclude-patterns:
+          - "google-genai"
+          - "websockets"
+          - "uvicorn"
+          - "fastapi"
+          - "starlette"
+    ignore:
+      - dependency-name: "google-genai"
+      - dependency-name: "websockets"
+      - dependency-name: "uvicorn"
+      - dependency-name: "fastapi"
+      - dependency-name: "starlette"
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
