@@ -725,9 +725,15 @@ const OptionWidgetSelect: React.FC<{
   // widgets, MINUS any name already claimed by a sibling option (assigning a
   // sibling's widget to this option makes two options claim one widget -- a
   // silent duplicate that fills WRONG, with the last-processed option
-  // overwriting the other's value; the local checkFieldComplete never flags
-  // it and the multiclaim lint is dump-gated so it may not run either; bd
-  // mrdj outer review). De-duped, current-first so it always shows mid-load.
+  // overwriting the other's value; bd mrdj outer review). De-duped,
+  // current-first so it always shows mid-load.
+  //
+  // This filter is PREVENTION, and it is still needed even though
+  // checkFieldComplete now DETECTS the collision too (bd polyglot-pdf-fyc7):
+  // that check is the always-on half, covering schemas that arrive with a
+  // duplicate already baked in from any path other than this dropdown. Not
+  // offering the choice here is better than flagging it after the fact, and
+  // the dump-gated multiclaim lint may not run at all.
   const choices = React.useMemo(() => {
     const claimed = new Set(siblingNames);
     const seen = new Set<string>();

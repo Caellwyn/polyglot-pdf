@@ -160,6 +160,195 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
     expect(status.isComplete).toBe(true);
   });
 
+  // bd polyglot-pdf-ufj7. The unmapped-option check used to be gated on
+  // !field.pdf_field_name for EVERY choice type. That gate is right for
+  // select/radio (a field-level name is the legitimate shared-name shape) but
+  // wrong for checkbox_group, where v2 forbids a field-level name outright --
+  // so a stray one short-circuited the branch and the group read GREEN with
+  // every option unmapped and unfillable.
+  describe('checkbox_group with a stray field-level PDF name (bd ufj7)', () => {
+    it('still flags unmapped options despite the stray field-level name', () => {
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: 'form1[0].bad[0]',
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black' },
+        ],
+      } as Partial<FormField>));
+      expect(status.isComplete).toBe(false);
+      expect(status.errors.some(e => e.includes('Black'))).toBe(true);
+    });
+
+    it('flags the stray field-level name as its own error', () => {
+      // Even with EVERY option correctly mapped, the invalid shape stands.
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: 'form1[0].bad[0]',
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[1]' },
+        ],
+      } as Partial<FormField>));
+      expect(status.isComplete).toBe(false);
+      expect(status.errors.some(e => e.includes('must not carry its own PDF field name'))).toBe(true);
+    });
+
+    it('does NOT apply the checkbox_group rule to a radio', () => {
+      // A field-level name IS the legitimate shared-name shape for radio --
+      // this is the carve-out that keeps the rule from reddening real groups.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: 'm',
+        options: [
+          { value: 'single', label: 'Single', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toEqual([]);
+      expect(status.isComplete).toBe(true);
+    });
+  });
+
+  // bd polyglot-pdf-fyc7. The dropdown that CREATES mappings already refuses to
+  // offer a sibling-claimed widget, but that only stops new duplicates made
+  // through that one UI path. A schema arriving with one already baked in --
+  // hand-edited JSON, a legacy export, an import from another tool -- rendered
+  // fully GREEN while two options silently claimed one PDF widget.
+  describe('sibling options sharing one PDF widget (bd fyc7)', () => {
+    it('FLAGS two checkbox_group options claiming the same widget', () => {
+      // The fill-time consequence: ticking White also ticks Black's box.
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[0]' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+      expect(status.errors[0]).toContain('r[0]');
+      expect(status.errors[0]).toContain('White, Black');
+      expect(status.isComplete).toBe(false);
+    });
+
+    it('FLAGS option-level claimants even when they carry distinct export codes', () => {
+      // The carve-out I first wrote (exempt distinct pdf_on_values as "a real
+      // radio group") was WRONG and blessed the defect -- Opus cross-surface
+      // review. The /AS write that consumes pdf_on_value runs only where an
+      // option has NO pdf_field_name and inherits the FIELD-level name; that
+      // shape never reaches this check. Once options carry their OWN name the
+      // filler resolves BY NAME and ignores pdf_on_value entirely, so both
+      // claimants write to one widget and the last wins. The backend's
+      // dump-widget-multiclaim agrees: ERROR, no pdf_on_value exemption.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors.some(e => e.includes('More than one answer choice'))).toBe(true);
+    });
+
+    it('does NOT flag the genuine shared-NAME radio shape (field-level name)', () => {
+      // THIS is the real AcroForm radio group: ONE field-level name, options
+      // differing by export code and carrying no pdf_field_name of their own.
+      // It is the /AS path, it fills correctly, and it must stay clean --
+      // this is the false-positive guard the carve-out was reaching for.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: 'm',
+        options: [
+          { value: 'single', label: 'Single', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toEqual([]);
+      expect(status.isComplete).toBe(true);
+    });
+
+    it('FLAGS a shared widget when the export codes are also identical', () => {
+      // Same code on both claimants: the fill cannot tell them apart either.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'X' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm', pdf_on_value: 'X' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+      expect(status.errors[0]).toContain('Single, Married');
+    });
+
+    it('FLAGS a shared widget when only ONE claimant carries an export code', () => {
+      // A partially-authored group: the blank claimant has nothing to write.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'single', label: 'Single', pdf_field_name: 'm', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_field_name: 'm' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toHaveLength(1);
+    });
+
+    it('FLAGS a select too -- the backend gate refuses that shape', () => {
+      // I first excluded select on fill-mechanics grounds (a combobox is one
+      // widget, so the collision cannot bite at fill time). That left the
+      // editor GREEN on a shape the dump-loaded publish gate refuses as a hard
+      // dump-widget-multiclaim ERROR -- which has no type filter. Green here
+      // and refused there is the worse failure: the point of this check is to
+      // tell the author before publish what publish will say.
+      const status = checkFieldComplete(field('state', {
+        ...complete,
+        type: 'select',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'al', label: 'Alabama', pdf_field_name: 'combo' },
+          { value: 'ak', label: 'Alaska', pdf_field_name: 'combo' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors.some(e => e.includes('More than one answer choice'))).toBe(true);
+    });
+
+    it('does not flag DIFFERENT widgets, nor a single claimant', () => {
+      const distinct = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[1]' },
+        ],
+      } as Partial<FormField>));
+      expect(distinct.errors).toEqual([]);
+    });
+
+    it('is not thrown off by a malformed options array', () => {
+      // Same render-path safety as the rest of this function: a throw here is
+      // a BLANK SCREEN, not a wrong number (bd polyglot-pdf-8bjdx).
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: undefined,
+        options: [null, 'junk', { value: 'w', label: 'W', pdf_field_name: 'r[0]' }],
+      } as unknown as Partial<FormField>));
+      expect(Array.isArray(status.errors)).toBe(true);
+    });
+  });
+
   it('names the specific unmapped options of a partially-mapped group', () => {
     const status = checkFieldComplete(field('race', {
       ...complete,

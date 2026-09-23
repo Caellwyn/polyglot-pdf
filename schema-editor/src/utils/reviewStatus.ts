@@ -322,7 +322,21 @@ export function statusFromFindings(
  *     count-excluding lint ERROR (Opus fresh-eyes round 2; verified against
  *     schema_lint);
  *   - a field with no id or no type at all (hand-edited/drifted kits; no
- *     lint rule names it -- Opus outer review, pass 1).
+ *     lint rule names it -- Opus outer review, pass 1);
+ *   - a checkbox_group carrying a FIELD-LEVEL pdf_field_name, which v2
+ *     forbids outright (form_models.py). The rule is Pydantic
+ *     _collect_v2_problems, not a LintFinding, so no lint ERROR excludes it
+ *     from the count (bd polyglot-pdf-ufj7);
+ *   - two or more OPTIONS claiming the same widget. The backend's
+ *     dump-widget-multiclaim covers it but is DUMP-GATED, so it does not fire
+ *     in a schema-only view (bd polyglot-pdf-fyc7).
+ *
+ * KEEP THIS LIST IN STEP WITH checkFieldComplete. An error class added there
+ * and not here breaks the predicate's one promise -- the strip, the review
+ * filter and the "Next to review" jump are one definition, so the rows can
+ * paint red while the strip reports the form fully reviewed and the jump
+ * refuses to stop on it. That is exactly what happened when fyc7/ufj7 added
+ * their classes (Opus cross-surface review).
  *
  * Derived from the SCHEMA alone, so the server can compute the identical
  * clause (the predicate's both-sides rule holds). Retire the choice-mapping
@@ -344,8 +358,60 @@ function hasUncoveredStructuralError(field: FormField): boolean {
   // of degrading one field's count -- the two mirrors must both degrade,
   // never throw, on the same malformed input.
   const options = Array.isArray(field.options) ? field.options : [];
-  if (!isChoice || options.length === 0 || field.pdf_field_name) return false;
-  return options.some(o => !(o && typeof o === 'object' ? o.pdf_field_name : undefined));
+  if (!isChoice || options.length === 0) return false;
+  const optionName = (o: unknown): string | undefined =>
+    o && typeof o === 'object' ? (o as { pdf_field_name?: string }).pdf_field_name : undefined;
+
+  // A checkbox_group must not carry a field-level pdf_field_name at all (v2,
+  // form_models.py), so a stray one is itself a structural error -- AND it
+  // must not short-circuit the unmapped-option scan below. That gate is
+  // correct only for select/radio, where a field-level name is the legitimate
+  // shared-name shape (bd polyglot-pdf-ufj7).
+  //
+  // THIS IS THE SECOND MEMBER OF THAT SET (scar #8). The same short-circuit
+  // was fixed in checkFieldComplete; fixing only there would leave the COUNT
+  // predicate blind to the very fields the rows now paint red -- the strip
+  // would report a form fully reviewed while a red row sat in the list, and
+  // "Next to review" would refuse to stop on it. The strip, the filter and
+  // the jump are one predicate by design; they must move together.
+  const isCheckboxGroup = field.type === 'checkbox_group';
+  if (isCheckboxGroup && field.pdf_field_name) return true;
+
+  // NOTE THE ORDERING, and mirror checkFieldComplete's exactly. A field-level
+  // name on select/radio suppresses only the UNMAPPED-OPTION scan (that is the
+  // legitimate shared-name shape, where options need no own name). It must NOT
+  // suppress the COLLISION scan, which runs unconditionally on the row-status
+  // side. Returning false here for the whole predicate was the SAME invariant
+  // break as round 1, surviving for a second shape: a radio carrying a
+  // field-level name AND two options claiming one widget painted a red row
+  // while the strip counted it reviewed and the jump skipped it (Opus
+  // cross-surface round 2). The backend agrees this shape is an ERROR --
+  // schema_lint registers the field-level claim as kind "field" and each
+  // option as "option[i]", so 2+ option claimants fire dump-widget-multiclaim;
+  // its benign carve-out covers only field-level PLUS EXACTLY ONE option.
+  const suppressUnmappedScan = !isCheckboxGroup && Boolean(field.pdf_field_name);
+
+  // NORMALIZE ONCE, then read only from the normalized list. The raw entries
+  // are never touched by an array callback below, so a non-array `options` or
+  // a null/non-object entry degrades this field's count instead of throwing
+  // out through reviewCounts -> App.liveStats and blanking the whole strip
+  // (bd polyglot-pdf-93p8, and the set-completeness guard in
+  // optionsConsumerSet.test.ts, which caught this loop reading raw entries).
+  const names: Array<string | undefined> = options.map(optionName);
+
+  // Two OPTION-level claimants on one widget: the backend's
+  // dump-widget-multiclaim ERROR, mirrored here so a collision is counted as
+  // needing review rather than silently passing as reviewed
+  // (bd polyglot-pdf-fyc7).
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (typeof name !== 'string' || name === '') continue;
+    if (seen.has(name)) return true;
+    seen.add(name);
+  }
+
+  if (suppressUnmappedScan) return false;
+  return names.some(name => !name);
 }
 
 /**

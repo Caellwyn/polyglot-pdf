@@ -92,10 +92,13 @@ const SAFE_EXEMPTIONS: Array<{
   },
   {
     file: 'reviewStatus.ts',
-    fragment: "return options.some(o => !(o && typeof o === 'object'",
+    fragment: 'const names: Array<string | undefined> = options.map(optionName);',
     why: 'hasUncoveredStructuralError (bd polyglot-pdf-93p8) -- `options` is '
-       + 'an Array.isArray-guarded local, and the callback type-checks each '
-       + 'entry inline.',
+       + 'an Array.isArray-guarded local, and optionName type-checks each '
+       + 'entry (returning undefined for a null/non-object) rather than '
+       + 'dereferencing it. This is the ONE raw read; everything after it '
+       + 'iterates the normalized `names` list, so the collision and '
+       + 'unmapped scans added by bd polyglot-pdf-fyc7 / ufj7 cannot throw.',
   },
   {
     file: 'PreviewPane.tsx',
