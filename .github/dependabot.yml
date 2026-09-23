@@ -51,7 +51,8 @@
 # them needs a deliberate, reviewed bead the same way the five backend
 # packages do -- not an automatic grouped PR. @vitest/ui and
 # @vitest/coverage-v8 require an EXACT matching vitest version (peer dep),
-# and @vitejs/plugin-react is version-coupled to vite the same way, so
+# and @vitejs/plugin-react is range-coupled to vite's supported-version
+# range the same way (it stays on a caret range, not an exact pin), so
 # excluding vitest/vite alone without also excluding these leaves Dependabot
 # free to try bumping the peer-locked packages on their own, which either
 # drags vitest/vite along anyway or opens a PR with an unresolvable

@@ -166,6 +166,33 @@ previously lacked.
      TS-toolchain packages and the duplicate-install-line allowlist wording)
      were filed by the reviewer as `polyglot-pdf-ld4o0` and
      `polyglot-pdf-88tcg`; both pre-exist as open beads, not fixed here.
+9. Round-6 outer cross-surface review fix (same PR): the reviewer traced all
+   nine changed contracts plus the plan contracts and core rules and found
+   one GAP.
+   - **Adopted:** Finding 1 (blocker) -- `docs/doctrine/promotion-tiers.md`
+     said schema-editor and admin-console "pin all three exactly" (referring
+     to `@vitest/ui`, `@vitest/coverage-v8` and `@vitejs/plugin-react`). That
+     is wrong for `@vitejs/plugin-react`: verified via `git show
+     origin/dev:schema-editor/package.json` and `admin-console/package.json`
+     -- both declare `"@vitejs/plugin-react": "^4.3.1"`, a caret range, not
+     an exact pin. Only `@vitest/coverage-v8` and `@vitest/ui` are exact at
+     `4.0.7`. The reason for excluding `@vitejs/plugin-react` still holds
+     (its supported-vite-versions range still couples it to vite), so the
+     exclusion logic was not wrong -- only the "exactly" claim was. Corrected
+     the same overclaim in three places: `docs/doctrine/promotion-tiers.md`'s
+     "Why staging exists" paragraph, `tests/test_dependabot_config.py`'s
+     module docstring (the round-4/FOLLOW-UP-SCOPE-ADDITION paragraph), and
+     `.github/dependabot.yml`'s comment ("version-coupled to vite the same
+     way" -> "range-coupled to vite's supported-version range the same
+     way"). Docs/comment-only; no behavioral or test-assertion change, so no
+     new mutation-verification applies. Re-ran the full root-level suite
+     (2061 passed, 94 skipped) and the full backend suite (3890 passed, 195
+     skipped, 4 deselected) from the worktree -- both green, matching the
+     prior baseline.
+   - **Rejected:** none.
+   - No new nits surfaced this round; the reviewer's "Not new" list
+     (`ld4o0`, `3kaqw`, `01kiz`, `em0bf`, `88tcg`, `cn6v7`) already covers
+     every other outstanding item, so no new nits bead was filed.
 
 ## Lessons
 
@@ -201,16 +228,22 @@ Recorded in the closeout ping.
   deploy-sensitive packages, plus (round 2) the same for the four
   TS-toolchain packages across all three npm groups; round 4 added
   `@vitest/*` and `@vitejs/plugin-react` to close the peer-dependency gap,
-  plus a comment-wording fix ("broke deploys" -> "broke dev's build").
+  plus a comment-wording fix ("broke deploys" -> "broke dev's build"); round
+  6 fixed the comment's "@vitejs/plugin-react is version-coupled to vite"
+  overclaim to "range-coupled".
 - `.github/workflows/ci.yml` -- new `backend-runtime-install` job.
 - `tests/test_dependabot_config.py` -- new, pins the exclusion; round 2 added
   the mirrored npm/TS-toolchain enumerated set and four tests; round 4 folded
   `@vitest/*`/`@vitejs/plugin-react` into `TS_TOOLCHAIN_PACKAGES` and fixed the
-  same "broke deploys" docstring wording.
+  same "broke deploys" docstring wording; round 6 fixed the docstring's "pin
+  all three of these exactly" overclaim (only `@vitest/ui` and
+  `@vitest/coverage-v8` are exact; `@vitejs/plugin-react` is a caret range).
 - `tests/test_ci_security_job.py` -- one named exception for the new job's
   install line.
 - `docs/doctrine/promotion-tiers.md` -- voice-harness-gated bump note; round 2
   added the matching npm/TS-toolchain paragraph and stamp update; round 4
   corrected the false "broke the deployed /ws/fill handshake" and "morning
-  after" claims and added the peer-dependency-package note.
+  after" claims and added the peer-dependency-package note; round 6 fixed the
+  "pin all three exactly" overclaim (`@vitejs/plugin-react` is a caret range,
+  not an exact pin).
 - `docs/standards/testing.md` -- Tracks line + current-state prose entry.

@@ -42,13 +42,16 @@ together in #867.
 FOLLOW-UP SCOPE ADDITION 2026-09-23 (cross-surface review of this same
 bead): excluding typescript/vite/vitest alone left @vitest/ui and
 @vitest/coverage-v8 (which require an exact matching vitest version via a
-peer dependency) and @vitejs/plugin-react (peer-coupled to vite the same
-way) in the catch-all npm groups. schema-editor and admin-console pin all
-three of these exactly, so a vitest/vite bump would either drag the excluded
-package along anyway or open a red, peer-conflicted PR -- the guard leaked
-on its own coupling. @vitest/* and @vitejs/plugin-react are folded into the
-same TS_TOOLCHAIN_PACKAGES set below rather than a second constant, so every
-test in this file that checks the set automatically covers them too.
+peer dependency) and @vitejs/plugin-react (range-coupled to vite's
+supported-version range the same way) in the catch-all npm groups.
+schema-editor and admin-console pin @vitest/ui and @vitest/coverage-v8
+exactly; @vitejs/plugin-react stays on a caret range (^4.3.1) but is still
+coupled to vite's supported range, so a vitest/vite bump would either drag
+the excluded package along anyway or open a red, peer-conflicted PR -- the
+guard leaked on its own coupling. @vitest/* and @vitejs/plugin-react are
+folded into the same TS_TOOLCHAIN_PACKAGES set below rather than a second
+constant, so every test in this file that checks the set automatically
+covers them too.
 
 The npm tests below mirror the pip tests above exactly: enumerate the
 TS-toolchain packages once, then check every npm group and every npm
