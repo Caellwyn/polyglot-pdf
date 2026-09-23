@@ -1024,19 +1024,27 @@ def test_export_line_carries_every_column_income_month_reads(
 
     Parses income_month's actual SQL (not a hand-copied list) so this test
     and the view cannot silently drift apart -- if a future edit to the view
-    reads a NEW jsonPayload column, this test fails here (income_month would
-    read a column that is always NULL) rather than shipping a quietly-empty
+    reads a NEW field, this test fails here (income_month would read a
+    field that is always NULL) rather than shipping a quietly-empty
     dashboard number. The reverse direction (every LEDGER_EXPORT_FIELDS
     member is a real emitted key) is already pinned by
     test_every_write_emits_ONE_ledger_export_line_with_the_declared_fields
     above via the `set(payload) == LEDGER_EXPORT_FIELDS` equality.
 
-    Mutation: add a jsonPayload.<col> reference to income_month's SQL for a
-    column not in LEDGER_EXPORT_FIELDS (e.g. jsonPayload.kit_id, which
-    ENTRY_FIELDS has but LEDGER_EXPORT_FIELDS deliberately does not) --
-    red. Also mutation: drop a kwarg from the append_entry _log.info call
-    that income_month reads (e.g. remove usd_amount=... from the emit
-    call) -- also red, via the payload-vs-referenced-columns check below."""
+    ACCESSOR SHAPE (bd polyglot-pdf-0fus0): income_month reads every field
+    via JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.<col>'), not plain
+    jsonPayload.<col> dot-access (bd polyglot-pdf-vqgkj's shape, superseded
+    -- see sql/telemetry_views.sql's header for why). This test extracts
+    the JSONPath argument, not a dotted accessor, so it stays a real pin
+    against the current SQL rather than silently matching zero columns.
+
+    Mutation: add a JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.<col>')
+    reference to income_month's SQL for a column not in
+    LEDGER_EXPORT_FIELDS (e.g. '$.kit_id', which ENTRY_FIELDS has but
+    LEDGER_EXPORT_FIELDS deliberately does not) -- red. Also mutation: drop
+    a kwarg from the append_entry _log.info call that income_month reads
+    (e.g. remove usd_amount=... from the emit call) -- also red, via the
+    payload-vs-referenced-columns check below."""
     import pathlib
     import re
 
@@ -1052,11 +1060,20 @@ def test_export_line_carries_every_column_income_month_reads(
     assert view_match, "income_month view not found in sql/telemetry_views.sql"
     income_body = view_match.group(1)
 
-    # Every flat jsonPayload.<col> the view references (excluding the
-    # nested `message` accessor, which belongs to the usage-event shape,
-    # not ledger_export's).
-    referenced_columns = set(
-        re.findall(r"jsonPayload\.(\w+)", income_body)) - {"message"}
+    # Every flat $.<col> JSONPath the view references, via
+    # JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.<col>') -- excluding the
+    # nested $.message.* accessor, which belongs to the usage-event shape,
+    # not ledger_export's.
+    json_value_paths = re.findall(
+        r"JSON_VALUE\(\s*TO_JSON_STRING\(jsonPayload\)\s*,\s*'\$((?:\.\w+)+)'\s*\)",
+        income_body)
+    referenced_columns = {
+        path[1:] for path in json_value_paths if path.count(".") == 1
+    }
+    assert referenced_columns, (
+        "no flat $.<col> JSON_VALUE reference found in income_month's SQL "
+        "-- the extraction regex may be out of sync with the view's "
+        "accessor syntax")
     # timestamp is the LogEntry's own field, not part of the emitted
     # ledger_export payload kwargs -- structural, like event_type.
     referenced_columns -= {"timestamp"}

@@ -2225,17 +2225,35 @@ a deploy script.
   not yet built) are deliberately absent from the filter until
   `StructuredLogger.log_error` has a real call site; when it does, it shares
   contract 20's nested shape, so widening this filter is a one-line addition.
+- **Views reference jsonPayload ONLY via
+  `JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path')`, never struct
+  dot-access** (bd polyglot-pdf-0fus0, supersedes bd polyglot-pdf-vqgkj's
+  dot-access fix). A Cloud Logging -> BigQuery sink INFERS jsonPayload's
+  STRUCT sub-fields from the rows it has actually received and SKIPS any
+  field null in every row landed so far -- a view referencing such a
+  field via `jsonPayload.foo` dot-access fails `CREATE VIEW` outright
+  (a hard schema error, observed live 2026-09-23 creating `income_month`:
+  "400 Field name channel does not exist in STRUCT<...>", the stderr
+  table's first row being an admin-service `subscription_grant` with no
+  `channel` by design). `TO_JSON_STRING(jsonPayload)` re-serializes the
+  struct's CURRENT fields to a JSON string first (always succeeds,
+  regardless of which fields the sink has inferred so far), and
+  `JSON_VALUE` then returns the path's value or NULL if absent --
+  schema-independent by construction. `hosting_cost_by_service_month`
+  is unaffected: it reads the Cloud Billing export, a fixed-schema
+  table, not a sink-inferred one, so its `service.description` /
+  `resource.name` direct struct access stays as-is.
 - **Views reference ONLY columns their source event actually emits, checked by
   a DERIVED set, not a hand list.** `backend/tests/unit/test_telemetry_views.py`
-  parses `sql/telemetry_views.sql` and asserts every
-  `jsonPayload.message.metadata.*` reference in the three cost-by-* views is a
+  parses `sql/telemetry_views.sql` and asserts every JSON path
+  `$.message.metadata.*` referenced in the three cost-by-* views is a
   member of `log_schemas.USAGE_CONTEXT_KEYS` (contract 20) plus the fixed
   cost/count keys `StructuredLogger._emit_usage` always writes, and every flat
-  `jsonPayload.*` reference in `income_month` is a member of
+  JSON path `$.*` referenced in `income_month` is a member of
   `credit_ledger.LEDGER_EXPORT_FIELDS` (contract 18). *Breaks if a view drifts
-  onto an unemitted column:* BigQuery does not error on an unknown JSON path --
-  it returns NULL forever, so a dashboard column goes silently and permanently
-  empty.
+  onto an unemitted column:* `JSON_VALUE` returns NULL for a JSON path it
+  cannot find (rather than erroring), so a dashboard column goes silently
+  and permanently empty.
 - **`income_month` hard-codes `firm_kind = 'live'` in the view definition, not
   left to a caller's WHERE clause** -- Epic 3's overall exit criterion 5 (the
   income-filter half this bead inherits). Income cannot filter on `channel`:

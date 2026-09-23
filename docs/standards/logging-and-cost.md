@@ -351,7 +351,16 @@ columns are pinned by `backend/tests/unit/test_telemetry_views.py` as a
 **derived** set (from `log_schemas.USAGE_CONTEXT_KEYS` and
 `credit_ledger.LEDGER_EXPORT_FIELDS`), not hand-listed, so a view that drifts
 onto a column its source event does not emit fails there instead of shipping
-a silently-null dashboard column.
+a silently-null dashboard column. The four sink-backed views read every
+jsonPayload field via `JSON_VALUE(TO_JSON_STRING(jsonPayload), '$.path')`,
+not struct dot-access -- the sink infers jsonPayload's STRUCT sub-fields
+from the rows it has actually received and skips any field null in every
+row so far, so a dot-access reference to a skipped field fails
+`CREATE VIEW` outright (bd polyglot-pdf-0fus0, observed live: `income_month`
+would not create against a real sink table because its first row had no
+`channel`). `hosting_cost_by_service_month` reads the fixed-schema billing
+export table and keeps direct struct access (`service.description`,
+`resource.name`), since that table is not sink-inferred.
 
 **Each view is applied independently, gated on its OWN source table existing** (bd polyglot-pdf-k5w16). `CREATE VIEW` requires its referenced table to already exist -- "BigQuery views are late-bound" is true only for re-resolving a table reference at QUERY time, not at CREATE time, and an earlier version of this file and `sql/telemetry_views.sql` both got that backwards (live-confirmed: applying `income_month` before the sink's stderr-stream table existed failed with a 404, not a quietly-empty view). `scripts/setup-telemetry.sh` therefore extracts and applies each view's `CREATE OR REPLACE VIEW` statement on its own `bq query` call -- `cost_by_firm_month`/`cost_by_kit_month`/`cost_by_employee_month` gated on `TELEMETRY_TABLE_STDOUT`, `income_month` gated on `TELEMETRY_TABLE_STDERR`, and `hosting_cost_by_service_month` applied whenever `BILLING_EXPORT_TABLE` was given at all -- reporting any view whose table is not there yet as PENDING and still exiting 0, instead of the previous all-or-nothing gate that skipped every view until BOTH sink tables existed.
 
