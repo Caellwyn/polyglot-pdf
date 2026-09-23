@@ -502,7 +502,7 @@ fi
 _apply_view "cost_by_firm_month" "stdout table not found yet" "$STDOUT_OK"
 _apply_view "cost_by_kit_month" "stdout table not found yet" "$STDOUT_OK"
 _apply_view "cost_by_employee_month" "stdout table not found yet" "$STDOUT_OK"
-_apply_view "hosting_cost_by_service_month" "BILLING_EXPORT_TABLE not given" "true"
+_apply_view "hosting_cost_by_service_month" "unreachable -- BILLING_EXPORT_TABLE is already guaranteed non-empty here" "true"
 _apply_view "income_month" "stderr table not found yet" "$STDERR_OK"
 
 echo -e "${GREEN}[INFO]${NC} Telemetry setup complete for $PROJECT_ID."
