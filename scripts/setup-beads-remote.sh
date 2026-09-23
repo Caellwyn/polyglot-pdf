@@ -30,10 +30,16 @@
 #   - lifecycle: delete NONCURRENT versions 30 days after they stop being
 #     current. Bounds the cost of versioning; live objects are never touched.
 #
-# ACCESS: the operator's own credentials (Dolt reads Application Default
-# Credentials -- a new machine needs `gcloud auth application-default login`
-# once). No service account is created here; cloud-session access to the store
-# is decided separately (bd polyglot-pdf-91a72).
+# ACCESS: the operator reaches the store with their own credentials (Dolt reads
+# Application Default Credentials -- a new machine needs
+# `gcloud auth application-default login` once). This script grants no one
+# anything, BUT a bucket also inherits every PROJECT-level storage role, and
+# public access prevention does not stop those. Before the store holds data,
+# confirm no deployed identity holds a project-wide storage role on the target
+# project -- on polyglot-demo-aa709 the public backend SA holds
+# roles/storage.objectViewer project-wide and so can read this bucket
+# (bd polyglot-pdf-fuao2, which gates the cutover). Cloud-session access to the
+# store is decided separately (bd polyglot-pdf-91a72).
 #
 # Usage: scripts/setup-beads-remote.sh <PROJECT_ID>
 #

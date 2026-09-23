@@ -41,6 +41,28 @@ write, not a settings change.
 
 `tests/test_setup_beads_remote_script.py` (12 tests) pins the script text.
 
+**Review outcome.** Fresh-eyes: `NO-GAPS`, round 1, including a read-only
+check of the live bucket. The Opus cross-surface review found what neither the
+author nor fresh-eyes had: **a bucket inherits every project-level storage
+role, and public access prevention does not stop them.** On polyglot-demo-aa709
+the public backend's service account (`polyglot-backend-sa`, used by both the
+demo and staging backends) holds `roles/storage.objectViewer` project-wide, so
+it can read this bucket; the default compute account (`roles/editor`) and the
+legacy Cloud Build account (`cloudbuild.builds.builder`) can write and delete
+in it. Verified live. The bucket is EMPTY, so nothing is exposed today -- but
+cutting over as planned would make every bead body readable by the running
+app, including staging's unverified code.
+
+Triage: the project-wide grant pre-exists on dev (granted by
+`scripts/setup-gcp-project.sh`), so it is filed rather than fixed here --
+polyglot-pdf-fuao2 (P1), now wired to BLOCK the cutover bead h06sv. Fixing it
+means changing a deployed identity's permissions (CLAUDE.md scar #7) or
+homing the bucket in a separate project; that is a maintainer decision. The
+script's own header had claimed operator-only access -- false -- and now states
+the inherited-access posture and points at fuao2. Also filed:
+polyglot-pdf-95pln (P2) -- `scripts/audit/infra_posture.sh` never re-checks the
+new bucket, so its settings are verified once and never again.
+
 ## Lessons
 
 **Scope the evidence to the claim, again.** Every setting appears three times
@@ -51,6 +73,14 @@ A whole-file search would have stayed green with a setting deleted from
 command block and look only there; mutation-verified by deleting each flag
 from `update` alone while it still appeared elsewhere in the file (for the two
 access-control flags, once more in `create`) -- each turned its own case red.
+
+**"Nobody was granted access" is not "nobody has access."** The script's
+settings were all correct and all verified, and the bucket was still readable
+by the public app -- through a project-wide role granted long ago for a
+different bucket. Provisioning a sensitive store in a shared project has to
+ask who inherits access, not only what the new resource grants. It took the
+reviewer whose mandate is to follow things OUT of the diff to see it; the
+in-diff review, correctly, found nothing wrong with the script.
 
 **Parse, don't grep, anything that can destroy data.** The lifecycle rule is
 checked by parsing the heredoc JSON: `isLive: false` versus `true` is the
