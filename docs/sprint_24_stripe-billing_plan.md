@@ -50,7 +50,7 @@ Every child declares its `metadata.surfaces` (the collision guard keys on them),
 | 5.7 `gf8ne` | Margin report and CSV | `sql/telemetry_views.sql`, `admin_backend/services/bigquery_reports.py`, `admin_backend/routes/report_routes.py`, `admin-console/src/pages/CostReportsPage.tsx`, `backend/tests/unit/test_telemetry_views.py`, `admin_backend/tests/unit/test_report_routes.py` | 4 | 5.1a |
 | 5.8 `t1s4g` | Bill overage through Stripe | `admin_backend/services/stripe_client.py`, `admin_backend/routes/credit_routes.py`, `admin_backend/tests/unit/` | 1 | 5.3, and the Stripe account (maintainer) |
 
-MECE check: no two children share a write surface except the two webhook beads, which are sequenced (5.3 after 5.2) and the two `admin_backend/main.py` router registrations (5.2 then 5.4, sequenced); every rubric criterion is inherited by at least one child; no "etc." items. Parallelizable after 5.1a: 5.1b, 5.2, 5.6, 5.7. Then 5.3 and 5.4; then 5.5.
+MECE check: no two children share a write surface except the two webhook beads, which are sequenced (5.3 after 5.2) the two `admin_backend/main.py` router registrations (5.2 then 5.4, sequenced), and `admin_backend/services/stripe_client.py` / `admin_backend/routes/credit_routes.py` (5.2 and 5.8, sequenced through 5.3); every rubric criterion is inherited by at least one child; no "etc." items. Parallelizable after 5.1a: 5.1b, 5.2, 5.6, 5.7. Then 5.3 and 5.4; then 5.5.
 
 ## Out of scope
 
