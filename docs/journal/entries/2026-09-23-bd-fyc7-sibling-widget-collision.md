@@ -1,7 +1,7 @@
 ---
 date: 2026-09-23
 bead: polyglot-pdf-fyc7
-title: "Two always-on editor checks, and the carve-out that is the actual work"
+title: "Two always-on editor checks, and a carve-out I got backwards"
 tags: [schema-editor, testing, conventions]
 ---
 
@@ -39,40 +39,62 @@ would have the author fix symptoms while the shape the backend rejects stayed.
 
 ## Lessons
 
-**On a detector, the carve-out IS the work -- the detection is the easy half.**
-Both fixes took more thought in deciding what NOT to flag than in flagging.
+**A MUTATION PROVES A GUARD HAS AN EFFECT, NOT THAT THE EFFECT IS WANTED --
+and I learned this the expensive way in this very PR.**
 
-- A shared `pdf_field_name` is not automatically wrong: a genuine AcroForm radio
-  group is exactly one widget name whose options differ by export code
-  (`pdf_on_value`), which is the `/AS` appearance-state write the backend's
-  radio arm performs. So the check flags a shared widget only where the
-  claimants fail to disambiguate.
-- A field-level `pdf_field_name` is not automatically wrong either: it is the
-  legitimate shared-name shape for radio, and invalid only on `checkbox_group`.
+I shipped two carve-outs on the collision check, and reasoned carefully about
+both. One exempted claimants carrying distinct `pdf_on_value` export codes, on
+the grounds that this is how a genuine AcroForm radio group is authored. I
+mutation-verified it (removing it reddens an acceptance test, so it is
+load-bearing). The inner reviewer then reproduced that same mutation
+independently, in an out-of-repo scratch copy, and agreed.
 
-Get either boundary wrong and the rule reddens every real radio group in every
-shipped kit. A detector whose false positives outnumber its catches is worse
-than no detector, because authors learn to ignore the colour -- which is the
-very signal the fix exists to restore. This is the "position-based rules must
-be SCOPED, not global" trap wearing different clothes.
+**All of that verification was rigorous, and all of it was checking the wrong
+property.** The Opus cross-surface pass read the filler instead, and the
+carve-out is simply false: the `/AS` write that consumes `pdf_on_value` runs
+ONLY on the branch where an option has NO `pdf_field_name` of its own and
+inherits the field-level one -- a shape that never enters this check at all,
+because only option-level names are bucketed. Once options carry their own
+names the filler resolves BY NAME and ignores `pdf_on_value` entirely, so both
+claimants write to one widget and the last wins. My carve-out exempted
+precisely the defect the check exists to catch. The backend had said so all
+along: `dump-widget-multiclaim` is an ERROR for 2+ option-level claimants, with
+no export-code exemption and no type filter.
 
-**So the mutation that proves a detector is the one that removes its
-CARVE-OUT, not the one that removes its detection.** Disabling a check and
-watching the positive tests redden only proves the code runs. The load-bearing
-question is whether the false-positive guard is real, and the only way to know
-is to delete it and watch an ACCEPTANCE test fail. Both carve-outs here were
-verified that way, and both were genuinely load-bearing. A detector shipped
-with only positive tests is one refactor away from flagging everything, with a
-green suite the whole time.
+The second carve-out (excluding `select` on fill-mechanics grounds) was wrong
+in a different way -- correct about the fill, but it left the editor GREEN on a
+shape the publish gate hard-REFUSES. Green here, refused there, is worse than a
+flag that is strictly-true-but-moot.
 
-**Read the backend before writing a client-side mirror.** Both rules encode
-invariants that live in `backend/models/form_models.py` and the fill routes.
-Guessing at "a shared name is probably wrong" would have produced a rule that
-contradicts how radios are actually filled. The v2 rule
-("a checkbox_group's boxes are independent widgets, so each option MUST carry
-its own pdf_field_name") is stated outright in the backend, with a comment
-explaining why the shared-name path is radio-only -- five minutes of reading
-that replaced an assumption with a fact.
+So the lesson is narrower and sharper than "the carve-out is the work":
+
+- A mutation answers *does this line change behaviour?* It cannot answer *is
+  this the behaviour we want?* Only the consumer can answer that.
+- A confidently-wrong guard WITH a passing test pinned to it is harder to
+  dislodge than no guard, because every subsequent reviewer sees a test
+  asserting the intended behaviour and moves on. Two reviewers did exactly
+  that here.
+- When writing a client-side mirror of a backend rule, the question is not
+  "what is true about the mechanism?" but **"what does the authoritative side
+  actually do?"** I reasoned from the fill mechanics and got a defensible
+  story; the backend's lint rule was three lines long and said the opposite.
+  Read the rule, do not re-derive it.
+
+**The related trap, still true: an error class added to one predicate and not
+its mirror splits an invariant.** `checkFieldComplete` (row status) and
+`hasUncoveredStructuralError` (the count) re-implement the same question
+separately. Teaching only one about a new error class means rows paint red
+while the strip reports the form fully reviewed and "Next to review" refuses
+to stop on them -- the exact thing `ValidationPanel`'s comment promised could
+never happen. That comment is now written as an invariant to MAINTAIN rather
+than a property that holds by itself.
+
+**Where reading the backend DID work.** The `ufj7` half went the other way and
+is the control case: the v2 rule ("a checkbox_group's boxes are independent
+widgets, so each option MUST carry its own pdf_field_name") is stated outright
+in `form_models.py`, I read it rather than inferring it, and that half needed no
+correction. The difference between the two halves was not care -- it was whether
+I took the rule from the authoritative side or reconstructed it from mechanism.
 
 ## Doc freshness
 
@@ -87,9 +109,22 @@ No CLAUDE.md changes.
 ## Files touched
 
 - `schema-editor/src/utils/validation.ts` -- sibling-widget-collision check
-  (with the `pdf_on_value` carve-out); checkbox_group ungating of the
-  unmapped-option check; stray field-level name as its own error.
-- `schema-editor/src/utils/validation.test.ts` -- 9 tests: 4 driving the
-  defects, 3 as false-positive guards (a real radio group must stay clean), 1
-  for distinct widgets, 1 feeding a malformed options array (this function is
-  on the per-field RENDER path, where a throw is a blank screen -- bd `8bjdx`).
+  mirroring the backend's `dump-widget-multiclaim` exactly (no export-code
+  exemption, no type filter); checkbox_group ungating of the unmapped-option
+  check; stray field-level name as its own error.
+- `schema-editor/src/utils/validation.test.ts` -- 10 tests, including the ONE
+  genuine false-positive guard (a field-level shared name with per-option
+  export codes -- the real AcroForm radio shape -- must stay clean) and a
+  malformed-options case, since this function is on the per-field RENDER path
+  where a throw is a blank screen (bd `8bjdx`).
+- `schema-editor/src/utils/reviewStatus.ts` -- the COUNT mirror: same ungating,
+  plus both new error classes, reading through one normalized name list so a
+  malformed kit degrades instead of blanking the strip. Docstring now
+  enumerates the classes and says to keep them in step.
+- `schema-editor/src/utils/reviewStatus.test.ts` -- 4 tests pinning
+  strip/row agreement via `reviewCounts`, plus the no-throw case.
+- `schema-editor/src/utils/optionsConsumerSet.test.ts` -- exemption re-pointed
+  at the single guarded read.
+- `schema-editor/src/components/ValidationPanel.tsx`,
+  `schema-editor/src/components/FieldEditor.tsx` -- comments that asserted
+  invariants now say what maintains them.
