@@ -148,6 +148,24 @@ previously lacked.
      pre-existing branch-protection doc claim) were already filed by the
      reviewer as `polyglot-pdf-em0bf` and `polyglot-pdf-cn6v7`; no new bead
      needed.
+8. Round-5 outer cross-surface review fix (same PR): the reviewer traced all
+   eight contracts (the four handoff items plus the four already covered by
+   rounds 1-4, plus the stale-branch-base question) and found one GAP.
+   - **Adopted:** Finding 1 -- `docs/standards/testing.md`'s round-2 dated
+     entry said the npm/TS-toolchain guard added "four tests" and named only
+     "typescript, `@types/node`, vite and vitest"; round 4 had folded
+     `@vitest/*` and `@vitejs/plugin-react` into the same `TS_TOOLCHAIN_PACKAGES`
+     tuple and the npm side has always had three tests (not four), so both
+     counts were wrong. Corrected the sentence to name all six packages and
+     say "three tests". Prose-only; no test or production-code change, so it
+     does not re-run the outer review per CLAUDE.md ("only a BEHAVIORAL fix
+     voids a clear").
+   - **Rejected:** none.
+   - Two more findings from this round (the `@vitejs/plugin-react-swc`
+     peer-coupling gap, and two comment-accuracy nits about "four" vs "six"
+     TS-toolchain packages and the duplicate-install-line allowlist wording)
+     were filed by the reviewer as `polyglot-pdf-ld4o0` and
+     `polyglot-pdf-88tcg`; both pre-exist as open beads, not fixed here.
 
 ## Lessons
 
