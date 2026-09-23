@@ -50,6 +50,22 @@ unresolvable runtime-only dependency set had no CI signal before this bead.
    path the other four pip/npm groups use. `docs/standards/testing.md`'s
    `Tracks:` line picked up `.github/dependabot.yml` and the new test file,
    with a new current-state prose entry describing both changes.
+5. Round-2 fresh-eyes fix (same PR): the bead body's same-day NOTES amendment
+   ("SCOPE ADDITION 2026-09-23") asked for the same treatment for the
+   TypeScript toolchain after `#862`/`#863`/`#864` (grouped npm bumps in
+   admin-console, frontend and schema-editor) broke all three front-end
+   type-checks on `dev` the same morning and were reverted together in
+   `#867`. That addition had shipped unaddressed in the first round.
+   `.github/dependabot.yml` now excludes typescript, `@types/node`, vite and
+   vitest from all three npm groups' `exclude-patterns` and from each npm
+   update's `ignore:` list, the same belt-and-suspenders shape as the five
+   pip packages. `tests/test_dependabot_config.py` gained a matching
+   enumerated set (`TS_TOOLCHAIN_PACKAGES`) and four tests mirroring the pip
+   tests exactly, mutation-verified by removing one package from an npm
+   group's `exclude-patterns` and from an npm update's `ignore:` list in
+   turn and confirming each corresponding test fails, then restoring.
+   `docs/doctrine/promotion-tiers.md` gained a matching paragraph and stamp
+   update noting the npm-side gate.
 
 ## Lessons
 
@@ -82,10 +98,13 @@ Recorded in the closeout ping.
 ## Files touched
 
 - `.github/dependabot.yml` -- exclude-patterns + ignore: for the five
-  deploy-sensitive packages.
+  deploy-sensitive packages, plus (round 2) the same for the four
+  TS-toolchain packages across all three npm groups.
 - `.github/workflows/ci.yml` -- new `backend-runtime-install` job.
-- `tests/test_dependabot_config.py` -- new, pins the exclusion.
+- `tests/test_dependabot_config.py` -- new, pins the exclusion; round 2 added
+  the mirrored npm/TS-toolchain enumerated set and four tests.
 - `tests/test_ci_security_job.py` -- one named exception for the new job's
   install line.
-- `docs/doctrine/promotion-tiers.md` -- voice-harness-gated bump note.
+- `docs/doctrine/promotion-tiers.md` -- voice-harness-gated bump note; round 2
+  added the matching npm/TS-toolchain paragraph and stamp update.
 - `docs/standards/testing.md` -- Tracks line + current-state prose entry.

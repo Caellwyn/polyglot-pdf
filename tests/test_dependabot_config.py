@@ -13,8 +13,25 @@ checked as a set, not as five separate ad hoc assertions that could each be
 dropped independently without the test noticing the class shrank.
 
 Mutation-verified: removing any one of the five from either the group's
-exclude-patterns or the top-level ignore list fails test_all_five_packages_are_
-excluded_from_every_pip_group / test_all_five_packages_are_fully_ignored.
+exclude-patterns or the top-level ignore list fails
+test_all_five_packages_are_excluded_from_every_pip_group /
+test_all_five_packages_are_fully_ignored.
+
+SCOPE ADDITION 2026-09-23 (same bead, same-day bead-body amendment): the same
+morning's grouped npm bumps (#862 admin-console, #863 frontend, #864
+schema-editor) broke all three front-end type-checks on dev the same way --
+typescript and @types/node (which pin the TS surface, along with vite and
+vitest) landed via an automatic grouped update that green CI could not catch
+because the unit suites don't type-check against a bumped TS toolchain the
+way tsc / vite build do in a real PR. All four bumps were reverted together
+in #867. The npm tests below mirror the pip tests above exactly: enumerate
+the four TS-toolchain packages once, then check every npm group and every
+npm update's ignore: list against that one set.
+
+Mutation-verified: removing any one of the four from an npm group's
+exclude-patterns or ignore: list fails
+test_all_ts_toolchain_packages_are_excluded_from_every_npm_group /
+test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update.
 """
 import yaml
 from pathlib import Path
@@ -34,6 +51,16 @@ DEPLOY_SENSITIVE_PACKAGES = (
     "starlette",
 )
 
+# The enumerated set for the npm side of the same guard (bead-body scope
+# addition, 2026-09-23): the TypeScript-toolchain packages that pin the
+# compiler/type surface every front-end package builds and tests against.
+TS_TOOLCHAIN_PACKAGES = (
+    "typescript",
+    "@types/node",
+    "vite",
+    "vitest",
+)
+
 
 def _load_dependabot_config():
     return yaml.safe_load(DEPENDABOT_PATH.read_text(encoding="utf-8"))
@@ -48,6 +75,17 @@ def _pip_backend_update(config):
         "expected exactly one pip/backend update entry, found: " + repr(pip_updates)
     )
     return pip_updates[0]
+
+
+def _npm_updates(config):
+    npm_updates = [
+        u for u in config["updates"] if u.get("package-ecosystem") == "npm"
+    ]
+    assert len(npm_updates) == 3, (
+        "expected exactly three npm update entries (frontend, schema-editor, "
+        "admin-console), found: " + repr(npm_updates)
+    )
+    return npm_updates
 
 
 def test_dependabot_yaml_is_well_formed():
@@ -117,6 +155,78 @@ def test_no_other_pip_update_reintroduces_the_five_ungated():
                 assert covered, (
                     "pip update '{}' groups '{}' with pattern '*' but does not "
                     "exclude or ignore deploy-sensitive package '{}'".format(
+                        update.get("directory"), group_name, pkg
+                    )
+                )
+
+
+def test_all_ts_toolchain_packages_are_excluded_from_every_npm_group():
+    """Each npm-ecosystem update's group(s) (frontend, schema-editor,
+    admin-console) must exclude every package in the TS-toolchain set -- the
+    same shape as the pip test above, so a future regrouping can't silently
+    drop the exclusion in any one of the three front-end packages."""
+    for update in _npm_updates(_load_dependabot_config()):
+        groups = update.get("groups", {})
+        assert groups, "npm update '{}' has no groups: at all".format(
+            update.get("directory")
+        )
+        for group_name, group in groups.items():
+            excluded = set(group.get("exclude-patterns", []))
+            missing = [p for p in TS_TOOLCHAIN_PACKAGES if p not in excluded]
+            assert not missing, (
+                "npm update '{}' group '{}' is missing exclude-patterns for: "
+                "{}".format(update.get("directory"), group_name, missing)
+            )
+
+
+def test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update():
+    """Each npm-ecosystem update's top-level `ignore:` list must name every
+    package in the TS-toolchain set with no `versions:`/`update-types` key,
+    i.e. ignore EVERY version -- mirrors test_all_five_packages_are_fully_
+    ignored for the pip side."""
+    for update in _npm_updates(_load_dependabot_config()):
+        ignore_entries = {
+            entry["dependency-name"]: entry
+            for entry in update.get("ignore", [])
+            if "dependency-name" in entry
+        }
+        missing = [p for p in TS_TOOLCHAIN_PACKAGES if p not in ignore_entries]
+        assert not missing, (
+            "npm update '{}' ignore: list is missing these packages entirely: "
+            "{}".format(update.get("directory"), missing)
+        )
+        scoped = [
+            p for p in TS_TOOLCHAIN_PACKAGES
+            if "versions" in ignore_entries[p] or "update-types" in ignore_entries[p]
+        ]
+        assert not scoped, (
+            "npm update '{}': these packages are only PARTIALLY ignored "
+            "(versions/update-types scoped the ignore instead of blocking "
+            "every version): {}".format(update.get("directory"), scoped)
+        )
+
+
+def test_no_other_npm_update_reintroduces_the_ts_toolchain_ungated():
+    """If a fourth npm-ecosystem update entry is ever added, it must not
+    group any of the four TS-toolchain packages without the same exclusion --
+    mirrors test_no_other_pip_update_reintroduces_the_five_ungated."""
+    config = _load_dependabot_config()
+    for update in config["updates"]:
+        if update.get("package-ecosystem") != "npm":
+            continue
+        groups = update.get("groups", {})
+        ignore_names = {
+            entry.get("dependency-name") for entry in update.get("ignore", [])
+        }
+        for group_name, group in groups.items():
+            if group.get("patterns") != ["*"]:
+                continue  # a narrowly-scoped group is not the catch-all risk
+            excluded = set(group.get("exclude-patterns", []))
+            for pkg in TS_TOOLCHAIN_PACKAGES:
+                covered = pkg in excluded or pkg in ignore_names
+                assert covered, (
+                    "npm update '{}' groups '{}' with pattern '*' but does not "
+                    "exclude or ignore TS-toolchain package '{}'".format(
                         update.get("directory"), group_name, pkg
                     )
                 )

@@ -23,6 +23,22 @@
 # case the ignore list is ever narrowed later. A human bumps them by hand when
 # the gated bead calls for it. Pinned + mutation-verified by
 # tests/test_dependabot_config.py.
+#
+# The four TypeScript-toolchain packages excluded from every npm group below
+# (typescript, @types/node, vite, vitest) are the same fix for the same
+# reason (bd polyglot-pdf-lwka0 scope addition, 2026-09-23): the same morning
+# #862/#863/#864 (grouped npm bumps in admin-console, frontend and
+# schema-editor) landed on dev with green CI and broke all three front-end
+# type-checks -- the TypeScript bump dropped the downlevelIteration and
+# baseUrl compiler options the tsconfigs still set (TS5102), and the updated
+# Node type definitions broke every node:* import and __dirname use in the
+# vitest files (TS2591/TS2304). All four bumps were reverted together in
+# #867. typescript, @types/node, vite and vitest pin the TS surface every
+# front-end package compiles and tests against, so a real bump of any of them
+# needs a deliberate, reviewed bead the same way the five backend packages
+# do -- not an automatic grouped PR. A human bumps them by hand when that
+# bead calls for it. Pinned + mutation-verified by
+# tests/test_dependabot_config.py.
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -53,6 +69,16 @@ updates:
       all-npm-frontend:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
@@ -61,6 +87,16 @@ updates:
       all-npm-schema-editor:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
@@ -69,6 +105,16 @@ updates:
       all-npm-admin-console:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@types/node"
+          - "vite"
+          - "vitest"
+    ignore:
+      - dependency-name: "typescript"
+      - dependency-name: "@types/node"
+      - dependency-name: "vite"
+      - dependency-name: "vitest"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
