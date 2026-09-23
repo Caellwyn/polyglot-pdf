@@ -247,7 +247,7 @@ named bead or in the journal.
 | The voice app's Firebase persistence mode | `browserSessionPersistence` for the voice app only (recommended), local for editor/admin | `polyglot-pdf-8v8i7` notes |
 | Bucket public-access prevention | DONE 2026-09-17: `enforced` on `gs://polyglot-demo-aa709-form-kits` | `polyglot-pdf-m1dlv` |
 | Artifact Registry container scanning | DONE 2026-09-17: `containerscanning.googleapis.com` enabled; `infra_posture.sh` reads the findings from the next pushed image on | `polyglot-pdf-m1dlv` |
-| Provision `polyglot-cloudbuild-sa` | DEFERRED 2026-09-17: the identity only matters once deploys move to Cloud Build; run `setup-cloud-build.sh` then | `polyglot-pdf-m1dlv` |
+| Provision `polyglot-cloudbuild-sa` | DONE: deploys moved to Cloud Build the same week and the identity exists with every pinned role (two roles added 2026-09-17, `polyglot-pdf-8e812`); the posture run of 2026-09-23 reads its live roles equal to the pinned list | `polyglot-pdf-m1dlv` |
 | Two human accounts hold project Owner | ACCEPTED 2026-09-17: both are the sole operator's own accounts (see accepted risks) | `polyglot-pdf-m1dlv` |
 | Vertex AI abuse-monitoring opt-out | REFUSED by Google 2026-09-23 (requested 2026-09-17; the likely cause is the missing company website, which is now a prerequisite on the maintainer's list); RE-APPLY once the website is live -- until then the retention in the processor table stands as an accepted, dated risk | the processor table above |
 | Grant the operator identity Identity Toolkit read (or read the Firebase Auth settings in the console): authorized domains, email-enumeration protection, providers, password policy | a live IAM change | `polyglot-pdf-m1dlv` |
