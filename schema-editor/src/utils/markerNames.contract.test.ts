@@ -146,12 +146,37 @@ describe('handshake marker filenames stay coupled across languages', () => {
       // Occurrences that are NOT the declaration and NOT a comment. The
       // declaration itself is excluded so a constant nobody reads cannot
       // satisfy its own pin.
-      const live = src
+      //
+      // COMMENTS ARE STRIPPED STRUCTURALLY, not by a per-line startsWith test.
+      // A line-prefix test only recognises a comment whose FIRST character
+      // says so, which misses a `/* ... */` continuation line and a mention
+      // inside a string -- both of which then count as a "use" and let a
+      // genuinely dead constant satisfy this very pin. Fresh-eyes caught that
+      // in the first version of this guard, which is the same class of hole
+      // the rest of this file exists to close (a scan that reads prose as
+      // code). Strip block comments, line comments and string literals from
+      // the whole source first, then look for what remains.
+      const stripped = src
+        // Block comments (TS) -- non-greedy, across lines.
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        // Line comments: `//` (TS) and `#` (Python), to end of line.
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/#[^\n]*/g, '')
+        // String literals, so a name mentioned in prose inside quotes is not
+        // a use. Kept simple: these files carry no escaped quotes in the
+        // relevant lines, and a miss here fails CLOSED (an uncounted use
+        // reddens the pin, which is the safe direction).
+        .replace(/'[^'\n]*'/g, "''")
+        .replace(/"[^"\n]*"/g, '""')
+        .replace(/`[^`]*`/g, '``');
+      const live = stripped
         .split(/\r?\n/)
         .filter((line) => {
-          const t = line.trim();
-          if (t.startsWith('//') || t.startsWith('*') || t.startsWith('#')) return false;
-          if (!new RegExp(`\\b${name}\\b`).test(t)) return false;
+          // A starred JSDoc body line survives block-stripping when the
+          // comment is unterminated in the sliced region, so keep the cheap
+          // prefix test as a SECOND line of defence rather than replacing it.
+          if (line.trim().startsWith('*')) return false;
+          if (!new RegExp(`\\b${name}\\b`).test(line)) return false;
           return !new RegExp(`^[ \\t]*(?:export\\s+)?(?:const|let|var)?[ \\t]*${name}\\s*(?::[^=]+)?=`)
             .test(line);
         });
