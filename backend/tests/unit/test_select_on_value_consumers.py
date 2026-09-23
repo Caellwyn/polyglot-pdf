@@ -104,6 +104,15 @@ REVIEWED: dict[str, str] = {
     "schema-editor/src/utils/lintFindings.ts":
         "RULE_REMEDIES prose names pdf_on_value in the select-value-not-slug remedy; labels only, not a reader "
         "(this file joined the set when the remedy was reworded in g2fpr.1 round 2 -- the pin caught it)",
+    "schema-editor/src/utils/validation.ts":
+        "PROSE ONLY, not a reader: checkFieldComplete's sibling-widget-collision "
+        "check (bd polyglot-pdf-fyc7) names pdf_on_value to record WHY it does not "
+        "consult it -- the /AS write that consumes the channel runs only where an "
+        "option has no pdf_field_name of its own and inherits the field-level name, "
+        "a shape the check never buckets. An earlier draft DID read the channel, as "
+        "a carve-out exempting claimants with distinct export codes; that exempted "
+        "the very defect the check exists to catch and was removed "
+        "(this file joined the set when that comment landed -- the pin caught it)",
     "schema-editor/src/utils/fieldGrouping.ts":
         "grouping rules (pdf_on_value alone is not a checkbox_group) and mintSelectSlugs, which reserves codes already slug-shaped (g2fpr.2)",
     "schema-editor/src/utils/remoteKitStore.ts":

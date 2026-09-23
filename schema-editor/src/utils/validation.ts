@@ -161,7 +161,19 @@ export function checkFieldComplete(
   const isChoice =
     field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group';
   if (isChoice && options.length > 0) {
-    if (!field.pdf_field_name) {
+    // The unmapped-option check is gated on !field.pdf_field_name for
+    // select/radio, where a field-level name is the LEGITIMATE shared-name
+    // shape (one widget, options differing by pdf_on_value). It must NOT be
+    // gated that way for checkbox_group (bd polyglot-pdf-ufj7): v2 FORBIDS a
+    // field-level pdf_field_name there outright (form_models.py -- "a
+    // checkbox_group's boxes are independent widgets, so each option MUST
+    // carry its own pdf_field_name"), so a stray field-level name is itself
+    // invalid AND, under the old gate, short-circuited the whole branch --
+    // reporting ZERO errors for a group whose every option was genuinely
+    // unmapped and unfillable. The backend lint catches both, but only after a
+    // round-trip; the field list's at-a-glance status is this function alone.
+    const isCheckboxGroup = field.type === 'checkbox_group';
+    if (!field.pdf_field_name || isCheckboxGroup) {
       const unmapped = options.filter(o => !o?.pdf_field_name);
       if (unmapped.length === options.length) {
         errors.push('No PDF mapping: neither the field nor its options name a PDF widget');
@@ -169,6 +181,70 @@ export function checkFieldComplete(
         const names = unmapped.map(o => o?.label || String(o?.value ?? '?')).join(', ');
         errors.push(`Options missing a PDF widget mapping: ${names}`);
       }
+    }
+
+    // The stray field-level name is ALSO a defect in its own right, not just
+    // the thing that used to hide the check above (bd polyglot-pdf-ufj7). v2
+    // forbids it on a checkbox_group, and the backend lints it as its own
+    // ERROR, so reporting only the unmapped options would leave the author
+    // fixing symptoms while the invalid shape stayed.
+    if (isCheckboxGroup && field.pdf_field_name) {
+      errors.push(
+        `A checkbox group must not carry its own PDF field name ` +
+        `("${field.pdf_field_name}") -- each box is a separate widget, so the ` +
+        `name belongs on each option`,
+      );
+    }
+
+    // ALWAYS-ON sibling-collision check (bd polyglot-pdf-fyc7). Two options of
+    // one choice field claiming the SAME PDF widget silently mis-fill. The
+    // dropdown that creates mappings already refuses to offer a sibling-claimed
+    // widget (bd p2bd criterion 1), but that only stops NEW duplicates made
+    // through that one UI path -- a schema that arrives with one already baked
+    // in (hand-edited JSON, a legacy export, an import from another tool)
+    // rendered fully GREEN. This is the always-on half; it needs no backend
+    // dump.
+    //
+    // MIRRORS THE BACKEND RULE EXACTLY, and the earlier attempts at being
+    // cleverer than it were both wrong (Opus cross-surface review):
+    //
+    //   schema_lint.dump-widget-multiclaim -- "this PDF box is claimed by more
+    //   than one answer choice on field X, so filling it will misbehave" --
+    //   is an ERROR for 2+ OPTION-level claimants, with NO pdf_on_value
+    //   exemption and NO field-type filter.
+    //
+    // 1. NO pdf_on_value CARVE-OUT. I first exempted claimants carrying
+    //    distinct export codes, reasoning that is a real AcroForm radio group.
+    //    It is not -- and the mistake blessed the very defect this check
+    //    exists to catch. The /AS appearance-state write that consumes
+    //    pdf_on_value (find_widget_by_state) runs ONLY on the branch where an
+    //    option has NO pdf_field_name of its own and inherits the FIELD-level
+    //    name (pdf_fill_routes.py, the radio arm). A field-level name is never
+    //    bucketed here, so that shape never reaches this loop. When options DO
+    //    carry their own pdf_field_name the filler goes to find_widget BY NAME
+    //    and never reads pdf_on_value at all: every claimant writes its own
+    //    is_selected to the same widget and the last one processed wins.
+    // 2. NO select EXCLUSION. Excluding select on fill-mechanics grounds (a
+    //    combobox is one widget, so the collision cannot bite at fill time)
+    //    left the editor GREEN on a shape the dump-loaded publish gate REFUSES
+    //    as a hard ERROR. Green here and refused there is worse than a
+    //    strictly-true-but-moot flag, and the whole point of this check is to
+    //    tell the author before publish what publish will say.
+    const byWidget = new Map<string, string[]>();
+    for (const o of options) {
+      const widget = o?.pdf_field_name;
+      if (typeof widget !== 'string' || widget === '') continue;
+      const label = o?.label || String(o?.value ?? '?');
+      const bucket = byWidget.get(widget);
+      if (bucket) bucket.push(label);
+      else byWidget.set(widget, [label]);
+    }
+    for (const [widget, claimants] of byWidget) {
+      if (claimants.length < 2) continue;
+      errors.push(
+        `More than one answer choice claims the PDF box "${widget}", so ` +
+        `filling one would change the other: ${claimants.join(', ')}`,
+      );
     }
   } else if (!field.pdf_field_name) {
     errors.push('Missing PDF field name');
