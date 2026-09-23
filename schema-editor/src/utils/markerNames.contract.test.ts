@@ -156,19 +156,27 @@ describe('handshake marker filenames stay coupled across languages', () => {
       // the rest of this file exists to close (a scan that reads prose as
       // code). Strip block comments, line comments and string literals from
       // the whole source first, then look for what remains.
+      // ORDER MATTERS: strings BEFORE line comments. Stripping `#`/`//` first
+      // lets a `#` or `//` INSIDE a string literal eat the rest of that line,
+      // deleting a genuine use that follows it -- e.g.
+      //   path = root / "#weird" / _HANDSHAKE_FILE
+      // loses the use and the guard fails spuriously, blocking a legitimate
+      // refactor. (Found by fresh-eyes; an earlier comment here claimed this
+      // direction "fails closed", which was wrong -- it fails OPEN in the
+      // sense that matters, by manufacturing a failure on correct code.)
+      // Removing the strings first makes their contents unable to look like
+      // a comment opener.
       const stripped = src
         // Block comments (TS) -- non-greedy, across lines.
         .replace(/\/\*[\s\S]*?\*\//g, '')
+        // String literals, escape-aware, so a name mentioned in prose inside
+        // quotes is not a use and a `\'` does not end the literal early.
+        .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+        .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+        .replace(/`(?:[^`\\]|\\.)*`/g, '``')
         // Line comments: `//` (TS) and `#` (Python), to end of line.
         .replace(/\/\/[^\n]*/g, '')
-        .replace(/#[^\n]*/g, '')
-        // String literals, so a name mentioned in prose inside quotes is not
-        // a use. Kept simple: these files carry no escaped quotes in the
-        // relevant lines, and a miss here fails CLOSED (an uncounted use
-        // reddens the pin, which is the safe direction).
-        .replace(/'[^'\n]*'/g, "''")
-        .replace(/"[^"\n]*"/g, '""')
-        .replace(/`[^`]*`/g, '``');
+        .replace(/#[^\n]*/g, '');
       const live = stripped
         .split(/\r?\n/)
         .filter((line) => {
