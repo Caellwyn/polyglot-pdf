@@ -3,7 +3,7 @@
 **Visual editor for PDF form schemas - built for human-in-the-loop schema extraction**
 
 Version: 1.0.0  
-Last Updated: November 5, 2025  
+Last Updated: 2026-09-23  
 Status: Production Ready - All 5 phases complete (see the test suites under
 `src/` for current coverage; run `npm run test:run` for the live count)
 
@@ -178,7 +178,7 @@ directory directly (File System Access API; Chrome/Edge):
    much of the human review is done), and an aggregate overview ("N forms -
    X complete - Y in progress - Z retired").
 3. Click a card to open that kit -- PDF on the left, fields in the center,
-   properties on the right, validation panel at the bottom.
+   properties on the right, the one-line progress strip at the bottom.
 4. To onboard a NEW form, **drag-drop an AcroForm PDF** onto the catalogue; it
    creates a `form-kits/<id>/` (status:draft) with no schema yet.
 5. On the new (schemaless) card, click **Run extraction** to produce its
@@ -276,8 +276,8 @@ header's **Help** button.
 │             │             │   Pattern: ^\d{7,9}$            │
 │             │             │                                  │
 ├─────────────┴─────────────┴──────────────────────────────────┤
-│ VALIDATION PANEL                                             │
-│ Progress: 67% | 89 complete, 43 review, 132 total           │
+│ PROGRESS STRIP                                               │
+│ Progress: 67% | 89 reviewed . 43 to review . 132 total      │
 │ ▓▓▓▓▓▓▓▓▓▓░░░░░░                                            │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -300,9 +300,12 @@ header's **Help** button.
 - **- / +** - Zoom out/in by 25%
 
 **Field Overlays on PDF**:
-- 🟢 **Green border** - Complete (all required info filled)
+- 🟢 **Green border** - Complete, OR signed off by a human reviewer
+  (bd `polyglot-pdf-g63j`: green means a PERSON said the field is right, not
+  that the machine failed to fault it)
 - 🟡 **Yellow border** - Needs review (missing help text or spoken name)
-- 🔴 **Red border** - Has errors (missing required properties)
+- 🔴 **Red border** - Has errors. A lint ERROR always WINS: a sign-off can
+  never green a broken field
 - **Thick border** - Currently selected field (3px vs 2px)
 - **Hover** - Shows tooltip with field name and type
 - **Click** - Selects field for editing
@@ -340,19 +343,30 @@ header's **Help** button.
 
 **All changes auto-tracked** - unsaved changes warning appears
 
-### Validation Panel
+### Progress Strip
 
-**Progress tracking**:
-- Progress bar (% complete)
-- Status counts (complete / review / total)
-- Validation errors (schema issues)
-- Reference warnings (broken field references)
+The bottom band is a ONE-LINE strip, not a findings list (sprint-18 C1, bd
+`polyglot-pdf-o7y9`). It shows:
+
+- a review-progress bar (% of fields a human has signed off), and
+- status counts (reviewed / to review / total).
+
+**Findings do NOT appear here.** They render AT the field they concern -- as
+chips on the field-list row, on the pinned Form row, and as
+property-anchored blocks in the field editor. The old pane was a second copy
+of per-field truth and drifted from it (it could read "0 need review" beside
+"7 to review"), which is why it was removed.
+
+**"M to review" is a control, not a label**: click it to jump to the next
+field needing review; right-click it (or use the filter toggle) to filter the
+field list to flagged fields -- that filtered list is the overview the pane
+used to provide.
 
 ### Field Status Icons
 
-- 🟢 **Complete** - All required info filled
+- 🟢 **Complete** - All required info filled, or a human signed the field off
 - 🟡 **Needs Review** - Missing help text or spoken name
-- 🔴 **Error** - Missing required properties
+- 🔴 **Error** - Missing required properties (outranks a sign-off)
 
 ### Keyboard Shortcuts
 
@@ -564,9 +578,10 @@ Keep it simple:
 ### Visual Inspection
 
 **Use the PDF overlays**:
-- Green borders = fields ready for production
+- Green borders = complete, or you have signed the field off
 - Yellow borders = need your attention
-- Red borders = must fix before deploying
+- Red borders = must fix before deploying (a red field stays red even if
+  someone signed it off)
 - Click overlays to select fields instantly
 - Hover to see field names without selecting
 
@@ -627,15 +642,18 @@ If overlays don't show on PDF:
 
 ### Validation Errors
 
-Red errors in validation panel indicate schema issues:
+Schema issues surface as red chips on the affected field's row and as
+property-anchored blocks in the field editor (not in a bottom panel):
 - **Duplicate IDs** - Field IDs must be unique
 - **Missing sections** - Field references non-existent section
 - **Broken references** - show_if or require_if reference a missing field
 
 Fix by:
-1. Click on error to see field ID
-2. Find field in list
-3. Fix the property causing issue
+1. Click "M to review" in the progress strip to jump to the next flagged field
+   (or right-click it to filter the list to flagged fields only)
+2. Read the finding where it renders -- on the row, or anchored to the exact
+   property in the field editor
+3. Fix the property causing the issue
 
 ---
 
@@ -800,17 +818,20 @@ interface FieldOverlayProps {
 }
 ```
 
-**Color Logic**:
+**Color Logic** (`FieldOverlay.tsx`):
 ```typescript
-const status = checkFieldComplete(field);
-if (status.isComplete) {
-  // Green border
-} else if (status.needsReview) {
-  // Yellow border
-} else {
-  // Red border (has errors)
-}
+// statusFromFindings -- the SAME entry point the field list uses, so the
+// canvas and the rows can never disagree. It layers the human review
+// sign-off over checkFieldComplete's machine opinion, and lets a lint
+// ERROR outrank both.
+const status = statusFromFindings(field, lintFindings, pageCount);
+// 'complete'              -> green
+// 'review' | 'followup'   -> amber
+// otherwise (lint ERROR)  -> red
 ```
+An earlier version derived the colour from `checkFieldComplete(field)` alone.
+That ignored lint ERRORs and the guidance gate entirely, so the canvas could
+paint a field green while the list showed it flagged.
 
 **Border Styles**:
 - Normal: 2px border
