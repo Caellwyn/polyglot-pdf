@@ -161,7 +161,19 @@ export function checkFieldComplete(
   const isChoice =
     field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group';
   if (isChoice && options.length > 0) {
-    if (!field.pdf_field_name) {
+    // The unmapped-option check is gated on !field.pdf_field_name for
+    // select/radio, where a field-level name is the LEGITIMATE shared-name
+    // shape (one widget, options differing by pdf_on_value). It must NOT be
+    // gated that way for checkbox_group (bd polyglot-pdf-ufj7): v2 FORBIDS a
+    // field-level pdf_field_name there outright (form_models.py -- "a
+    // checkbox_group's boxes are independent widgets, so each option MUST
+    // carry its own pdf_field_name"), so a stray field-level name is itself
+    // invalid AND, under the old gate, short-circuited the whole branch --
+    // reporting ZERO errors for a group whose every option was genuinely
+    // unmapped and unfillable. The backend lint catches both, but only after a
+    // round-trip; the field list's at-a-glance status is this function alone.
+    const isCheckboxGroup = field.type === 'checkbox_group';
+    if (!field.pdf_field_name || isCheckboxGroup) {
       const unmapped = options.filter(o => !o?.pdf_field_name);
       if (unmapped.length === options.length) {
         errors.push('No PDF mapping: neither the field nor its options name a PDF widget');
@@ -169,6 +181,19 @@ export function checkFieldComplete(
         const names = unmapped.map(o => o?.label || String(o?.value ?? '?')).join(', ');
         errors.push(`Options missing a PDF widget mapping: ${names}`);
       }
+    }
+
+    // The stray field-level name is ALSO a defect in its own right, not just
+    // the thing that used to hide the check above (bd polyglot-pdf-ufj7). v2
+    // forbids it on a checkbox_group, and the backend lints it as its own
+    // ERROR, so reporting only the unmapped options would leave the author
+    // fixing symptoms while the invalid shape stayed.
+    if (isCheckboxGroup && field.pdf_field_name) {
+      errors.push(
+        `A checkbox group must not carry its own PDF field name ` +
+        `("${field.pdf_field_name}") -- each box is a separate widget, so the ` +
+        `name belongs on each option`,
+      );
     }
 
     // ALWAYS-ON sibling-collision check (bd polyglot-pdf-fyc7). Two options of

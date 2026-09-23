@@ -160,6 +160,59 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
     expect(status.isComplete).toBe(true);
   });
 
+  // bd polyglot-pdf-ufj7. The unmapped-option check used to be gated on
+  // !field.pdf_field_name for EVERY choice type. That gate is right for
+  // select/radio (a field-level name is the legitimate shared-name shape) but
+  // wrong for checkbox_group, where v2 forbids a field-level name outright --
+  // so a stray one short-circuited the branch and the group read GREEN with
+  // every option unmapped and unfillable.
+  describe('checkbox_group with a stray field-level PDF name (bd ufj7)', () => {
+    it('still flags unmapped options despite the stray field-level name', () => {
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: 'form1[0].bad[0]',
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black' },
+        ],
+      } as Partial<FormField>));
+      expect(status.isComplete).toBe(false);
+      expect(status.errors.some(e => e.includes('Black'))).toBe(true);
+    });
+
+    it('flags the stray field-level name as its own error', () => {
+      // Even with EVERY option correctly mapped, the invalid shape stands.
+      const status = checkFieldComplete(field('race', {
+        ...complete,
+        type: 'checkbox_group',
+        pdf_field_name: 'form1[0].bad[0]',
+        options: [
+          { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+          { value: 'black', label: 'Black', pdf_field_name: 'r[1]' },
+        ],
+      } as Partial<FormField>));
+      expect(status.isComplete).toBe(false);
+      expect(status.errors.some(e => e.includes('must not carry its own PDF field name'))).toBe(true);
+    });
+
+    it('does NOT apply the checkbox_group rule to a radio', () => {
+      // A field-level name IS the legitimate shared-name shape for radio --
+      // this is the carve-out that keeps the rule from reddening real groups.
+      const status = checkFieldComplete(field('marital', {
+        ...complete,
+        type: 'radio',
+        pdf_field_name: 'm',
+        options: [
+          { value: 'single', label: 'Single', pdf_on_value: 'S' },
+          { value: 'married', label: 'Married', pdf_on_value: 'M' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors).toEqual([]);
+      expect(status.isComplete).toBe(true);
+    });
+  });
+
   // bd polyglot-pdf-fyc7. The dropdown that CREATES mappings already refuses to
   // offer a sibling-claimed widget, but that only stops new duplicates made
   // through that one UI path. A schema arriving with one already baked in --
