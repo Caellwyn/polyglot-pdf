@@ -135,7 +135,7 @@ confirms the ACTIVE ruleset equals the repo file by hash.
 | Client magic-link token | a firm's client | `backend/services/link_tokens.py` (HMAC-signed; 128-bit CSPRNG `jti`; `exp` is the only time check) with `LINK_TOKEN_SECRET` from Secret Manager | `POST /api/links/open` (uniform 404), the paid-work gate, the WebSocket (first frame with C2, in PR; `?token=` today) | No key-version claim, so rotation is an all-at-once cutover (`polyglot-pdf-jx5u9`); the reopen check is not transactional (`mzhrp`, P3) |
 | Editor actor credential | schema-editor users | the editor's own auth (see `docs/components/auth.md`) | `require_editor_actor` on `/api/editor/*` | Separate system; never grants a voice-app or admin route |
 | Google OIDC token | Cloud Scheduler | Google | `require_google_oidc` on the expiry sweep | Audience-checked |
-| Runtime service identities | `polyglot-backend-sa`, the admin SA, `polyglot-cloudbuild-sa` | IAM | pinned lists in `test_deployed_iam_envelope.py`, `test_admin_sa_iam_envelope.py`, `setup-cloud-build.sh`; live-compared by `infra_posture.sh` | The Cloud Build identity is not yet provisioned on the project (see decisions) |
+| Runtime service identities | `polyglot-backend-sa`, the admin SA, `polyglot-cloudbuild-sa` | IAM | pinned lists in `test_deployed_iam_envelope.py`, `test_admin_sa_iam_envelope.py`, `setup-cloud-build.sh`; live-compared by `infra_posture.sh` | all three live; the posture run of 2026-09-23 read each identity's project roles equal to its pinned list (the Cloud Build identity was provisioned 2026-09-17 and gained its two missing roles the same week) |
 
 No password, API key or token is handled in plain text by the code: the
 public Firebase web API key is the one tracked "key" (public by design), and

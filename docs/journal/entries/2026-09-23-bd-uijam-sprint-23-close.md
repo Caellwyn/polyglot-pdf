@@ -49,7 +49,9 @@ sites serve the headers; container scanning, N/A then, now reads PASS.
   not been deployed since E2 merged; its next deploy carries the headers.
 - N/A, the script's own fault (seven checks; bd `kz7rv`): the four Firebase
   Auth reads fail because the script's request carries no quota-project
-  header -- the same read succeeds in-process under the same credentials --
+  header -- the same read succeeds in-process under the same credentials
+  (11 authorized domains, the count the posture doc's Firebase Auth row
+  cites) --
   and the three BigQuery reads shell out to the `bq` CLI, whose Python is
   broken on the operator machine (the telemetry code already left `bq`
   behind in `vm2fu`).
