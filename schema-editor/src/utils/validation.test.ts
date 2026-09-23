@@ -282,6 +282,24 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
       expect(status.errors).toHaveLength(1);
     });
 
+    it('does NOT apply the collision rule to a select (fresh-eyes finding)', () => {
+      // A select is ONE combobox widget: it fills by substituting a string
+      // into /V (resolve_select_fill_value) and never reads
+      // options[].pdf_field_name. So a shared per-option name there cannot
+      // cause the fill-time collision the message describes -- flagging it
+      // would name a consequence that cannot happen for this type.
+      const status = checkFieldComplete(field('state', {
+        ...complete,
+        type: 'select',
+        pdf_field_name: undefined,
+        options: [
+          { value: 'al', label: 'Alabama', pdf_field_name: 'combo' },
+          { value: 'ak', label: 'Alaska', pdf_field_name: 'combo' },
+        ],
+      } as Partial<FormField>));
+      expect(status.errors.some(e => e.includes('share one PDF widget'))).toBe(false);
+    });
+
     it('does not flag DIFFERENT widgets, nor a single claimant', () => {
       const distinct = checkFieldComplete(field('race', {
         ...complete,

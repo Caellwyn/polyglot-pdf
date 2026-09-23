@@ -216,6 +216,17 @@ export function checkFieldComplete(
     // pdf_on_values. Flagging every shared name would redden every legitimate
     // radio group in every shipped kit -- a detector whose false positives
     // outnumber its catches gets ignored, which is worse than not having it.
+    //
+    // SCOPED to radio + checkbox_group, NOT select (fresh-eyes finding). A
+    // select is ONE combobox widget: it fills by substituting a STRING into
+    // /V (resolve_select_fill_value), and never reads options[].pdf_field_name
+    // at all. So two select options carrying the same per-option widget name
+    // cannot produce the fill-time collision this message describes -- the
+    // message would name a consequence that cannot happen for that type.
+    // Radio (per-kid /AS write) and checkbox_group (independent widgets) are
+    // the two shapes where a shared name really does mis-fill.
+    const collisionApplies =
+      field.type === 'radio' || field.type === 'checkbox_group';
     const byWidget = new Map<string, Array<{ label: string; on: string }>>();
     for (const o of options) {
       const widget = o?.pdf_field_name;
@@ -226,7 +237,7 @@ export function checkFieldComplete(
       if (bucket) bucket.push({ label, on });
       else byWidget.set(widget, [{ label, on }]);
     }
-    for (const [widget, claimants] of byWidget) {
+    for (const [widget, claimants] of collisionApplies ? byWidget : []) {
       if (claimants.length < 2) continue;
       // Distinct, non-empty export codes on EVERY claimant = a real radio
       // group, correctly authored. Anything else (a blank code, or two
