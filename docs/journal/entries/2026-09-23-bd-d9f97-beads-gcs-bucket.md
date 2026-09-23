@@ -109,6 +109,20 @@ Python, since the mix of quoted-literal and unquoted-glob parts in the `case`
 patterns is exactly what an imitation would get wrong; cases include the app
 project's real agent numbers. Five more mutations, each red. 40 tests.
 
+**Provisioned on the dedicated project.** The maintainer created
+`polyglot-beads` (number 310323013200, under org 879824377574, billed to the
+same account as the app). Run as josh@caellwynai.com (the guard needs
+org-level IAM read), the script created `gs://polyglot-beads-beads` and read
+back all four settings. The guard was NOT vacuous: it evaluated six real
+ancestors-policy rows -- the maintainer as project owner, the maintainer's
+org-admin roles, and the org's default `domain:caellwynai.com` Project
+Creator / Billing Account Creator grants -- all allowed; no service account
+holds a role anywhere up the hierarchy. Ownership confirmed
+(`projectNumber` 310323013200, and the bucket lists under polyglot-beads),
+which closes the pre-registered-name concern in bd polyglot-pdf-radxe for this
+bucket. A second run took the "exists; converging" path, exited 0, and left
+every setting identical.
+
 ## Lessons
 
 **Scope the evidence to the claim, again.** Every setting appears three times
