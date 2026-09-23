@@ -15,7 +15,9 @@
     "",
     "ADD A CASE whenever either predicate gains or changes a clause. `ackSha1: \"@identity\"`",
     "is a placeholder each side replaces with the field's own natively-computed identity",
-    "hash (the two languages compute it differently but must agree on the value)."
+    "hash (the two languages compute it differently but must agree on the value).",
+    "",
+    "NOT COVERED, and provably UNCOVERABLE: 'a checkbox_group wrongly sets suppress_unmapped_scan'. That flag is unreachable for checkbox_group by construction -- the stray-field-level-name rule returns True before it is consulted, so the mutation is behaviourally inert and NO fixture case can redden on it. A case added for that dimension looks like coverage and is not; one was added and removed after the mutation stayed green (bd polyglot-pdf-sqkii)."
   ],
   "cases": [
     {
@@ -587,6 +589,37 @@
             "value": "a",
             "label": "A",
             "pdf_field_name": "w[0]"
+          }
+        ]
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "empty-string option names are NOT a collision on a radio (skip guard)",
+      "field": {
+        "name": "X",
+        "spoken_name": "x",
+        "help": {
+          "instructions": "Done."
+        },
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": []
+        },
+        "id": "radio_empty_names",
+        "type": "radio",
+        "pdf_field_name": "m",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pdf_field_name": ""
+          },
+          {
+            "value": "b",
+            "label": "B",
+            "pdf_field_name": ""
           }
         ]
       },
