@@ -8,7 +8,7 @@
 # dev's BUILD after landing -- never a deployed environment (#830's own
 # revert body says "dev does not build"; the backend pins contradicted each
 # other so pip install itself failed with ResolutionImpossible) -- because
-# the unit suites never exercise what a bump of these changes (every test stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI and Starlette run only under the in-process TestClient, never a real ASGI server), so a real bump cannot be validated by the suite. Every one of those PRs was
+# the unit suites never exercise what a bump of these changes (every test CI runs (-m "not external") stubs the Gemini SDK, none starts uvicorn or the websockets library, and FastAPI/Starlette run only in-process (TestClient or httpx.ASGITransport), never under a real ASGI server), so a real bump cannot be validated by the suite. Every one of those PRs was
 # actually RED in the job that mattered (e.g. #865 failed backend pytest,
 # unresolvable on websockets==17.1) and was merged by hand anyway -- CI
 # caught these, but CI here is advisory (see docs/standards/testing.md), not
@@ -17,7 +17,7 @@
 # at all; it does not depend on CI being green in the first place.
 #   - google-genai: the Live adapter (backend/adapters/live_ai_gemini.py) is
 #     written against the vendored docs/genai_docs 2.8 reference; every test
-#     stubs the SDK.
+#     CI runs (-m "not external") stubs the SDK.
 #   - websockets, uvicorn: the /ws/fill handshake broke on a websockets bump
 #     before (see docs/components/websocket-routing.md).
 #   - fastapi, starlette: #865 was a major-version jump (0.48 -> 1.6) that
