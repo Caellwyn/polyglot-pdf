@@ -39,6 +39,8 @@ from their own terminal at 23:13Z: 79 checks, 66 PASS, 2 FAIL, 11 N/A
 cleared: the Cloud Build identity now exists with its pinned roles, the
 bucket's public-access prevention is enforced, and four of the five Hosting
 sites serve the headers; container scanning, N/A then, now reads PASS.
+All three runtime identities (backend, admin, Cloud Build) read their live
+project roles equal to the pinned lists.
 
 - FAIL, accepted: two human accounts hold Owner -- the sole operator's two
   accounts, accepted in writing on 2026-09-17 (the posture doc's decisions
