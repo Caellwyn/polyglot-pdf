@@ -373,3 +373,71 @@ async def test_per_turn_emit_leaves_unset_ids_null_not_absent():
     assert kwargs["model"] == adapter._model_name
 
     await adapter.finalize()
+
+
+class _ThinkingUsageEventSession(_OneUsageEventSession):
+    """One billed turn that also reports thinking tokens, the way 3.8 does:
+    thoughts_token_count sits OUTSIDE response_tokens_details."""
+
+    def __init__(self, thoughts):
+        super().__init__()
+        self._thoughts = thoughts
+
+    def receive(self):
+        if self._generator is None:
+            thoughts = self._thoughts
+
+            async def gen():
+                usage = SimpleNamespace(
+                    prompt_token_count=100,
+                    response_token_count=20,
+                    thoughts_token_count=thoughts,
+                    total_token_count=120 + thoughts,
+                    prompt_tokens_details=[
+                        types.ModalityTokenCount(
+                            modality=types.Modality.TEXT, token_count=60),
+                        types.ModalityTokenCount(
+                            modality=types.Modality.AUDIO, token_count=40),
+                    ],
+                    response_tokens_details=[
+                        types.ModalityTokenCount(
+                            modality=types.Modality.TEXT, token_count=20),
+                    ],
+                )
+                yield SimpleNamespace(
+                    usage_metadata=usage,
+                    tool_call=None,
+                    server_content=None,
+                )
+            self._generator = gen()
+        return self._generator
+
+
+@pytest.mark.asyncio
+async def test_thinking_tokens_bill_at_the_text_output_rate():
+    """3.8 always reasons, and its thought tokens bill at the TEXT OUTPUT rate
+    but arrive outside response_tokens_details (bd polyglot-pdf-bd1zs). The
+    connection cost -- what the spend ceiling reads -- must include them.
+    Exact figure, so a handler that drops thoughts_token_count fails here."""
+    from backend.config import MODEL_NATIVE_STANDARD, get_pricing_for_model
+
+    adapter = LiveAIGemini(model=MODEL_NATIVE_STANDARD)
+    adapter._log = MagicMock()
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    session = _ThinkingUsageEventSession(thoughts=116)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    with patch("backend.adapters.live_ai_gemini.get_structured_logger"):
+        await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    p = get_pricing_for_model(MODEL_NATIVE_STANDARD)
+    expected = (60 * p["text_input"] + 40 * p["audio_input"]
+                + (20 + 116) * p["text_output"])
+    assert adapter.session_cost_usd() == pytest.approx(expected)
+    assert adapter._session_text_output_tokens == 20 + 116
+
+    await adapter.finalize()

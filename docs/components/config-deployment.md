@@ -48,9 +48,9 @@ which bypasses the cache).
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 2.5 standard (default for its audio-path behavior), `true` → 3.1 premium (**LOCAL-ONLY**: 3.1 exists only on AI Studio, and the Vertex-only startup guard cannot catch this flip — the premium id resolves before the `VERTEXAI` branch, so a deployed service starts then `1008`s at connect. Deploy 3.1 only once GA on Vertex. Opt-in; now tool-call-reliable since the untyped-param fix, `bd polyglot-pdf-wpw.4`). See [ai-models.md](../standards/ai-models.md). |
+| `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 3.8 standard (`gemini-3.8-live`, default), `true` → 3.1 premium (**LOCAL-ONLY**: 3.1 exists only on AI Studio, and the Vertex-only startup guard cannot catch this flip — the premium id resolves before the `VERTEXAI` branch, so a deployed service starts then `1008`s at connect. Deploy 3.1 only once GA on Vertex. Opt-in; now tool-call-reliable since the untyped-param fix, `bd polyglot-pdf-wpw.4`). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
-| `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default. Effect on native-audio Live is unverified upstream, so safe-if-ignored. See [voice-ai.md](voice-ai.md). |
+| `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default, and the default 3.8 gets NO thinking config (it `1007`s on one), so the flag is inert on 3.8. See [voice-ai.md](voice-ai.md). |
 | `USE_DTI` | `true` | Dynamic Turn Injection -- the shipped reduced-SI mode (code default flipped to `true` by bd `polyglot-pdf-7872` on 2026-07-11; `deploy-demo.sh` no longer needs to set it). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
 | `CONTINUOUS_SESSION` | `true` | Runs the whole form as one Gemini Live session bounded by context-window compression, instead of resetting the session per section (code default flipped to `true` alongside `USE_DTI` by bd `polyglot-pdf-7872`). Requires `USE_DTI`: if `CONTINUOUS_SESSION` is on and `USE_DTI` is off, `Settings` forces `USE_DTI` on and logs a warning rather than serve the inconsistent combination. `false` -> the legacy per-section-reset flow (used as the measurement-harness baseline). See [context-compression.md](context-compression.md). |
 | `SPELLBACK_TOOL_ENABLED` | `true` | Deterministic spell-back verification clip (bd 22h1f/44ywm): declares the `name_spellback` tool, appends the DTI spell-back addendum to the SI, and un-503s `POST /api/tts/spellback`. See [voice-ai.md](voice-ai.md) and the routes table in [../technical_guide.md](../technical_guide.md). |
@@ -93,11 +93,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   Vertex AI via `GOOGLE_CLOUD_PROJECT` + service-account ADC (no key needed;
   keeps request data private). `false` → Gemini Developer API (**AI Studio**),
   which authenticates **only** via `GEMINI_API_KEY` (no ADC/SA path). The demo
-  runs `VERTEXAI=true` (the privacy path). The standard native-audio model id
-  differs by backend, so `_resolve_model` is backend-aware: on Vertex the
-  standard tier resolves to `gemini-live-2.5-flash-native-audio` (the AI Studio
-  id 1008s on Vertex), so a Vertex deploy needs no `MODEL_NATIVE` pin. 3.1 is
-  AI-Studio-only as of 2026-06, so reaching it still requires `VERTEXAI=false`
+  runs `VERTEXAI=true` (the privacy path). `_resolve_model` is backend-aware
+  (Live ids have differed per backend); on Vertex the standard tier resolves to
+  `gemini-3.8-live`, the same id as on AI Studio, so a Vertex deploy needs no
+  `MODEL_NATIVE` pin. 3.1 is AI-Studio-only, so reaching it still requires `VERTEXAI=false`
   — which is a **LOCAL-ONLY** exercise: a deployed service refuses to start on
   that path (see the Vertex-only rule below). See
   [ai-models.md](../standards/ai-models.md).

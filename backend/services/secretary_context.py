@@ -1,7 +1,7 @@
 """Secretary context renderer -- the form info the cheap secretary model reads.
 
 PRODUCTION module (bd polyglot-pdf-jnjj.45a). The secretary
-(gemini-2.5-flash-lite) is a pure retrieval+reasoning specialist: it holds the
+(the lite MODEL_LABELING tier, gemini-3.1-flash-lite) is a pure retrieval+reasoning specialist: it holds the
 form's per-field context plus the client's current values and answers the
 principal's prose queries. This module renders that context, ALGORITHMICALLY, from
 the same inputs the secretary gets in production:

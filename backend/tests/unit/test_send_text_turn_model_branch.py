@@ -2,8 +2,10 @@
 
 The 3.1 family REJECTS send_client_content() text turns with close code 1007, so
 the adapter routes text turns by model family:
-  - 3.1 family  -> session.send_realtime_input(text=...)
-  - 2.5 / other -> session.send_client_content(turns=..., turn_complete=True)
+  - 3.1 family        -> session.send_realtime_input(text=...)
+  - 3.8 / 2.5 / other -> session.send_client_content(turns=..., turn_complete=True)
+(3.8 is the default standard tier; endpoint-verified to accept send_client_content
+on Vertex, bd polyglot-pdf-bd1zs.)
 (backend/adapters/live_ai_gemini.py _send_text_turn). test_model_selection.py
 covers only flag->model NAME resolution, never this send-path branch.
 
@@ -29,7 +31,10 @@ from backend.adapters.live_ai_gemini import LiveAIGemini
 # stale name. The precondition test then pins that these resolve to the expected
 # families.
 MODEL_3P1 = MODEL_NATIVE_PREMIUM
-MODEL_2P5 = MODEL_NATIVE_STANDARD
+MODEL_STANDARD = MODEL_NATIVE_STANDARD
+# 2.5 is no longer a tier constant, but an explicit MODEL_NATIVE pin can still
+# select it, so its send path stays pinned with a literal id.
+MODEL_2P5 = "gemini-live-2.5-flash-native-audio"
 
 
 def _adapter_for(model_name: str) -> LiveAIGemini:
@@ -41,6 +46,7 @@ def _adapter_for(model_name: str) -> LiveAIGemini:
 def test_model_family_mapping_precondition():
     """Guard the assumption the branch rests on: these names map as expected."""
     assert model_family(MODEL_3P1) == "3.1"
+    assert model_family(MODEL_STANDARD) == "3.8"
     assert model_family(MODEL_2P5) == "2.5"
 
 
@@ -60,6 +66,21 @@ async def test_3p1_uses_send_realtime_input_not_client_content():
 async def test_2p5_uses_send_client_content_not_realtime_input():
     """2.5 family keeps the pre-fix send_client_content shape (turns + turn_complete)."""
     adapter = _adapter_for(MODEL_2P5)
+    session = AsyncMock()
+
+    await adapter._send_text_turn(session, "hello world")
+
+    session.send_client_content.assert_awaited_once_with(
+        turns={"parts": [{"text": "hello world"}]},
+        turn_complete=True,
+    )
+    session.send_realtime_input.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_3p8_standard_uses_send_client_content_not_realtime_input():
+    """The default 3.8 tier sends text turns via send_client_content (verified on Vertex)."""
+    adapter = _adapter_for(MODEL_STANDARD)
     session = AsyncMock()
 
     await adapter._send_text_turn(session, "hello world")

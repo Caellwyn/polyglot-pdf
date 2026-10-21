@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
+*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: Live default 2.5 -> 3.8 with a `3.8` rate row and `DEFAULT_PRICING_FAMILY="3.8"`; `TEXT_GENERATION_PRICING` gains `gemini-3.1-flash-lite` (new lite default) and `gemini-3.5-flash-lite` (fallback); all rows re-verified against the pricing page.)*
+
 *Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
 
 *Last updated: 2026-09-18 (bd polyglot-pdf-vm2fu: `scripts/setup-telemetry.sh`'s sink-table detection now goes through a new `scripts/telemetry_bq_setup.py list-tables` subcommand instead of `bq ls --project_id=... --format=csv "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline swallowed stderr and treated an EMPTY listing as "no tables yet", indistinguishable from a `bq` CLI that failed to list at all (observed live: a broken `bq` shim on one machine returned nothing while the sink's stdout table was confirmed present via the same google-cloud-bigquery client this script already depends on for LOCATION derivation and the dataset-scoped IAM grants). `list-tables` exits non-zero with a message on any real API error, which the script now aborts on rather than silently reporting every gated cost view PENDING.)*
@@ -31,19 +33,27 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 ### Where the pieces live
 
 - **Rates** — `backend/config.py` holds `GEMINI_PRICING_BY_FAMILY`, a dict of
-  per-token rates keyed by model family (`"2.5"`, `"3.1"`). Rates are written as
-  per-1M list prices divided by `_PER_1M`. Verified against Google pricing
-  2026-05-30:
+  per-token rates keyed by model family (`"2.5"`, `"3.1"`, `"3.8"`). Rates are
+  written as per-1M list prices divided by `_PER_1M`. Verified against Google
+  pricing 2026-10-21:
 
   | Family | text-in | audio-in | text-out | audio-out |
   |--------|--------:|---------:|---------:|----------:|
-  | `2.5` (native-audio) | 0.50 | 3.00 | 2.00 | 12.00 |
+  | `3.8` (live; **default**) | 0.75 | 3.00 | 4.50 | 12.00 |
   | `3.1` (live preview) | 0.75 | 3.00 | 4.50 | 12.00 |
+  | `2.5` (native-audio) | 0.50 | 3.00 | 2.00 | 12.00 |
+
+  The `2.5` row stays so pre-migration session logs and an explicit 2.5
+  `MODEL_NATIVE` pin still price. Moving the default 2.5 → 3.8 leaves both
+  audio rates unchanged and raises text-in 0.50 → 0.75 and text-out
+  2.00 → 4.50 (output includes thinking tokens).
 
   `model_family(model_name)` maps a concrete model id to a family key with a
   version-bounded regex (so `gemini-3.1-flash` → `"3.1"` but `gemini-3.10-flash`
   does not). `get_pricing_for_model(model_name)` returns the rate row, falling
-  back to `DEFAULT_PRICING_FAMILY` (`"2.5"`) for unknown names. A legacy flat
+  back to `DEFAULT_PRICING_FAMILY` (`"3.8"`, never below any other row) for
+  unknown names. The fallback must not be `"2.5"`: the live adapter sends the
+  2.5-only `thinking_config` to the 2.5 family, which 3.8 rejects. A legacy flat
   `GEMINI_PRICING` alias still resolves to the default family's rates for older
   importers.
 
@@ -52,13 +62,19 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 
   `TEXT_GENERATION_PRICING` prices the plain `generate_content` endpoint (the
   secretary / validator / translation paths), per 1M tokens, verified against
-  ai.google.dev/gemini-api/docs/pricing on 2026-09-09:
+  ai.google.dev/gemini-api/docs/pricing on 2026-10-21:
 
-  | Model | text-in | cached-in | out |
-  |-------|--------:|----------:|----:|
-  | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 |
-  | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 |
-  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 |
+  | Model | text-in | cached-in | out | Role |
+  |-------|--------:|----------:|----:|------|
+  | `gemini-3.1-flash-lite` | 0.25 | 0.025 | 1.50 | default lite model (`MODEL_LABELING`, `TRANSLATION_VERIFY_BT_MODEL`) |
+  | `gemini-3.5-flash-lite` | 0.30 | 0.03 | 2.50 | lite-tier outage fallback |
+  | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 | not a default; env pin / old logs |
+  | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 | not a default; env pin / old logs |
+  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 | whole-form validator, authoring |
+
+  Moving the secretary/validator default from `gemini-2.5-flash` (which ran
+  because no deploy channel pinned `MODEL_LABELING`) to `gemini-3.1-flash-lite`
+  lowers those calls' rates (text-in 0.30 → 0.25, out 2.50 → 1.50).
 
   The `gemini-2.5-pro` row is the `<=200k`-token-prompt tier (this app's
   validator/translation prompts never approach 200k); the page's `>200k` tier
@@ -165,8 +181,11 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > re-inflates and the old "SI is everything" shape returns (cost/field rose 2.10x
 > across a form vs 1.15x with the derived window).
 >
-> (On **3.1** the split shifts again -- reasoning/thinking bills as *output*; but
-> 2.5 is the production tier.) Older source tables, superseded but retained for
+> **The production tier is now 3.8** (bd `polyglot-pdf-bd1zs`), and this split
+> has NOT been re-measured on it. Audio rates are identical to 2.5, so the
+> audio-in-leads ORDERING is expected to hold or strengthen; text-in costs 1.5x
+> more per token on 3.8, and any reasoning bills as *output* at 4.50. Re-run the
+> 89mt shape on 3.8 before quoting percentages for it. Older source tables, superseded but retained for
 > the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
 > and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
 

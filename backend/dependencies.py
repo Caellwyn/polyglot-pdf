@@ -29,8 +29,8 @@ def get_live_ai(settings: Settings = Depends(get_settings)) -> ILiveAI:
 
 def get_text_ai(settings: Settings = Depends(get_settings)) -> ITextAI:
     # Fresh instance per call (consistent with get_live_ai shape).
-    # Model: MODEL_LABELING env knob (default gemini-2.5-flash; pin to
-    # gemini-2.5-flash-lite in deploy env). Reuse decided in F3 contract
+    # Model: MODEL_LABELING env knob (default gemini-3.1-flash-lite, the lite
+    # tier). Reuse decided in F3 contract
     # (docs/standards/validation-delegation.md, contract 5).
     return TextAIGemini(
         api_key=settings.GEMINI_API_KEY,

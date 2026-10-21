@@ -72,10 +72,9 @@ where we prove it first.
 ### Working Features
 - ✅ Firebase Authentication (Google sign-in + email/password)
 - ✅ Authorized-email gating for sign-up (server-side check against the Admin-SDK-only `authorized_emails` collection)
-- ✅ Gemini Live API voice integration (native audio-to-audio); default 2.5
-  native-audio (backend-aware id: `gemini-live-2.5-flash-native-audio` on Vertex,
-  `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio), with
-  `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only, so **local dev only** until it is GA on Vertex)
+- ✅ Gemini Live API voice integration (native audio-to-audio); default
+  `gemini-3.8-live` (same id on Vertex and AI Studio), with
+  `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only, so **local dev only**)
 - ✅ Schema-driven form filling; continuous single-session flow is the default
   (`CONTINUOUS_SESSION` + `USE_DTI`), with the legacy per-section reset flow kept
   as an env-flippable fallback
@@ -131,7 +130,7 @@ export GOOGLE_CLOUD_PROJECT=your_gcp_project
 ```
 
 To use the **Gemini Developer API (AI Studio)** instead — e.g. to run the premium
-`gemini-3.1-flash-live-preview` model, which is not yet on Vertex — set
+`gemini-3.1-flash-live-preview` model, which is not on Vertex — set
 `VERTEXAI=false` and provide an API key. This is a **local-development-only**
 path: a deployed service refuses to start on it (see
 [Deployment](#backend-google-cloud-run)).
@@ -429,7 +428,7 @@ sessionStorage.clear()
 - ❌ Modify `.venv` or example files
 
 **Always Do:**
-- ✅ Use the configured native-audio model (`MODEL_NATIVE`); default is the 2.5 native-audio tier, resolved backend-aware (`gemini-live-2.5-flash-native-audio` on Vertex, `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio)
+- ✅ Use the configured native-audio model (`MODEL_NATIVE`); default is the standard tier, `gemini-3.8-live` (the same id on Vertex and AI Studio)
 - ✅ Create unit tests before making changes
 - ✅ Maintain stateless backend (client = source of truth)
 - ✅ Update the relevant tier-2 doc + add a journal entry after code changes

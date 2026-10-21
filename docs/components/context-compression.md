@@ -22,8 +22,11 @@ See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journa
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
 > `CONTEXT_COMPRESSION_ENABLED` defaults TRUE; the continuous whole-form session
-> is bounded by the sliding window on every production connect. Sliding-window
-> eviction is real and reliable on both tiers -- `gemini-3.1-flash-live-preview`
+> is bounded by the sliding window on every production connect. The default
+> `gemini-3.8-live` ACCEPTS the compression config (Vertex connect with the
+> production config, 2026-10-21) but its eviction behavior has NOT been measured.
+> Sliding-window eviction is real and reliable on the two models it was measured
+> on -- `gemini-3.1-flash-live-preview`
 > (3/3 twenty-turn runs, 3-4 evictions each, 54-74% below the unbounded baseline
 > at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) and
 > `gemini-2.5-flash-native-audio-preview-12-2025` (2-3 evictions each; ON

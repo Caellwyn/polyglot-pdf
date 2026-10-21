@@ -102,7 +102,7 @@ Then in a Chrome tab (see RUNBOOK steps 2-7 for the exact JS):
 ## Reporting
 
 `runCycle` already classifies PASS/FAIL/FLAKY. For confidence, rerun the whole
-cycle (reload + redo) up to 3x and report the rate + model (2.5 default vs 3.1
+cycle (reload + redo) up to 3x and report the rate + model (3.8 default vs 3.1
 premium, which skips tool calls more). On non-PASS, capture
 `read_console_messages` and the backend stdout.
 

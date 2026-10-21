@@ -41,6 +41,8 @@ class TestModelFamilyMapping:
             ("gemini-live-2.5-flash-preview", "2.5"),
             ("gemini-3.1-flash-live-preview", "3.1"),
             ("GEMINI-3.1-FLASH-LIVE-PREVIEW", "3.1"),  # case-insensitive
+            ("gemini-3.8-live", "3.8"),
+            ("gemini-3.8-live-extended-thinking", "3.8"),
         ],
     )
     def test_known_models_map_to_family(self, model_name, expected):
@@ -93,6 +95,25 @@ class TestFamilyKeyedRates:
     def test_known_token_count_yields_3_1_rate(self):
         # 3.1: 0.75 + 3.00 + 4.50 + 12.00 per 1M each = $20.25 for the bundle.
         assert _cost("gemini-3.1-flash-live-preview") == pytest.approx(20.25)
+
+    def test_known_token_count_yields_3_8_rate(self):
+        # 3.8 (the default tier) shares 3.1's pricing section on the page:
+        # 0.75 + 3.00 + 4.50 + 12.00 per 1M = $20.25 (verified 2026-10-21).
+        assert _cost("gemini-3.8-live") == pytest.approx(20.25)
+        p38 = get_pricing_for_model("gemini-3.8-live")
+        assert p38["text_input"] == pytest.approx(0.75 / 1_000_000)
+        assert p38["audio_input"] == pytest.approx(3.00 / 1_000_000)
+        assert p38["text_output"] == pytest.approx(4.50 / 1_000_000)
+        assert p38["audio_output"] == pytest.approx(12.00 / 1_000_000)
+
+    def test_unknown_model_never_bills_below_any_family(self):
+        # The fallback family is the costliest row per column, so an unknown
+        # model is over- rather than under-estimated.
+        from backend.config import GEMINI_PRICING_BY_FAMILY
+        fallback = get_pricing_for_model("gemini-9.9-unknown")
+        for row in GEMINI_PRICING_BY_FAMILY.values():
+            for column, rate in row.items():
+                assert fallback[column] >= rate, column
 
     def test_2_5_and_3_1_costs_differ(self):
         # The whole point of family keying: same tokens, different bill.

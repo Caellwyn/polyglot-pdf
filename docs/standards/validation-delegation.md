@@ -11,13 +11,15 @@ bump; a prose-only stamp-chain prune must not clear that signal.)*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
-cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
+cheap lite-tier TEXT model (the "validator"; `gemini-3.1-flash-lite` by default,
+see [ai-models.md](ai-models.md)) that, at section and
 form boundaries, reads the client's current form state and catches cross-field
 contradictions (zip-vs-state, contradictory addresses, future-dated births) that
 field-level validation cannot see. It exists as a defense-in-depth second-pass
 net, ADDITIVE TO (not a replacement for) the in-system-instruction
 ADDRESS-CONSISTENCY prose the Live model still carries: the B-pillar rescope of
-2026-06-17 (bd polyglot-pdf-jnjj) found flash-lite contradiction recall (0.853)
+2026-06-17 (bd polyglot-pdf-jnjj) found flash-lite contradiction recall (0.853,
+measured on `gemini-2.5-flash-lite`; not re-measured on 3.1)
 below the in-SI check's recall (1.000) and kept the prose as the primary check
 (the `"ADDRESS CONSISTENCY:"` block in `backend/config.py`; see `backend/services/validator_service.py`'s
 module docstring). The validator adds zero false positives on the G1 corpus, so
@@ -75,7 +77,7 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   for implicit caching; logs `cached_content_token_count` on every call (`cache_hit`
   bool) for observability. **Model-fallback (jnjj.42, hardened jnjj.45/j268):**
   `_generate()` walks an ordered LITE-tier Gemini chain (configured model ->
-  `DEFAULT_FALLBACK_MODELS`: just `gemini-3.1-flash-lite`) on a transient
+  `DEFAULT_FALLBACK_MODELS`: just `gemini-3.5-flash-lite`) on a transient
   availability error (5xx, or 404/429). The chain stays lite-tier ON PURPOSE
   (cost) -- the full `gemini-flash-latest` is NOT a fallback, and the invalid
   `gemini-flash-lite-latest` string was removed (j268). Auth/config 4xx
@@ -92,8 +94,10 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   `backend/services/secretary_context.py` (jnjj.45a). The blocking call is
   timeout-guarded by `FormFillingService.handle_ask_secretary` (jnjj.45c).
 - Wiring: `backend/dependencies.py::get_text_ai()` constructs a `TextAIGemini`
-  reading `settings.MODEL_LABELING` (default `gemini-2.5-flash`; set
-  `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).
+  reading `settings.MODEL_LABELING` (default `gemini-3.1-flash-lite`, the lite
+  validator tier; no deploy channel pins it). The Vertex client is built at the
+  `global` location (`TextAIGemini.DEFAULT_VERTEX_LOCATION`) because the 3.x
+  lite models are not served at `us-central1`.
   On the `/ws/fill` path that client is **process-cached and shared across
   sessions** (bd polyglot-pdf-4hnyq -- it is stateless, so sharing is safe and
   removes ~3s from every handshake); only `get_live_ai` stays per-connection,
@@ -586,8 +590,8 @@ Rationale (this is a decide-by-default call -- naming, no external contract):
   then. Reversible default, taken now; note left here for the maintainer to
   overturn if they prefer the clearer name up front.
 
-Set the validator id to `gemini-2.5-flash-lite` via this knob (its default stays
-`gemini-2.5-flash`; the env pins the lite tier where the validator runs).
+The knob's default IS the lite validator id (`gemini-3.1-flash-lite`), so no
+deploy env pin is needed.
 
 ---
 
