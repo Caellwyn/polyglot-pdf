@@ -355,9 +355,9 @@ production default (bd polyglot-pdf-7872):
 | Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for all of this | **Keep** |
 | Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | Connect race fix, orthogonal | **Keep** |
 
-Related design idea on file (maintainer, 2026-06-12): a **2.5 -> 3.1 mid-session
-failover** -- default to 2.5 for its much lower turn latency, and on a `1011` from
-the 2.5 backend immediately open a 3.1 session rehydrated from client state for a
+Related design idea on file (maintainer, 2026-06-12): a **mid-session model
+failover** -- on a `1011` from the default backend (2.5 when this was filed; 3.8
+since bd `polyglot-pdf-bd1zs`) immediately open a session on another Live model rehydrated from client state for a
 seamless model switch (bd `polyglot-pdf-3v5m`). The stateless handshake makes this
 architecturally cheap; it is a separate bead, not part of the compression epic.
 

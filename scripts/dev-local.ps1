@@ -76,7 +76,7 @@
 
 .EXAMPLE
   ./scripts/dev-local.ps1
-  Start both servers on the 2.5 model (the deployed default) with full dev logging.
+  Start both servers on the 3.8 model (the deployed default) with full dev logging.
 
 .EXAMPLE
   ./scripts/dev-local.ps1 -Model premium
