@@ -351,20 +351,24 @@ vs. maintainer merge"), and deploys stay manual
 suite, enforced per-PR by [`/closeout`](../doctrine/review-flow.md) (which runs
 the backend suite before opening the PR), remains the real gate.
 
-**Dependabot batches only minor and patch backend updates.** The weekly
-`all-pip-backend` group in `.github/dependabot.yml` carries
-`update-types: [minor, patch]`, so a MAJOR bump of any backend package arrives
-as its own single-package PR rather than inside the batch (bd
-polyglot-pdf-niwcu, after the grouped `#882` carried seven majors and broke the
-staging verify gate). The five voice-path packages (google-genai, websockets,
+**Dependabot batches only minor and patch updates.** Every group in
+`.github/dependabot.yml` -- the backend pip group, the three npm groups
+(frontend, schema-editor, admin-console) and the GitHub Actions group --
+carries `update-types: [minor, patch]`, so a MAJOR bump of any package arrives
+as its own single-package PR rather than inside a batch (bd
+polyglot-pdf-niwcu for pip, bd polyglot-pdf-fx8gg for the rest: the grouped
+`#882` and `#880`/`#884`/`#885` carried untested majors, were merged red,
+broke the staging verify gate, and were pinned back / reverted in
+`#887`/`#888`). The five voice-path pip packages (google-genai, websockets,
 uvicorn, fastapi, starlette) are excluded from automatic bumps altogether, and
 the npm groups exclude the TypeScript toolchain the same way (see
-`docs/doctrine/promotion-tiers.md`). Packages pinned back from `#882` are
-HELD the same way (fully ignored and excluded) until their own upgrade bead
-lands, because several of those jumps were MINOR to Dependabot (PyMuPDF
-1.24 -> 1.28, soundfile 0.12 -> 0.14) and would otherwise return in the next
-batch; each upgrade's PR removes its own entry. All of it is pinned by
-`tests/test_dependabot_config.py` (`HELD_FOR_UPGRADE` names the held set), which
+`docs/doctrine/promotion-tiers.md`). Packages pinned back or reverted in
+those PRs are HELD the same way (fully ignored and excluded) until their own
+upgrade bead lands, because several of the jumps were MINOR to Dependabot
+(PyMuPDF 1.24 -> 1.28, soundfile 0.12 -> 0.14) and a major-only rule would
+still let others race the validated upgrade; each upgrade's PR removes its own
+entries. All of it is pinned by `tests/test_dependabot_config.py`
+(`HELD_FOR_UPGRADE` and `NPM_HELD_FOR_UPGRADE` name the held sets), which
 parses the YAML.
 
 **xfail counts as pass everywhere.** A spec-test that documents a known defect is
