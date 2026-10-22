@@ -52,7 +52,7 @@ import sys
 from collections import Counter, OrderedDict
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))

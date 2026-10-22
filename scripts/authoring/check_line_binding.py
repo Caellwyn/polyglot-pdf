@@ -310,7 +310,7 @@ def marker_for_widget(markers, rect) -> Optional[str]:
 
 def check(schema: dict, pdf_path: str) -> dict:
     try:
-        import fitz  # PyMuPDF
+        import pymupdf as fitz  # PyMuPDF
     except ImportError:  # pragma: no cover - env-dependent
         return {"error": "PyMuPDF (fitz) is required", "findings": [],
                 "checked": 0, "markers": 0}

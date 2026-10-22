@@ -431,7 +431,7 @@ def test_held_out_note_widget_claims_match_the_real_pdf():
     """Anchor the NOTE's widget claims to the actual PDF so the analysis can
     never silently drift from the form it describes (fresh-eyes round 1: the
     first draft of the note had the LLC box mis-mapped)."""
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     kit = _REPO / "form-kits" / "w9-heldout"
     note = (kit / "NOTE.md").read_text(encoding="utf-8")
 

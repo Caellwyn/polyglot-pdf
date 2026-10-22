@@ -49,7 +49,7 @@ needs_f1040 = pytest.mark.skipif(
 needs_w7 = pytest.mark.skipif(
     not _W7_PDF.exists(), reason="w7 kit not present")
 
-pytest.importorskip("fitz", reason="PyMuPDF required for the geometry oracle")
+pytest.importorskip("pymupdf", reason="PyMuPDF required for the geometry oracle")
 
 
 # --------------------------------------------------------------------------- #
@@ -234,7 +234,7 @@ def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
     asserts the marker set directly, so the rule cannot silently rot behind a
     coincidence.
     """
-    import fitz
+    import pymupdf as fitz
     markers = clb.collect_markers(fitz.open(str(_F1040_PDF))[0])
     assert markers, "the real gutters must still be found"
     legend = [m for m in markers if abs(m[1] - 278.0) < 3 or abs(m[1] - 357.2) < 3]
@@ -416,7 +416,7 @@ def test_collect_markers_is_byte_identical_on_every_page_of_the_shipped_kits(kit
     summed count, which a marker moving between pages (or one marker
     swapping for a different one at the same count) would not catch.
     """
-    import fitz
+    import pymupdf as fitz
 
     pdf_path = _REPO / "form-kits" / kit / "form.pdf"
     if not pdf_path.exists():
@@ -446,7 +446,7 @@ def test_the_page2_prose_column_is_suppressed_by_the_ROW_guard():
     a vertical band. So the risk is prose sharing a ROW with an entry widget, not
     prose merely being near one.
     """
-    import fitz
+    import pymupdf as fitz
 
     page = fitz.open(str(_F1040_PDF))[1]
     prose = [m for m in clb.collect_markers(page) if 155 <= m[1] <= 175]
@@ -486,7 +486,7 @@ def test_uniqueness_is_a_PER_COLUMN_rule_not_a_per_page_one():
     page 1; up to three times on page 2). Hoisting the check to page scope would
     reject both real gutters and take the tool from 20 findings to 0.
     """
-    import fitz
+    import pymupdf as fitz
     from collections import Counter
 
     doc = fitz.open(str(_F1040_PDF))

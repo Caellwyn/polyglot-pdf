@@ -39,7 +39,7 @@ import sys
 
 import pytest
 
-fitz = pytest.importorskip("fitz")
+fitz = pytest.importorskip("pymupdf")
 
 _REPO = pathlib.Path(__file__).resolve().parent.parent
 SCRIPT_PATH = _REPO / "scripts" / "schema_score.py"

@@ -248,7 +248,7 @@ def _resolve_claimants(
 def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
              png_dir: Optional[str] = None) -> dict:
     try:
-        import fitz  # PyMuPDF
+        import pymupdf as fitz  # PyMuPDF
     except ImportError:  # pragma: no cover - env-dependent
         return {"error": "PyMuPDF (fitz) is required"}
 

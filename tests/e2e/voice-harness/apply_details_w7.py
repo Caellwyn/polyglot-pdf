@@ -30,7 +30,7 @@ import json
 import re
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 WT = Path(__file__).resolve().parents[3]
 SCHEMA = WT / "frontend" / "public" / "form-kits" / "w7" / "schema.json"

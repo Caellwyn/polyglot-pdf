@@ -87,7 +87,7 @@ def test_f1040_income_lines_fill_onto_their_own_printed_rows():
     import asyncio
     import json
 
-    import fitz
+    import pymupdf as fitz
 
     from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
     from scripts.authoring.check_line_binding import collect_markers, marker_for_widget
@@ -152,7 +152,7 @@ def test_f1040_write_in_boxes_bind_by_geometry_not_by_row():
     """
     import json
 
-    import fitz
+    import pymupdf as fitz
 
     kit_dir = _REPO / "form-kits" / "f1040"
     if not (kit_dir / "form.pdf").exists():
@@ -243,7 +243,7 @@ def test_stored_pdf_position_agrees_with_the_claimed_widget(kit):
     """
     import json
 
-    import fitz
+    import pymupdf as fitz
 
     kit_dir = _REPO / "form-kits" / kit
     if not (kit_dir / "form.pdf").exists():

@@ -31,7 +31,7 @@ import sys
 from collections import OrderedDict
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 _TYPE_NAMES = {

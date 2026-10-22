@@ -42,7 +42,7 @@ import subprocess
 import sys
 from typing import Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 # Suppress the child console window every subprocess opens on Windows
 # (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than

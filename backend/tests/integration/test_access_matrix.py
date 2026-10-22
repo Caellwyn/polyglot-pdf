@@ -148,7 +148,7 @@ class _AccessMatrixStore:
         # trick test_http_route_auth.py's _TwoKitStore uses, needed for any
         # matrix case that reaches the real /api/fill-pdf PyMuPDF render
         # rather than stopping at the auth gate.
-        import fitz
+        import pymupdf as fitz
 
         doc = fitz.open()
         doc.new_page()

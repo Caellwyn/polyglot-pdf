@@ -3,7 +3,7 @@ PDF Schema Extractor
 This module extracts form schema information from a PDF file.
 """
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 from datetime import datetime
 import json
 from pathlib import Path
