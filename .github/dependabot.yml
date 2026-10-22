@@ -95,9 +95,6 @@ updates:
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
           - "structlog"
-          - "pytest"
-          - "pytest-asyncio"
-          - "pytest-cov"
           - "PyMuPDF"
           - "librosa"
           - "soundfile"
@@ -118,9 +115,6 @@ updates:
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
       - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
-      - dependency-name: "pytest"                # bd polyglot-pdf-oy37r
-      - dependency-name: "pytest-asyncio"        # bd polyglot-pdf-oy37r
-      - dependency-name: "pytest-cov"            # bd polyglot-pdf-oy37r
       - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
       - dependency-name: "librosa"               # bd polyglot-pdf-m9h4w
       - dependency-name: "soundfile"             # bd polyglot-pdf-m9h4w
