@@ -73,7 +73,17 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # MINOR + PATCH only (bd polyglot-pdf-niwcu). A MAJOR bump of any other
+      # package arrives as its own single-package PR, never inside the batch:
+      # #882 grouped four majors (structlog 23->26, pytest-asyncio 0.21->1.4,
+      # firebase-admin 6->7, google-cloud-storage 2->3) with 15 harmless bumps,
+      # broke the staging verify gate (structlog 26 let exception messages --
+      # client field values -- reach the logs), and had to be pinned back.
+      # A single-package PR is reviewable and revertible on its own.
       all-pip-backend:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
         exclude-patterns:
