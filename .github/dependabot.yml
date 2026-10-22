@@ -95,7 +95,7 @@ updates:
           - "starlette"
           # COUPLED (bd polyglot-pdf-1aq49): firebase-admin 7.x pins httpx[http2]
           # EXACTLY (==0.28.1), so an httpx bump inside the batch cannot resolve.
-          # Kept out of the group; it moves with a firebase-admin bump instead.
+          # Kept out of the group; a firebase-admin upgrade PR must bump it by hand.
           - "httpx"
           # HELD until its upgrade bead lands (see the ignore: block below).
           - "structlog"
