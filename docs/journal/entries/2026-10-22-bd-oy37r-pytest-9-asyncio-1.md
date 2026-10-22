@@ -19,7 +19,7 @@ Pytest-plugin majors change implicit fixtures; tests that relied on a side effec
 
 ## Doc freshness
 
-docs/standards/testing.md names no pytest-asyncio version or loop behavior; reviewed, unchanged.
+docs/standards/testing.md: its "Dep pins" line updated to pytest 9.1.1 / pytest-asyncio 1.4.0.
 
 ## Files touched
 
