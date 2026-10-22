@@ -322,8 +322,6 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
 HELD_FOR_UPGRADE = {
     "structlog": "polyglot-pdf-6wkzi",
     "PyMuPDF": "polyglot-pdf-k5dnc",
-    "firebase-admin": "polyglot-pdf-d5rsx",
-    "google-cloud-storage": "polyglot-pdf-d5rsx",
 }
 
 
@@ -423,3 +421,14 @@ def test_every_npm_held_package_is_declared_by_some_app():
             declared.update(pkg.get(section, {}))
     stray = [p for p in NPM_HELD_FOR_UPGRADE if p not in declared]
     assert not stray, "held but declared by no app: " + repr(stray)
+
+
+def test_httpx_is_held_while_firebase_admin_exact_pins_it():
+    """firebase-admin 7.x declares httpx[http2]==0.28.1 (an EXACT pin), so an
+    httpx bump in the grouped batch would be unresolvable (bd polyglot-pdf-1aq49).
+    Drop this hold only together with a firebase-admin that relaxes the pin."""
+    update = _pip_backend_update(_load_dependabot_config())
+    ignored = {e["dependency-name"]: e for e in update.get("ignore", []) if "dependency-name" in e}
+    assert "httpx" in ignored and not ({"versions", "update-types"} & set(ignored["httpx"]))
+    for name, group in update.get("groups", {}).items():
+        assert "httpx" in group.get("exclude-patterns", []), name

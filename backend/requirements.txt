@@ -13,9 +13,9 @@ structlog==23.2.0
 pydantic==2.13.5
 python-multipart==0.0.32
 PyMuPDF==1.24.14
-google-cloud-storage==2.18.2
+google-cloud-storage==3.14.1
 google-cloud-texttospeech==2.37.0
-firebase-admin==6.6.0
+firebase-admin==7.6.0
 google-auth==2.58.0
 google-cloud-bigquery==3.45.2
 google-cloud-build==3.39.0
