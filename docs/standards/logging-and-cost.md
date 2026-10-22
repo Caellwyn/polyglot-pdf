@@ -466,6 +466,15 @@ processor renders the exception MESSAGE, and in a form-filling app that
 message can embed a field value (a parse error over an A-number, a validation
 error naming a date of birth) -- a P0 (bd `polyglot-pdf-p84m`).
 
+The processor alone is not enough on structlog >= 24, whose stock
+`BoundLogger.exception()` forwards to `logging.Logger.exception` and so puts the
+live exception on the stdlib LogRecord -- the handler's Formatter would then
+print the full traceback, message included, after the scrubbed JSON line. The
+configured `wrapper_class` is therefore `PiiSafeBoundLogger`, whose `.exception()`
+routes through `.error()` so exc_info never leaves the processor chain (bd
+`polyglot-pdf-6wkzi`). Both halves are load-bearing; reverting either reopens the
+leak, and `tests/test_structlog_json_output.py` fails on either.
+
 Every `.exception(...)` / `exc_info=True` site under `backend/` or `admin_backend/` renders
 through this one processor, which emits:
 
