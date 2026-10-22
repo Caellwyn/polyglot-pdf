@@ -94,7 +94,6 @@ updates:
           - "fastapi"
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
-          - "structlog"
           - "PyMuPDF"
           - "librosa"
           - "soundfile"
@@ -114,7 +113,6 @@ updates:
       # PR. Each upgrade bead's PR REMOVES its own entries here (and from the
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
-      - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
       - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
       - dependency-name: "librosa"               # bd polyglot-pdf-m9h4w
       - dependency-name: "soundfile"             # bd polyglot-pdf-m9h4w
