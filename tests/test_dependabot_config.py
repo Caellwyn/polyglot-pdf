@@ -87,6 +87,8 @@ exclude-patterns or ignore: list fails
 test_all_ts_toolchain_packages_are_excluded_from_every_npm_group /
 test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update.
 """
+import re
+
 import yaml
 from pathlib import Path
 
@@ -309,3 +311,56 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
                 "pip group '{}' batches update-types {} -- majors must not be "
                 "grouped".format(group_name, types)
             )
+
+
+# Packages pinned back from #882 and HELD out of Dependabot until their own
+# upgrade bead lands (bd polyglot-pdf-niwcu). Several #882 jumps were MINOR to
+# Dependabot (PyMuPDF 1.24 -> 1.28, soundfile 0.12 -> 0.14, 0.x librosa /
+# pytest-asyncio), so the minor+patch group alone would re-propose them in the
+# next batch, around the validation each bead exists to do. An upgrade bead's
+# PR removes its packages from this map AND from dependabot.yml together.
+HELD_FOR_UPGRADE = {
+    "structlog": "polyglot-pdf-6wkzi",
+    "pytest": "polyglot-pdf-oy37r",
+    "pytest-asyncio": "polyglot-pdf-oy37r",
+    "pytest-cov": "polyglot-pdf-oy37r",
+    "PyMuPDF": "polyglot-pdf-k5dnc",
+    "librosa": "polyglot-pdf-m9h4w",
+    "soundfile": "polyglot-pdf-m9h4w",
+    "firebase-admin": "polyglot-pdf-d5rsx",
+    "google-cloud-storage": "polyglot-pdf-d5rsx",
+}
+
+
+def test_held_packages_are_fully_ignored_and_excluded_from_every_pip_group():
+    update = _pip_backend_update(_load_dependabot_config())
+    ignored = {
+        e["dependency-name"]: e for e in update.get("ignore", []) if "dependency-name" in e
+    }
+    missing = [p for p in HELD_FOR_UPGRADE if p not in ignored]
+    assert not missing, "held packages missing from ignore: " + repr(missing)
+    scoped = [p for p in HELD_FOR_UPGRADE
+              if "versions" in ignored[p] or "update-types" in ignored[p]]
+    assert not scoped, (
+        "held packages only PARTIALLY ignored (a scoped ignore still lets a "
+        "minor bump through): " + repr(scoped)
+    )
+    for group_name, group in update.get("groups", {}).items():
+        excluded = set(group.get("exclude-patterns", []))
+        absent = [p for p in HELD_FOR_UPGRADE if p not in excluded]
+        assert not absent, "group '{}' does not exclude held packages: {}".format(
+            group_name, absent)
+
+
+def test_every_held_package_is_actually_pinned_in_the_requirements():
+    """A held entry for a package no requirements file pins is dead config --
+    usually a typo that leaves the real package unheld."""
+    backend = Path(__file__).resolve().parents[1] / "backend"
+    pinned = set()
+    for name in ("requirements.txt", "requirements-dev.txt"):
+        for line in (backend / name).read_text(encoding="utf-8").splitlines():
+            m = re.match(r"\s*([A-Za-z0-9_.\-]+)(\[[^\]]*\])?\s*==", line)
+            if m:
+                pinned.add(m.group(1).lower())
+    stray = [p for p in HELD_FOR_UPGRADE if p.lower() not in pinned]
+    assert not stray, "held but not pinned in backend requirements: " + repr(stray)

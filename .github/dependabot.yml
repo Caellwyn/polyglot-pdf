@@ -93,12 +93,39 @@ updates:
           - "uvicorn"
           - "fastapi"
           - "starlette"
+          # HELD until its upgrade bead lands (see the ignore: block below).
+          - "structlog"
+          - "pytest"
+          - "pytest-asyncio"
+          - "pytest-cov"
+          - "PyMuPDF"
+          - "librosa"
+          - "soundfile"
+          - "firebase-admin"
+          - "google-cloud-storage"
     ignore:
       - dependency-name: "google-genai"
       - dependency-name: "websockets"
       - dependency-name: "uvicorn"
       - dependency-name: "fastapi"
       - dependency-name: "starlette"
+      # HELD packages (bd polyglot-pdf-niwcu): pinned back from #882 and being
+      # upgraded deliberately, each behind its own validation. Several of their
+      # #882 jumps were MINOR by Dependabot's reckoning (PyMuPDF 1.24 -> 1.28,
+      # soundfile 0.12 -> 0.14, and 0.x bumps of librosa / pytest-asyncio), so
+      # update-types alone would put them straight back into the next grouped
+      # PR. Each upgrade bead's PR REMOVES its own entries here (and from the
+      # exclude-patterns above and HELD_FOR_UPGRADE in
+      # tests/test_dependabot_config.py) when it lands.
+      - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
+      - dependency-name: "pytest"                # bd polyglot-pdf-oy37r
+      - dependency-name: "pytest-asyncio"        # bd polyglot-pdf-oy37r
+      - dependency-name: "pytest-cov"            # bd polyglot-pdf-oy37r
+      - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
+      - dependency-name: "librosa"               # bd polyglot-pdf-m9h4w
+      - dependency-name: "soundfile"             # bd polyglot-pdf-m9h4w
+      - dependency-name: "firebase-admin"        # bd polyglot-pdf-d5rsx
+      - dependency-name: "google-cloud-storage"  # bd polyglot-pdf-d5rsx
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:

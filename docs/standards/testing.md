@@ -343,6 +343,13 @@ audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
 against `.secrets.baseline`, bandit, and semgrep (Python + TypeScript
 rulesets); every one of its scanner steps is `continue-on-error`, so it
 reports and never gates either.
+It is **not** a required status check: the merge gate is the closeout merge
+decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
+merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
+vs. maintainer merge"), and deploys stay manual
+([config-deployment.md](../components/config-deployment.md)). The **local**
+suite, enforced per-PR by [`/closeout`](../doctrine/review-flow.md) (which runs
+the backend suite before opening the PR), remains the real gate.
 
 **Dependabot batches only minor and patch backend updates.** The weekly
 `all-pip-backend` group in `.github/dependabot.yml` carries
@@ -352,15 +359,13 @@ polyglot-pdf-niwcu, after the grouped `#882` carried seven majors and broke the
 staging verify gate). The five voice-path packages (google-genai, websockets,
 uvicorn, fastapi, starlette) are excluded from automatic bumps altogether, and
 the npm groups exclude the TypeScript toolchain the same way (see
-`docs/doctrine/promotion-tiers.md`). All of it is pinned by
-`tests/test_dependabot_config.py`, which parses the YAML.
-It is **not** a required status check: the merge gate is the closeout merge
-decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
-merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
-vs. maintainer merge"), and deploys stay manual
-([config-deployment.md](../components/config-deployment.md)). The **local**
-suite, enforced per-PR by [`/closeout`](../doctrine/review-flow.md) (which runs
-the backend suite before opening the PR), remains the real gate.
+`docs/doctrine/promotion-tiers.md`). Packages pinned back from `#882` are
+HELD the same way (fully ignored and excluded) until their own upgrade bead
+lands, because several of those jumps were MINOR to Dependabot (PyMuPDF
+1.24 -> 1.28, soundfile 0.12 -> 0.14) and would otherwise return in the next
+batch; each upgrade's PR removes its own entry. All of it is pinned by
+`tests/test_dependabot_config.py` (`HELD_FOR_UPGRADE` names the held set), which
+parses the YAML.
 
 **xfail counts as pass everywhere.** A spec-test that documents a known defect is
 marked `@pytest.mark.xfail` (pytest) or `test.fails` (vitest); neither runner

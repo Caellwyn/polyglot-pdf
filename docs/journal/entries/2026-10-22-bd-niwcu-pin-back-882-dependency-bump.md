@@ -65,6 +65,20 @@ unrelated model-migration PR `#886`. The 12 failures reproduced identically on
 
   Both were adopted. Round 2 left only the "single green run" evidence item,
   which prep's run closed.
+- **Opus cross-surface, round 1, GAPS-FOUND (1), adopted.** The minor+patch
+  group alone would have re-proposed several pinned-back packages in the very
+  next batch, because their `#882` jumps were MINOR to Dependabot (PyMuPDF
+  1.24 -> 1.28, soundfile 0.12 -> 0.14, 0.x librosa / pytest-asyncio). That
+  would have bypassed the validation each upgrade bead exists to do.
+  - **Fix:** all nine pinned-back packages are now HELD: fully ignored and
+    excluded, each tagged with its upgrade bead and listed in
+    `HELD_FOR_UPGRADE` in the test file.
+  - **Mutation-verified:** dropping one ignore, misspelling an exclusion and
+    misspelling a held name each fail.
+  - **Removing the hold:** each upgrade PR removes its own entries.
+- **Same review, also filed:** `fx8gg` (the npm groups still batch majors;
+  pre-existing). `eni15` (my Dependabot paragraph had split testing.md's CI
+  paragraph from its continuation) was fixed here and closes with this PR.
 
 ## Lessons
 
