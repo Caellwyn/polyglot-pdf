@@ -122,8 +122,18 @@ on project `polyglot-demo-aa709`, 2026-10-21):
 | `gemini-2.5-pro` | ✅ | ✅ | whole-form validator, authoring |
 
 `TextAIGemini.DEFAULT_VERTEX_LOCATION` is therefore `"global"`. That is still
-Vertex -- the same project, service account and data terms as a regional
-endpoint. Every `TextAIGemini` construction site takes the default.
+Vertex -- the same project, service account and no-training data terms -- but the
+`global` endpoint carries **no regional data-residency commitment**: Google may
+serve the request (field values included) from any region. Whether that is
+acceptable for this product's data is tracked in bd `polyglot-pdf-bsq6y`.
+
+Every RUNTIME construction (`backend/dependencies.py`,
+`backend/services/editor_text_ai.py`, `backend/services/option_translation.py`)
+takes the default. Two AUTHORING scripts pass a location explicitly and stay on
+`us-central1` by default: `scripts/authoring/extract_form.py`
+(`GOOGLE_CLOUD_LOCATION`) and `scripts/authoring/translate_option_labels.py`
+(`--location`). Both default to `gemini-2.5-pro`, which serves at either
+location; pointing either at a 3.x lite model also needs `global`.
 
 The text adapter's outage fallback chain (`DEFAULT_FALLBACK_MODELS`) is
 `gemini-3.5-flash-lite` -- it stays within the lite tier on purpose (cost

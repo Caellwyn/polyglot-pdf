@@ -155,8 +155,9 @@ class TextAIGemini(ITextAI):
     # lite models (gemini-3.1-flash-lite, gemini-3.5-flash-lite) are served on
     # Vertex ONLY at `global` and 404 at us-central1, while gemini-2.5-pro and
     # gemini-2.5-flash-lite answer at both (all endpoint-verified 2026-10-21, bd
-    # polyglot-pdf-bd1zs). It is still Vertex -- the same project, service
-    # account and data terms as a regional endpoint. The LIVE adapter keeps
+    # polyglot-pdf-bd1zs). It is still Vertex (same project, service account and
+    # no-training terms), but `global` carries no regional data-residency
+    # commitment -- see docs/standards/ai-models.md. The LIVE adapter keeps
     # us-central1: gemini-3.8-live is the reverse (regional only, 1008 at global).
     DEFAULT_VERTEX_LOCATION = "global"
 

@@ -1,6 +1,6 @@
 # Config & deployment
 
-*Last updated: 2026-09-23 (bd `polyglot-pdf-mxzkf`: noted the `roles/run.admin` grant is project-wide, mirroring the script comment added by bd `polyglot-pdf-nacfo.1`.)*
+*Last updated: 2026-10-22. See [2026-10-22-bd-bd1zs-gemini-3p8-live-and-3p1-flash-lite-migration.md](../journal/entries/2026-10-22-bd-bd1zs-gemini-3p8-live-and-3p1-flash-lite-migration.md) for closeout details.*
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 

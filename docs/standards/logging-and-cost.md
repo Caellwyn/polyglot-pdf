@@ -2,8 +2,6 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
-*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: Live default 2.5 -> 3.8 with a `3.8` rate row and `DEFAULT_PRICING_FAMILY="3.8"`; `TEXT_GENERATION_PRICING` gains `gemini-3.1-flash-lite` (new lite default) and `gemini-3.5-flash-lite` (fallback); all rows re-verified against the pricing page.)*
-
 *Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
 
 *Last updated: 2026-09-18 (bd polyglot-pdf-vm2fu: `scripts/setup-telemetry.sh`'s sink-table detection now goes through a new `scripts/telemetry_bq_setup.py list-tables` subcommand instead of `bq ls --project_id=... --format=csv "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline swallowed stderr and treated an EMPTY listing as "no tables yet", indistinguishable from a `bq` CLI that failed to list at all (observed live: a broken `bq` shim on one machine returned nothing while the sink's stdout table was confirmed present via the same google-cloud-bigquery client this script already depends on for LOCATION derivation and the dataset-scoped IAM grants). `list-tables` exits non-zero with a message on any real API error, which the script now aborts on rather than silently reporting every gated cost view PENDING.)*
@@ -182,10 +180,12 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > across a form vs 1.15x with the derived window).
 >
 > **The production tier is now 3.8** (bd `polyglot-pdf-bd1zs`), and this split
-> has NOT been re-measured on it. Audio rates are identical to 2.5, so the
-> audio-in-leads ORDERING is expected to hold or strengthen; text-in costs 1.5x
-> more per token on 3.8, and any reasoning bills as *output* at 4.50. Re-run the
-> 89mt shape on 3.8 before quoting percentages for it. Older source tables, superseded but retained for
+> has NOT been re-measured on it. Audio rates are identical to 2.5, but text-in
+> costs 1.5x more per token on 3.8 (0.75 vs 0.50), so at the same token counts the
+> happy-path split above re-weights to roughly text-in ~70 vs audio-in ~49 --
+> **the audio-in-leads ORDERING likely FLIPS back to text-in on 3.8**, and any
+> reasoning additionally bills as *output* at 4.50. Do not quote either ordering
+> for 3.8 until the 89mt shape is re-run on it (bd `polyglot-pdf-e72on`). Older source tables, superseded but retained for
 > the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
 > and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
 
