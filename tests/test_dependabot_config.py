@@ -324,7 +324,6 @@ HELD_FOR_UPGRADE = {
     "pytest": "polyglot-pdf-oy37r",
     "pytest-asyncio": "polyglot-pdf-oy37r",
     "pytest-cov": "polyglot-pdf-oy37r",
-    "PyMuPDF": "polyglot-pdf-k5dnc",
     "librosa": "polyglot-pdf-m9h4w",
     "soundfile": "polyglot-pdf-m9h4w",
     "firebase-admin": "polyglot-pdf-d5rsx",
