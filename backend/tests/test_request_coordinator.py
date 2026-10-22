@@ -271,6 +271,20 @@ def _seed(coordinator, request_id, request_type, **extras):
 class TestResponseHandlers:
     """Tests for response handler methods."""
 
+    @pytest.fixture(autouse=True)
+    def _current_event_loop(self):
+        """These are SYNC tests that build asyncio.Future()s via _seed, which
+        needs a current event loop. pytest-asyncio < 1.0 left one installed as
+        a side effect; 1.x does not (bd polyglot-pdf-oy37r), so install an
+        explicit one per test and tear it down."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            yield loop
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
     def test_handle_form_state_response_no_pending(self):
         """Should warn (not raise) when there is no pending request for the id."""
         coordinator = RequestCoordinator()

@@ -95,9 +95,6 @@ updates:
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
           - "structlog"
-          - "pytest"
-          - "pytest-asyncio"
-          - "pytest-cov"
           - "librosa"
           - "soundfile"
           - "firebase-admin"
@@ -117,9 +114,6 @@ updates:
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
       - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
-      - dependency-name: "pytest"                # bd polyglot-pdf-oy37r
-      - dependency-name: "pytest-asyncio"        # bd polyglot-pdf-oy37r
-      - dependency-name: "pytest-cov"            # bd polyglot-pdf-oy37r
       - dependency-name: "librosa"               # bd polyglot-pdf-m9h4w
       - dependency-name: "soundfile"             # bd polyglot-pdf-m9h4w
       - dependency-name: "firebase-admin"        # bd polyglot-pdf-d5rsx
@@ -130,6 +124,12 @@ updates:
       interval: "weekly"
     groups:
       all-npm-frontend:
+        # MINOR + PATCH only (bd polyglot-pdf-fx8gg): a major arrives as its
+        # own PR -- #880/#884/#885 batched React 19, Tailwind 4 and more, merged
+        # red, and were reverted in #888.
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
         exclude-patterns:
@@ -140,6 +140,17 @@ updates:
           - "@vitest/*"
           - "@vitejs/plugin-react"
           - "@vitejs/plugin-react-swc"
+          # HELD until its upgrade bead lands (reverted in #888, bd fx8gg).
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@testing-library/react"
+          - "pdfjs-dist"
+          - "tailwindcss"
+          - "react-router-dom"
+          - "jsdom"
+          - "@testing-library/jest-dom"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -148,12 +159,29 @@ updates:
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
       - dependency-name: "@vitejs/plugin-react-swc"
+      # HELD (reverted in #888): each upgrade bead's PR removes its own entries.
+      - dependency-name: "react"                         # bd polyglot-pdf-lhrnq
+      - dependency-name: "react-dom"                     # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react"                  # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react-dom"              # bd polyglot-pdf-lhrnq
+      - dependency-name: "@testing-library/react"        # bd polyglot-pdf-lhrnq
+      - dependency-name: "pdfjs-dist"                    # bd polyglot-pdf-q0i7k
+      - dependency-name: "tailwindcss"                   # bd polyglot-pdf-umd8r
+      - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
+      - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
+      - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
       interval: "weekly"
     groups:
       all-npm-schema-editor:
+        # MINOR + PATCH only (bd polyglot-pdf-fx8gg): a major arrives as its
+        # own PR -- #880/#884/#885 batched React 19, Tailwind 4 and more, merged
+        # red, and were reverted in #888.
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
         exclude-patterns:
@@ -164,6 +192,17 @@ updates:
           - "@vitest/*"
           - "@vitejs/plugin-react"
           - "@vitejs/plugin-react-swc"
+          # HELD until its upgrade bead lands (reverted in #888, bd fx8gg).
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@testing-library/react"
+          - "pdfjs-dist"
+          - "tailwindcss"
+          - "react-router-dom"
+          - "jsdom"
+          - "@testing-library/jest-dom"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -172,12 +211,29 @@ updates:
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
       - dependency-name: "@vitejs/plugin-react-swc"
+      # HELD (reverted in #888): each upgrade bead's PR removes its own entries.
+      - dependency-name: "react"                         # bd polyglot-pdf-lhrnq
+      - dependency-name: "react-dom"                     # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react"                  # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react-dom"              # bd polyglot-pdf-lhrnq
+      - dependency-name: "@testing-library/react"        # bd polyglot-pdf-lhrnq
+      - dependency-name: "pdfjs-dist"                    # bd polyglot-pdf-q0i7k
+      - dependency-name: "tailwindcss"                   # bd polyglot-pdf-umd8r
+      - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
+      - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
+      - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
       interval: "weekly"
     groups:
       all-npm-admin-console:
+        # MINOR + PATCH only (bd polyglot-pdf-fx8gg): a major arrives as its
+        # own PR -- #880/#884/#885 batched React 19, Tailwind 4 and more, merged
+        # red, and were reverted in #888.
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
         exclude-patterns:
@@ -188,6 +244,17 @@ updates:
           - "@vitest/*"
           - "@vitejs/plugin-react"
           - "@vitejs/plugin-react-swc"
+          # HELD until its upgrade bead lands (reverted in #888, bd fx8gg).
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@testing-library/react"
+          - "pdfjs-dist"
+          - "tailwindcss"
+          - "react-router-dom"
+          - "jsdom"
+          - "@testing-library/jest-dom"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -196,11 +263,25 @@ updates:
       - dependency-name: "@vitest/*"
       - dependency-name: "@vitejs/plugin-react"
       - dependency-name: "@vitejs/plugin-react-swc"
+      # HELD (reverted in #888): each upgrade bead's PR removes its own entries.
+      - dependency-name: "react"                         # bd polyglot-pdf-lhrnq
+      - dependency-name: "react-dom"                     # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react"                  # bd polyglot-pdf-lhrnq
+      - dependency-name: "@types/react-dom"              # bd polyglot-pdf-lhrnq
+      - dependency-name: "@testing-library/react"        # bd polyglot-pdf-lhrnq
+      - dependency-name: "pdfjs-dist"                    # bd polyglot-pdf-q0i7k
+      - dependency-name: "tailwindcss"                   # bd polyglot-pdf-umd8r
+      - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
+      - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
+      - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
       all-github-actions-root:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
