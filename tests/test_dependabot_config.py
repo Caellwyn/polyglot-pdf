@@ -324,8 +324,6 @@ HELD_FOR_UPGRADE = {
     "PyMuPDF": "polyglot-pdf-k5dnc",
     "librosa": "polyglot-pdf-m9h4w",
     "soundfile": "polyglot-pdf-m9h4w",
-    "firebase-admin": "polyglot-pdf-d5rsx",
-    "google-cloud-storage": "polyglot-pdf-d5rsx",
 }
 
 

@@ -98,8 +98,6 @@ updates:
           - "PyMuPDF"
           - "librosa"
           - "soundfile"
-          - "firebase-admin"
-          - "google-cloud-storage"
     ignore:
       - dependency-name: "google-genai"
       - dependency-name: "websockets"
@@ -118,8 +116,6 @@ updates:
       - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
       - dependency-name: "librosa"               # bd polyglot-pdf-m9h4w
       - dependency-name: "soundfile"             # bd polyglot-pdf-m9h4w
-      - dependency-name: "firebase-admin"        # bd polyglot-pdf-d5rsx
-      - dependency-name: "google-cloud-storage"  # bd polyglot-pdf-d5rsx
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
