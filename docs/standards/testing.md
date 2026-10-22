@@ -98,7 +98,7 @@ The backend suite is organized **by directory**, not by marker:
 
 - **Async tests** use `pytest-asyncio` with an **explicit** `@pytest.mark.asyncio`
   on each coroutine test (there is no `asyncio_mode = auto`; the marker is
-  required). Dep pins: `pytest==7.4.3`, `pytest-asyncio==0.21.1` in
+  required). Dep pins: `pytest==9.1.1`, `pytest-asyncio==1.4.0` in
   `backend/requirements-dev.txt` (test tooling only -- never installed into the
   image) and `httpx==0.28.1` in `backend/requirements.txt`.
 - **The `external` marker** gates tests that hit the **real Gemini Live API** --
