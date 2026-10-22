@@ -292,10 +292,10 @@ def test_no_other_npm_update_reintroduces_the_ts_toolchain_ungated():
 def test_every_pip_group_batches_only_minor_and_patch_updates():
     """Every pip group must restrict itself to minor+patch update-types, so a
     MAJOR bump of any package arrives as its own single-package PR (bd
-    polyglot-pdf-niwcu). #882 grouped four majors -- structlog 23->26 among
-    them, which let exception messages reach the logs -- with fifteen safe
-    bumps, and the whole batch had to be pinned back. A group with no
-    update-types key batches majors too, so a missing key fails here."""
+    polyglot-pdf-niwcu). #882 grouped seven majors -- structlog 23->26 among
+    them, which let exception messages reach the logs -- with twelve minor/
+    patch bumps, and the batch had to be pinned back. A group with no
+    update-types key (or an empty list) batches majors too, so both fail here."""
     config = _load_dependabot_config()
     for update in config["updates"]:
         if update.get("package-ecosystem") != "pip":
@@ -305,7 +305,7 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
             assert types is not None, (
                 "pip group '{}' has no update-types: it batches MAJOR bumps".format(group_name)
             )
-            assert set(types) <= {"minor", "patch"} and "major" not in types, (
+            assert types and set(types) <= {"minor", "patch"}, (
                 "pip group '{}' batches update-types {} -- majors must not be "
                 "grouped".format(group_name, types)
             )
