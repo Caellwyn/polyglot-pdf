@@ -2248,7 +2248,12 @@ async def derive_editor_kit_divisions(
 
     def _run() -> dict:
         # fitz needs a real path; the PDF lives in the store, not on disk.
-        with tempfile.TemporaryDirectory() as td:
+        # ignore_cleanup_errors: PyMuPDF >= 1.26 can keep a handle on a file
+        # it FAILED to open (a corrupt upload), and on Windows the cleanup's
+        # PermissionError would then replace the 422 below with a 500 (bd
+        # polyglot-pdf-k5dnc). A leftover temp file is harmless; a wrong
+        # status code is not.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             pdf_path = os.path.join(td, "form.pdf")
             with open(pdf_path, "wb") as fh:
                 fh.write(pdf_bytes)
@@ -2484,7 +2489,10 @@ async def _regenerate_guidance_locked(
     form_name = ((schema.get("form_metadata") or {}).get("title") or kit_id)
 
     def _run() -> tuple[dict, str, list]:
-        with tempfile.TemporaryDirectory() as td:
+        # ignore_cleanup_errors: see derive_editor_kit_divisions (bd
+        # polyglot-pdf-k5dnc) -- a held PyMuPDF handle must not turn the
+        # route's own error handling into a cleanup crash.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             path = os.path.join(td, booklet_file)
             with open(path, "wb") as fh:
                 fh.write(booklet_bytes)

@@ -37,6 +37,9 @@ def _tracked_python_files():
 def test_no_tracked_file_imports_the_deprecated_fitz_name():
     offenders = []
     for rel in _tracked_python_files():
+        # This file names the deprecated forms in its own pattern and samples.
+        if rel == "tests/test_no_deprecated_fitz_import.py":
+            continue
         text = (REPO / rel).read_text(encoding="utf-8", errors="replace")
         for m in _DEPRECATED.finditer(text):
             line = text.count("\n", 0, m.start()) + 1
