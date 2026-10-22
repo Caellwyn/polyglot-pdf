@@ -38,8 +38,7 @@ field. No human speaks.
   (window OR localStorage). The same gate installs a **mock auth user**
   (`AuthContext`) so you skip Firebase login. NEVER active in prod/normal dev.
 - **Fixtures** `frontend/public/test-fixtures/{digits_1234567,confirm_yes}.wav`,
-  served by vite at `/test-fixtures/*.wav`. Regenerate with `gen_fixtures.py`
-  (needs `pip install "setuptools<81"` for librosa's `pkg_resources`).
+  served by vite at `/test-fixtures/*.wav`. Regenerate with `gen_fixtures.py`.
 - **Harness** `tests/e2e/voice-harness/harness.js` -> `window.__VFF_HARNESS`
   (`loadFixture`, `injectUtterance`, `runCycle`, outcome waiters, `readField`).
 
