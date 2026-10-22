@@ -15,9 +15,6 @@ Network: gTTS hits Google's translate TTS endpoint at generation time only.
 If you are offline, generate elsewhere and copy the .wav files in -- the format
 contract (16 kHz / mono / PCM_16) is enforced + printed below.
 
-Prereq note: librosa imports the legacy `pkg_resources`, which setuptools >= 81
-no longer ships. If you hit `ModuleNotFoundError: No module named 'pkg_resources'`,
-run `python -m pip install "setuptools<81"` in the venv first.
 """
 from __future__ import annotations
 
