@@ -266,8 +266,8 @@ See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`d
 - WebSocket API - Real-time communication
 
 **Key Dependencies:**
-- librosa 0.10.1 - Audio processing
-- soundfile 0.12.1 - Audio I/O
+- librosa 1.0.0 - Audio processing
+- soundfile 0.14.0 - Audio I/O
 - websockets 13-15 - Real-time communication
 - google-cloud-storage / firebase-admin - GCS form-kit storage + auth
 
