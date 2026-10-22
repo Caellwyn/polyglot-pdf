@@ -320,7 +320,6 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
 # next batch, around the validation each bead exists to do. An upgrade bead's
 # PR removes its packages from this map AND from dependabot.yml together.
 HELD_FOR_UPGRADE = {
-    "structlog": "polyglot-pdf-6wkzi",
     "pytest": "polyglot-pdf-oy37r",
     "pytest-asyncio": "polyglot-pdf-oy37r",
     "pytest-cov": "polyglot-pdf-oy37r",

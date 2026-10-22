@@ -94,7 +94,6 @@ updates:
           - "fastapi"
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
-          - "structlog"
           - "pytest"
           - "pytest-asyncio"
           - "pytest-cov"
@@ -117,7 +116,6 @@ updates:
       # PR. Each upgrade bead's PR REMOVES its own entries here (and from the
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
-      - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
       - dependency-name: "pytest"                # bd polyglot-pdf-oy37r
       - dependency-name: "pytest-asyncio"        # bd polyglot-pdf-oy37r
       - dependency-name: "pytest-cov"            # bd polyglot-pdf-oy37r
