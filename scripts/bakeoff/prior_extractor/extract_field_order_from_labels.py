@@ -12,7 +12,7 @@ Usage:
     python extract_field_order_from_labels.py <pdf> <schema> <output_schema>
 """
 
-import fitz
+import pymupdf as fitz
 import json
 import re
 import sys

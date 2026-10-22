@@ -321,7 +321,6 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
 # PR removes its packages from this map AND from dependabot.yml together.
 HELD_FOR_UPGRADE = {
     "structlog": "polyglot-pdf-6wkzi",
-    "PyMuPDF": "polyglot-pdf-k5dnc",
     "firebase-admin": "polyglot-pdf-d5rsx",
     "google-cloud-storage": "polyglot-pdf-d5rsx",
 }

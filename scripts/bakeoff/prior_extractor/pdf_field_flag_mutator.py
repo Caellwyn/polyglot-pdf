@@ -8,7 +8,7 @@ READ_ONLY bit (bit 0) cleared, enabling them to be filled for testing.
 Reusable across ALL forms.
 """
 
-import fitz
+import pymupdf as fitz
 import json
 import sys
 from typing import Dict, List, Tuple

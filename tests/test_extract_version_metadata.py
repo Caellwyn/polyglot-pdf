@@ -142,7 +142,7 @@ _PDFS = {
 
 
 def _meta_for(rel_path: str) -> dict:
-    import fitz
+    import pymupdf as fitz
     path = _REPO / rel_path
     if not path.exists():
         pytest.skip(f"PDF not present in this checkout: {rel_path}")

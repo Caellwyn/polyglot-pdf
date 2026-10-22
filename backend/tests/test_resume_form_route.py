@@ -13,7 +13,7 @@ import asyncio
 import base64
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import pytest
 from fastapi import HTTPException
 
@@ -765,7 +765,7 @@ def test_a_SUFFIX_named_widget_still_resolves(kit):
     if not (_KITS / kit / "form.pdf").exists():
         pytest.skip(f"{kit} kit not present")
 
-    import fitz as _fitz
+    import pymupdf as _fitz
 
     schema = _kit_schema(kit)
     doc = _fitz.open(str(_KITS / kit / "form.pdf"))

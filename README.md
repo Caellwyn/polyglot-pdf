@@ -255,7 +255,7 @@ See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`d
 - FastAPI 0.117.1 - Modern async web framework
 - google-genai 2.8.0 - Gemini Live API integration
 - Pydantic 2.x - Data validation and settings
-- PyMuPDF 1.24.14 - PDF rendering / form filling
+- PyMuPDF 1.28.2 - PDF rendering / form filling
 - structlog - Structured (metadata-only) logging
 - pytest - Testing framework
 

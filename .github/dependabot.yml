@@ -95,7 +95,6 @@ updates:
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
           - "structlog"
-          - "PyMuPDF"
           - "firebase-admin"
           - "google-cloud-storage"
     ignore:
@@ -113,7 +112,6 @@ updates:
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
       - dependency-name: "structlog"             # bd polyglot-pdf-6wkzi
-      - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
       - dependency-name: "firebase-admin"        # bd polyglot-pdf-d5rsx
       - dependency-name: "google-cloud-storage"  # bd polyglot-pdf-d5rsx
   - package-ecosystem: "npm"

@@ -34,7 +34,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-import fitz  # PyMuPDF -- page-1 text + doc.metadata for version extraction.
+import pymupdf as fitz  # PyMuPDF -- page-1 text + doc.metadata for version extraction.
 
 # Reuse the bakeoff machinery (the bead: "reuse the validated scripts/bakeoff/").
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

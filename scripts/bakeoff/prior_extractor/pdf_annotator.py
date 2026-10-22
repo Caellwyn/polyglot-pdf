@@ -4,7 +4,7 @@ Annotate PDF with widget field names overlaid on each field.
 This creates a visual reference that Gemini can use to map field names to form structure.
 """
 
-import fitz
+import pymupdf as fitz
 from pathlib import Path
 from typing import List, Dict, Any
 from widget_inventory import extract_widget_inventory

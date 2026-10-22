@@ -17,7 +17,7 @@ import os
 import sys
 from typing import Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 def render(path: str, outdir: str, dpi: int = 150) -> list[str]:
