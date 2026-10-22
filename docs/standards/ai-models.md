@@ -1,13 +1,11 @@
 # AI models & pricing (swappable, A/B-able)
 
-**Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
+**Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-2kbo0, sprint 23 B1b: `vertexai` is no longer surfaced on `/health`; the startup refusal is the enforcement.)*
+*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: standard voice tier -> `gemini-3.8-live`; lite text tier -> `gemini-3.1-flash-lite` on the Vertex `global` location.)*
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: Vertex-only production enforced; 3.1 A/B remains local-only until Vertex GA).*
-
-How the Gemini model is selected, how to A/B two tiers in live testing, and how
-that selection drives cost. The cost mechanics themselves live in
+How the Gemini models are selected, how to A/B two voice tiers in live testing,
+and how that selection drives cost. The cost mechanics themselves live in
 [logging-and-cost.md](logging-and-cost.md); this doc owns the **selection** rule.
 
 ## We run native audio-to-audio Live models only
@@ -15,71 +13,69 @@ that selection drives cost. The cost mechanics themselves live in
 No cascade / half-cascade. `backend/config.py` defines two tiers (module-level
 constants):
 
-| Tier | Model id | Family |
-|------|----------|--------|
-| **standard** (default), AI Studio | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
-| **standard** (default), Vertex | `gemini-live-2.5-flash-native-audio` | `2.5` |
-| **premium** (opt-in), AI Studio only | `gemini-3.1-flash-live-preview` | `3.1` |
+| Tier | Model id | Family | Where it is served |
+|------|----------|--------|--------------------|
+| **standard** (default) | `gemini-3.8-live` | `3.8` | Vertex `us-central1` **and** AI Studio (same id) |
+| **premium** (opt-in) | `gemini-3.1-flash-live-preview` | `3.1` | AI Studio only |
 
-The standard tier's id is **backend-aware** (`_resolve_model` picks by `VERTEXAI`)
-because the native-audio Live model is published under a different id on each
-backend and each `1008`s on the other. The premium (3.1) tier has no Vertex id as
-of 2026-06.
+The standard tier still resolves **backend-aware** (`_resolve_model` picks
+`MODEL_NATIVE_STANDARD_VERTEX` when `VERTEXAI=true`, `MODEL_NATIVE_STANDARD`
+otherwise) because Live ids have historically differed per service. For 3.8 the
+two constants hold the same id. `gemini-3.8-live` is **regional**: it connects on
+Vertex `us-central1` (the Live adapter's location) and `1008`s at the `global`
+location (endpoint-verified 2026-10-21).
 
-> **Why 2.5 is the default.** **Both models now emit `update_form_fields`
-> reliably.** The historic "3.1 only calls the tool ~50% of the time and
-> confabulates an 'I'm having trouble saving' message" defect (`bd
-> polyglot-pdf-5oq`, 2026-06-07) was **not** a model regression — it was the
-> `update_form_fields` `value` parameter declared with **no type**. Under
-> `google-genai` 2.8.0, 3.1 rejects an untyped required param (2.5 tolerated it),
-> so the call failed server-side. Typing `value` as `"string"` fixed 3.1 — 4/4
-> with the full production system instruction (`bd polyglot-pdf-wpw.4`,
-> 2026-06-11, via
-> [`backend/scripts/probe_si_bisect_i9q8.py`](../../backend/scripts/probe_si_bisect_i9q8.py)).
-> 2.5 stays the default for its **audio-path** behavior, not tool-calling: its
-> known tradeoff is intermittent AUDIO silence (no-audio turns / `1011`), which
-> did **not** reproduce in recent usage (`bd polyglot-pdf-daa`: 30/30 audio turns
-> clean). Set `USE_PREMIUM_MODEL=true` to run 3.1. (3.1 is modestly pricier on
-> text-out, 4.50 vs 2.00 /1M — audio in/out identical.)
+> **Why 3.8 is the default, and how it differs.** `gemini-3.8-live` is Google's
+> stable "default option for most low-latency voice agent experiences", priced
+> identically to 3.1 on the Live endpoint. Three behavioral differences from the
+> older families are handled in the adapter
+> ([migration notes](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live#migrating);
+> each endpoint-verified on Vertex):
+> - **No thinking config.** Any `thinking_config` makes the connect `1007`
+>   ("not allowlisted to customize the thinking level"). The adapter sends the
+>   2.5-only `thinking_budget=0` solely to the 2.5 family, so 3.8 gets none.
+> - **Function calls default to `NON_BLOCKING`.** Unmarked, 3.8 called
+>   `update_form_fields` and then ended its turn silently after the tool result.
+>   The adapter marks every declaration `behavior: BLOCKING` for the 3.8 family,
+>   restoring the wait-for-result-then-speak contract every tool here is written
+>   for.
+> - **`send_client_content` works for the whole session**, and on 3.8
+>   `turn_complete=True` **interrupts** any generation in progress. The adapter's
+>   text turns use it unchanged.
+>
+> Proactive audio is permanently on (setting it `false` errors) and affective
+> dialog was removed; the adapter sets neither.
 
-> **Model names are not reliable signals.** Google's naming is inconsistent — the
-> 2.5 native model has *also* appeared as `gemini-live-2.5-flash-preview`, and that
-> exact string returned `1008 not found for bidiGenerateContent` in the contract
-> test. The constants above are the strings **verified to connect and return
-> audio**. Don't infer native-vs-cascade from a name; verify against the live
-> endpoint. (See [`genai_docs/`](../genai_docs/README.md).)
+> **Model names are not reliable signals.** Google's naming is inconsistent, and a
+> plausible id can `1008` on one service while working on the other. The constants
+> above are the strings **verified to connect and return audio**. Don't infer
+> availability or native-vs-cascade from a name; verify against the live endpoint.
+> (See [`genai_docs/`](../genai_docs/README.md).)
 
 ## Selection is env-swappable (no redeploy)
 
 `Settings` (config.py) resolves the active model in a `model_validator`:
 
-- `USE_PREMIUM_MODEL` (env, **default `false`** → 2.5) flips between the two tiers;
-  set it `true` to run the 3.1 premium tier (now tool-call-reliable; see above).
+- `USE_PREMIUM_MODEL` (env, **default `false`** → 3.8) flips between the two tiers;
+  set it `true` to run the 3.1 premium tier.
   **LOCAL ONLY.** 3.1 exists only on AI Studio, so `USE_PREMIUM_MODEL=true` *is*
   the AI-Studio flip under another name — and it is the variant the Vertex-only
   startup guard CANNOT catch: `_resolve_model` sets the premium id before the
   `VERTEXAI` branch, so a deployed service starts fine and then `1008`s at
-  connect time. Deploy 3.1 only once it is GA on Vertex.
+  connect time.
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
-- **Backend-aware standard tier.** When `MODEL_NATIVE` is unset and the standard
-  tier is active (`USE_PREMIUM_MODEL=false`), `_resolve_model` picks the id by
-  backend: `VERTEXAI=true` -> `gemini-live-2.5-flash-native-audio` (Vertex),
-  `VERTEXAI=false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (AI Studio).
-  The native-audio Live model is published under different ids on each backend and
-  each `1008`s on the other, so this lets a Vertex deploy work with **no pin**.
-  Both are 2.5-family, so `model_family()` bills them identically. The premium
-  (3.1) tier has no Vertex id (AI-Studio-only as of 2026-06), so it is unaffected.
-- `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the cheap,
-  non-Live TEXT model. The SI-reduction epic's **cheap-model validator / secretary**
-  (`bd polyglot-pdf-jnjj`, pillar B) reuses this knob via `get_text_ai()` in
-  `backend/dependencies.py` (wired in jnjj.14). Set `MODEL_LABELING=gemini-2.5-flash-lite`
-  in the deploy env to run the validator/secretary on the lite tier (the default
-  stays `gemini-2.5-flash` so existing deploys without the env var don't change).
-  The reuse decision + the "why flash-lite" rationale are owned by
-  [validation-delegation.md](validation-delegation.md) (F3); this doc just records
-  that the validator's model id rides on `MODEL_LABELING`, not a new env var.
+- `MODEL_LABELING` (default **`gemini-3.1-flash-lite`**) is the knob for the cheap,
+  non-Live TEXT model behind `get_text_ai()` in `backend/dependencies.py`: the
+  SI-reduction epic's **per-section validator and secretary** (`bd
+  polyglot-pdf-jnjj`, pillar B). The reuse decision + the "why flash-lite"
+  rationale are owned by [validation-delegation.md](validation-delegation.md)
+  (F3); this doc just records that the validator's model id rides on
+  `MODEL_LABELING`, not a new env var. No deploy channel pins it, so the code
+  default is what runs.
+- `TRANSLATION_VERIFY_BT_MODEL` (default `gemini-3.1-flash-lite`) is the lite
+  back-translation leg of the authoring-time translation gate.
 - `OPTION_TRANSLATION_MODEL` (default `gemini-2.5-pro`) is the AUTHORING-time
   knob for baking option `label_translations` into kit JSON (bd polyglot-pdf-2h9j:
   the extraction post-pass, the editor translate-options route, and
@@ -88,8 +84,8 @@ of 2026-06.
   `TextAIGemini` with an EMPTY fallback chain (a deliberately chosen tier fails
   loud rather than silently degrading to lite) and a bounded thinking budget
   (2.5-pro cannot disable thinking). The RUNTIME option-translation path (bd
-  ow1e) still rides `MODEL_LABELING`'s lite chain and is unchanged -- it is only
-  the fallback for labels a kit does not carry.
+  ow1e) still rides the lite chain -- it is only the fallback for labels a kit
+  does not carry.
 - `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
   `GOOGLE_CLOUD_PROJECT` (compliance-friendly; keeps request data private). `false`
@@ -101,48 +97,60 @@ of 2026-06.
   > using client data for model training; AI Studio's consumer terms do not offer
   > that, so no deployed use of it is acceptable. When `K_SERVICE` is set (Cloud
   > Run), `VERTEXAI=false` **fails startup outright** -- there is deliberately
-  > **no override flag** (the earlier `ALLOW_AI_STUDIO` acknowledgment was
-  > removed). AI Studio is permitted **for local development only** (no
-  > `K_SERVICE`), e.g. testing a model that is not yet on Vertex. A model such as
-  > 3.1 ships only once it is **GA for Vertex customers**.
-
-  This matters because **model
-  availability AND the model id differ by service**: the native-audio Live models
-  are published under DIFFERENT ids on each backend, and a Live
-  (`bidiGenerateContent`) connect with the wrong-backend id `1008`s. As of 2026-06:
-  - **AI Studio:** native-audio is `gemini-2.5-flash-native-audio-preview-12-2025`
-    (the `config.py` default selected by `USE_PREMIUM_MODEL=false`), and
-    `gemini-3.1-flash-live-preview` is available (the only backend with 3.1).
-  - **Vertex:** the AI Studio native-audio id above is NOT published in any region
-    (Live connect `1008`s); the Vertex native-audio Live model is
-    `gemini-live-2.5-flash-native-audio` (verified on `us-central1`, the adapter's
-    default location). 3.1 is NOT on Vertex (it `1008`s -- "policy violation").
+  > **no override flag**. AI Studio is permitted **for local development only** (no
+  > `K_SERVICE`), e.g. testing a model that is not yet on Vertex. A model ships
+  > only once it is **GA for Vertex customers**.
 
   The **demo** runs `VERTEXAI=true` (Vertex, SA ADC) with `USE_PREMIUM_MODEL=false`
-  -- the privacy-preserving path, on a 2.5-family native-audio model
-  (`bd polyglot-pdf-a079`). It does **not** pin `MODEL_NATIVE`: `_resolve_model` is
-  backend-aware, so the standard tier on Vertex resolves to
-  `gemini-live-2.5-flash-native-audio` on its own (see "Backend-aware standard tier"
-  below). A/B-ing 3.1 requires the AI-Studio path (`VERTEXAI=false`,
-  `USE_PREMIUM_MODEL=true`), so it is a **LOCAL-ONLY** exercise -- a deployed
-  service refuses to start on that path (see the Vertex-only rule above).
+  and does **not** pin `MODEL_NATIVE`, so the standard tier resolves to
+  `gemini-3.8-live` on its own. A/B-ing 3.1 requires the AI-Studio path
+  (`VERTEXAI=false`, `USE_PREMIUM_MODEL=true`), so it is a **LOCAL-ONLY** exercise.
   Not surfaced on `/health` (which reports no configuration at all since
   sprint 23 B1b); the startup refusal IS the enforcement.
 
-`backend/dependencies.py` is the **one** place models reach adapters:
+## Vertex location: Live is regional, text is `global`
+
+The two adapters build their Vertex clients at **different locations**, because
+the models they serve are published in different places (all endpoint-verified
+on project `polyglot-demo-aa709`, 2026-10-21):
+
+| Model | `us-central1` | `global` | Used by |
+|-------|---------------|----------|---------|
+| `gemini-3.8-live` | ✅ | ❌ `1008` | `LiveAIGemini` (location `us-central1`) |
+| `gemini-3.1-flash-lite` | ❌ `404` | ✅ | `TextAIGemini` default model |
+| `gemini-3.5-flash-lite` | ❌ `404` | ✅ | `TextAIGemini` outage fallback |
+| `gemini-2.5-pro` | ✅ | ✅ | whole-form validator, authoring |
+
+`TextAIGemini.DEFAULT_VERTEX_LOCATION` is therefore `"global"`. That is still
+Vertex -- the same project, service account and no-training data terms -- but the
+`global` endpoint carries **no regional data-residency commitment**: Google may
+serve the request (field values included) from any region. Whether that is
+acceptable for this product's data is tracked in bd `polyglot-pdf-bsq6y`.
+
+Every RUNTIME construction (`backend/dependencies.py`,
+`backend/services/editor_text_ai.py`, `backend/services/option_translation.py`)
+takes the default. Two AUTHORING scripts pass a location explicitly and stay on
+`us-central1` by default: `scripts/authoring/extract_form.py`
+(`GOOGLE_CLOUD_LOCATION`) and `scripts/authoring/translate_option_labels.py`
+(`--location`). Both default to `gemini-2.5-pro`, which serves at either
+location; pointing either at a 3.x lite model also needs `global`.
+
+The text adapter's outage fallback chain (`DEFAULT_FALLBACK_MODELS`) is
+`gemini-3.5-flash-lite` -- it stays within the lite tier on purpose (cost
+discipline; see [validation-delegation.md](validation-delegation.md)).
+
+`backend/dependencies.py` is the **one** place runtime models reach adapters:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
 model=settings.MODEL_NATIVE, vertexai=settings.VERTEXAI)` (a fresh instance per
-connection -- a CRITICAL bug-fix comment there). `get_text_ai()` (added jnjj.14)
-constructs `TextAIGemini(api_key=settings.GEMINI_API_KEY,
-model=settings.MODEL_LABELING, vertexai=settings.VERTEXAI)` for the cheap
-text-gen validator/secretary path. Routes depend on the service factory, so
-nothing else picks a model.
+connection -- a CRITICAL bug-fix comment there). `get_text_ai()` constructs
+`TextAIGemini(api_key=settings.GEMINI_API_KEY, model=settings.MODEL_LABELING,
+vertexai=settings.VERTEXAI)` for the cheap text-gen validator/secretary path.
+Routes depend on the service factory, so nothing else picks a runtime model.
 
-## A/B-ing 2.5 vs 3.1
+## A/B-ing 3.8 vs 3.1
 
-**Locally only.** 3.1 is AI-Studio-only as of 2026-06, and a deployed service
-cannot run the AI Studio path at all (Vertex-only rule above) — so this A/B is a
-local-dev exercise, and 3.1 becomes deployable only once it is **GA on Vertex**.
+**Locally only.** 3.1 is AI-Studio-only, and a deployed service cannot run the
+AI Studio path at all (Vertex-only rule above).
 
 1. Set `USE_PREMIUM_MODEL=true` (or pin `MODEL_NATIVE=<id>`) and restart — no code
    change, no redeploy of a new image.
@@ -150,15 +158,22 @@ local-dev exercise, and 3.1 becomes deployable only once it is **GA on Vertex**.
    its structured logger (`model=self._model_name`).
 3. Cost follows automatically: the cost calc keys off the active model's **family**
    via `get_pricing_for_model(self._model_name)` (see
-   [logging-and-cost.md](logging-and-cost.md) for the rate table). So a 2.5 vs 3.1
+   [logging-and-cost.md](logging-and-cost.md) for the rate table). So a 3.8 vs 3.1
    run is directly cost-comparable from `token_usage.jsonl`.
 
 ## Rules
 
 - **Change the model via env, never by editing the adapter.** The constructor's
   `model=` default is a fallback only; prod always passes `settings.MODEL_NATIVE`.
-- **When adding a new tier/family,** add the model constant here *and* a pricing
-  row in `GEMINI_PRICING_BY_FAMILY` + a `model_family()` branch (config.py), or it
-  bills at the default `2.5` rate. See [logging-and-cost.md](logging-and-cost.md).
-- **Verify any new model string against the live endpoint** before shipping it as a
-  default — a plausible-looking name can 1008.
+- **When adding a new Live tier/family,** add the model constant here *and* a
+  pricing row in `GEMINI_PRICING_BY_FAMILY` (config.py) -- `model_family()` matches
+  the rows' keys, so an unlisted family bills at `DEFAULT_PRICING_FAMILY` (`3.8`).
+  Also check the family-gated branches in `live_ai_gemini.py` (`thinking_config`,
+  tool `behavior`, the text-turn send method) against the new model's migration
+  notes. See [logging-and-cost.md](logging-and-cost.md).
+- **When adding a text model,** add a `TEXT_GENERATION_PRICING` row (an unpriced
+  model logs `cost_estimate_usd=None`) and confirm it answers at
+  `TextAIGemini.DEFAULT_VERTEX_LOCATION`.
+- **Verify any new model string against the live endpoint** -- on Vertex, at the
+  location the adapter actually uses -- before shipping it as a default. A
+  plausible-looking name can `1008`/`404`.

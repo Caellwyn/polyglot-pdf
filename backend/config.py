@@ -9,10 +9,16 @@ from pathlib import Path
 
 # === Native audio-to-audio model tiers (A/B-able) ===
 # Both are full native audio-to-audio Live API models (bidiGenerateContent).
-# USE_PREMIUM_MODEL flips between these (defaults FALSE -> standard/2.5):
-#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (DEFAULT; reliably
-#               emits the update_form_fields tool call; family 2.5)
-#   premium  -> gemini-3.1-flash-live-preview            (opt-in; family 3.1)
+# USE_PREMIUM_MODEL flips between these (defaults FALSE -> standard/3.8):
+#   standard -> gemini-3.8-live                (DEFAULT; family 3.8; same id on
+#               Vertex and AI Studio)
+#   premium  -> gemini-3.1-flash-live-preview  (opt-in; family 3.1; AI Studio only)
+# 3.8 differs from the older families in three ways the adapter handles
+# (ai.google.dev models/gemini-3.8-live#migrating, endpoint-verified on Vertex
+# us-central1 2026-10-21, bd polyglot-pdf-bd1zs): it 1007s on ANY thinking_config,
+# it defaults function calls to NON_BLOCKING (so every declaration is sent with
+# behavior=BLOCKING -- unmarked, the model ended its turn silently after the tool
+# result), and proactive audio is permanently on.
 # NOTE on 3.1 tool-calling: the historic "3.1 skips update_form_fields ~50%"
 # finding (bd polyglot-pdf-5oq) was traced to the update_form_fields `value`
 # param being declared with NO type -- under google-genai 2.8.0, 3.1 rejects an
@@ -20,32 +26,28 @@ from pathlib import Path
 # With `value` typed as "string" (see TOOL_DECLARATIONS), 3.1 emits the call
 # reliably (5/5, 2026-06-11, bd polyglot-pdf-i9q8). 2.5 tolerated the untyped
 # param, which is why only 3.1 showed the defect.
-# NOTE: Gemini model naming is inconsistent across Google's sources -- the 2.5
-# native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
-# default), and that exact string 1008'd ("not found for bidiGenerateContent") in
-# the contract test. We pin the explicit `-preview-12-2025` string above, which is
-# verified to connect and return audio. Don't infer native-vs-cascade from a name;
-# verify against the live endpoint. See docs/genai_docs/README.md.
+# NOTE: Gemini model naming is inconsistent across Google's sources, and a Live id
+# can exist on one service and 1008 ("not found for bidiGenerateContent") on the
+# other. Don't infer availability or native-vs-cascade from a name; verify
+# against the live endpoint. See docs/genai_docs/README.md.
 MODEL_NATIVE_PREMIUM = "gemini-3.1-flash-live-preview"
-MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
-# Vertex publishes the 2.5 native-audio Live model under a DIFFERENT id than AI
-# Studio: the AI Studio id above is NOT available on Vertex in any region (a Live
-# bidiGenerateContent connect 1008s), and this Vertex id is not on AI Studio.
-# Both are 2.5-family native-audio, so model_family() bills them identically; only
-# the service-specific id differs. Verified connecting + returning audio on Vertex
-# us-central1 (the adapter's default location), bd polyglot-pdf-a079. _resolve_model
-# selects this when VERTEXAI=true and the standard tier is active, so a Vertex
-# deploy works WITHOUT having to pin MODEL_NATIVE by hand. There is no Vertex 3.1
-# (premium) id yet: 3.1 is AI-Studio-only as of 2026-06, so the premium tier still
-# requires VERTEXAI=false.
-MODEL_NATIVE_STANDARD_VERTEX = "gemini-live-2.5-flash-native-audio"
+MODEL_NATIVE_STANDARD = "gemini-3.8-live"
+# The standard id as served on Vertex. Kept as its own constant because Live ids
+# have historically differed per service (the 2.5 native-audio model was
+# `gemini-live-2.5-flash-native-audio` on Vertex only). For 3.8 the ids are the
+# SAME: `gemini-3.8-live` connects + returns audio on Vertex us-central1 (the
+# adapter's default location) and 1008s at the `global` location (verified
+# 2026-10-21, bd polyglot-pdf-bd1zs). _resolve_model selects this when
+# VERTEXAI=true and the standard tier is active. There is no Vertex 3.1 (premium)
+# id: 3.1 is AI-Studio-only, so the premium tier still requires VERTEXAI=false.
+MODEL_NATIVE_STANDARD_VERTEX = "gemini-3.8-live"
 
 # --- DEV FEATURE: model A/B toggle (bd polyglot-pdf-kbf) -----------------------
 # To A/B these two models for tool-call reliability (e.g. "does 3.1 emit
-# update_form_fields less reliably than 2.5?"), flip USE_PREMIUM_MODEL and
+# update_form_fields less reliably than 3.8?"), flip USE_PREMIUM_MODEL and
 # restart the backend -- each run is one clean sample. Locally, the dev runner
 # does this for you:
-#     ./scripts/dev-local.ps1                 # standard / 2.5 (default, mirrors prod)
+#     ./scripts/dev-local.ps1                 # standard / 3.8 (default, mirrors prod)
 #     ./scripts/dev-local.ps1 -Model premium  # premium / 3.1
 # The active model is recorded on every structlog line (bound `model=...`) and on
 # every dev I/O capture entry (`model` field in gemini_<date>.jsonl), so a
@@ -63,22 +65,17 @@ class Settings(BaseModel):
 	# RESOLVED active model (derived below), kept as a field so pricing,
 	# and dependencies can read the single source of truth. Set MODEL_NATIVE
 	# directly via env to pin an exact model string (overrides the flag).
-	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
-	#   deprecated; kept as an env-swappable knob; not surfaced on /health).
-	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). BOTH families
-	# now emit update_form_fields reliably: the historic "3.1 only calls the tool
-	# ~50% of the time and confabulates a 'trouble saving' message" defect (bd
-	# polyglot-pdf-5oq, probe_tool_call.py 2026-06-07) was the UNTYPED `value`
-	# param, not the model -- under google-genai 2.8.0 3.1 rejected the untyped
-	# required param; typing it "string" restored the call 5/5 (bd
-	# polyglot-pdf-i9q8, 2026-06-11). 2.5 remains the default for its audio-path
-	# behavior, not its tool-calling. 2.5's known tradeoff is intermittent silence
-	# on the AUDIO path (no-audio turns / 1011 -- bd polyglot-pdf-daa), mitigated
-	# separately. (3.1 is modestly pricier -- text-out 4.50 vs 2.00/1M; audio
-	# in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
+	# MODEL_LABELING: the cheap, non-Live TEXT model behind get_text_ai() -- the
+	#   per-section validator and the secretary (docs/standards/ai-models.md).
+	#   Default gemini-3.1-flash-lite, the lite tier those paths are designed for;
+	#   it is served on Vertex only at the `global` location, which is why
+	#   TextAIGemini defaults to that location. Not surfaced on /health.
+	# Default FALSE -> standard/3.8 (gemini-3.8-live). Both 3.x families price
+	# identically on the Live endpoint (see GEMINI_PRICING_BY_FAMILY); 3.1 stays
+	# available as the opt-in AI-Studio-only tier.
 	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
-	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
+	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-3.1-flash-lite")
 	# Secretary tail-latency guard (bd polyglot-pdf-jnjj.43). The ask_secretary call
 	# is BLOCKING (the live "principal" model waits on the tool result mid-turn);
 	# Gate 2 (jnjj.27) measured a heavy tail (median ~1s but spikes to 8.5s / 20s).
@@ -266,9 +263,12 @@ class Settings(BaseModel):
 	# models thinking_config={"thinking_budget": 0} turns it off and reduces
 	# latency (genai codegen_instructions.md); the effect on native-audio Live is
 	# unverified upstream (live-api-best-practices.md), so this is safe-if-ignored
-	# rather than guaranteed. Only the 2.5 `thinking_budget` form is sent; 3.1 uses
-	# a different `thinking_level` field and is left at its default. Env-flippable
-	# (set DISABLE_MODEL_THINKING=false) if native-audio ever misbehaves with it.
+	# rather than guaranteed. Only the 2.5 `thinking_budget` form is sent, and only
+	# to a model positively identified as 2.5: 3.1 uses a different
+	# `thinking_level` field and is left at its default, and 3.8 REJECTS any
+	# thinking_config with a 1007 at connect (verified 2026-10-21) -- so on the
+	# default 3.8 tier this flag is inert. Env-flippable (set
+	# DISABLE_MODEL_THINKING=false) if a 2.5 model ever misbehaves with it.
 	DISABLE_MODEL_THINKING: bool = os.getenv("DISABLE_MODEL_THINKING", "true").lower() == "true"
 
 	# === VAD ===
@@ -614,14 +614,13 @@ class Settings(BaseModel):
 			self.LIVE_DEV_AUDIO_DUMP = False
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
 		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard
-		# (2.5) tier is BACKEND-AWARE: the native-audio Live model has a different id
-		# on Vertex than on AI Studio (see MODEL_NATIVE_STANDARD_VERTEX), and the
-		# AI Studio id 1008s on Vertex. So when VERTEXAI=true and no explicit pin is
-		# set, resolve to the Vertex id -- this makes ANY Vertex deploy work without
-		# hand-pinning MODEL_NATIVE (bd polyglot-pdf-a079). The premium (3.1) tier is
-		# AI-Studio-only as of 2026-06, so it is unaffected; USE_PREMIUM_MODEL=true on
-		# the Vertex path will 1008 until Vertex ships 3.1 (an explicit, documented
-		# limitation, not this resolver's concern).
+		# tier is BACKEND-AWARE: Live ids can differ between Vertex and AI Studio
+		# (see MODEL_NATIVE_STANDARD_VERTEX), so when VERTEXAI=true and no explicit
+		# pin is set, resolve to the Vertex id -- this makes ANY Vertex deploy work
+		# without hand-pinning MODEL_NATIVE (bd polyglot-pdf-a079). For 3.8 the two
+		# ids coincide. The premium (3.1) tier is AI-Studio-only, so
+		# USE_PREMIUM_MODEL=true on the Vertex path will 1008 (an explicit,
+		# documented limitation, not this resolver's concern).
 		if not self.MODEL_NATIVE:
 			if self.USE_PREMIUM_MODEL:
 				self.MODEL_NATIVE = MODEL_NATIVE_PREMIUM
@@ -1030,7 +1029,7 @@ class Settings(BaseModel):
 	# independence from the pro forward/judge path; V1 measured its noise as
 	# the main FP driver and the judge prompt guards against anchoring on it).
 	TRANSLATION_VERIFY_BT_MODEL: str = os.getenv(
-		"TRANSLATION_VERIFY_BT_MODEL", "gemini-2.5-flash-lite")
+		"TRANSLATION_VERIFY_BT_MODEL", "gemini-3.1-flash-lite")
 
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")
@@ -1427,20 +1426,23 @@ def parse_extra_origins(raw: str | None) -> list[str]:
 # Rates are per-1M list prices from https://ai.google.dev/gemini-api/docs/pricing,
 # divided to per-token here. Output rates include thinking tokens. Keyed by model
 # FAMILY so the active model (MODEL_NATIVE, set by USE_PREMIUM_MODEL) selects the
-# right row -- this is what makes a 2.5 -> 3.1 A/B comparable on cost.
-# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-06-12 (bd
-# polyglot-pdf-4loz): BOTH rows match the published page exactly (no drift) --
-# 2.5 native-audio, and 3.1 flash-live at the page's
-# #gemini-3.1-flash-live-preview anchor (text in 0.75 / audio in 3.00 / text
-# out 4.50 / audio out 12.00, output incl. thinking tokens).
-# Updated: 2026-06-12.
+# right row -- this is what makes a 3.8 vs 3.1 A/B comparable on cost.
+# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-10-21 (bd
+# polyglot-pdf-bd1zs): all three rows match the published page. 3.8 and 3.1
+# share one pricing section ("Gemini 3.8 Live, Gemini 3.8 Live Extended
+# Thinking, and Gemini 3.1 Flash Live Preview"); 2.5 is the page's "Gemini 2.5
+# Flash Native Audio (Live API)" section. Output rates include thinking tokens.
+# The 2.5 row stays so pre-migration session logs and an explicit MODEL_NATIVE
+# pin of a 2.5 id still price correctly.
+# Updated: 2026-10-21.
 #
 # Columns: text_input / audio_input / text_output / audio_output (USD per 1M).
 #   2.5 (native-audio):  0.50 / 3.00 / 2.00 / 12.00
 #   3.1 (live preview):  0.75 / 3.00 / 4.50 / 12.00
-# Note: a bare "gemini-3-flash-*" (no ".1") is NOT a Live/native-audio model per
+#   3.8 (live):          0.75 / 3.00 / 4.50 / 12.00
+# Note: a bare "gemini-3-flash-*" (no ".N") is NOT a Live/native-audio model per
 # Google's docs, so it won't reach this adapter; model_family() bills it at the
-# 2.5 default if it ever does. Add a "3" row here if that changes.
+# default family if it ever does. Add a "3" row here if that changes.
 _PER_1M = 1_000_000
 
 GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
@@ -1456,14 +1458,23 @@ GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
 		"text_output": 4.50 / _PER_1M,
 		"audio_output": 12.00 / _PER_1M,
 	},
+	"3.8": {
+		"text_input": 0.75 / _PER_1M,
+		"audio_input": 3.00 / _PER_1M,
+		"text_output": 4.50 / _PER_1M,
+		"audio_output": 12.00 / _PER_1M,
+	},
 }
 
 # Family used when a model name doesn't match any known family -- a safe
-# fall-back for unrecognized/unspecified model strings (bills at the cheaper
-# 2.5 rate). NOTE: this is the pricing fallback for UNKNOWN names. It happens to
-# coincide with the runtime default model family (2.5, USE_PREMIUM_MODEL=false --
-# bd polyglot-pdf-5oq), but the two are independent knobs.
-DEFAULT_PRICING_FAMILY = "2.5"
+# fall-back for unrecognized/unspecified model strings. It bills at the 3.8
+# rate, which is never below any other row, so an unknown model is over- rather
+# than under-estimated. NOTE: this is the pricing fallback for UNKNOWN names. It
+# happens to coincide with the runtime default model family (3.8,
+# USE_PREMIUM_MODEL=false), but the two are independent knobs. It must NOT be
+# "2.5": the live adapter sends the 2.5-only thinking_config when
+# model_family() == "2.5", and 3.8 rejects that with a 1007 at connect.
+DEFAULT_PRICING_FAMILY = "3.8"
 
 
 def model_family(model_name: str | None) -> str:
@@ -1491,8 +1502,8 @@ def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
 	return GEMINI_PRICING_BY_FAMILY[model_family(model_name)]
 
 
-# Backward-compatible alias: the old flat dict was the 2.5 rates. Anything still
-# importing GEMINI_PRICING keeps working (it gets the default family's rates).
+# Backward-compatible alias for the old flat dict. Anything still importing
+# GEMINI_PRICING keeps working (it gets the default family's rates).
 # A COPY, not the live inner dict -- a stray mutation of GEMINI_PRICING must not
 # corrupt GEMINI_PRICING_BY_FAMILY for everyone else in the process.
 GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
@@ -1507,22 +1518,34 @@ GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 # call the ordinary generate_content endpoint on different models at different
 # rates. Two tables, because they bill as two products.
 #
-# Verified against https://ai.google.dev/gemini-api/docs/pricing on 2026-09-09
-# (bd polyglot-pdf-wio6m; gemini-2.5-pro row added on 2026-09-09 fixing a gap
-# found in cross-surface review of bd polyglot-pdf-t86oz), paid-tier rows,
-# quoted per 1M tokens:
+# Verified against https://ai.google.dev/gemini-api/docs/pricing on 2026-10-21
+# (bd polyglot-pdf-bd1zs), Standard paid-tier rows, quoted per 1M tokens:
+#   gemini-3.1-flash-lite:  text in 0.25 / cached in 0.025 / out 1.50
+#     (the default lite model -- MODEL_LABELING, TRANSLATION_VERIFY_BT_MODEL)
+#   gemini-3.5-flash-lite:  text in 0.30 / cached in 0.03 / out 2.50
+#     (TextAIGemini's lite-tier outage fallback)
 #   gemini-2.5-flash:       text in 0.30 / cached in 0.03 / out 2.50
 #   gemini-2.5-flash-lite:  text in 0.10 / cached in 0.01 / out 0.40
+#     (no longer a default; kept so an env pin and pre-migration logs price)
 #   gemini-2.5-pro:         text in 1.25 / cached in 0.125 / out 10.00
 #     (<=200k-token prompt tier; this app's validator/translation prompts are
 #     well under that. The page's >200k tier -- in 2.50 / cached 0.25 / out
 #     15.00 -- is NOT carried here; add a second row if a prompt ever needs it.)
 # Output rates include thinking tokens. Audio input is priced separately on that
-# page (2.5-flash 1.00, 2.5-flash-lite 0.30) and is NOT carried here: these are
-# the TEXT paths, which send no audio. Add an "audio_input" column if a text
-# model is ever handed audio.
-# Updated: 2026-09-09.
+# page and is NOT carried here: these are the TEXT paths, which send no audio.
+# Add an "audio_input" column if a text model is ever handed audio.
+# Updated: 2026-10-21.
 TEXT_GENERATION_PRICING: dict[str, dict[str, float]] = {
+	"gemini-3.1-flash-lite": {
+		"text_input": 0.25 / _PER_1M,
+		"cached_input": 0.025 / _PER_1M,
+		"text_output": 1.50 / _PER_1M,
+	},
+	"gemini-3.5-flash-lite": {
+		"text_input": 0.30 / _PER_1M,
+		"cached_input": 0.03 / _PER_1M,
+		"text_output": 2.50 / _PER_1M,
+	},
 	"gemini-2.5-flash": {
 		"text_input": 0.30 / _PER_1M,
 		"cached_input": 0.03 / _PER_1M,
@@ -1544,9 +1567,9 @@ TEXT_GENERATION_PRICING: dict[str, dict[str, float]] = {
 def get_text_generation_pricing(model_name: str | None) -> dict[str, float] | None:
 	"""Return the per-token rate row for a text-generation model, or None.
 
-	Matches on the model id with any date/preview suffix stripped (the chain
-	ships concrete ids like "gemini-2.5-flash-lite-preview-09-2025", which must
-	bill at the base model's rate). Returns None -- not a fallback row -- for an
+	Matches on the model id with any date/preview suffix stripped (a concrete
+	id like "gemini-3.1-flash-lite-preview-09-2025" must bill at the base
+	model's rate). Returns None -- not a fallback row -- for an
 	unknown model: billing an unknown model at a guessed rate produces a
 	confident wrong number, which is worse for a cost dashboard than an
 	explicit gap. Callers emit cost_estimate_usd=None in that case.

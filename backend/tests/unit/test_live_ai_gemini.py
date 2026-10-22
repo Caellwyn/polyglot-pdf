@@ -1889,21 +1889,82 @@ def test_thinking_config_absent_when_flag_off():
     assert "thinking_config" not in cfg
 
 
-def test_thinking_config_gate_documents_model_family_fallback():
-    # HONEST NOTE (fresh-eyes finding 4): the gate is `model_family(...) == "2.5"`,
-    # which reads as an explicit 2.5 allowlist. But model_family() is a PRICING
-    # helper that maps ANY unrecognized string to the default family "2.5", so an
-    # unknown model still matches and still gets thinking_budget=0. The change from
-    # `!= "3.1"` to `== "2.5"` is a clarity/intent improvement, NOT a behavior fix
-    # for unknown models -- a true capability gate would need a distinct "unknown"
-    # from model_family, which is out of scope (it's a widely-used pricing fn).
-    # Practical risk is ~nil: thinking_config is safe-if-ignored on native-audio.
-    # This test PINS that fallback so a future model_family change that stops
-    # defaulting to "2.5" is caught here rather than silently changing the gate.
-    from backend.config import model_family
-    assert model_family("totally-made-up-model-xyz") == "2.5"
+def test_thinking_config_absent_for_3p8_default():
+    # 3.8 REJECTS any thinking_config with a 1007 at connect ("not allowlisted to
+    # customize the thinking level", Vertex 2026-10-21, bd polyglot-pdf-bd1zs).
+    # Sending it would kill every session on the default tier.
+    from backend.config import MODEL_NATIVE_STANDARD, MODEL_NATIVE_STANDARD_VERTEX
+    for model in (MODEL_NATIVE_STANDARD, MODEL_NATIVE_STANDARD_VERTEX):
+        cfg = _build_cfg(model, disable_thinking=True)
+        assert "thinking_config" not in cfg, model
+
+
+def test_thinking_config_absent_for_unknown_model():
+    # The gate is `model_family(...) == "2.5"`, and model_family() maps an
+    # UNRECOGNIZED name to DEFAULT_PRICING_FAMILY. That fallback must not be
+    # "2.5", or an unknown/typo'd model -- or a new family nobody added a row
+    # for -- would get the 2.5-only thinking_budget form, which 3.8 1007s on.
+    from backend.config import DEFAULT_PRICING_FAMILY, model_family
+    assert DEFAULT_PRICING_FAMILY != "2.5"
+    assert model_family("totally-made-up-model-xyz") == DEFAULT_PRICING_FAMILY
     cfg = _build_cfg("totally-made-up-model-xyz", disable_thinking=True)
-    assert cfg.get("thinking_config") == {"thinking_budget": 0}
+    assert "thinking_config" not in cfg
+
+
+# ---------------------------------------------------------------------------
+# Tool `behavior` on 3.8 (bd polyglot-pdf-bd1zs): 3.8 defaults function calls to
+# NON_BLOCKING; measured on Vertex, an unmarked update_form_fields call ended the
+# turn silently after the tool result. Every declaration is sent BLOCKING for the
+# 3.8 family only.
+# ---------------------------------------------------------------------------
+
+def _build_cfg_with_tools(model_name, declarations):
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend.config import Settings
+    a = LiveAIGemini(model=model_name)
+    a._log = MagicMock()
+    a._system_instruction = "test SI"
+    a._function_declarations = declarations
+    return a._build_live_config(Settings())
+
+
+def _behaviors(cfg):
+    return [d.get("behavior") for t in cfg["tools"] for d in t["function_declarations"]]
+
+
+def test_3p8_marks_every_production_tool_blocking():
+    from backend.config import MODEL_NATIVE_STANDARD, Settings
+    decls = Settings().TOOL_DECLARATIONS
+    cfg = _build_cfg_with_tools(MODEL_NATIVE_STANDARD, decls)
+    assert len(_behaviors(cfg)) == len(decls)
+    assert set(_behaviors(cfg)) == {"BLOCKING"}
+
+
+def test_3p8_marks_fallback_tools_blocking():
+    # No declarations -> the adapter's own fallback tool list; same rule.
+    from backend.config import MODEL_NATIVE_STANDARD
+    cfg = _build_cfg_with_tools(MODEL_NATIVE_STANDARD, None)
+    assert _behaviors(cfg) and set(_behaviors(cfg)) == {"BLOCKING"}
+
+
+def test_3p8_blocking_does_not_mutate_shared_declarations():
+    # The config deep-copies; the process-wide TOOL_DECLARATIONS must stay clean.
+    from backend.config import MODEL_NATIVE_STANDARD, Settings
+    decls = Settings().TOOL_DECLARATIONS
+    _build_cfg_with_tools(MODEL_NATIVE_STANDARD, decls)
+    assert all("behavior" not in d for d in decls)
+
+
+@pytest.mark.parametrize("model", [
+    "gemini-live-2.5-flash-native-audio",
+    "gemini-3.1-flash-live-preview",
+])
+def test_older_families_send_no_tool_behavior(model):
+    # 2.5 / 3.1 already block by default and were never endpoint-verified with
+    # the field set, so their declarations stay byte-identical.
+    from backend.config import Settings
+    cfg = _build_cfg_with_tools(model, Settings().TOOL_DECLARATIONS)
+    assert set(_behaviors(cfg)) == {None}
 
 
 

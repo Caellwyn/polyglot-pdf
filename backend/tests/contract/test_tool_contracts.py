@@ -15,7 +15,7 @@ mirroring test_live_ai_gemini_integration.py. Run on demand with a key:
 
     GEMINI_API_KEY=... PYTHONPATH=. python -m pytest backend/tests/contract/test_tool_contracts.py -m external
 
-Model A/B: 2.5 native-audio is the demo/prod default. BOTH models now emit both
+Model A/B: gemini-3.8-live is the demo default. BOTH models now emit both
 calls reliably and are gated -- the historic "3.1 skips update_form_fields ~50%"
 (bd polyglot-pdf-5oq) was the UNTYPED update_form_fields.value param rejected
 under google-genai 2.8.0, not a model regression; typing it "string" fixed 3.1
@@ -32,7 +32,7 @@ import os
 
 import pytest
 
-from backend.config import MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD, Settings
+from backend.config import MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD, Settings, model_family
 
 pytestmark = pytest.mark.external
 
@@ -76,11 +76,18 @@ def _system_instruction() -> str:
     )
 
 
-def _config() -> dict:
+def _config(model: str) -> dict:
     s = Settings()
+    decls = [dict(d) for d in s.TOOL_DECLARATIONS]
+    # Mirror LiveAIGemini._build_live_config: 3.8 defaults tools to NON_BLOCKING,
+    # so production sends every declaration BLOCKING on that family (bd
+    # polyglot-pdf-bd1zs). Without it this test would gate a config the app never sends.
+    if model_family(model) == "3.8":
+        for d in decls:
+            d["behavior"] = "BLOCKING"
     return {
         "response_modalities": ["AUDIO"],
-        "tools": [{"function_declarations": s.TOOL_DECLARATIONS}],
+        "tools": [{"function_declarations": decls}],
         "realtime_input_config": {"automatic_activity_detection": {}},
         "input_audio_transcription": {},
         "output_audio_transcription": {},
@@ -180,7 +187,7 @@ async def _drive_fill_then_confirm(model: str) -> dict:
     def _is(name, c):
         return c["name"] == name and c["field_id"] == FIELD_ID
 
-    async with client.aio.live.connect(model=model, config=_config()) as session:
+    async with client.aio.live.connect(model=model, config=_config(model)) as session:
         await session.send_realtime_input(
             text="Speak English. Greet the user and ask for the first field."
         )
@@ -243,7 +250,7 @@ async def _drive_fill_then_confirm(model: str) -> dict:
         # it skip the call ~50% of the time. A real gate for both models.
         MODEL_NATIVE_PREMIUM,
     ],
-    ids=["2.5-standard", "3.1-premium"],
+    ids=["3.8-standard", "3.1-premium"],
 )
 async def test_update_then_confirm_sequence(model):
     """The demo invariant: the model fills (update_form_fields) and THEN confirms

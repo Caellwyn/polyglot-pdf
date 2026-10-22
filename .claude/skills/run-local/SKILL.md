@@ -1,6 +1,6 @@
 ---
 name: run-local
-description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.sh (bash -- the agent can run this directly) / scripts/dev-local.ps1 (PowerShell, human-facing). Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "premium" to run the 3.1 model instead of the default 2.5, or "backend" for backend-only.
+description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.sh (bash -- the agent can run this directly) / scripts/dev-local.ps1 (PowerShell, human-facing). Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "premium" to run the 3.1 model instead of the default 3.8 (`gemini-3.8-live`), or "backend" for backend-only.
 ---
 
 # Run the local dev stack
@@ -12,7 +12,7 @@ This skill launches the polyglot-pdf app on the developer's machine so you can:
   This is the ONLY place full message bodies (tool-call args, tool responses,
   hints) are logged -- Cloud Run never logs them (PII policy). So local is where
   we debug tool-call behavior.
-- **A/B the Live model** (3.1 vs 2.5) by restarting with a different flag.
+- **A/B the Live model** (3.1 vs 3.8) by restarting with a different flag.
 - **Iterate on the frontend** with vite HMR and (later) drive it via the preview
   tools for rapid UI tweaks.
 
@@ -58,7 +58,7 @@ repo) and runs the same stack from Git Bash. Launch it with
 `run_in_background: true` so you are notified if it exits; do NOT poll it.
 
 ```bash
-# Default: both servers, 2.5 (standard) model, full dev logging ON
+# Default: both servers, 3.8 (standard) model, full dev logging ON
 ./scripts/dev-local.sh
 
 # A/B on the 3.1 (premium) model
@@ -77,7 +77,7 @@ The PowerShell runner is the human-facing equivalent (same servers; flags
 `-Model premium`, `-BackendOnly`, `-NoDevLog`):
 
 ```powershell
-./scripts/dev-local.ps1            # both, 2.5
+./scripts/dev-local.ps1            # both, 3.8
 ./scripts/dev-local.ps1 -Model premium
 ./scripts/dev-local.ps1 -BackendOnly
 ```
@@ -118,5 +118,5 @@ bash runner is somehow unavailable AND you cannot run it, ask the user to run
   gitignored (full message bodies are PII/PHI). If asked to share a log, redact
   field values first.
 - **Local only.** This runner never deploys and never touches Cloud Run.
-- **One model per run.** Switching 3.1 <-> 2.5 needs a restart (re-run with the
+- **One model per run.** Switching 3.1 <-> 3.8 needs a restart (re-run with the
   other `-Model`); that's intentional -- each run is a clean A/B sample.

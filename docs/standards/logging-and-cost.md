@@ -31,19 +31,27 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 ### Where the pieces live
 
 - **Rates** — `backend/config.py` holds `GEMINI_PRICING_BY_FAMILY`, a dict of
-  per-token rates keyed by model family (`"2.5"`, `"3.1"`). Rates are written as
-  per-1M list prices divided by `_PER_1M`. Verified against Google pricing
-  2026-05-30:
+  per-token rates keyed by model family (`"2.5"`, `"3.1"`, `"3.8"`). Rates are
+  written as per-1M list prices divided by `_PER_1M`. Verified against Google
+  pricing 2026-10-21:
 
   | Family | text-in | audio-in | text-out | audio-out |
   |--------|--------:|---------:|---------:|----------:|
-  | `2.5` (native-audio) | 0.50 | 3.00 | 2.00 | 12.00 |
+  | `3.8` (live; **default**) | 0.75 | 3.00 | 4.50 | 12.00 |
   | `3.1` (live preview) | 0.75 | 3.00 | 4.50 | 12.00 |
+  | `2.5` (native-audio) | 0.50 | 3.00 | 2.00 | 12.00 |
+
+  The `2.5` row stays so pre-migration session logs and an explicit 2.5
+  `MODEL_NATIVE` pin still price. Moving the default 2.5 → 3.8 leaves both
+  audio rates unchanged and raises text-in 0.50 → 0.75 and text-out
+  2.00 → 4.50 (output includes thinking tokens).
 
   `model_family(model_name)` maps a concrete model id to a family key with a
   version-bounded regex (so `gemini-3.1-flash` → `"3.1"` but `gemini-3.10-flash`
   does not). `get_pricing_for_model(model_name)` returns the rate row, falling
-  back to `DEFAULT_PRICING_FAMILY` (`"2.5"`) for unknown names. A legacy flat
+  back to `DEFAULT_PRICING_FAMILY` (`"3.8"`, never below any other row) for
+  unknown names. The fallback must not be `"2.5"`: the live adapter sends the
+  2.5-only `thinking_config` to the 2.5 family, which 3.8 rejects. A legacy flat
   `GEMINI_PRICING` alias still resolves to the default family's rates for older
   importers.
 
@@ -52,13 +60,19 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 
   `TEXT_GENERATION_PRICING` prices the plain `generate_content` endpoint (the
   secretary / validator / translation paths), per 1M tokens, verified against
-  ai.google.dev/gemini-api/docs/pricing on 2026-09-09:
+  ai.google.dev/gemini-api/docs/pricing on 2026-10-21:
 
-  | Model | text-in | cached-in | out |
-  |-------|--------:|----------:|----:|
-  | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 |
-  | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 |
-  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 |
+  | Model | text-in | cached-in | out | Role |
+  |-------|--------:|----------:|----:|------|
+  | `gemini-3.1-flash-lite` | 0.25 | 0.025 | 1.50 | default lite model (`MODEL_LABELING`, `TRANSLATION_VERIFY_BT_MODEL`) |
+  | `gemini-3.5-flash-lite` | 0.30 | 0.03 | 2.50 | lite-tier outage fallback |
+  | `gemini-2.5-flash` | 0.30 | 0.03 | 2.50 | not a default; env pin / old logs |
+  | `gemini-2.5-flash-lite` | 0.10 | 0.01 | 0.40 | not a default; env pin / old logs |
+  | `gemini-2.5-pro` | 1.25 | 0.125 | 10.00 | whole-form validator, authoring |
+
+  Moving the secretary/validator default from `gemini-2.5-flash` (which ran
+  because no deploy channel pinned `MODEL_LABELING`) to `gemini-3.1-flash-lite`
+  lowers those calls' rates (text-in 0.30 → 0.25, out 2.50 → 1.50).
 
   The `gemini-2.5-pro` row is the `<=200k`-token-prompt tier (this app's
   validator/translation prompts never approach 200k); the page's `>200k` tier
@@ -165,8 +179,13 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > re-inflates and the old "SI is everything" shape returns (cost/field rose 2.10x
 > across a form vs 1.15x with the derived window).
 >
-> (On **3.1** the split shifts again -- reasoning/thinking bills as *output*; but
-> 2.5 is the production tier.) Older source tables, superseded but retained for
+> **The production tier is now 3.8** (bd `polyglot-pdf-bd1zs`), and this split
+> has NOT been re-measured on it. Audio rates are identical to 2.5, but text-in
+> costs 1.5x more per token on 3.8 (0.75 vs 0.50), so at the same token counts the
+> happy-path split above re-weights to roughly text-in ~70 vs audio-in ~49 --
+> **the audio-in-leads ORDERING likely FLIPS back to text-in on 3.8**, and any
+> reasoning additionally bills as *output* at 4.50. Do not quote either ordering
+> for 3.8 until the 89mt shape is re-run on it (bd `polyglot-pdf-e72on`). Older source tables, superseded but retained for
 > the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
 > and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
 

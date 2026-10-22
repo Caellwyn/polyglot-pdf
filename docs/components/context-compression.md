@@ -22,8 +22,11 @@ See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journa
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
 > `CONTEXT_COMPRESSION_ENABLED` defaults TRUE; the continuous whole-form session
-> is bounded by the sliding window on every production connect. Sliding-window
-> eviction is real and reliable on both tiers -- `gemini-3.1-flash-live-preview`
+> is bounded by the sliding window on every production connect. The default
+> `gemini-3.8-live` ACCEPTS the compression config (Vertex connect with the
+> production config, 2026-10-21) but its eviction behavior has NOT been measured.
+> Sliding-window eviction is real and reliable on the two models it was measured
+> on -- `gemini-3.1-flash-live-preview`
 > (3/3 twenty-turn runs, 3-4 evictions each, 54-74% below the unbounded baseline
 > at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) and
 > `gemini-2.5-flash-native-audio-preview-12-2025` (2-3 evictions each; ON
@@ -352,9 +355,9 @@ production default (bd polyglot-pdf-7872):
 | Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for all of this | **Keep** |
 | Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | Connect race fix, orthogonal | **Keep** |
 
-Related design idea on file (maintainer, 2026-06-12): a **2.5 -> 3.1 mid-session
-failover** -- default to 2.5 for its much lower turn latency, and on a `1011` from
-the 2.5 backend immediately open a 3.1 session rehydrated from client state for a
+Related design idea on file (maintainer, 2026-06-12): a **mid-session model
+failover** -- on a `1011` from the default backend (2.5 when this was filed; 3.8
+since bd `polyglot-pdf-bd1zs`) immediately open a session on another Live model rehydrated from client state for a
 seamless model switch (bd `polyglot-pdf-3v5m`). The stateless handshake makes this
 architecturally cheap; it is a separate bead, not part of the compression epic.
 

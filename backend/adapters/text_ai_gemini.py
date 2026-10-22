@@ -125,8 +125,8 @@ class TextAIGemini(ITextAI):
     (jnjj.27) establishes the token minimum and confirms latency savings.
 
     Model-fallback resilience (jnjj.42): a single cheap model can have a
-    sustained outage (gemini-2.5-flash-lite was 503 UNAVAILABLE for 1hr+ on
-    2026-06-25 while gemini-3.1-flash-lite answered fine). _generate() walks an
+    sustained outage (one lite model was 503 UNAVAILABLE for 1hr+ on
+    2026-06-25 while a sibling lite model answered fine). _generate() walks an
     ordered fallback chain -- the configured model, then DEFAULT_FALLBACK_MODELS
     -- on a transient AVAILABILITY error (5xx, or 404/429), so a single-model
     outage degrades to a sibling instead of failing the call. The chain stays
@@ -140,22 +140,34 @@ class TextAIGemini(ITextAI):
     """
 
     # Ordered fallback models tried after the configured one. LITE TIER ONLY (cost
-    # discipline -- never gemini-flash-latest / full Flash). gemini-3.1-flash-lite
-    # is a real, valid model id; gemini-flash-lite-latest was REMOVED (2026-06-27)
-    # -- it is NOT a valid model string (the only `-latest` rolling aliases are
-    # gemini-flash-latest / gemini-pro-latest, neither of which is the lite tier),
-    # so it would 404 if ever reached.
+    # discipline -- never gemini-flash-latest / full Flash). gemini-3.5-flash-lite
+    # is a real, valid model id, endpoint-verified on Vertex `global` 2026-10-21
+    # (bd polyglot-pdf-bd1zs); it is the next lite generation after the
+    # 3.1-flash-lite default, priced in TEXT_GENERATION_PRICING. Do NOT use
+    # gemini-flash-lite-latest -- it is NOT a valid model string (the only
+    # `-latest` rolling aliases are gemini-flash-latest / gemini-pro-latest,
+    # neither of which is the lite tier), so it would 404 if ever reached.
     DEFAULT_FALLBACK_MODELS = (
-        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
     )
+
+    # Vertex location for the TEXT client. `global`, not us-central1: the 3.x
+    # lite models (gemini-3.1-flash-lite, gemini-3.5-flash-lite) are served on
+    # Vertex ONLY at `global` and 404 at us-central1, while gemini-2.5-pro and
+    # gemini-2.5-flash-lite answer at both (all endpoint-verified 2026-10-21, bd
+    # polyglot-pdf-bd1zs). It is still Vertex (same project, service account and
+    # no-training terms), but `global` carries no regional data-residency
+    # commitment -- see docs/standards/ai-models.md. The LIVE adapter keeps
+    # us-central1: gemini-3.8-live is the reverse (regional only, 1008 at global).
+    DEFAULT_VERTEX_LOCATION = "global"
 
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "gemini-2.5-flash-lite",
+        model: str = "gemini-3.1-flash-lite",
         vertexai: bool = False,
         project: str | None = None,
-        location: str = "us-central1",
+        location: str = DEFAULT_VERTEX_LOCATION,
         fallback_models: tuple | list | None = None,
         thinking_budget: int | None = None,
     ):
@@ -1223,6 +1235,11 @@ class TextAIGemini(ITextAI):
         cached_tokens = getattr(usage_metadata, "cached_content_token_count", 0) or 0
         prompt_tokens = getattr(usage_metadata, "prompt_token_count", None)
         output_tokens = getattr(usage_metadata, "candidates_token_count", None)
+        # Thinking tokens bill at the OUTPUT rate but are reported outside
+        # candidates_token_count (bd polyglot-pdf-bd1zs). The 2.5-pro validator
+        # runs with a nonzero thinking budget and the 3.x lite models may think,
+        # so they are added to the billed output below.
+        thoughts_tokens = getattr(usage_metadata, "thoughts_token_count", None) or 0
         total_tokens = getattr(usage_metadata, "total_token_count", None)
         self._log.info(
             "text_ai_usage",
@@ -1231,6 +1248,7 @@ class TextAIGemini(ITextAI):
             prompt_tokens=prompt_tokens,
             cached_tokens=cached_tokens,
             output_tokens=output_tokens,
+            thoughts_tokens=thoughts_tokens,
             cache_hit=(cached_tokens > 0),
         )
 
@@ -1240,7 +1258,7 @@ class TextAIGemini(ITextAI):
         ctx = session_ctx if isinstance(session_ctx, dict) else {}
 
         # Cost: (prompt - cached) at text_input, cached at cached_input, output
-        # at text_output. get_text_generation_pricing returns None for an
+        # + thoughts at text_output. get_text_generation_pricing returns None for an
         # unrecognized model id -- an explicit gap beats a confident wrong
         # number (docs/standards/logging-and-cost.md), so cost_estimate_usd is
         # None in that case rather than computed from a guessed rate.
@@ -1249,7 +1267,7 @@ class TextAIGemini(ITextAI):
         if pricing is not None:
             safe_prompt = prompt_tokens or 0
             safe_cached = min(cached_tokens, safe_prompt)
-            safe_output = output_tokens or 0
+            safe_output = (output_tokens or 0) + thoughts_tokens
             uncached_input = safe_prompt - safe_cached
             cost_estimate_usd = round(
                 uncached_input * pricing["text_input"]

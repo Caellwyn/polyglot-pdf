@@ -30,10 +30,9 @@
 
 .PARAMETER Model
   Which native-audio Live model to run, for A/B testing tool-call reliability:
-    standard -> gemini-2.5-flash-native-audio-preview-12-2025 (default; mirrors
-                the deployed demo/prod default since bd polyglot-pdf-5oq)
-    premium  -> gemini-3.1-flash-live-preview            (opt-in; unreliable
-                tool-calling in audio mode)
+    standard -> gemini-3.8-live                (default; mirrors the deployed
+                demo default since bd polyglot-pdf-bd1zs)
+    premium  -> gemini-3.1-flash-live-preview  (opt-in; AI Studio only)
   Maps to USE_PREMIUM_MODEL. To pin an exact id instead, set $env:MODEL_NATIVE
   before launching (non-empty MODEL_NATIVE wins over this flag).
 
@@ -77,7 +76,7 @@
 
 .EXAMPLE
   ./scripts/dev-local.ps1
-  Start both servers on the 2.5 model (the deployed default) with full dev logging.
+  Start both servers on the 3.8 model (the deployed default) with full dev logging.
 
 .EXAMPLE
   ./scripts/dev-local.ps1 -Model premium

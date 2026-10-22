@@ -245,6 +245,34 @@ async def test_unknown_model_emits_null_cost_not_a_guess():
     assert kwargs["metadata"]["cost_estimate_usd"] is None
 
 
+@pytest.mark.asyncio
+async def test_thinking_tokens_bill_at_the_output_rate():
+    """thoughts_token_count is billed as OUTPUT (bd polyglot-pdf-bd1zs).
+
+    The SDK reports thinking outside candidates_token_count; the pricing page's
+    output rate "includes thinking tokens". The 2.5-pro validator runs with a
+    thinking budget and the 3.x lite models may think, so dropping it would
+    under-state every such call. Exact figure, not `> 0`, so a regression that
+    ignores thoughts fails here.
+    """
+    from backend.config import TEXT_GENERATION_PRICING
+
+    response = _make_response('{"conflicts":[]}', prompt_tokens=1000,
+                              output_tokens=20)
+    response.usage_metadata.thoughts_token_count = 500
+    adapter = _make_adapter(response)
+
+    with patch("backend.adapters.text_ai_gemini.get_structured_logger") as mock_get:
+        mock_logger = MagicMock()
+        mock_get.return_value = mock_logger
+        await adapter.validate({"stable_prefix": [], "fresh_tail": []})
+
+    row = TEXT_GENERATION_PRICING["gemini-2.5-flash-lite"]
+    expected = round(1000 * row["text_input"] + (20 + 500) * row["text_output"], 8)
+    kwargs = mock_logger.log_text_ai_usage.call_args.kwargs
+    assert kwargs["metadata"]["cost_estimate_usd"] == pytest.approx(expected)
+
+
 # ---------------------------------------------------------------------------
 # Exit criterion 2: concurrent sessions never leak ids on the singleton
 # ---------------------------------------------------------------------------

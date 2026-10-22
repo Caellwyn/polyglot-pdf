@@ -20,21 +20,22 @@ from backend.config import (
 )
 
 
-def test_standard_tier_on_ai_studio_resolves_to_2_5_native():
-    # AI Studio path (VERTEXAI=False): standard tier -> the AI Studio native-audio id.
+def test_standard_tier_on_ai_studio_resolves_to_3_8_live():
+    # AI Studio path (VERTEXAI=False): standard tier -> the AI Studio id.
     s = Settings(VERTEXAI=False, USE_PREMIUM_MODEL=False, MODEL_NATIVE="")
     assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD
-    assert s.MODEL_NATIVE == "gemini-2.5-flash-native-audio-preview-12-2025"
+    assert s.MODEL_NATIVE == "gemini-3.8-live"
 
 
 def test_standard_tier_on_vertex_resolves_to_vertex_native():
-    # Vertex path (VERTEXAI=True): standard tier -> the Vertex native-audio id,
-    # because the AI Studio id 1008s on Vertex. Backend-aware resolution means a
-    # Vertex deploy needs no MODEL_NATIVE pin (bd polyglot-pdf-a079). Still 2.5.
+    # Vertex path (VERTEXAI=True): standard tier -> the Vertex id. Backend-aware
+    # resolution means a Vertex deploy needs no MODEL_NATIVE pin (bd
+    # polyglot-pdf-a079). For 3.8 the Vertex id equals the AI Studio id; it is
+    # endpoint-verified on Vertex us-central1 (bd polyglot-pdf-bd1zs).
     s = Settings(VERTEXAI=True, USE_PREMIUM_MODEL=False, MODEL_NATIVE="")
     assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD_VERTEX
-    assert s.MODEL_NATIVE == "gemini-live-2.5-flash-native-audio"
-    assert model_family(s.MODEL_NATIVE) == "2.5"
+    assert s.MODEL_NATIVE == "gemini-3.8-live"
+    assert model_family(s.MODEL_NATIVE) == "3.8"
 
 
 def test_premium_tier_resolves_to_3_1_live():
@@ -43,13 +44,12 @@ def test_premium_tier_resolves_to_3_1_live():
     assert s.MODEL_NATIVE == "gemini-3.1-flash-live-preview"
 
 
-def test_default_resolves_to_2_5_standard():
-    """Regression: with NO premium flag, the default tier is standard/2.5.
+def test_default_resolves_to_3_8_standard():
+    """Regression: with NO premium flag, the default tier is standard/3.8.
 
-    2.5 is the default for latency (~170x faster per turn on the audio path).
-    Pin it so a future accidental flip to 3.1 is caught here. Resolution is now
-    BACKEND-AWARE (bd polyglot-pdf-a079): the standard tier's 2.5 id depends on
-    VERTEXAI, so this test pins VERTEXAI=False to assert the AI Studio id
+    Pin it so a future accidental flip to the AI-Studio-only 3.1 is caught here.
+    Resolution is BACKEND-AWARE (bd polyglot-pdf-a079): the standard tier's id
+    may depend on VERTEXAI, so this test pins VERTEXAI=False to assert the AI Studio id
     specifically (the Vertex branch is covered by
     test_standard_tier_on_vertex_resolves_to_vertex_native). The field default is
     read from os.getenv at class-definition time, so an explicit
@@ -59,7 +59,7 @@ def test_default_resolves_to_2_5_standard():
         pytest.skip("USE_PREMIUM_MODEL is set in the env; can't assert the code default")
     s = Settings(VERTEXAI=False, MODEL_NATIVE="")  # USE_PREMIUM_MODEL at field default
     assert s.USE_PREMIUM_MODEL is False
-    assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD == "gemini-2.5-flash-native-audio-preview-12-2025"
+    assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD == "gemini-3.8-live"
 
 
 def test_explicit_model_native_overrides_flag():
@@ -69,8 +69,8 @@ def test_explicit_model_native_overrides_flag():
 
 
 def test_resolved_models_map_to_expected_pricing_families():
-    # The whole point of the toggle is a comparable 2.5-vs-3.1 cost A/B.
+    # The whole point of the toggle is a comparable 3.8-vs-3.1 cost A/B.
     standard = Settings(USE_PREMIUM_MODEL=False, MODEL_NATIVE="")
     premium = Settings(USE_PREMIUM_MODEL=True, MODEL_NATIVE="")
-    assert model_family(standard.MODEL_NATIVE) == "2.5"
+    assert model_family(standard.MODEL_NATIVE) == "3.8"
     assert model_family(premium.MODEL_NATIVE) == "3.1"

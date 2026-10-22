@@ -732,3 +732,30 @@ def test_probe_judges_with_the_production_rules():
     probe = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(probe)
     assert probe._JUDGE_RULES is TextAIGemini._JUDGE_RULES
+
+
+def test_vertex_text_client_is_built_at_the_global_location():
+    """The 3.x lite models are served on Vertex ONLY at `global` (404 at
+    us-central1, endpoint-verified 2026-10-21, bd polyglot-pdf-bd1zs). A text
+    client built at a regional location would 404 the default model on every
+    call -- and fail the whole lite chain over to fail-open, silently. Pinned
+    at the SDK boundary, through the same construction every call site uses
+    (no explicit location)."""
+    from backend.adapters.text_ai_gemini import TextAIGemini
+
+    with patch("backend.adapters.text_ai_gemini.genai") as mock_genai:
+        TextAIGemini(vertexai=True, project="p")
+    assert mock_genai.Client.call_args.kwargs["location"] == "global"
+
+
+def test_default_text_model_is_the_3p1_lite_tier():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    from backend.config import Settings
+
+    assert Settings().MODEL_LABELING == "gemini-3.1-flash-lite"
+    with patch("backend.adapters.text_ai_gemini.genai"):
+        a = TextAIGemini(vertexai=True, project="p")
+    assert a._model_chain[0] == "gemini-3.1-flash-lite"
+    # The outage fallback stays in the lite tier and never repeats the primary.
+    assert all("lite" in m for m in a._model_chain)
+    assert a._model_chain.count("gemini-3.1-flash-lite") == 1

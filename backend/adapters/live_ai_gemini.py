@@ -309,7 +309,7 @@ class LiveAIGemini(ILiveAI):
     dependency provider can pass either `api_key`, `vertexai` or `model` as keywords.
     """
 
-    def __init__(self, api_key: str | None = None, model: str = "gemini-2.5-flash-native-audio-preview-12-2025",
+    def __init__(self, api_key: str | None = None, model: str = "gemini-3.8-live",
              vertexai: bool = False,
              project: str | None = None, 
              location: str = "us-central1"):
@@ -1410,9 +1410,11 @@ class LiveAIGemini(ILiveAI):
         Studio endpoint (bd polyglot-pdf-1g6 / backend/scripts/probe_3p1_1007.py):
         the same text via session.send_realtime_input(text=...) is accepted and
         returns audio. So for the 3.1 family we use send_realtime_input(text=);
-        for 2.5 / others we keep send_client_content (the 2.5 path on
-        send_realtime_input is unconfirmed, so we do not change it). When the 2.5
-        family is re-verified this branch can collapse to a single call.
+        every other family keeps send_client_content. 3.8 accepts
+        send_client_content for the whole session (its migration notes, and
+        endpoint-verified with this exact no-role shape on Vertex 2026-10-21, bd
+        polyglot-pdf-bd1zs). Note on 3.8 turn_complete=True unconditionally
+        interrupts any model generation in progress.
         """
         # DEV-ONLY: the FULL text turn sent to Gemini (next-field hints, language
         # /context prompts). The structlog path logs only its length (PII: text
@@ -1932,6 +1934,20 @@ class LiveAIGemini(ILiveAI):
             }]
             self._log.warning("[warn] No function_declarations provided - using fallback tools only")
 
+        # 3.8 defaults function calls to NON_BLOCKING (async) -- every tool here
+        # is written for the blocking contract (the model waits for the result,
+        # then speaks; ask_secretary's deadline/pending path depends on it).
+        # Measured on Vertex 2026-10-21 (bd polyglot-pdf-bd1zs): with no
+        # `behavior`, 3.8 called update_form_fields and then ENDED THE TURN
+        # SILENTLY after the tool result; with behavior=BLOCKING it waited (no
+        # audio during a 3s delayed response) and then spoke. Scoped to the 3.8
+        # family: the older families already block by default and were never
+        # endpoint-verified with the field set.
+        if model_family(self._model_name) == "3.8":
+            for tool in tools_config:
+                for decl in tool["function_declarations"]:
+                    decl["behavior"] = "BLOCKING"
+
         config = {
             "response_modalities": response_modalities,
             "tools": tools_config,
@@ -2279,11 +2295,13 @@ class LiveAIGemini(ILiveAI):
         # failover, which is a separate, still-open design bead). The form-fill
         # turn loop needs no chain-of-thought, and thinking tokens bill at the
         # output rate. Send the 2.5-family `thinking_budget=0` form ONLY to a model
-        # that is positively identified as 2.5 (an explicit allowlist, not "!= 3.1")
-        # -- model_family() is a PRICING fallback that maps any unrecognized string
-        # to "2.5", so gating on `!= "3.1"` would send `thinking_budget` to an
-        # unknown/typo'd model that may not accept it (fresh-eyes). 3.1 uses a
-        # different `thinking_level` field and is left at its default. Dict form
+        # whose family is 2.5 (an allowlist, not "!= 3.1"). model_family() maps
+        # an UNRECOGNIZED string to DEFAULT_PRICING_FAMILY, which is deliberately
+        # not "2.5", so an unknown/typo'd model gets no thinking_config either.
+        # This matters: 3.8 REJECTS any thinking_config with a 1007 at connect
+        # ("not allowlisted to customize the thinking level", Vertex 2026-10-21,
+        # bd polyglot-pdf-bd1zs) -- sending it would kill every session. 3.1
+        # uses a different `thinking_level` field and is left at its default. Dict form
         # mirrors the other snake_case config keys the SDK aliases. Effect on
         # native-audio Live is unverified upstream
         # (docs/genai_docs/live-api-best-practices.md), so this is safe-if-ignored.
@@ -3390,9 +3408,24 @@ class LiveAIGemini(ILiveAI):
                                                         elif modality == types.Modality.AUDIO:
                                                             audio_output_tokens += safe_count
 
+                                            # Thinking tokens are billed as TEXT OUTPUT
+                                            # (the pricing page's output rate "including
+                                            # thinking tokens") but are reported OUTSIDE
+                                            # response_tokens_details, in
+                                            # thoughts_token_count (total = prompt +
+                                            # response + thoughts). 3.8 always reasons and
+                                            # cannot be told not to (bd polyglot-pdf-bd1zs:
+                                            # 116 thought tokens on a one-tool turn), so
+                                            # leaving them out under-reports every turn's
+                                            # cost and the spend ceiling built on it. Folded
+                                            # into text_output_tokens so every downstream
+                                            # field keeps meaning "billed text output".
+                                            thoughts_tokens = getattr(usage, "thoughts_token_count", None) or 0
+                                            text_output_tokens += thoughts_tokens
+
                                             # Calculate costs by modality, using the
                                             # rate row for the ACTIVE model's family so
-                                            # a 2.5 vs 3.1 A/B is costed correctly.
+                                            # a 3.8 vs 3.1 A/B is costed correctly.
                                             pricing = get_pricing_for_model(self._model_name)
                                             text_input_cost = text_input_tokens * pricing["text_input"]
                                             audio_input_cost = audio_input_tokens * pricing["audio_input"]
@@ -3424,6 +3457,7 @@ class LiveAIGemini(ILiveAI):
                                                 text_input_tokens=text_input_tokens,
                                                 audio_input_tokens=audio_input_tokens,
                                                 text_output_tokens=text_output_tokens,
+                                                thoughts_tokens=thoughts_tokens,
                                                 audio_output_tokens=audio_output_tokens,
                                                 turn_cost_usd=round(total_cost, 6),
                                                 session_total_tokens=self._session_total_tokens,

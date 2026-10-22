@@ -21,7 +21,7 @@
 #   - Frontend : vite dev server on http://localhost:5173 (--mode demo + local WS)
 #
 # Usage:
-#   ./scripts/dev-local.sh              # both servers (default 2.5 model, VERTEX)
+#   ./scripts/dev-local.sh              # both servers (default 3.8 model, VERTEX)
 #   ./scripts/dev-local.sh premium      # both, USE_PREMIUM_MODEL=true (3.1, AI Studio)
 #   ./scripts/dev-local.sh backend      # backend only
 #   ./scripts/dev-local.sh frontend     # frontend only (talks to whatever WS URL)
@@ -202,7 +202,7 @@ start_backend() {
   if [ "$PREMIUM" = "true" ]; then
     vertexai=false
     echo "WARNING: premium (3.1) arm runs on AI STUDIO (VERTEXAI=false) -- 3.1 is not on Vertex yet." >&2
-    echo "  This arm bills to the AI Studio account, NOT the Vertex project. Use the default (2.5) arm for Vertex." >&2
+    echo "  This arm bills to the AI Studio account, NOT the Vertex project. Use the default (3.8) arm for Vertex." >&2
   else
     vertexai=true
   fi

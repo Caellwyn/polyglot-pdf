@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-wfgjz, sprint 23 B1a: the token file is local-dev only (.env.DEV gate at the call site, K_SERVICE no-op in the writer) and the per-turn print() banner became the structured `token_usage` event; nothing else in the adapter changed.)*
+*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: default Live model `gemini-3.8-live` -- no thinking config, BLOCKING tool behavior, thought tokens billed as text output.)*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -265,7 +265,8 @@ if any voice is rejected (so it can gate a deploy) and always probes a bogus
 name as a CONTROL -- a probe that accepts everything proves nothing. `Algieba`
 and `Iapetus` are both verified ACCEPTED on
 `gemini-live-2.5-flash-native-audio` (2026-08-11); `NotARealVoiceXYZ` is
-correctly rejected. Rollback if one ever 1007s: `LIVE_VOICE_NAME=""` falls back
+correctly rejected. The default `Algieba` also connects on `gemini-3.8-live`
+(Vertex, 2026-10-21, inside the full production config). Rollback if one ever 1007s: `LIVE_VOICE_NAME=""` falls back
 to the API default.
 
 Connect-acceptance is all the probe can tell you. Whether a voice actually
@@ -454,9 +455,10 @@ transcription block on by itself, and it is per-connect -- which is a natural fi
 since the spoken language is PINNED per session (bd polyglot-pdf-87a9,
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md)) and so the codes
 are derived once, before the connect. Endpoint-verified
-ACCEPTED on the Vertex 2.5 native-audio default tier
-(`scripts/spikes/transcription_lang_codes_findings.md`); the AI-Studio 3.1
-premium tier is unverified -- the env flag is the kill-switch.
+ACCEPTED on Vertex 2.5 native-audio
+(`scripts/spikes/transcription_lang_codes_findings.md`) and on the Vertex 3.8
+default tier together with `speech_config.language_code` (`es-US`, 2026-10-21);
+the AI-Studio 3.1 premium tier is unverified -- the env flag is the kill-switch.
 
 **Stored-value echo** (bd polyglot-pdf-h7wx): a successful `update_form_fields`
 tool response carries `stored_values` (field_id -> the post-validator CANONICAL
@@ -471,14 +473,26 @@ multi-field call -- whose first field validates but is never carried to the
 client -- must NOT echo `stored_values`, or the model reads back a value client
 and model never agreed on.
 
-Model **thinking** is turned off by default: when `DISABLE_MODEL_THINKING` is set
-(default on) and the active model is 2.5-family, the config carries
-`thinking_config = {"thinking_budget": 0}`. The form-fill turn loop needs no
-chain-of-thought, and thinking tokens bill at the output rate. The 3.1 family uses
-a different `thinking_level` field and is left at its default (the 2.5-only
-`thinking_budget` form is not sent to it). Whether the flag does anything on
-native-audio Live is unverified upstream ([../genai_docs/live-api-best-practices.md](../genai_docs/live-api-best-practices.md)),
-so this is safe-if-ignored rather than guaranteed.
+Model **thinking** config is sent only to the 2.5 family: when
+`DISABLE_MODEL_THINKING` is set (default on) and the active model is 2.5-family,
+the config carries `thinking_config = {"thinking_budget": 0}`. The default
+**3.8** tier gets no thinking config at all -- it REJECTS one with a `1007` at
+connect ("not allowlisted to customize the thinking level", Vertex 2026-10-21) --
+and it reasons by default, so its turns report `thoughts_token_count`. The 3.1
+family uses a different `thinking_level` field and is left at its default.
+Thought tokens bill at the text-OUTPUT rate but arrive outside
+`response_tokens_details`, so the usage handler folds `thoughts_token_count` into
+`text_output_tokens` (and logs it as `thoughts_tokens`) -- otherwise every 3.8
+turn under-reports cost and the spend ceiling built on it.
+
+**Tool `behavior` on 3.8.** 3.8 defaults function calls to `NON_BLOCKING`. Every
+tool here is written for the blocking contract (the model waits for the result,
+then speaks), so `_build_live_config` marks each declaration
+`behavior: "BLOCKING"` for the 3.8 family only. Measured on Vertex: unmarked, the
+model called `update_form_fields` and then ended its turn silently after the tool
+result; marked, it waited and then spoke the confirmation. Text turns
+(`_send_text_turn`) use `send_client_content` on 3.8 (verified); on 3.8 a
+`turn_complete=True` turn interrupts any speech in progress.
 
 ## Scar tissue
 

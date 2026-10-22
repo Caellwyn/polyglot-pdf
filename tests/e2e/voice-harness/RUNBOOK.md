@@ -81,8 +81,8 @@ cd "$WT/frontend" && npm run build:worklet && \
   VITE_WS_URL=ws://localhost:8001/ws/fill npx vite --mode demo --port 5174 --strictPort
 ```
 Wait for `http://localhost:8001/health` and `http://localhost:5174` to respond.
-(2.5 is the default model; `USE_PREMIUM_MODEL=true` A/Bs 3.1 -- known to skip
-`update_form_fields` more, expect more FLAKY.)
+(`gemini-3.8-live` is the default model; `USE_PREMIUM_MODEL=true` A/Bs 3.1 --
+known to skip `update_form_fields` more, expect more FLAKY.)
 
 ### 2. Open the app with the gates on (Chrome MCP)
 
