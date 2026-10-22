@@ -343,6 +343,17 @@ audit --omit=dev` for the three apps, detect-secrets on the PR's changed files
 against `.secrets.baseline`, bandit, and semgrep (Python + TypeScript
 rulesets); every one of its scanner steps is `continue-on-error`, so it
 reports and never gates either.
+
+**Dependabot batches only minor and patch backend updates.** The weekly
+`all-pip-backend` group in `.github/dependabot.yml` carries
+`update-types: [minor, patch]`, so a MAJOR bump of any backend package arrives
+as its own single-package PR rather than inside the batch (bd
+polyglot-pdf-niwcu, after the grouped `#882` carried seven majors and broke the
+staging verify gate). The five voice-path packages (google-genai, websockets,
+uvicorn, fastapi, starlette) are excluded from automatic bumps altogether, and
+the npm groups exclude the TypeScript toolchain the same way (see
+`docs/doctrine/promotion-tiers.md`). All of it is pinned by
+`tests/test_dependabot_config.py`, which parses the YAML.
 It is **not** a required status check: the merge gate is the closeout merge
 decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
 merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
