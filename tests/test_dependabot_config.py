@@ -320,9 +320,6 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
 # next batch, around the validation each bead exists to do. An upgrade bead's
 # PR removes its packages from this map AND from dependabot.yml together.
 HELD_FOR_UPGRADE = {
-    "pytest": "polyglot-pdf-oy37r",
-    "pytest-asyncio": "polyglot-pdf-oy37r",
-    "pytest-cov": "polyglot-pdf-oy37r",
     "PyMuPDF": "polyglot-pdf-k5dnc",
     "librosa": "polyglot-pdf-m9h4w",
     "soundfile": "polyglot-pdf-m9h4w",
@@ -363,3 +360,67 @@ def test_every_held_package_is_actually_pinned_in_the_requirements():
                 pinned.add(m.group(1).lower())
     stray = [p for p in HELD_FOR_UPGRADE if p.lower() not in pinned]
     assert not stray, "held but not pinned in backend requirements: " + repr(stray)
+
+
+def test_every_group_in_every_ecosystem_batches_only_minor_and_patch():
+    """bd polyglot-pdf-fx8gg: the npm and github-actions groups get the same
+    rule as pip. #880/#884/#885 batched React 19, Tailwind 4, pdfjs-dist 6 and
+    react-router 7 into three grouped npm PRs that were merged red and had to
+    be reverted (#888)."""
+    config = _load_dependabot_config()
+    groups = [
+        (u.get("package-ecosystem"), u.get("directory"), name, g)
+        for u in config["updates"]
+        for name, g in u.get("groups", {}).items()
+    ]
+    assert len(groups) >= 5, "expected pip + 3 npm + github-actions groups: " + repr(groups)
+    bad = [(eco, d, name, g.get("update-types")) for eco, d, name, g in groups
+           if not g.get("update-types") or not set(g["update-types"]) <= {"minor", "patch"}]
+    assert not bad, "groups that batch majors (or have no update-types): " + repr(bad)
+
+
+# npm packages reverted in #888 and HELD out of Dependabot until their own
+# upgrade bead lands (bd polyglot-pdf-fx8gg). Each upgrade bead's PR removes
+# its packages from this map AND from every npm entry in dependabot.yml.
+NPM_HELD_FOR_UPGRADE = {
+    "react": "polyglot-pdf-lhrnq",
+    "react-dom": "polyglot-pdf-lhrnq",
+    "@types/react": "polyglot-pdf-lhrnq",
+    "@types/react-dom": "polyglot-pdf-lhrnq",
+    "@testing-library/react": "polyglot-pdf-lhrnq",
+    "pdfjs-dist": "polyglot-pdf-q0i7k",
+    "tailwindcss": "polyglot-pdf-umd8r",
+    "react-router-dom": "polyglot-pdf-vxssq",
+    "jsdom": "polyglot-pdf-50zcc",
+    "@testing-library/jest-dom": "polyglot-pdf-50zcc",
+}
+
+
+def test_npm_held_packages_are_fully_ignored_and_excluded_in_every_npm_update():
+    config = _load_dependabot_config()
+    npm = [u for u in config["updates"] if u.get("package-ecosystem") == "npm"]
+    assert len(npm) == 3, "expected three npm update entries"
+    for u in npm:
+        ignored = {e["dependency-name"]: e for e in u.get("ignore", []) if "dependency-name" in e}
+        missing = [p for p in NPM_HELD_FOR_UPGRADE if p not in ignored]
+        assert not missing, "{}: held packages missing from ignore: {}".format(u["directory"], missing)
+        scoped = [p for p in NPM_HELD_FOR_UPGRADE
+                  if "versions" in ignored[p] or "update-types" in ignored[p]]
+        assert not scoped, "{}: held packages only PARTIALLY ignored: {}".format(u["directory"], scoped)
+        for gname, g in u.get("groups", {}).items():
+            absent = [p for p in NPM_HELD_FOR_UPGRADE if p not in set(g.get("exclude-patterns", []))]
+            assert not absent, "{} group {} does not exclude: {}".format(u["directory"], gname, absent)
+
+
+def test_every_npm_held_package_is_declared_by_some_app():
+    """A held name no app declares is dead config -- usually a typo leaving the
+    real package unheld."""
+    import json
+    repo = Path(__file__).resolve().parents[1]
+    declared = set()
+    for app in ("frontend", "schema-editor", "admin-console"):
+        pkg = json.loads((repo / app / "package.json").read_text(encoding="utf-8"))
+        for section in ("dependencies", "devDependencies"):
+            declared.update(pkg.get(section, {}))
+    stray = [p for p in NPM_HELD_FOR_UPGRADE if p not in declared]
+    assert not stray, "held but declared by no app: " + repr(stray)
