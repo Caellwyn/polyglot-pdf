@@ -93,6 +93,10 @@ updates:
           - "uvicorn"
           - "fastapi"
           - "starlette"
+          # COUPLED (bd polyglot-pdf-1aq49): firebase-admin 7.x pins httpx[http2]
+          # EXACTLY (==0.28.1), so an httpx bump inside the batch cannot resolve.
+          # Kept out of the group; it moves with a firebase-admin bump instead.
+          - "httpx"
           # HELD until its upgrade bead lands (see the ignore: block below).
           - "structlog"
           - "PyMuPDF"
@@ -104,6 +108,8 @@ updates:
       - dependency-name: "uvicorn"
       - dependency-name: "fastapi"
       - dependency-name: "starlette"
+      # httpx: see the exclude-patterns note -- exact-pinned by firebase-admin 7.x.
+      - dependency-name: "httpx"
       # HELD packages (bd polyglot-pdf-niwcu): pinned back from #882 and being
       # upgraded deliberately, each behind its own validation. Several of their
       # #882 jumps were MINOR by Dependabot's reckoning (PyMuPDF 1.24 -> 1.28,
