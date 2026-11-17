@@ -1,0 +1,1079 @@
+{
+  "generated_utc": "2026-11-17T21:58:23+00:00",
+  "project": "polyglot-demo-aa709",
+  "log_window_start": "2026-10-18T00:00:00Z",
+  "cutover": "2026-10-21",
+  "services_now": {
+    "polyglot-backend": {
+      "latest_ready_revision": "polyglot-backend-00099-kn5",
+      "update_time": "2026-09-23T23:03:00.836836Z",
+      "image_tag": [
+        "b91fad5bb03d"
+      ],
+      "env": {
+        "USE_PREMIUM_MODEL": "false",
+        "LINK_CHANNEL": "demo"
+      }
+    },
+    "polyglot-backend-staging": {
+      "latest_ready_revision": "polyglot-backend-staging-00015-dw9",
+      "update_time": "2026-10-22T04:38:16.863837Z",
+      "image_tag": [
+        "5edd4b6d1139"
+      ],
+      "env": {
+        "USE_PREMIUM_MODEL": "false",
+        "LINK_CHANNEL": "staging"
+      }
+    }
+  },
+  "model_attribution": {
+    "rows_by_channel_day_model": [
+      {
+        "channel": "demo",
+        "day": "2026-11-04",
+        "model": "gemini-live-2.5-flash-native-audio",
+        "source": "attributed",
+        "rows": 3
+      },
+      {
+        "channel": "demo",
+        "day": "2026-11-04",
+        "model": "gemini-live-2.5-flash-native-audio",
+        "source": "logged",
+        "rows": 30
+      },
+      {
+        "channel": "staging",
+        "day": "2026-10-22",
+        "model": "gemini-3.8-live",
+        "source": "attributed",
+        "rows": 5
+      },
+      {
+        "channel": "staging",
+        "day": "2026-10-22",
+        "model": "gemini-3.8-live",
+        "source": "logged",
+        "rows": 66
+      }
+    ],
+    "unattributed_rows": 0,
+    "model_vs_date_cutover_mismatches": [
+      {
+        "channel": "demo",
+        "day": "2026-11-04",
+        "model": "gemini-live-2.5-flash-native-audio",
+        "source": "attributed",
+        "rows": 3
+      },
+      {
+        "channel": "demo",
+        "day": "2026-11-04",
+        "model": "gemini-live-2.5-flash-native-audio",
+        "source": "logged",
+        "rows": 30
+      }
+    ]
+  },
+  "logging_by_channel_model": {
+    "demo|gemini-live-2.5-flash-native-audio": {
+      "service": "polyglot-backend",
+      "channel": "demo",
+      "model": "gemini-live-2.5-flash-native-audio",
+      "days": [
+        "2026-11-04"
+      ],
+      "form_sessions_started": 1,
+      "adapter_instances": 2,
+      "ws_connections": [
+        {
+          "duration_s": 6.702428,
+          "status": 101
+        },
+        {
+          "duration_s": 10.131566,
+          "status": 101
+        }
+      ],
+      "cost_summary_rows": [
+        {
+          "inst": "inst2",
+          "fsess": "fsess1",
+          "total_cost_usd": 0.006618,
+          "total_tokens": 4358,
+          "text_input_tokens": 3972,
+          "audio_input_tokens": 0,
+          "text_output_tokens_incl_thoughts": 0,
+          "thoughts_tokens": 0,
+          "audio_output_tokens": 386,
+          "turns_with_usage": 1
+        },
+        {
+          "inst": "inst3",
+          "fsess": "fsess1",
+          "total_cost_usd": 0.003494,
+          "total_tokens": 4297,
+          "text_input_tokens": 4180,
+          "audio_input_tokens": 0,
+          "text_output_tokens_incl_thoughts": 0,
+          "thoughts_tokens": 0,
+          "audio_output_tokens": 117,
+          "turns_with_usage": 1
+        }
+      ],
+      "cost_per_adapter_instance_usd": {
+        "n": 2,
+        "p50": 0.003494,
+        "p90": 0.006618,
+        "min": 0.003494,
+        "max": 0.006618,
+        "values": [
+          0.003494,
+          0.006618
+        ]
+      },
+      "cost_per_form_session_usd": {
+        "n": 1,
+        "p50": 0.010112,
+        "p90": 0.010112,
+        "min": 0.010112,
+        "max": 0.010112,
+        "values": [
+          0.010112
+        ]
+      },
+      "per_turn": {
+        "turn_cost_usd": {
+          "n": 2,
+          "p50": 0.003494,
+          "p90": 0.006618,
+          "min": 0.003494,
+          "max": 0.006618,
+          "values": [
+            0.003494,
+            0.006618
+          ]
+        },
+        "text_input_tokens": {
+          "n": 2,
+          "p50": 3972,
+          "p90": 4180,
+          "min": 3972,
+          "max": 4180,
+          "values": [
+            3972,
+            4180
+          ]
+        },
+        "audio_input_tokens": {
+          "n": 2,
+          "p50": 0,
+          "p90": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0
+          ]
+        },
+        "text_output_tokens_incl_thoughts": {
+          "n": 2,
+          "p50": 0,
+          "p90": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0
+          ]
+        },
+        "thoughts_tokens": {
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "min": null,
+          "max": null,
+          "values": []
+        },
+        "audio_output_tokens": {
+          "n": 2,
+          "p50": 117,
+          "p90": 386,
+          "min": 117,
+          "max": 386,
+          "values": [
+            117,
+            386
+          ]
+        }
+      },
+      "latency_ms": {
+        "tool_call_since_activity_end": {
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "min": null,
+          "max": null,
+          "values": []
+        },
+        "tool_calls_by_tool": {},
+        "coordinator_roundtrip": {
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "min": null,
+          "max": null,
+          "values": []
+        },
+        "connect_to_ready": {
+          "n": 2,
+          "p50": 123,
+          "p90": 188,
+          "min": 123,
+          "max": 188,
+          "values": [
+            123,
+            188
+          ]
+        },
+        "activity_end_to_first_audio_chunk_log": {
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "min": null,
+          "max": null,
+          "values": []
+        },
+        "activity_end_to_turn_usage": {
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "min": null,
+          "max": null,
+          "values": []
+        },
+        "text_turn_send_to_first_audio_chunk_log": {
+          "n": 2,
+          "p50": 600,
+          "p90": 605,
+          "min": 600,
+          "max": 605,
+          "values": [
+            600,
+            605
+          ]
+        }
+      },
+      "reliability": {
+        "gemini_session_connection_closed": [],
+        "ws_error_rows": [],
+        "go_away_received": 0,
+        "connect_attempts_gt1": 0,
+        "adapter_instances_per_form_session": 2.0,
+        "interrupts": 1
+      },
+      "silent_audio_evidence": {
+        "usage_turns": 2,
+        "usage_turns_with_zero_audio_output": 0,
+        "activity_end_without_usage_before_next_press_or_close": 1,
+        "note": "output transcription is OFF on the production path, so a transcript-without-audio turn cannot be observed directly; zero audio_output_tokens on a usage row is the proxy."
+      }
+    },
+    "staging|gemini-3.8-live": {
+      "service": "polyglot-backend-staging",
+      "channel": "staging",
+      "model": "gemini-3.8-live",
+      "days": [
+        "2026-10-22"
+      ],
+      "form_sessions_started": 1,
+      "adapter_instances": 2,
+      "ws_connections": [
+        {
+          "duration_s": 6.17804,
+          "status": 101
+        },
+        {
+          "duration_s": 60.968105,
+          "status": 101
+        }
+      ],
+      "cost_summary_rows": [
+        {
+          "inst": "inst0",
+          "fsess": "fsess0",
+          "total_cost_usd": 0.0056295,
+          "total_tokens": 5551,
+          "text_input_tokens": 5360,
+          "audio_input_tokens": 0,
+          "text_output_tokens_incl_thoughts": 91,
+          "thoughts_tokens": 91,
+          "audio_output_tokens": 100,
+          "turns_with_usage": 1
+        },
+        {
+          "inst": "inst1",
+          "fsess": "fsess0",
+          "total_cost_usd": 0.07519875,
+          "total_tokens": 67547,
+          "text_input_tokens": 61025,
+          "audio_input_tokens": 4551,
+          "text_output_tokens_incl_thoughts": 1050,
+          "thoughts_tokens": 931,
+          "audio_output_tokens": 921,
+          "turns_with_usage": 6
+        }
+      ],
+      "cost_per_adapter_instance_usd": {
+        "n": 2,
+        "p50": 0.0056295,
+        "p90": 0.07519875,
+        "min": 0.0056295,
+        "max": 0.07519875,
+        "values": [
+          0.0056295,
+          0.07519875
+        ]
+      },
+      "cost_per_form_session_usd": {
+        "n": 1,
+        "p50": 0.08082824999999999,
+        "p90": 0.08082824999999999,
+        "min": 0.08082824999999999,
+        "max": 0.08082824999999999,
+        "values": [
+          0.08082824999999999
+        ]
+      },
+      "per_turn": {
+        "turn_cost_usd": {
+          "n": 7,
+          "p50": 0.011606,
+          "p90": 0.021322,
+          "min": 0.00563,
+          "max": 0.021322,
+          "values": [
+            0.00563,
+            0.006089,
+            0.009933,
+            0.011606,
+            0.012336,
+            0.013913,
+            0.021322
+          ]
+        },
+        "text_input_tokens": {
+          "n": 7,
+          "p50": 7640,
+          "p90": 15567,
+          "min": 5360,
+          "max": 15567,
+          "values": [
+            5360,
+            5571,
+            7608,
+            7640,
+            11336,
+            13303,
+            15567
+          ]
+        },
+        "audio_input_tokens": {
+          "n": 7,
+          "p50": 545,
+          "p90": 2264,
+          "min": 0,
+          "max": 2264,
+          "values": [
+            0,
+            0,
+            350,
+            545,
+            620,
+            772,
+            2264
+          ]
+        },
+        "text_output_tokens_incl_thoughts": {
+          "n": 7,
+          "p50": 128,
+          "p90": 264,
+          "min": 91,
+          "max": 264,
+          "values": [
+            91,
+            94,
+            124,
+            128,
+            195,
+            245,
+            264
+          ]
+        },
+        "thoughts_tokens": {
+          "n": 7,
+          "p50": 109,
+          "p90": 257,
+          "min": 91,
+          "max": 257,
+          "values": [
+            91,
+            94,
+            99,
+            109,
+            161,
+            211,
+            257
+          ]
+        },
+        "audio_output_tokens": {
+          "n": 7,
+          "p50": 124,
+          "p90": 311,
+          "min": 98,
+          "max": 311,
+          "values": [
+            98,
+            100,
+            117,
+            124,
+            125,
+            146,
+            311
+          ]
+        }
+      },
+      "latency_ms": {
+        "tool_call_since_activity_end": {
+          "n": 3,
+          "p50": 512,
+          "p90": 587,
+          "min": 458,
+          "max": 587,
+          "values": [
+            458,
+            512,
+            587
+          ]
+        },
+        "tool_calls_by_tool": {
+          "update_form_fields": 2,
+          "confirm_field": 1
+        },
+        "coordinator_roundtrip": {
+          "n": 2,
+          "p50": 98,
+          "p90": 105,
+          "min": 98,
+          "max": 105,
+          "values": [
+            98,
+            105
+          ]
+        },
+        "connect_to_ready": {
+          "n": 2,
+          "p50": 100,
+          "p90": 173,
+          "min": 100,
+          "max": 173,
+          "values": [
+            100,
+            173
+          ]
+        },
+        "activity_end_to_first_audio_chunk_log": {
+          "n": 1,
+          "p50": 957,
+          "p90": 957,
+          "min": 957,
+          "max": 957,
+          "values": [
+            957
+          ]
+        },
+        "activity_end_to_turn_usage": {
+          "n": 4,
+          "p50": 5336,
+          "p90": 12844,
+          "min": 4628,
+          "max": 12844,
+          "values": [
+            4628,
+            5336,
+            6653,
+            12844
+          ]
+        },
+        "text_turn_send_to_first_audio_chunk_log": {
+          "n": 2,
+          "p50": 531,
+          "p90": 796,
+          "min": 531,
+          "max": 796,
+          "values": [
+            531,
+            796
+          ]
+        }
+      },
+      "reliability": {
+        "gemini_session_connection_closed": [
+          {
+            "close_code": 1007,
+            "intentional_shutdown": false,
+            "n": 1
+          }
+        ],
+        "ws_error_rows": [],
+        "go_away_received": 0,
+        "connect_attempts_gt1": 0,
+        "adapter_instances_per_form_session": 2.0,
+        "interrupts": 2
+      },
+      "silent_audio_evidence": {
+        "usage_turns": 7,
+        "usage_turns_with_zero_audio_output": 0,
+        "activity_end_without_usage_before_next_press_or_close": 2,
+        "note": "output transcription is OFF on the production path, so a transcript-without-audio turn cannot be observed directly; zero audio_output_tokens on a usage row is the proxy."
+      }
+    }
+  },
+  "monitoring_log_metrics": {
+    "ws_close_1011_count": {
+      "window_days": 120,
+      "total": 0
+    },
+    "ws_close_1013_count": {
+      "window_days": 120,
+      "total": 0
+    }
+  },
+  "sink_live_voice": {
+    "demo|gemini-live-2.5-flash-native-audio": {
+      "days": [
+        "2026-11-04"
+      ],
+      "turns": 2,
+      "form_sessions": 1,
+      "turn_cost_usd": {
+        "n": 2,
+        "p50": 0.003494,
+        "p90": 0.006618,
+        "min": 0.003494,
+        "max": 0.006618,
+        "values": [
+          0.003494,
+          0.006618
+        ]
+      },
+      "form_session_cost_usd": {
+        "n": 1,
+        "p50": 0.010112,
+        "p90": 0.010112,
+        "min": 0.010112,
+        "max": 0.010112,
+        "values": [
+          0.010112
+        ]
+      },
+      "turn_text_input_tokens": {
+        "n": 2,
+        "p50": 3972,
+        "p90": 4180,
+        "min": 3972,
+        "max": 4180,
+        "values": [
+          3972,
+          4180
+        ]
+      },
+      "turn_audio_input_tokens": {
+        "n": 2,
+        "p50": 0,
+        "p90": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0
+        ]
+      },
+      "turn_text_output_tokens": {
+        "n": 2,
+        "p50": 0,
+        "p90": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0
+        ]
+      },
+      "turn_audio_output_tokens": {
+        "n": 2,
+        "p50": 117,
+        "p90": 386,
+        "min": 117,
+        "max": 386,
+        "values": [
+          117,
+          386
+        ]
+      },
+      "turns_with_zero_audio_output": 0,
+      "cost_share": {
+        "total_usd": 0.010112
+      }
+    },
+    "staging|gemini-3.8-live": {
+      "days": [
+        "2026-10-22"
+      ],
+      "turns": 7,
+      "form_sessions": 1,
+      "turn_cost_usd": {
+        "n": 7,
+        "p50": 0.0116055,
+        "p90": 0.02132175,
+        "min": 0.0056295,
+        "max": 0.02132175,
+        "values": [
+          0.0056295,
+          0.00608925,
+          0.009933,
+          0.0116055,
+          0.012336,
+          0.01391325,
+          0.02132175
+        ]
+      },
+      "form_session_cost_usd": {
+        "n": 1,
+        "p50": 0.08082825,
+        "p90": 0.08082825,
+        "min": 0.08082825,
+        "max": 0.08082825,
+        "values": [
+          0.08082825
+        ]
+      },
+      "turn_text_input_tokens": {
+        "n": 7,
+        "p50": 7640,
+        "p90": 15567,
+        "min": 5360,
+        "max": 15567,
+        "values": [
+          5360,
+          5571,
+          7608,
+          7640,
+          11336,
+          13303,
+          15567
+        ]
+      },
+      "turn_audio_input_tokens": {
+        "n": 7,
+        "p50": 545,
+        "p90": 2264,
+        "min": 0,
+        "max": 2264,
+        "values": [
+          0,
+          0,
+          350,
+          545,
+          620,
+          772,
+          2264
+        ]
+      },
+      "turn_text_output_tokens": {
+        "n": 7,
+        "p50": 128,
+        "p90": 264,
+        "min": 91,
+        "max": 264,
+        "values": [
+          91,
+          94,
+          124,
+          128,
+          195,
+          245,
+          264
+        ]
+      },
+      "turn_audio_output_tokens": {
+        "n": 7,
+        "p50": 124,
+        "p90": 311,
+        "min": 98,
+        "max": 311,
+        "values": [
+          98,
+          100,
+          117,
+          124,
+          125,
+          146,
+          311
+        ]
+      },
+      "turns_with_zero_audio_output": 0,
+      "cost_share": {
+        "total_usd": 0.080828
+      }
+    },
+    "staging|gemini-live-2.5-flash-native-audio": {
+      "days": [
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-23"
+      ],
+      "turns": 162,
+      "form_sessions": 6,
+      "turn_cost_usd": {
+        "n": 162,
+        "p50": 0.008695,
+        "p90": 0.011063,
+        "min": 0.002326,
+        "max": 0.020118,
+        "values": null
+      },
+      "form_session_cost_usd": {
+        "n": 6,
+        "p50": 0.007916,
+        "p90": 1.278440500000001,
+        "min": 0.00465,
+        "max": 1.278440500000001,
+        "values": [
+          0.00465,
+          0.007039999999999999,
+          0.007916,
+          0.015752000000000002,
+          0.020118,
+          1.278440500000001
+        ]
+      },
+      "turn_text_input_tokens": {
+        "n": 162,
+        "p50": 6330,
+        "p90": 7106,
+        "min": 3933,
+        "max": 8146,
+        "values": null
+      },
+      "turn_audio_input_tokens": {
+        "n": 162,
+        "p50": 1678,
+        "p90": 2294,
+        "min": 0,
+        "max": 2935,
+        "values": null
+      },
+      "turn_text_output_tokens": {
+        "n": 162,
+        "p50": 2,
+        "p90": 26,
+        "min": 0,
+        "max": 45,
+        "values": null
+      },
+      "turn_audio_output_tokens": {
+        "n": 162,
+        "p50": 23,
+        "p90": 131,
+        "min": 0,
+        "max": 1511,
+        "values": null
+      },
+      "turns_with_zero_audio_output": 80,
+      "cost_share": {
+        "total_usd": 1.333916
+      }
+    }
+  },
+  "sink_ws_errors": [
+    {
+      "svc": "polyglot-backend-staging",
+      "d": "2026-09-17",
+      "close_code": "1008",
+      "reason_token": "auth_failed",
+      "n": 3
+    },
+    {
+      "svc": "polyglot-backend-staging",
+      "d": "2026-09-17",
+      "close_code": "1008",
+      "reason_token": "origin_refused",
+      "n": 1
+    },
+    {
+      "svc": "polyglot-backend-staging",
+      "d": "2026-09-17",
+      "close_code": "1008",
+      "reason_token": "auth_timeout",
+      "n": 1
+    }
+  ],
+  "billing_live_skus": [
+    {
+      "d": "2026-09-01",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.009012,
+      "amount": 751.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-01",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.014477,
+      "amount": 28959.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-03",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.01086,
+      "amount": 905.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-03",
+      "sku": "Gemini 2.5 Flash Live Audio Input - Predictions",
+      "cost_usd": 0.00318,
+      "amount": 1060.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-09-03",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.030626,
+      "amount": 61255.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-03",
+      "sku": "Gemini 2.5 Flash Live Text Output - Predictions",
+      "cost_usd": 0.000208,
+      "amount": 104.0,
+      "usd_per_1m": 2.0
+    },
+    {
+      "d": "2026-09-08",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.017568,
+      "amount": 1464.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-08",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.022228,
+      "amount": 44460.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-09",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.053592,
+      "amount": 4466.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-09",
+      "sku": "Gemini 2.5 Flash Live Audio Input - Predictions",
+      "cost_usd": 0.136338,
+      "amount": 45446.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-09-09",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.134534,
+      "amount": 269069.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-09",
+      "sku": "Gemini 2.5 Flash Live Text Output - Predictions",
+      "cost_usd": 0.000936,
+      "amount": 468.0,
+      "usd_per_1m": 2.0
+    },
+    {
+      "d": "2026-09-15",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.018264,
+      "amount": 1522.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-15",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.001994,
+      "amount": 3989.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-16",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.01416,
+      "amount": 1180.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-16",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.008083,
+      "amount": 16167.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-17",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.02244,
+      "amount": 1870.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-17",
+      "sku": "Gemini 2.5 Flash Live Audio Input - Predictions",
+      "cost_usd": 0.00717,
+      "amount": 2390.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-09-17",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.033437,
+      "amount": 66876.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-17",
+      "sku": "Gemini 2.5 Flash Live Text Output - Predictions",
+      "cost_usd": 0.000264,
+      "amount": 132.0,
+      "usd_per_1m": 2.0
+    },
+    {
+      "d": "2026-09-18",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.086652,
+      "amount": 7221.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-18",
+      "sku": "Gemini 2.5 Flash Live Audio Input - Predictions",
+      "cost_usd": 0.71229,
+      "amount": 237430.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-09-18",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.476141,
+      "amount": 952285.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-09-18",
+      "sku": "Gemini 2.5 Flash Live Text Output - Predictions",
+      "cost_usd": 0.003356,
+      "amount": 1678.0,
+      "usd_per_1m": 2.0
+    },
+    {
+      "d": "2026-09-23",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.005628,
+      "amount": 469.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-09-23",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.006062,
+      "amount": 12124.0,
+      "usd_per_1m": 0.5
+    },
+    {
+      "d": "2026-10-21",
+      "sku": "Gemini 3.8 Live Audio Input - Online Predictions",
+      "cost_usd": 0.00861,
+      "amount": 2870.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-10-21",
+      "sku": "Gemini 3.8 Live Audio Output - Online Predictions",
+      "cost_usd": 0.01212,
+      "amount": 1010.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-10-21",
+      "sku": "Gemini 3.8 Live Text Input - Online Predictions",
+      "cost_usd": 0.072695,
+      "amount": 96930.0,
+      "usd_per_1m": 0.75
+    },
+    {
+      "d": "2026-10-21",
+      "sku": "Gemini 3.8 Live Text Output - Online Predictions",
+      "cost_usd": 0.002172,
+      "amount": 483.0,
+      "usd_per_1m": 4.497
+    },
+    {
+      "d": "2026-10-22",
+      "sku": "Gemini 3.8 Live Audio Input - Online Predictions",
+      "cost_usd": 0.013653,
+      "amount": 4551.0,
+      "usd_per_1m": 3.0
+    },
+    {
+      "d": "2026-10-22",
+      "sku": "Gemini 3.8 Live Audio Output - Online Predictions",
+      "cost_usd": 0.01434,
+      "amount": 1195.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-10-22",
+      "sku": "Gemini 3.8 Live Text Input - Online Predictions",
+      "cost_usd": 0.049801,
+      "amount": 66403.0,
+      "usd_per_1m": 0.75
+    },
+    {
+      "d": "2026-10-22",
+      "sku": "Gemini 3.8 Live Text Output - Online Predictions",
+      "cost_usd": 0.000616,
+      "amount": 137.0,
+      "usd_per_1m": 4.496
+    },
+    {
+      "d": "2026-11-04",
+      "sku": "Gemini 2.5 Flash Live Audio (AV2A) Output - Predictions",
+      "cost_usd": 0.006036,
+      "amount": 503.0,
+      "usd_per_1m": 12.0
+    },
+    {
+      "d": "2026-11-04",
+      "sku": "Gemini 2.5 Flash Live Text Input - Predictions",
+      "cost_usd": 0.004076,
+      "amount": 8152.0,
+      "usd_per_1m": 0.5
+    }
+  ]
+}
