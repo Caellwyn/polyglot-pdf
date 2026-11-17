@@ -674,10 +674,49 @@ W7_QUESTIONS = [
      "wrong": "Yes, I received one before."},
 ]
 
-# No accuracy grading for this run -- 89mt asks a COST question, and an
-# expected-value map would invite reading fill-accuracy off a run whose
-# persona was chosen for cost realism rather than accuracy coverage.
-W7_EXPECTED: dict = {}
+# STRICT answer key for the W-7 plan (bd polyglot-pdf-r3ham.14). Without it
+# every W-7 field scored LENIENT (any non-empty write == correct), which hid a
+# spelled "Ana, A N A" stored as "Anna" on both 3.8 and 2.5. The persona is
+# still chosen for COST realism (bd 89mt), so read accuracy from these runs as
+# "did the scripted answer land", not as coverage of the form's branches.
+# Values are what a correct fill STORES: option slugs for radio/checkbox
+# fields (guarded at startup by _assert_expected_canon_matches_schema), and
+# text compared through _canon_value (case/punctuation-insensitive). A list
+# means any-of. Every W7_QUESTIONS field must have a key here (pinned by
+# backend/tests/unit/test_measure_harness_w7_expected.py).
+W7_EXPECTED: dict = {
+    "application_type": "apply_new_itin",
+    "reason": "b_nonresident_alien_return",
+    "name_1a_first": "Ana",
+    "name_1a_middle": "Lucia",
+    "name_1a_last": "Reyes",
+    "mailing_street": ["418 Willow Street, Apartment 2B", "418 Willow Street, Apt 2B",
+                       "418 Willow St, Apt 2B", "418 Willow Street 2B"],
+    "mailing_city_state_country": ["Springfield, Oregon, United States, 97477",
+                                   "Springfield, OR, United States, 97477",
+                                   "Springfield, Oregon, USA, 97477",
+                                   "Springfield, OR, USA, 97477",
+                                   "Springfield, Oregon 97477, United States"],
+    "foreign_street": "12 Avenida Central",
+    "foreign_city_state_country": "Quetzaltenango, Guatemala",
+    "date_of_birth": "03/14/1990",
+    "country_of_birth": "Guatemala",
+    "city_state_of_birth": ["Quetzaltenango", "Quetzaltenango, Guatemala"],
+    "sex": "female",
+    "countries_of_citizenship": "Guatemala",
+    "foreign_tax_id_number": "24981736",
+    # Declined ("I do not have a U.S. visa"). An empty value is a correct end
+    # state (skip semantics: blank on the PDF, the reviewer sees it) as is an
+    # explicit not-applicable marker; a visa VALUE is wrong. Which of these the
+    # model SHOULD prefer is open in bd polyglot-pdf-r3ham.12.
+    "us_visa_type_number_expiration": ["", "N/A", "NA", "Not Applicable", "None"],
+    "id_document_type": "passport",
+    "id_document_issued_by": "Guatemala",
+    "id_document_number": "10472285",
+    "id_document_expiration_date": "08/30/2029",
+    "date_of_entry_us": "06/11/2023",
+    "previously_received_itin_or_irsn": "no_dont_know",
+}
 
 # --------------------------------------------------------------------- I-90 v2
 # USCIS Form I-90 (Application to Replace Permanent Resident Card), the second-
