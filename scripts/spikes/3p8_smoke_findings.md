@@ -32,6 +32,12 @@
 
 For reference, the 2.5 I-90 v2 production-config runs on 2026-08-28 (bd 2nikx) scored 48/57, at about $2.04-2.07 on the happy path.
 
+**Caveat: the W-7 "fields correct" column is LENIENT.** The harness has no expected-value table for W-7, so any non-empty write counts as correct. A by-hand check of the written values (from `fill_accuracy.detail` in each `.meta.json`) against the script gives:
+- **Both models wrote "Anna" for "My first name is Ana, A N A."** 3.8 wrote `Anna`; 2.5 wrote `ANNA`. That is a wrong name on a spelled answer, on both models, and the lenient scorer counted it as correct.
+- **2.5 wrote passport number `104722285` for "1 0 4 7 2 2 8 5"**: it inserted a digit. 3.8 wrote `10472285`, which is correct.
+- **Strict score on the like-for-like W-7: 3.8 20/22, 2.5 20/22.** 3.8 missed the name and the declined visa field; 2.5 missed the name and the passport number.
+- Phase 3 (bd e72on) needs a strict W-7 expected-value table before its fill-accuracy numbers mean anything. The "Anna" result also bears directly on the Phase 2 spelling re-test (bd r3ham.3).
+
 **Cost on the like-for-like W-7 run is flat.** 3.8 came in about 4% cheaper per form than 2.5 on the identical script:
 - 3.8's text rates are higher: $0.75 in and $4.50 out, against $0.50 and $2.00.
 - That is offset by fewer audio-in tokens (83k vs 135k) and more evictions.
@@ -51,6 +57,11 @@ For reference, the 2.5 I-90 v2 production-config runs on 2026-08-28 (bd 2nikx) s
 | Spell-back TTS clip path | **WORKS** | `name_spellback` was called 3 times on W-7, and the model stayed silent while the clip played. |
 | field_id accuracy | **Mostly OK; one cascade** | I-90 q17: "same, 2140 Elmwood Drive" was written as `phys_street=''`. The model then ran one field behind. A later `update_form_fields(phys_city)` was rejected as `unknown_fields`, and the scripted user desynced for the rest of the run. |
 | Confirm before "yes" | NOT OBSERVED | -- |
+| Duplicate / missed tool calls | **3.8: none duplicated. 2.5: repeats on 5/22 questions** | From `per_question_tools`. 2.5 called `update_form_fields` or `confirm_field` twice on q6, q7, q14, q16 and q18, and all were harmless re-writes or re-confirms. On 3.8, the only missed call is the declined-field row below. |
+| Date format (MM/DD/YYYY) | **PASS** | All four W-7 dates were written as MM/DD/YYYY on both models, for example `03/14/1990`. |
+| Declined field ("I do not have a U.S. visa") | **CHANGED vs 2.5** | 3.8 wrote `us_visa_type_number_expiration=''`, which is the run's miss. 2.5 wrote `N/A`. |
+| Language drift | NOT TESTED | English only in this phase; the Spanish slice moved to r3ham.4. |
+| Reconnect state restore | **DEGRADED** (I-90, n=1) | The fields already written were kept after the GoAway reconnect, but the resumed session behaved badly (see the GoAway row). Filed as r3ham.11. |
 | Full option recital | **WORKS** (39 s) | All 8 `reason` options were read verbatim. The length is a UX problem, not a model defect. |
 | GoAway / session cap | **OBSERVED at about 9.5 min** | `gemini_go_away_received time_left=30s` at event 1602. The harness reconnected before q24. The session then degraded and closed with `APIError close_code=1000`. `SESSION_RESUMPTION_ENABLED` is off, which is the production default. |
 | 1011 / 1006 / 1008 drops | NOT OBSERVED | -- |
