@@ -84,3 +84,6 @@ def test_fallback_chain_is_empty():
 
 def test_pct_nearest_rank():
     assert pct([1, 2, 3, 4], 50) == 2 and pct([1, 2, 3, 4], 100) == 4 and pct([], 90) is None
+    # n=10 is where half-to-even rounding used to pick the wrong rank.
+    ten = list(range(1, 11))
+    assert pct(ten, 50) == 5 and pct(ten, 90) == 9 and pct(ten, 99) == 10

@@ -371,6 +371,9 @@ async def main() -> None:
         }
         print(f"{arm:<14} {rec:>8.3f} {prec:>10.3f} {c['tp']:>4} {c['fn']:>4} "
               f"{c['fp']:>4} {c['tn']:>4} {strict_rec:>14.3f}", flush=True)
+        if c["errors"]:
+            print(f"  ({arm}: {c['errors']} transport error(s) EXCLUDED from the "
+                  f"counts above -- no measurement, not a miss)", flush=True)
 
     # GO/NO-GO (exit criterion 3): GO iff flash_lite recall >= in_si recall at
     # acceptable precision. Print the comparison; the human verdict goes in the

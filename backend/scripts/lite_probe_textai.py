@@ -34,6 +34,7 @@ silent fallback to a sibling would attribute the sibling's behavior to it.
 from __future__ import annotations
 
 import contextvars
+import math
 import os
 import time
 
@@ -107,5 +108,5 @@ def pct(values: list, p: float):
     xs = sorted(v for v in values if v is not None)
     if not xs:
         return None
-    k = max(0, min(len(xs) - 1, int(round(p / 100.0 * len(xs) + 0.5)) - 1))
+    k = max(0, min(len(xs) - 1, math.ceil(p / 100.0 * len(xs)) - 1))
     return xs[k]
