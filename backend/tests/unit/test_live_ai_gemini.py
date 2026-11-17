@@ -2123,3 +2123,147 @@ async def test_run_session_loop_interrupted_callback_error_swallowed():
     # Must not raise despite the callback exploding.
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
     await adapter.finalize()
+
+
+# ---------------------------------------------------------------------------
+# bd polyglot-pdf-r3ham.6: gemini-3.8-live bundles output_transcription (and can
+# bundle completion flags) into the SAME server message as an audio chunk. The
+# receive loop must forward the audio exactly once AND still process that
+# message's server_content.
+# ---------------------------------------------------------------------------
+
+def _audio_msg(pcm: bytes, **server_content_fields):
+    """An SDK-shaped LiveServerMessage carrying audio: event.data is the PCM,
+    and server_content.model_turn holds the SAME bytes as inline_data (the
+    real SDK derives .data from model_turn.parts)."""
+    part = SimpleNamespace(
+        inline_data=SimpleNamespace(data=pcm, mime_type="audio/pcm;rate=24000"),
+        text=None, function_call=None)
+    sc = SimpleNamespace(
+        interrupted=False,
+        model_turn=SimpleNamespace(parts=[part]),
+        input_transcription=None,
+        output_transcription=None,
+        turn_complete=False,
+        generation_complete=False,
+    )
+    for k, v in server_content_fields.items():
+        setattr(sc, k, v)
+    return SimpleNamespace(data=pcm, server_content=sc, tool_call=None,
+                           usage_metadata=None)
+
+
+def _run_messages_adapter(messages):
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+    seen = {"audio": [], "transcripts": [], "done": 0, "activity": 0}
+
+    async def on_audio(b):
+        seen["audio"].append(b)
+
+    async def on_transcript(t):
+        seen["transcripts"].append(t)
+
+    async def on_done():
+        seen["done"] += 1
+
+    async def on_activity():
+        seen["activity"] += 1
+
+    adapter._on_audio = on_audio
+    adapter._on_transcript = on_transcript
+    adapter._on_processing_done = on_done
+    adapter._on_user_activity = on_activity
+
+    class _Session:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    for m in messages:
+                        yield m
+                self._generator = gen()
+            return self._generator
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(_Session())
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+    return adapter, seen
+
+
+@pytest.mark.asyncio
+async def test_bundled_output_transcription_is_delivered_and_audio_not_doubled():
+    pcm1, pcm2 = b"\x01\x02" * 40, b"\x03\x04" * 40
+    adapter, seen = _run_messages_adapter([
+        _audio_msg(pcm1, output_transcription=SimpleNamespace(text="Hello")),
+        _audio_msg(pcm2, output_transcription=SimpleNamespace(text=" there")),
+    ])
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    assert seen["audio"] == [pcm1, pcm2]  # once each, never replayed
+    assert seen["transcripts"] == ["Hello", " there"]
+    # A bundled transcript is mid-generation: it must not reset the per-turn
+    # audio counters (that would re-fire the first-chunk path every chunk).
+    assert adapter._audio_chunk_count == 2
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_bundled_turn_complete_fires_processing_done_without_doubling_audio():
+    pcm = b"\x05\x06" * 40
+    adapter, seen = _run_messages_adapter([
+        _audio_msg(pcm, turn_complete=True, generation_complete=True),
+    ])
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    assert seen["audio"] == [pcm]
+    assert seen["done"] >= 1
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_bundled_input_transcription_still_signals_user_activity():
+    pcm = b"\x07\x08" * 40
+    adapter, seen = _run_messages_adapter([
+        _audio_msg(pcm, input_transcription=SimpleNamespace(text="yes")),
+    ])
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    assert seen["audio"] == [pcm]
+    assert seen["activity"] == 1
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_audio_only_message_forwards_once():
+    # The plain case: an audio chunk with nothing else in server_content.
+    pcm = b"\x09\x0a" * 40
+    adapter, seen = _run_messages_adapter([_audio_msg(pcm)])
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    assert seen["audio"] == [pcm]
+    assert seen["transcripts"] == []
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_inline_audio_without_event_data_is_still_forwarded():
+    # The rare inline_data-only path (no event.data) must keep working.
+    pcm = b"\x0b\x0c" * 40
+    msg = _audio_msg(pcm)
+    msg.data = None
+    adapter, seen = _run_messages_adapter([msg])
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    assert seen["audio"] == [pcm]
+    await adapter.finalize()
