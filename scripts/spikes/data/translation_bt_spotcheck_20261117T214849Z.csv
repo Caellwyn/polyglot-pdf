@@ -1,0 +1,133 @@
+model,language,id,group,class,source_en,translation,back_translation,sim_to_source
+gemini-2.5-flash-lite,spanish,es-g01,gold,,Head of household,Cabeza de familia,Head of household,1.0
+gemini-2.5-flash-lite,spanish,es-g02,gold,,Single,Soltero(a),Single,1.0
+gemini-2.5-flash-lite,spanish,es-g03,gold,,Married filing jointly,Casado que presenta una declaración conjunta,Married filing jointly,1.0
+gemini-2.5-flash-lite,spanish,es-g04,gold,,Married filing separately,Casado que presenta la declaración por separado,Married filing separately,1.0
+gemini-2.5-flash-lite,spanish,es-g05,gold,,Qualifying surviving spouse,Cónyuge sobreviviente que reúne los requisitos,Qualifying widow(er),0.596
+gemini-2.5-flash-lite,spanish,es-g06,gold,,Social security number,Número de Seguro Social,Social Security number,1.0
+gemini-2.5-flash-lite,spanish,es-g07,gold,,Date of birth (mm/dd/yyyy),Fecha de nacimiento (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-2.5-flash-lite,spanish,es-g08,gold,,Individual Taxpayer Identification Number (ITIN),Número de identificación personal del contribuyente (ITIN),Individual Taxpayer Identification Number (ITIN),1.0
+gemini-2.5-flash-lite,spanish,es-g09,gold,,"Wages from Form W-2, box 1","Salarios del Formulario W-2, casilla 1","Wages from Form W-2, box 1",1.0
+gemini-2.5-flash-lite,spanish,es-g10,gold,,Adjusted gross income,Ingreso bruto ajustado,Adjusted gross income,1.0
+gemini-2.5-flash-lite,spanish,es-g11,gold,,Standard deduction,Deducción estándar,Standard deduction,1.0
+gemini-2.5-flash-lite,spanish,es-g12,gold,,Do not file Form W-7 if you have a social security number,No presente el Formulario W-7 si tiene un número de Seguro Social,Do not file Form W-7 if you have a Social Security number,1.0
+gemini-2.5-flash-lite,spanish,es-g13,gold,,Dependent 1 first name,Primer nombre del dependiente 1,Dependent 1 first name,1.0
+gemini-2.5-flash-lite,spanish,es-g14,gold,,Country of birth,País de nacimiento,Country of birth,1.0
+gemini-2.5-flash-lite,spanish,es-g15,gold,,Alien registration number (USCIS number),Número de registro de extranjero (número de USCIS),Alien registration number (USCIS number),1.0
+gemini-2.5-flash-lite,spanish,es-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,Presente el Formulario W-7 si tiene un número de Seguro Social,File Form W-7 if you have a Social Security number,0.935
+gemini-2.5-flash-lite,spanish,es-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1","Salarios del Formulario W-2, línea 1","Wages from Form W-2, line 1",0.868
+gemini-2.5-flash-lite,spanish,es-p3,plant,sibling-swap,Single,Casado que presenta la declaración por separado,Married filing separately,0.258
+gemini-2.5-flash-lite,spanish,es-p3-partner,plant,sibling-swap,Married filing separately,Soltero(a),Single,0.258
+gemini-2.5-flash-lite,spanish,es-p4,plant,numeral-alteration,Dependent 1 first name,Primer nombre del dependiente 2,Dependent 2 first name,0.955
+gemini-2.5-flash-lite,spanish,es-p5,plant,dnt-violation,Alien registration number (USCIS number),Número de registro de extranjero (número del Servicio de Ciudadanía e Inmigración),Alien registration number (Citizenship and Immigration Services number),0.685
+gemini-2.5-flash-lite,spanish,es-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,Presente el Formulario W7 si tiene un número de Seguro Social,File Form W7 if you have a Social Security number,0.925
+gemini-2.5-flash-lite,chinese,zh-g01,gold,,Head of household,户主,Head of household,1.0
+gemini-2.5-flash-lite,chinese,zh-g02,gold,,Single,单身,Single,1.0
+gemini-2.5-flash-lite,chinese,zh-g03,gold,,Married filing jointly,已婚联合申报,Married filing jointly,1.0
+gemini-2.5-flash-lite,chinese,zh-g04,gold,,Married filing separately,已婚分别申报,Married filing separately,1.0
+gemini-2.5-flash-lite,chinese,zh-g05,gold,,Social security number,社会安全号码,Social Security number,1.0
+gemini-2.5-flash-lite,chinese,zh-g06,gold,,Date of birth (mm/dd/yyyy),出生日期 (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-2.5-flash-lite,chinese,zh-g07,gold,,"Wages from Form W-2, box 1",W-2表第1栏的工资,"Wages from Form W-2, line 1",0.868
+gemini-2.5-flash-lite,chinese,zh-g08,gold,,Adjusted gross income,调整后总收入,Adjusted gross income,1.0
+gemini-2.5-flash-lite,chinese,zh-g09,gold,,Standard deduction,标准扣除额,Standard deduction,1.0
+gemini-2.5-flash-lite,chinese,zh-g10,gold,,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请勿提交W-7表,Do not file Form W-7 if you have a Social Security number,1.0
+gemini-2.5-flash-lite,chinese,zh-g11,gold,,Dependent 1 first name,被抚养人1的名字,Dependent 1's name,0.85
+gemini-2.5-flash-lite,chinese,zh-g12,gold,,Country of birth,出生国家,Country of birth,1.0
+gemini-2.5-flash-lite,chinese,zh-g13,gold,,Alien registration number (USCIS number),外国人登记号码（USCIS号码）,Alien registration number (USCIS number),1.0
+gemini-2.5-flash-lite,chinese,zh-g14,gold,,Taxpayer,纳税人,Taxpayer,1.0
+gemini-2.5-flash-lite,chinese,zh-g15,gold,,Refund,退税,Tax refund,0.75
+gemini-2.5-flash-lite,chinese,zh-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W-7表,File Form W-7 if you have a Social Security number,0.935
+gemini-2.5-flash-lite,chinese,zh-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1",W-2表第1行的工资,"Wages from Form W-2, line 1",0.868
+gemini-2.5-flash-lite,chinese,zh-p3,plant,sibling-swap,Single,已婚分别申报,Married filing separately,0.258
+gemini-2.5-flash-lite,chinese,zh-p3-partner,plant,sibling-swap,Married filing separately,单身,Single,0.258
+gemini-2.5-flash-lite,chinese,zh-p4,plant,numeral-alteration,Dependent 1 first name,被抚养人2的名字,Dependent 2's name,0.8
+gemini-2.5-flash-lite,chinese,zh-p5,plant,dnt-violation,Alien registration number (USCIS number),外国人登记号码（移民局号码）,Alien registration number (USCIS number),1.0
+gemini-2.5-flash-lite,chinese,zh-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W7表,File Form W-7 if you have a Social Security number,0.935
+gemini-3.1-flash-lite,spanish,es-g01,gold,,Head of household,Cabeza de familia,Head of household,1.0
+gemini-3.1-flash-lite,spanish,es-g02,gold,,Single,Soltero(a),Single,1.0
+gemini-3.1-flash-lite,spanish,es-g03,gold,,Married filing jointly,Casado que presenta una declaración conjunta,Married filing jointly,1.0
+gemini-3.1-flash-lite,spanish,es-g04,gold,,Married filing separately,Casado que presenta la declaración por separado,Married filing separately,1.0
+gemini-3.1-flash-lite,spanish,es-g05,gold,,Qualifying surviving spouse,Cónyuge sobreviviente que reúne los requisitos,Qualifying surviving spouse,1.0
+gemini-3.1-flash-lite,spanish,es-g06,gold,,Social security number,Número de Seguro Social,Social Security number,1.0
+gemini-3.1-flash-lite,spanish,es-g07,gold,,Date of birth (mm/dd/yyyy),Fecha de nacimiento (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-3.1-flash-lite,spanish,es-g08,gold,,Individual Taxpayer Identification Number (ITIN),Número de identificación personal del contribuyente (ITIN),Individual Taxpayer Identification Number (ITIN),1.0
+gemini-3.1-flash-lite,spanish,es-g09,gold,,"Wages from Form W-2, box 1","Salarios del Formulario W-2, casilla 1","Wages from Form W-2, box 1",1.0
+gemini-3.1-flash-lite,spanish,es-g10,gold,,Adjusted gross income,Ingreso bruto ajustado,Adjusted gross income,1.0
+gemini-3.1-flash-lite,spanish,es-g11,gold,,Standard deduction,Deducción estándar,Standard deduction,1.0
+gemini-3.1-flash-lite,spanish,es-g12,gold,,Do not file Form W-7 if you have a social security number,No presente el Formulario W-7 si tiene un número de Seguro Social,Do not file Form W-7 if you have a Social Security number,1.0
+gemini-3.1-flash-lite,spanish,es-g13,gold,,Dependent 1 first name,Primer nombre del dependiente 1,First name of dependent 1,0.468
+gemini-3.1-flash-lite,spanish,es-g14,gold,,Country of birth,País de nacimiento,Country of birth,1.0
+gemini-3.1-flash-lite,spanish,es-g15,gold,,Alien registration number (USCIS number),Número de registro de extranjero (número de USCIS),Alien registration number (USCIS number),1.0
+gemini-3.1-flash-lite,spanish,es-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,Presente el Formulario W-7 si tiene un número de Seguro Social,File Form W-7 if you have a Social Security number,0.935
+gemini-3.1-flash-lite,spanish,es-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1","Salarios del Formulario W-2, línea 1","Wages from Form W-2, line 1",0.868
+gemini-3.1-flash-lite,spanish,es-p3,plant,sibling-swap,Single,Casado que presenta la declaración por separado,Married filing separately,0.258
+gemini-3.1-flash-lite,spanish,es-p3-partner,plant,sibling-swap,Married filing separately,Soltero(a),Single,0.258
+gemini-3.1-flash-lite,spanish,es-p4,plant,numeral-alteration,Dependent 1 first name,Primer nombre del dependiente 2,First name of dependent 2,0.426
+gemini-3.1-flash-lite,spanish,es-p5,plant,dnt-violation,Alien registration number (USCIS number),Número de registro de extranjero (número del Servicio de Ciudadanía e Inmigración),Alien registration number (Citizenship and Immigration Services number),0.685
+gemini-3.1-flash-lite,spanish,es-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,Presente el Formulario W7 si tiene un número de Seguro Social,File Form W7 if you have a Social Security number,0.925
+gemini-3.1-flash-lite,chinese,zh-g01,gold,,Head of household,户主,Head of household,1.0
+gemini-3.1-flash-lite,chinese,zh-g02,gold,,Single,单身,Single,1.0
+gemini-3.1-flash-lite,chinese,zh-g03,gold,,Married filing jointly,已婚联合申报,Married filing jointly,1.0
+gemini-3.1-flash-lite,chinese,zh-g04,gold,,Married filing separately,已婚分别申报,Married filing separately,1.0
+gemini-3.1-flash-lite,chinese,zh-g05,gold,,Social security number,社会安全号码,Social Security Number,1.0
+gemini-3.1-flash-lite,chinese,zh-g06,gold,,Date of birth (mm/dd/yyyy),出生日期 (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-3.1-flash-lite,chinese,zh-g07,gold,,"Wages from Form W-2, box 1",W-2表第1栏的工资,Wages from box 1 of Form W-2,0.704
+gemini-3.1-flash-lite,chinese,zh-g08,gold,,Adjusted gross income,调整后总收入,Adjusted gross income,1.0
+gemini-3.1-flash-lite,chinese,zh-g09,gold,,Standard deduction,标准扣除额,Standard deduction,1.0
+gemini-3.1-flash-lite,chinese,zh-g10,gold,,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请勿提交W-7表,"If you have a Social Security Number, do not submit Form W-7",0.615
+gemini-3.1-flash-lite,chinese,zh-g11,gold,,Dependent 1 first name,被抚养人1的名字,Name of dependent 1,0.537
+gemini-3.1-flash-lite,chinese,zh-g12,gold,,Country of birth,出生国家,Country of birth,1.0
+gemini-3.1-flash-lite,chinese,zh-g13,gold,,Alien registration number (USCIS number),外国人登记号码（USCIS号码）,Alien registration number (USCIS number),1.0
+gemini-3.1-flash-lite,chinese,zh-g14,gold,,Taxpayer,纳税人,Taxpayer,1.0
+gemini-3.1-flash-lite,chinese,zh-g15,gold,,Refund,退税,Tax refund,0.75
+gemini-3.1-flash-lite,chinese,zh-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W-7表,"If you have a Social Security Number, please submit Form W-7",0.615
+gemini-3.1-flash-lite,chinese,zh-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1",W-2表第1行的工资,Wages from line 1 of Form W-2,0.691
+gemini-3.1-flash-lite,chinese,zh-p3,plant,sibling-swap,Single,已婚分别申报,Married filing separately,0.258
+gemini-3.1-flash-lite,chinese,zh-p3-partner,plant,sibling-swap,Married filing separately,单身,Single,0.258
+gemini-3.1-flash-lite,chinese,zh-p4,plant,numeral-alteration,Dependent 1 first name,被抚养人2的名字,Name of dependent 2,0.488
+gemini-3.1-flash-lite,chinese,zh-p5,plant,dnt-violation,Alien registration number (USCIS number),外国人登记号码（移民局号码）,Alien registration number (USCIS number),1.0
+gemini-3.1-flash-lite,chinese,zh-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W7表,"If you have a Social Security Number, please submit Form W-7",0.615
+gemini-3.5-flash-lite,spanish,es-g01,gold,,Head of household,Cabeza de familia,Head of household,1.0
+gemini-3.5-flash-lite,spanish,es-g02,gold,,Single,Soltero(a),Unmarried,0.267
+gemini-3.5-flash-lite,spanish,es-g03,gold,,Married filing jointly,Casado que presenta una declaración conjunta,Married filing a joint return,0.784
+gemini-3.5-flash-lite,spanish,es-g04,gold,,Married filing separately,Casado que presenta la declaración por separado,Married filing a separate return,0.807
+gemini-3.5-flash-lite,spanish,es-g05,gold,,Qualifying surviving spouse,Cónyuge sobreviviente que reúne los requisitos,Qualifying surviving spouse,1.0
+gemini-3.5-flash-lite,spanish,es-g06,gold,,Social security number,Número de Seguro Social,Social Security number,1.0
+gemini-3.5-flash-lite,spanish,es-g07,gold,,Date of birth (mm/dd/yyyy),Fecha de nacimiento (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-3.5-flash-lite,spanish,es-g08,gold,,Individual Taxpayer Identification Number (ITIN),Número de identificación personal del contribuyente (ITIN),Individual taxpayer identification number (ITIN),1.0
+gemini-3.5-flash-lite,spanish,es-g09,gold,,"Wages from Form W-2, box 1","Salarios del Formulario W-2, casilla 1","Form W-2 wages, box 1",0.638
+gemini-3.5-flash-lite,spanish,es-g10,gold,,Adjusted gross income,Ingreso bruto ajustado,Adjusted gross income,1.0
+gemini-3.5-flash-lite,spanish,es-g11,gold,,Standard deduction,Deducción estándar,Standard deduction,1.0
+gemini-3.5-flash-lite,spanish,es-g12,gold,,Do not file Form W-7 if you have a social security number,No presente el Formulario W-7 si tiene un número de Seguro Social,Do not file Form W-7 if you have a Social Security number,1.0
+gemini-3.5-flash-lite,spanish,es-g13,gold,,Dependent 1 first name,Primer nombre del dependiente 1,First name of dependent 1,0.468
+gemini-3.5-flash-lite,spanish,es-g14,gold,,Country of birth,País de nacimiento,Country of birth,1.0
+gemini-3.5-flash-lite,spanish,es-g15,gold,,Alien registration number (USCIS number),Número de registro de extranjero (número de USCIS),Alien registration number (USCIS number),1.0
+gemini-3.5-flash-lite,spanish,es-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,Presente el Formulario W-7 si tiene un número de Seguro Social,File Form W-7 if you have a Social Security number,0.935
+gemini-3.5-flash-lite,spanish,es-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1","Salarios del Formulario W-2, línea 1","Form W-2 wages, line 1",0.5
+gemini-3.5-flash-lite,spanish,es-p3,plant,sibling-swap,Single,Casado que presenta la declaración por separado,Married filing a separate return,0.211
+gemini-3.5-flash-lite,spanish,es-p3-partner,plant,sibling-swap,Married filing separately,Soltero(a),Unmarried,0.412
+gemini-3.5-flash-lite,spanish,es-p4,plant,numeral-alteration,Dependent 1 first name,Primer nombre del dependiente 2,First name of dependent 2,0.426
+gemini-3.5-flash-lite,spanish,es-p5,plant,dnt-violation,Alien registration number (USCIS number),Número de registro de extranjero (número del Servicio de Ciudadanía e Inmigración),Alien registration number (Citizenship and Immigration Services number),0.685
+gemini-3.5-flash-lite,spanish,es-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,Presente el Formulario W7 si tiene un número de Seguro Social,File Form W7 if you have a Social Security number,0.925
+gemini-3.5-flash-lite,chinese,zh-g01,gold,,Head of household,户主,Head of household,1.0
+gemini-3.5-flash-lite,chinese,zh-g02,gold,,Single,单身,Single,1.0
+gemini-3.5-flash-lite,chinese,zh-g03,gold,,Married filing jointly,已婚联合申报,Married filing jointly,1.0
+gemini-3.5-flash-lite,chinese,zh-g04,gold,,Married filing separately,已婚分别申报,Married filing separately,1.0
+gemini-3.5-flash-lite,chinese,zh-g05,gold,,Social security number,社会安全号码,Social Security Number,1.0
+gemini-3.5-flash-lite,chinese,zh-g06,gold,,Date of birth (mm/dd/yyyy),出生日期 (mm/dd/yyyy),Date of birth (mm/dd/yyyy),1.0
+gemini-3.5-flash-lite,chinese,zh-g07,gold,,"Wages from Form W-2, box 1",W-2表第1栏的工资,W-2 form box 1 wages,0.522
+gemini-3.5-flash-lite,chinese,zh-g08,gold,,Adjusted gross income,调整后总收入,Adjusted gross income,1.0
+gemini-3.5-flash-lite,chinese,zh-g09,gold,,Standard deduction,标准扣除额,Standard deduction,1.0
+gemini-3.5-flash-lite,chinese,zh-g10,gold,,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请勿提交W-7表,"If you have a Social Security Number, do not submit Form W-7",0.615
+gemini-3.5-flash-lite,chinese,zh-g11,gold,,Dependent 1 first name,被抚养人1的名字,Name of dependent 1,0.537
+gemini-3.5-flash-lite,chinese,zh-g12,gold,,Country of birth,出生国家,Country of birth,1.0
+gemini-3.5-flash-lite,chinese,zh-g13,gold,,Alien registration number (USCIS number),外国人登记号码（USCIS号码）,Alien registration number (USCIS number),1.0
+gemini-3.5-flash-lite,chinese,zh-g14,gold,,Taxpayer,纳税人,Taxpayer,1.0
+gemini-3.5-flash-lite,chinese,zh-g15,gold,,Refund,退税,Tax refund,0.75
+gemini-3.5-flash-lite,chinese,zh-p1,plant,negation-flip,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W-7表,"If you have a Social Security Number, submit Form W-7",0.655
+gemini-3.5-flash-lite,chinese,zh-p2,plant,near-synonym-swap,"Wages from Form W-2, box 1",W-2表第1行的工资,W-2 form line 1 wages,0.383
+gemini-3.5-flash-lite,chinese,zh-p3,plant,sibling-swap,Single,已婚分别申报,Married filing separately,0.258
+gemini-3.5-flash-lite,chinese,zh-p3-partner,plant,sibling-swap,Married filing separately,单身,Single,0.258
+gemini-3.5-flash-lite,chinese,zh-p4,plant,numeral-alteration,Dependent 1 first name,被抚养人2的名字,Name of dependent 2,0.488
+gemini-3.5-flash-lite,chinese,zh-p5,plant,dnt-violation,Alien registration number (USCIS number),外国人登记号码（移民局号码）,Alien registration number (Immigration number),0.837
+gemini-3.5-flash-lite,chinese,zh-p6,plant,mechanical-plus-semantic,Do not file Form W-7 if you have a social security number,如果您有社会安全号码，请提交W7表,"If you have a Social Security Number, submit Form W7",0.661

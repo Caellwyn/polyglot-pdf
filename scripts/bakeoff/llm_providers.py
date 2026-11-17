@@ -35,6 +35,11 @@ import time
 import uuid
 from typing import Any, Callable, Dict, Optional, Protocol
 
+# Sibling import: bake-off modules run with this dir on sys.path (and tests load
+# this file by path), so put it there before the bare import.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from usage_tokens import gemini_usage_tokens  # noqa: E402
+
 # Suppress the child console window every subprocess opens on Windows
 # (bd polyglot-pdf-5k32 / bd polyglot-pdf-rdftu). Duplicated rather than
 # imported from swarm_config because importing that module mutates PATH and
@@ -308,8 +313,8 @@ class GeminiProvider:
         tok = {}
         usage = getattr(resp, "usage_metadata", None)
         if usage is not None:
-            tok = {"input": getattr(usage, "prompt_token_count", None),
-                   "output": getattr(usage, "candidates_token_count", None)}
+            # output = answer + thinking tokens (billed at the output rate).
+            tok = gemini_usage_tokens(usage)
         return schema, tok
 
 
@@ -452,8 +457,8 @@ def run_json_gemini(prompt: str, model: str) -> tuple[dict, dict]:
     tok = {}
     usage = getattr(resp, "usage_metadata", None)
     if usage is not None:
-        tok = {"input": getattr(usage, "prompt_token_count", None),
-               "output": getattr(usage, "candidates_token_count", None)}
+        # output = answer + thinking tokens (billed at the output rate).
+        tok = gemini_usage_tokens(usage)
     return obj, tok
 
 
