@@ -12,7 +12,9 @@ value, confirmed flag, advance), not audio. Full detail:
 [`tests/e2e/voice-harness/RUNBOOK.md`](../../../tests/e2e/voice-harness/RUNBOOK.md).
 The harness module is [`tests/e2e/voice-harness/harness.js`](../../../tests/e2e/voice-harness/harness.js).
 
-**Kit-agnostic (bd polyglot-pdf-tcemw).** Nothing here names a kit's field ids:
+**Kit-agnostic (bd polyglot-pdf-tcemw).** The harness module and the two main
+drivers name no kit's field ids (the Latin-storage / Russian W-7 arm drivers
+still do -- bd polyglot-pdf-w04up):
 kits live in the GCS bucket and their ids move on every republish (CLAUDE.md
 scar #10). The harness discovers its targets from the schema the app loaded --
 `lastNextField()` is the field the live session is asking, and
