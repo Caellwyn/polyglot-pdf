@@ -4,8 +4,9 @@ Pools all g1c_precision_*.csv runs by (model, prompt, size) -- summing tp/fn/fp/
 across repeats so the recall/precision numbers average out per-call cheap-model
 noise -- and prints the precision lever's per-model prompt comparison (every prompt
 arm present: baseline / tuned / prod). Runs are NEVER pooled across models (bd
-polyglot-pdf-u0kcc added --model; 08zv-era rows carry no model column and were
-all gemini-2.5-flash-lite). Also summarizes the
+polyglot-pdf-u0kcc added --model, so one corpus_fp can now hold several models'
+runs). A row missing the model column is read as gemini-2.5-flash-lite, the only
+model the probe ran before --model existed. Also summarizes the
 latency lever (g1c_latency_*.csv) if present. STDLIB-only.
 """
 from __future__ import annotations
@@ -51,7 +52,7 @@ def _precision():
             if (r.get("corpus_fp") or "") != current_fp:
                 dropped_fp += 1
                 continue  # different corpus version -- never pool
-            # 08zv-era rows have no model column; they were all 2.5-flash-lite.
+            # A row without a model value predates --model: 2.5-flash-lite.
             k = (r.get("model") or "gemini-2.5-flash-lite", r["prompt"], r["size"])
             c = agg[k]
             c["runs"].add(os.path.basename(f))
