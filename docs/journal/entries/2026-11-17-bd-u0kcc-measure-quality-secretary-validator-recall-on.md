@@ -74,6 +74,32 @@ all 147 answers blind with the probe's own `JUDGE_PROMPT` rubric.
   validator window concurrency.
 - A note on `polyglot-pdf-jnjj.41` with the cache data.
 
+**Review.** Scorecard: u0kcc criterion 1 PASS; nwnys criterion 1 PASS.
+- **Fresh-eyes (Sonnet), 1 round, NO-GAPS.** It did spot one real defect in
+  new code: `pct()` was not true nearest-rank. The fix was adopted and pinned
+  at n=10.
+- **Also adopted from fresh-eyes:** the G1 probe now prints excluded
+  transport errors.
+- **Opus cross-surface, 2 rounds.**
+  - Round 1, GAPS-FOUND (1): `backend/scripts/g1c_aggregate.py` pooled the new
+    per-model g1c runs into one blended number and dropped the `prod` arm.
+    Adopted: it now keys on (model, prompt, size), pinned by
+    `test_g1c_aggregate_per_model.py`, which fails under both mutations.
+  - Round 2, NO-GAPS. Its one comment-only note (the aggregator comment
+    wrongly said older rows lack a model column, bd a2z9t) was fixed inline.
+- **Deferred as beads by the reviewers:**
+  - `polyglot-pdf-xd0qc`: `VERTEX_LOCATION` means the Live region in one
+    probe and the text location in the others.
+  - `polyglot-pdf-vucm1`: the `validator_service.py` docstring still cites
+    0.853.
+- **Prep notes, both pre-existing and not this branch's:** `h06sv` is a
+  stale in-progress bead owned by another session, and the stale-doc list
+  covers files this branch never touched.
+- **Local-only test noise:** with the scratch I-90 schema present, the
+  stress-harness and g1b-coherence suites ran and failed on synthetic-fixture
+  collisions. That is the kit-coupled-test debt, bd 1mgkq. Moving the scratch
+  copy out restored 13 passed / 33 skipped; CI never has the kit.
+
 ## Lessons
 
 - **A same-day control arm beats a remembered baseline.** The 2.5 control's
@@ -111,6 +137,8 @@ all 147 answers blind with the probe's own `JUDGE_PROMPT` rubric.
 - `backend/scripts/probe_g1c_tuning.py`
 - `backend/scripts/probe_g1b_model_size_bakeoff.py`
 - `backend/scripts/probe_validator_rail.py`
+- `backend/scripts/g1c_aggregate.py`
+- `backend/tests/unit/test_g1c_aggregate_per_model.py` (new)
 - `scripts/spikes/translation_gate_probe.py`
 - `scripts/bakeoff/usage_tokens.py` (new)
 - `scripts/bakeoff/arm_gemini.py`
