@@ -93,6 +93,55 @@ describe('findDigitsTarget', () => {
     ])
     expect(H.findDigitsTarget('1234567')).toBeNull()
   })
+
+  describe('without the app validator (local fallback)', () => {
+    it('rejects a format_preset field, whose rules only the app knows', () => {
+      const H = install([
+        text('applicant_ssn', { validation: { format_preset: 'ssn' } }),
+        text('member_number'),
+      ])
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'member_number' })
+    })
+
+    it('rejects a field whose min_length the value does not reach', () => {
+      const H = install([text('tax_id', { validation: { min_length: 9 } }), text('member_number')])
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'member_number' })
+    })
+
+    it('rejects a field whose numeric max the value exceeds', () => {
+      const H = install([
+        { id: 'count_number', type: 'number', spoken_name: 'count number', validation: { max: 100 } },
+        text('member_number'),
+      ])
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'member_number' })
+    })
+  })
+
+  describe('with the app validator on the inject hook', () => {
+    it("defers to the app's verdict, rejecting what it rejects", () => {
+      const H = install([text('first_number'), text('second_number')], {
+        validateFieldValue: (id: string) => (id === 'first_number' ? 'must be 9 digits' : null),
+      })
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'second_number' })
+    })
+
+    it("accepts a preset field the app accepts (the local fallback is not consulted)", () => {
+      const H = install([text('alien_number', { validation: { format_preset: 'a_number' } })], {
+        validateFieldValue: () => null,
+      })
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'alien_number', tier: 'numeric-label' })
+    })
+
+    it('still requires a pattern-tier field to pass the app validator', () => {
+      const H = install([
+        text('code_a', { validation: { pattern: '^[0-9]+$' } }),
+        text('code_b', { validation: { pattern: '^[0-9]+$' } }),
+      ], {
+        validateFieldValue: (id: string) => (id === 'code_a' ? 'rejected' : null),
+      })
+      expect(H.findDigitsTarget('1234567')).toMatchObject({ fieldId: 'code_b', tier: 'pattern' })
+    })
+  })
 })
 
 describe('seedPrefixBefore / prepareDigitsTarget', () => {

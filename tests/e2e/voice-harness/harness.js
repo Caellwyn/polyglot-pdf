@@ -577,15 +577,56 @@
     return false;
   }
 
+  // The effective value of a constraint: an explicit `validation` entry wins
+  // over the field-level one, as in validation.ts validateField.
+  function rule(f, key) {
+    if (f.validation && f.validation[key] != null) return f.validation[key];
+    return f[key] != null ? f[key] : null;
+  }
+
+  /*
+   * Conservative stand-in for the app's validateField, used only when the
+   * inject hook offers no validateFieldValue (an app build predating it, or a
+   * unit test without the hook). It REJECTS any field carrying a
+   * format_preset: presets (ssn, zip, uscis_account, phone, email, ...) are
+   * enforced by the app, and guessing their rules here is exactly the
+   * hand-copied twin rule that drifts. Otherwise: length bounds, numeric
+   * bounds, and the field's own pattern.
+   */
+  function localAccepts(f, value) {
+    if (f.validation && f.validation.format_preset) return false;
+    var maxLen = rule(f, 'max_length');
+    var minLen = rule(f, 'min_length');
+    if (maxLen != null && value.length > maxLen) return false;
+    if (minLen != null && value.length < minLen) return false;
+    var num = Number(value);
+    var min = rule(f, 'min');
+    var max = rule(f, 'max');
+    if (typeof min === 'number' && num < min) return false;
+    if (typeof max === 'number' && num > max) return false;
+    return true;
+  }
+
+  // The app's own gate when available (inject hook), else localAccepts.
+  function appAccepts(f, value) {
+    var h = window.__VFF_TEST_INJECT;
+    if (h && typeof h.validateFieldValue === 'function') {
+      try { return h.validateFieldValue(f.id, value) === null; } catch (e) { return false; }
+    }
+    return localAccepts(f, value);
+  }
+
   /*
    * Pick a field the digits fixture can legitimately fill, in schema order.
    * Eligible: a plain single-line text/number field that is unconditionally
-   * shown (no show_if, not hidden), editable, and long enough for the value.
+   * shown (no show_if, not hidden), editable, whose own pattern (if any)
+   * accepts the value, AND that the app's validation would accept the value
+   * into (appAccepts -- the same validateField every AI fill passes, so the
+   * harness never targets a field whose fill the app would reject).
    * Tier 1: its own validation.pattern ACCEPTS expectDigits (the strongest
-   * evidence -- the kit says so). Tier 2: no pattern, but its id/label reads as
-   * a number (looksNumeric). A field whose pattern REJECTS the value is never
-   * picked. Returns { fieldId, tier, name } or null when the kit has no such
-   * field (the driver reports that as a setup error naming the kit).
+   * evidence -- the kit says so). Tier 2: no pattern, but its id/spoken name
+   * reads as a number (looksNumeric). Returns { fieldId, tier, name } or null
+   * when the kit has no such field (the driver reports that as a setup error).
    */
   function findDigitsTarget(expectDigits, schema) {
     expectDigits = expectDigits || '1234567';
@@ -596,21 +637,19 @@
       var f = schema.fields[i];
       if (f.type !== 'text' && f.type !== 'number') continue;
       if (f.show_if || f.hidden || f.read_only || f.multiline) continue;
-      var maxLen = f.max_length != null ? f.max_length
-        : (f.validation && f.validation.max_length != null ? f.validation.max_length : null);
-      if (maxLen != null && maxLen < expectDigits.length) continue;
       var pattern = f.validation && f.validation.pattern;
+      var patternOk = false;
       if (pattern) {
         var re = null;
         try { re = new RegExp(pattern); } catch (e) { re = null; }
-        if (re && re.test(expectDigits)) {
-          return { fieldId: f.id, tier: 'pattern', name: f.name };
-        }
-        continue; // a pattern that rejects (or cannot compile) disqualifies
+        if (!re || !re.test(expectDigits)) continue; // a rejecting pattern disqualifies
+        patternOk = true;
+      } else if (tier2 || !looksNumeric(f)) {
+        continue; // tier 2 needs a numeric label, and the first one wins
       }
-      if (!tier2 && looksNumeric(f)) {
-        tier2 = { fieldId: f.id, tier: 'numeric-label', name: f.name };
-      }
+      if (!appAccepts(f, expectDigits)) continue;
+      if (patternOk) return { fieldId: f.id, tier: 'pattern', name: f.name };
+      tier2 = { fieldId: f.id, tier: 'numeric-label', name: f.name };
     }
     return tier2;
   }
