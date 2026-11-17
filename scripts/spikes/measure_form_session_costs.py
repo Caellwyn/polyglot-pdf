@@ -54,7 +54,7 @@ scripts/spikes/fixtures/audio_cache/ (committed; reruns are network-free).
 Run from repo root with GEMINI_API_KEY (a 20-question happy run is ~5-8 min):
 
     backend/.venv/Scripts/python.exe scripts/spikes/measure_form_session_costs.py \
-        --model 2.5 --arm unbounded --path happy
+        --model 3.8 --arm unbounded --path happy
 """
 
 from __future__ import annotations
@@ -92,7 +92,9 @@ from backend.config import (  # noqa: E402
     MODEL_NATIVE_PREMIUM,
     MODEL_NATIVE_STANDARD,
     MODEL_NATIVE_STANDARD_VERTEX,
+    TEXT_GENERATION_PRICING,
     get_pricing_for_model,
+    get_text_generation_pricing,
 )
 from backend.services.form_filling_service import FormFillingService  # noqa: E402
 
@@ -101,8 +103,32 @@ if _SPIKES_DIR not in sys.path:
     sys.path.insert(0, _SPIKES_DIR)
 import full_form_script as _ffs  # noqa: E402  (stdlib-only sibling module)
 import scenario_events as _se  # noqa: E402  (stdlib-only sibling module)
+from turn_audio_audit import TurnAudioAudit  # noqa: E402  (stdlib-only sibling module)
 
-MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
+# --model tiers. "3.8" is the production standard tier (backend/config.py). "2.5"
+# is the retired native-audio baseline, pinned to its explicit ids here because
+# backend/config.py no longer carries them (bd polyglot-pdf-uzecd): mapping "2.5"
+# to MODEL_NATIVE_STANDARD silently ran 3.8 under a 2.5 label. Each tier is
+# {"ai_studio": id, "vertex": id}; "vertex" is None where the model has no
+# Vertex id (3.1 is AI-Studio-only).
+MODEL_25_AI_STUDIO = "gemini-2.5-flash-native-audio-preview-12-2025"
+MODEL_25_VERTEX = "gemini-live-2.5-flash-native-audio"
+MODELS = {
+    "3.8": {"ai_studio": MODEL_NATIVE_STANDARD,
+            "vertex": MODEL_NATIVE_STANDARD_VERTEX},
+    "3.1": {"ai_studio": MODEL_NATIVE_PREMIUM, "vertex": None},
+    "2.5": {"ai_studio": MODEL_25_AI_STUDIO, "vertex": MODEL_25_VERTEX},
+}
+
+
+def resolve_model_id(tier: str, vertex: bool) -> str:
+    """The concrete Live model id for a --model tier on the chosen service."""
+    ids = MODELS[tier]
+    if vertex:
+        if ids["vertex"] is None:
+            raise ValueError(f"--model {tier} has no Vertex id")
+        return ids["vertex"]
+    return ids["ai_studio"]
 
 # Cap on how many times the naive arm's derailment guard may resume-reconnect
 # ONE run before giving up and aborting exactly as before this feature existed
@@ -112,30 +138,22 @@ MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
 # the plan.
 MAX_NAIVE_RESUMES = 3
 
-# Per-model text-sidecar rate table, USD per token (bd polyglot-pdf-0cyu: the
-# W6 whole-form gemini-2.5-pro pass, bd polyglot-pdf-gbus/#434, added a SECOND
-# text model to the sidecar -- flash-lite for the secretary + lite validator
-# windows, pro for the end-of-form pass -- so a single flat TEXT_RATES row
-# silently mispriced every pro call at the flash-lite rate. text_ai_usage
-# already carries a `model` field (text_ai_gemini._log_usage); key pricing off
-# it. Rates dated 2026-07:
-#   gemini-2.5-flash-lite: $0.10 in / $0.01 cached-in / $0.40 out per 1M
-#     (unchanged from the pre-existing TEXT_RATES row).
-#   gemini-2.5-pro (<=200k prompt tier, the only tier this harness's payloads
-#     hit): $1.25 in / $0.125 cached-in / $10.00 out per 1M -- the 2026-07
-#     Gemini API list price for gemini-2.5-pro (docs/standards/ai-models.md and
-#     backend/config.py record no text-model list price for pro; this table is
-#     the harness's own sourced record, dated so a future rate change is
-#     visible as a diff here rather than a silent drift).
+# Per-model text-sidecar rate table, USD per token, DERIVED from the canonical
+# backend/config.py TEXT_GENERATION_PRICING (bd polyglot-pdf-r3ham.1). The
+# harness used to carry its own dated table (2.5-flash-lite + 2.5-pro only), so
+# after the 3.1-flash-lite migration (bd polyglot-pdf-bd1zs) every secretary /
+# validator call was "unpriced" and billed at the highest row -- the 2.5-pro
+# rate. Per-model keying still matters (bd polyglot-pdf-0cyu: lite and pro bill
+# at different rates in one run); the rows now just come from one source.
 TEXT_RATES_BY_MODEL = {
-    "gemini-2.5-flash-lite": {
-        "input": 0.10e-6, "cached_input": 0.01e-6, "output": 0.40e-6},
-    "gemini-2.5-pro": {
-        "input": 1.25e-6, "cached_input": 0.125e-6, "output": 10.00e-6},
+    model: {"input": row["text_input"], "cached_input": row["cached_input"],
+            "output": row["text_output"]}
+    for model, row in TEXT_GENERATION_PRICING.items()
 }
-# Back-compat alias: the flash-lite row, for any caller that still wants a
-# single default rate (price_text_usage below; historical CLI/tests).
-TEXT_RATES = TEXT_RATES_BY_MODEL["gemini-2.5-flash-lite"]
+# Default row for an event with NO model field (older log shapes / test
+# doubles): the production lite model (Settings.MODEL_LABELING default).
+_DEFAULT_TEXT_MODEL = "gemini-3.1-flash-lite"
+TEXT_RATES = TEXT_RATES_BY_MODEL[_DEFAULT_TEXT_MODEL]
 
 
 def _rates_for_model(model: str | None) -> tuple[dict, bool]:
@@ -143,10 +161,12 @@ def _rates_for_model(model: str | None) -> tuple[dict, bool]:
     (rates, unpriced) -- unpriced=True means the model name was not in the
     table and the run priced it at the HIGHEST known rate (never silently
     under-priced) so build_summary can surface an 'unpriced_model' warning
-    instead of a quietly-wrong dollar figure."""
-    row = TEXT_RATES_BY_MODEL.get(model or "")
+    instead of a quietly-wrong dollar figure. Matching is the canonical
+    get_text_generation_pricing (date/preview suffixes bill at the base id)."""
+    row = get_text_generation_pricing(model)
     if row is not None:
-        return row, False
+        return {"input": row["text_input"], "cached_input": row["cached_input"],
+                "output": row["text_output"]}, False
     # Unknown model (a future model swap, a typo, or a test double): price at
     # the highest per-token rate across every known row, field by field, so
     # the estimate is never an under-count.
@@ -162,7 +182,7 @@ def price_text_usage(prompt_tokens: int, cached_tokens: int,
     """USD for one text-sidecar call: cached prompt tokens bill at the cached
     rate, the uncached remainder at the input rate, output at the output rate.
     `model` selects the rate row (TEXT_RATES_BY_MODEL); omitted/unknown falls
-    back to the flash-lite row for back-compat with pre-per-model callers."""
+    back to the production lite-model row (TEXT_RATES)."""
     prompt = max(0, int(prompt_tokens or 0))
     cached = max(0, min(int(cached_tokens or 0), prompt))
     out = max(0, int(output_tokens or 0))
@@ -1157,6 +1177,9 @@ class FakeClientWebSocket:
         # send_transcript=True (the --debug path). LOCAL-ONLY -- transcripts are user
         # speech (PHI); the harness is a never-deployed spike.
         self.transcript_chunks: list[dict] = []
+        # Per-turn output-audio audit (bd polyglot-pdf-r3ham.1): silent turns,
+        # silent-after-tool, missing completion, runaway audio.
+        self.audit = TurnAudioAudit()
         # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
         # supplies the next field's FULL schema on next_field_hint_response, which
         # the backend renders into the confirm_field next_field_guidance. Mirrors the
@@ -1180,8 +1203,10 @@ class FakeClientWebSocket:
         return None
 
     async def send_bytes(self, _data: bytes):
+        _now = time.monotonic()
         if self.first_audio_at is None:
-            self.first_audio_at = time.monotonic()
+            self.first_audio_at = _now
+        self.audit.audio(len(_data), _now)
 
     @staticmethod
     def _same_field_value(a, b) -> bool:
@@ -1318,8 +1343,10 @@ class FakeClientWebSocket:
             # each with a monotonic ts so it can be joined per-question by time window.
             text = msg.get("data")
             if text:
+                _now = time.monotonic()
+                self.audit.transcript(str(text), _now)
                 self.transcript_chunks.append(
-                    {"ts": time.monotonic(), "text": str(text)})
+                    {"ts": _now, "text": str(text)})
         # section_switched / status messages need no reply
 
     def _reply(self, fn):
@@ -1953,7 +1980,7 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
         # model name (text_ai_gemini._log_usage); the lite sidecar and the W6
         # pro pass bill at DIFFERENT rates, so a flat rate silently mispriced
         # every pro call. A missing model field (older log shape / a test
-        # double) falls back to the flash-lite row for back-compat rather than
+        # double) falls back to the lite-model row (TEXT_RATES) rather than
         # raising unpriced -- only a NAMED-but-unknown model counts as
         # unpriced (never silently under-priced: it bills at the highest
         # known rate and is surfaced in errors.unpriced_model_calls).
@@ -2391,7 +2418,7 @@ async def run(args) -> int:
         if explicit_vertex:
             print("--vertex is not available for --model 3.1: the 3.1 Live "
                   "model has no Vertex id (AI-Studio-only as of 2026-06). "
-                  "Use --model 2.5, or --no-vertex with GEMINI_API_KEY.")
+                  "Use --model 3.8, or --no-vertex with GEMINI_API_KEY.")
             return 1
         print("--model 3.1 has no Vertex id; falling back to the AI Studio "
               "path (needs GEMINI_API_KEY).", flush=True)
@@ -2399,7 +2426,7 @@ async def run(args) -> int:
     if not args.vertex and not os.getenv("GEMINI_API_KEY"):
         print("GEMINI_API_KEY not set; cannot run "
               "(the AI Studio path needs a key; Vertex is the default -- "
-              "drop --no-vertex, or use --model 2.5).")
+              "drop --no-vertex, or use --model 3.8).")
         return 1
     # --events unhappy is the E3 scenario and is meant to run on --path
     # unhappy globally (see the mix=0 comment below: "E3 runs --path unhappy
@@ -2505,12 +2532,9 @@ async def run(args) -> int:
     if args.synth_only:
         return 0
 
-    model_name = MODELS[args.model]
-    if args.vertex and args.model == "2.5":
-        # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI
-        # Studio (backend/config.py MODEL_NATIVE_STANDARD_VERTEX; the deployed
-        # demo uses this id). Pricing resolves by family, so rates are identical.
-        model_name = MODEL_NATIVE_STANDARD_VERTEX
+    # Per-service id (2.5 had different ids on Vertex vs AI Studio). Pricing
+    # resolves by family, so rates follow the resolved id.
+    model_name = resolve_model_id(args.model, bool(args.vertex))
     rates = get_pricing_for_model(model_name)
     settings = _make_settings(args.arm, args.trigger, args.window, args.compression,
                               continuous=bool(getattr(args, "continuous", False)),
@@ -2595,6 +2619,10 @@ async def run(args) -> int:
     rows: list[dict] = []
     current_q = {"n": 0}
     DEBUG = bool(getattr(args, "debug", False))
+    # Output transcription for the turn-audio audit's silent_turn check. Only the
+    # transcript's CHARACTER COUNT reaches the audit / .meta.json; the text itself
+    # is retained only on the --debug path.
+    AUDIT_TRANSCRIPTS = bool(getattr(args, "audit_transcripts", False))
 
     # Text sidecar wiring (bd polyglot-pdf-eh1h): default ON for the full-form
     # stress schema (deploy fidelity: production always wires the secretary +
@@ -2841,7 +2869,7 @@ async def run(args) -> int:
             # bd jnjj.39: in --debug, request the model's OUTPUT transcript so the
             # FakeClient can capture what it SAID per turn. Off by default -- normal
             # runs neither request nor pay for transcription.
-            send_transcript=DEBUG)
+            send_transcript=(DEBUG or AUDIT_TRANSCRIPTS))
 
         # The validation seam is now the CLIENT's own machinery (W2/W3 landed,
         # bd polyglot-pdf-0cyu): client.maybe_emit_validate_windows() /
@@ -2864,6 +2892,7 @@ async def run(args) -> int:
             async def _tool_tap(tool_name, arguments):
                 tool_log.append((current_q["n"], tool_name))
                 _ts = time.monotonic()
+                client.audit.tool_call(tool_name, _ts)
                 try:
                     resp = await orig_tool_cb(tool_name, arguments)
                     if tool_name in ("ask_secretary", "switch_to_field",
@@ -2920,6 +2949,24 @@ async def run(args) -> int:
         adapter.set_callbacks = _set_callbacks_then_tap
         _install_tool_tap()  # initial install (first start_session already ran)
 
+        # Generation boundaries for the turn-audio audit. The adapter calls
+        # _dev_flush_audio_dump(reason) on exactly the edges the audit needs --
+        # server turn_complete/generation_complete ("turn_complete"), barge-in
+        # ("interrupted") and session close -- whether or not the dev audio dump
+        # is enabled (the method no-ops internally when it is off). An instance
+        # attribute, so set_callbacks / reconnects on this adapter keep it.
+        # Test doubles that stand in for the adapter (the offline dry-run
+        # fakes) may not define the method; the audit then sees no
+        # boundaries and reports every audio turn as missing_completion,
+        # which is the honest reading of "no completion edge observed".
+        _orig_flush = getattr(adapter, "_dev_flush_audio_dump", None)
+        if _orig_flush is not None:
+            def _flush_then_audit(reason):
+                client.audit.boundary(reason, time.monotonic())
+                return _orig_flush(reason)
+
+            adapter._dev_flush_audio_dump = _flush_then_audit
+
         for _ in range(150):
             if getattr(adapter, "_session_ready", False):
                 break
@@ -2975,6 +3022,7 @@ async def run(args) -> int:
                 await service.stream_audio(chunk)
                 await asyncio.sleep(_CHUNK_MS / 1000.0)
             t_end = time.monotonic()
+            client.audit.user_turn_end(t_end)
             await service.send_activity_end()
             # bd jnjj.39 / Codex PR #246: the question-window boundary is the user's
             # activity_end (BEFORE awaiting Gemini's response), so the response that
@@ -3140,7 +3188,7 @@ async def run(args) -> int:
                 form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
                 current_section_id=current_section_id,
                 full_schema=(schema if use_text_ai else None),
-                send_transcript=DEBUG)
+                send_transcript=(DEBUG or AUDIT_TRANSCRIPTS))
             for _ in range(150):
                 if getattr(adapter, "_session_ready", False):
                     break
@@ -3860,6 +3908,19 @@ async def run(args) -> int:
             tw.writerow({"turn": _i, **_t})
     meta["auto_apply_fids"] = [aa["field_id"]
                                for aa in (SCHEMAS[args.schema].get("auto_apply") or [])]
+    meta["turn_audio_audit"] = client.audit.finalize(time.monotonic())
+    meta["turn_audio_audit"]["transcripts_requested"] = bool(
+        DEBUG or AUDIT_TRANSCRIPTS)
+    meta["turn_audio_audit_turns"] = client.audit.turns
+    meta["turn_audio_audit_exchanges"] = client.audit.exchanges
+    _taa = meta["turn_audio_audit"]
+    _tx = ("on" if _taa["transcripts_requested"]
+           else "OFF: silent_turn unobservable")
+    print(f"turn-audio audit: {_taa['turns']} turns / {_taa['exchanges']} "
+          f"exchanges; silent_turn={_taa['silent_turn']} "
+          f"silent_after_tool={_taa['silent_after_tool']} "
+          f"missing_completion={_taa['missing_completion']} "
+          f"runaway_audio={_taa['runaway_audio']} (transcripts {_tx})")
     (out_dir / f"{base_name}.meta.json").write_text(
         json.dumps(meta, indent=2, default=str), encoding="utf-8")
     summary = build_summary(meta, rows, log_sink, client, planted_groups,
@@ -3955,7 +4016,10 @@ def _write_debug_artifact(path, q_windows, tool_io, transcript_chunks,
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
-    ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
+    ap.add_argument("--model", choices=sorted(MODELS), default="3.8",
+                    help="Live model tier: 3.8 (production default), 3.1 "
+                         "(AI-Studio-only premium), 2.5 (retired baseline, "
+                         "explicit 2.5 ids).")
     ap.add_argument("--schema", choices=["demo", "i90", "i90-full", "w7", "i90-v2"],
                     default="demo",
                     help="form schema + question plan: 'demo' (the legacy "
@@ -4052,8 +4116,8 @@ def main() -> int:
                     help="use Vertex AI via ADC (DEFAULT; deploy-faithful). "
                          "Project/location from GOOGLE_CLOUD_PROJECT / "
                          "GOOGLE_CLOUD_LOCATION, defaulting to the demo "
-                         "project. On 2.5 this also swaps to the Vertex model "
-                         "id (MODEL_NATIVE_STANDARD_VERTEX). Pass --no-vertex "
+                         "project; the model id is the tier's Vertex id "
+                         "(see MODELS). Pass --no-vertex "
                          "with GEMINI_API_KEY for a deliberate AI Studio run "
                          "(required for --model 3.1, which has no Vertex id).")
     ap.add_argument("--continuous", action="store_true",
@@ -4111,6 +4175,13 @@ def main() -> int:
                          "RESPONSE it got back, and timestamp-attributed tool calls. "
                          "LOCAL-ONLY (the file holds transcripts/field values = user "
                          "data); off by default so normal cost/fill runs stay clean.")
+    ap.add_argument("--audit-transcripts", action="store_true",
+                    help="request the model's OUTPUT transcript so the turn-audio "
+                         "audit can flag silent_turn (transcript present, audio "
+                         "empty). Only character counts are recorded. Off by "
+                         "default: production does not request output "
+                         "transcription, so leaving it off keeps the deploy-"
+                         "faithful config.")
     return asyncio.run(run(ap.parse_args()))
 
 

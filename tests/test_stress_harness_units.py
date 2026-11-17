@@ -487,22 +487,26 @@ def test_whole_form_state_snapshot_carries_shown():
 # ------------------------------------------------------- pricing + windows
 
 def test_price_text_usage():
+    # No-model default = the production lite row (gemini-3.1-flash-lite,
+    # backend/config.py TEXT_GENERATION_PRICING: 0.25 / 0.025 cached / 1.50).
     # 10k prompt (8k cached) + 200 out:
-    # (2000 * 0.10 + 8000 * 0.01) / 1e6 + 200 * 0.40 / 1e6
     usd = mfc.price_text_usage(10_000, 8_000, 200)
-    assert abs(usd - (2000 * 0.10e-6 + 8000 * 0.01e-6 + 200 * 0.40e-6)) < 1e-12
+    assert abs(usd - (2000 * 0.25e-6 + 8000 * 0.025e-6 + 200 * 1.50e-6)) < 1e-12
     # cached clamps to prompt; negatives clamp to 0
-    assert mfc.price_text_usage(100, 500, 0) == pytest.approx(100 * 0.01e-6)
+    assert mfc.price_text_usage(100, 500, 0) == pytest.approx(100 * 0.025e-6)
     assert mfc.price_text_usage(-5, 0, -1) == 0
 
 
 def test_price_text_usage_per_model():
-    """bd polyglot-pdf-0cyu: per-model rate rows. flash-lite (explicit + the
-    None-model back-compat default) vs pro vs an unknown model (priced at the
-    highest known rate, never silently under-priced)."""
-    lite = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-2.5-flash-lite")
-    default = mfc.price_text_usage(10_000, 8_000, 200)  # back-compat: no model
+    """bd polyglot-pdf-0cyu: per-model rate rows. The production lite model
+    (explicit + the None-model default) vs pro vs an unknown model (priced at
+    the highest known rate, never silently under-priced). Historical
+    2.5-flash-lite events still price at their own (cheaper) row."""
+    lite = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-3.1-flash-lite")
+    default = mfc.price_text_usage(10_000, 8_000, 200)  # no model field
     assert lite == pytest.approx(default)
+    old_lite = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-2.5-flash-lite")
+    assert old_lite == pytest.approx(2000 * 0.10e-6 + 8000 * 0.01e-6 + 200 * 0.40e-6)
     pro = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-2.5-pro")
     assert pro > lite  # pro's per-token rates are strictly higher
     rates, unpriced = mfc._rates_for_model("gemini-9000-mystery")
