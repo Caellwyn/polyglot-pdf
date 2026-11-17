@@ -59,6 +59,8 @@ from google.genai import types
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.scripts.g1_corpus import build_corpus  # noqa: E402
+from backend.scripts.lite_probe_textai import RecordingTextAI, new_record  # noqa: E402
+from backend.services.validator_service import render_validator_payload  # noqa: E402
 
 MODEL_IN_SI = "gemini-2.5-flash"        # voice model's text sibling (2.5 tier)
 MODEL_FLASH_LITE = "gemini-2.5-flash-lite"
@@ -153,7 +155,7 @@ def _client() -> genai.Client:
         return genai.Client(
             vertexai=True,
             project=project,
-            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            location=os.environ.get("VERTEX_LOCATION", "global"),
         )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
@@ -181,6 +183,36 @@ async def _run_arm(client, model: str, prompt_tmpl: str, fields: list) -> dict:
         return {"conflicts": [], "_parse": "json_error"}
     except Exception as exc:  # noqa: BLE001
         return {"conflicts": [], "_error": type(exc).__name__}
+
+
+async def _run_prod_arm(ai, fields: list) -> dict:
+    """bd u0kcc: one call through the SHIPPED validator path -- the production
+    render_validator_payload (CONTRADICTION_SI + FIELDS tail) into
+    TextAIGemini.validate() with the production generate config. The adapter
+    fail-opens every failure to an empty verdict, so the outcome (transport error
+    vs json_error vs verdict) plus latency/usage is read from the RecordingTextAI
+    record. One retry budget for a transient transport error, as a 5xx blip is
+    "no measurement", not a miss."""
+    payload = render_validator_payload(fields, today=TODAY)
+    for attempt in range(3):
+        rec = new_record()
+        await ai.validate(payload)
+        if rec["error"] and attempt < 2:
+            await asyncio.sleep(2 * (attempt + 1))
+            continue
+        meta = {"latency_s": rec["latency_s"], "usage": rec["usage"] or {},
+                "retries": attempt}
+        if rec["error"]:
+            return {"conflicts": [], "_error": rec["error"], "_meta": meta}
+        try:
+            verdict = json.loads(rec["raw"] or "")
+        except json.JSONDecodeError:
+            return {"conflicts": [], "_parse": "json_error", "_meta": meta}
+        conflicts = verdict.get("conflicts", []) if isinstance(verdict, dict) else None
+        if not isinstance(conflicts, list):
+            return {"conflicts": [], "_parse": "bad_conflicts_type", "_meta": meta}
+        return {"conflicts": conflicts, "_meta": meta}
+    return {"conflicts": [], "_error": "unreachable"}
 
 
 def _flagged_sets(verdict: dict) -> list:
@@ -217,6 +249,16 @@ async def main() -> None:
     ap.add_argument("--dry-run", action="store_true",
                     help="Score offline with a perfect-oracle stub (no API calls).")
     ap.add_argument("--limit", type=int, default=0, help="Cap cases (debug).")
+    ap.add_argument("--lite-model", default=MODEL_FLASH_LITE,
+                    help="model for the flash_lite arm (bd u0kcc; the 3.x lite "
+                         "tier is served at Vertex location global)")
+    ap.add_argument("--lite-prompt", choices=["probe", "prod"], default="probe",
+                    help="probe = this file's FLASH_LITE_PROMPT via a raw call; "
+                         "prod = the SHIPPED CONTRADICTION_SI via TextAIGemini")
+    ap.add_argument("--skip-in-si", action="store_true",
+                    help="drop the 2.5-flash in_si_check arm")
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="run the corpus this many times (pooled counts)")
     args = ap.parse_args()
 
     corpus = build_corpus()
@@ -231,23 +273,32 @@ async def main() -> None:
     client = None if args.dry_run else _client()
 
     # arm -> (model, prompt) ; no_check arm is computed, not called.
-    arms = {
-        "in_si_check": (MODEL_IN_SI, IN_SI_PROMPT),
-        "flash_lite": (MODEL_FLASH_LITE, FLASH_LITE_PROMPT),
-    }
+    # bd u0kcc: --lite-model swaps the flash_lite arm's model, --lite-prompt prod
+    # routes it through the SHIPPED validator path (_run_prod_arm), and
+    # --skip-in-si drops the 2.5-flash incumbent arm (not the u0kcc question).
+    lite_model = args.lite_model
+    arms = {}
+    if not args.skip_in_si:
+        arms["in_si_check"] = (MODEL_IN_SI, IN_SI_PROMPT)
+    arms["flash_lite"] = (lite_model, FLASH_LITE_PROMPT)
+    prod_ai = (RecordingTextAI(lite_model)
+               if (args.lite_prompt == "prod" and not args.dry_run) else None)
 
     # Per-arm, per-case results.
     rows = []  # for CSV
     # arm -> counters
     stat = {a: defaultdict(int) for a in list(arms) + ["no_check"]}
 
-    for ci, case in enumerate(corpus):
+    work = [(r, c) for r in range(args.repeats) for c in corpus]
+    for ci, (rep_i, case) in enumerate(work):
         verdicts = {}
         for arm, (model, tmpl) in arms.items():
             if args.dry_run:
                 # Perfect oracle: flag exactly the expected conflicts.
                 v = {"conflicts": [{"field_ids": sorted(s), "reason": "stub"}
                                    for s in case.expected_conflicts]}
+            elif arm == "flash_lite" and prod_ai is not None:
+                v = await _run_prod_arm(prod_ai, case.fields)
             else:
                 v = await _run_arm(client, model, tmpl, case.fields)
             verdicts[arm] = v
@@ -257,7 +308,10 @@ async def main() -> None:
             flagged = _flagged_sets(verdicts[arm])
             detected = _case_detected(case.expected_conflicts, flagged)
             strict = _case_strict(case.expected_conflicts, flagged)
-            if case.is_contradiction:
+            if verdicts[arm].get("_error"):
+                # transport failure = no measurement (excluded), never a miss
+                stat[arm]["errors"] += 1
+            elif case.is_contradiction:
                 # recall side
                 if detected:
                     stat[arm]["tp"] += 1
@@ -265,13 +319,24 @@ async def main() -> None:
                     stat[arm]["fn"] += 1
                 if strict:
                     stat[arm]["tp_strict"] += 1
-            else:
+            elif not case.is_contradiction:
                 # precision side: a clean case flagged is a false positive
                 if flagged:
                     stat[arm]["fp"] += 1
                 else:
                     stat[arm]["tn"] += 1
+            meta = verdicts[arm].get("_meta") or {}
+            usage = meta.get("usage") or {}
             rows.append({
+                "repeat": rep_i,
+                "model": arms[arm][0] if arm in arms else "",
+                "error": verdicts[arm].get("_error") or verdicts[arm].get("_parse") or "",
+                "latency_s": (round(meta["latency_s"], 3)
+                              if meta.get("latency_s") is not None else ""),
+                "prompt_tok": usage.get("prompt", ""),
+                "cached_tok": usage.get("cached", ""),
+                "output_tok": usage.get("output", ""),
+                "thoughts_tok": usage.get("thoughts", ""),
                 "case_id": case.case_id,
                 "cls": case.cls,
                 "is_contradiction": int(case.is_contradiction),
@@ -281,7 +346,7 @@ async def main() -> None:
                 "n_flagged": len(flagged),
                 "flagged_ids": ";".join(sorted({i for s in flagged for i in s})),
             })
-        print(f"  [{ci+1}/{len(corpus)}] {case.case_id} ({case.cls}) done", flush=True)
+        print(f"  [{ci+1}/{len(work)}] {case.case_id} ({case.cls}) done", flush=True)
 
     # ---- score ----
     def _prec_rec(c):
@@ -294,14 +359,15 @@ async def main() -> None:
     print(f"{'arm':<14} {'recall':>8} {'precision':>10} {'TP':>4} {'FN':>4} "
           f"{'FP':>4} {'TN':>4} {'strict_recall':>14}", flush=True)
     summary = {}
-    for arm in ["in_si_check", "flash_lite", "no_check"]:
+    for arm in [a for a in ("in_si_check", "flash_lite", "no_check") if a in stat]:
         c = stat[arm]
         prec, rec = _prec_rec(c)
-        strict_rec = c["tp_strict"] / n_contra if n_contra else float("nan")
+        n_scored = c["tp"] + c["fn"]
+        strict_rec = c["tp_strict"] / n_scored if n_scored else float("nan")
         summary[arm] = {
             "recall": rec, "precision": prec,
             "tp": c["tp"], "fn": c["fn"], "fp": c["fp"], "tn": c["tn"],
-            "strict_recall": strict_rec,
+            "strict_recall": strict_rec, "errors": c["errors"],
         }
         print(f"{arm:<14} {rec:>8.3f} {prec:>10.3f} {c['tp']:>4} {c['fn']:>4} "
               f"{c['fp']:>4} {c['tn']:>4} {strict_rec:>14.3f}", flush=True)
@@ -310,13 +376,14 @@ async def main() -> None:
     # acceptable precision. Print the comparison; the human verdict goes in the
     # findings doc (the precision bar is a judgment call).
     fl = summary["flash_lite"]
-    insi = summary["in_si_check"]
-    print("\n=== GATE COMPARISON ===", flush=True)
-    print(f"flash_lite recall {fl['recall']:.3f} vs in_si recall {insi['recall']:.3f} "
-          f"-> flash_lite {'>=' if fl['recall'] >= insi['recall'] else '<'} in_si",
-          flush=True)
+    if "in_si_check" in summary:
+        insi = summary["in_si_check"]
+        print("\n=== GATE COMPARISON ===", flush=True)
+        print(f"flash_lite recall {fl['recall']:.3f} vs in_si recall {insi['recall']:.3f} "
+              f"-> flash_lite {'>=' if fl['recall'] >= insi['recall'] else '<'} in_si",
+              flush=True)
     print(f"flash_lite precision {fl['precision']:.3f} "
-          f"(false positives: {fl['fp']}/{n_clean} clean cases)", flush=True)
+          f"(false positives: {fl['fp']}/{n_clean * args.repeats} clean cases)", flush=True)
 
     if args.dry_run:
         print("\n[dry-run] scoring harness verified; no live numbers recorded.",
@@ -349,10 +416,13 @@ async def main() -> None:
 
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(_nan_to_none({
-            "bead": "polyglot-pdf-jnjj.5",
+            "bead": "polyglot-pdf-jnjj.5 / polyglot-pdf-u0kcc",
             "stamp": stamp,
             "today_for_date_checks": TODAY,
-            "models": {"in_si_check": MODEL_IN_SI, "flash_lite": MODEL_FLASH_LITE},
+            "models": {a: m for a, (m, _t) in arms.items()},
+            "lite_prompt": args.lite_prompt,
+            "repeats": args.repeats,
+            "vertex_location": os.environ.get("VERTEX_LOCATION", "global"),
             "corpus": {"total": len(corpus), "contradiction": n_contra, "clean": n_clean,
                        "provenance": "SYNTHETIC injection over real I-90 field structure"},
             "summary": summary,

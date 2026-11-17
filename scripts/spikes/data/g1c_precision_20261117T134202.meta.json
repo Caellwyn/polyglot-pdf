@@ -1,0 +1,51 @@
+{
+  "bead": "polyglot-pdf-u0kcc",
+  "lever": "precision",
+  "stamp": "20261117T134202",
+  "model": "gemini-3.5-flash-lite",
+  "vertex_location": "global",
+  "corpus_fp": "7a00e3fe1d00",
+  "today_for_date_checks": "2026-06-17",
+  "summary": {
+    "prod@20": {
+      "recall": 1.0,
+      "precision": 1.0,
+      "tp": 32,
+      "fn": 0,
+      "fp": 0,
+      "tn": 26,
+      "lat_p50": 0.8500466346740723,
+      "errors": 0
+    },
+    "prod@40": {
+      "recall": 1.0,
+      "precision": 1.0,
+      "tp": 42,
+      "fn": 0,
+      "fp": 0,
+      "tn": 30,
+      "lat_p50": 0.8681086301803589,
+      "errors": 0
+    },
+    "tuned@20": {
+      "recall": 0.9375,
+      "precision": 1.0,
+      "tp": 30,
+      "fn": 2,
+      "fp": 0,
+      "tn": 26,
+      "lat_p50": 0.866304874420166,
+      "errors": 0
+    },
+    "tuned@40": {
+      "recall": 1.0,
+      "precision": 1.0,
+      "tp": 42,
+      "fn": 0,
+      "fp": 0,
+      "tn": 30,
+      "lat_p50": 0.8916975259780884,
+      "errors": 0
+    }
+  }
+}

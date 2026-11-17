@@ -38,6 +38,7 @@ from google.genai import types
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schema_contract import SCHEMA_CONTRACT, acroform_field_list  # noqa: E402
 from arm_gemini import _extract_json  # noqa: E402  reuse the tolerant JSON parser
+from usage_tokens import gemini_usage_tokens  # noqa: E402
 
 
 def docai_form_fields(pdf_path: str, project: str, location: str,
@@ -163,10 +164,8 @@ def run(pdf_path: str, project: str, location: str, processor_id: str,
     })
     usage = getattr(resp, "usage_metadata", None)
     if usage is not None:
-        schema["_bakeoff"]["tokens"] = {
-            "input": getattr(usage, "prompt_token_count", None),
-            "output": getattr(usage, "candidates_token_count", None),
-        }
+        # output = answer + thinking tokens (billed at the output rate).
+        schema["_bakeoff"]["tokens"] = gemini_usage_tokens(usage)
     return schema
 
 

@@ -212,7 +212,7 @@ def _client() -> genai.Client:
         return genai.Client(
             vertexai=True,
             project=project,
-            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            location=os.environ.get("VERTEX_LOCATION", "global"),
         )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
