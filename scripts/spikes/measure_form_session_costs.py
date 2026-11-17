@@ -2955,13 +2955,17 @@ async def run(args) -> int:
         # ("interrupted") and session close -- whether or not the dev audio dump
         # is enabled (the method no-ops internally when it is off). An instance
         # attribute, so set_callbacks / reconnects on this adapter keep it.
-        _orig_flush = adapter._dev_flush_audio_dump
+        # Test doubles that stand in for the adapter (the offline dry-run
+        # fakes) may not define the method; the audit then sees no
+        # boundaries and reports every audio turn as missing_completion,
+        # which is the honest reading of "no completion edge observed".
+        _orig_flush = getattr(adapter, "_dev_flush_audio_dump", None)
+        if _orig_flush is not None:
+            def _flush_then_audit(reason):
+                client.audit.boundary(reason, time.monotonic())
+                return _orig_flush(reason)
 
-        def _flush_then_audit(reason):
-            client.audit.boundary(reason, time.monotonic())
-            return _orig_flush(reason)
-
-        adapter._dev_flush_audio_dump = _flush_then_audit
+            adapter._dev_flush_audio_dump = _flush_then_audit
 
         for _ in range(150):
             if getattr(adapter, "_session_ready", False):
