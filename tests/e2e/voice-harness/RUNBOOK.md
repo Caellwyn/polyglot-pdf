@@ -10,12 +10,15 @@ headlessly with the Playwright drivers (see "Headless drivers" below). It is not
 a CI-collected test suite. It injects scripted audio fixtures into the running
 app through a dev-gated hook and reads back field state for assertions.
 
-**No kit or field id is baked in** (bd `polyglot-pdf-tcemw`, CLAUDE.md scar
-#10). Kits live in the GCS bucket and are republished from the editor, so their
-ids move. The harness DISCOVERS its targets from the schema the app loaded:
-`lastNextField()` is the field the live session is asking right now (the app
-sets it at every handshake and on every advance), and `findDigitsTarget()`
-picks a field the digits fixture can legitimately fill.
+**The harness module and the two main drivers bake in no field id** (bd
+`polyglot-pdf-tcemw`, CLAUDE.md scar #10); the Latin-storage / Russian W-7 arm
+drivers still do (bd `polyglot-pdf-w04up`). Kits live in the GCS bucket and are
+republished from the editor, so their ids move. The harness DISCOVERS its
+targets from the schema the app loaded: `lastNextField()` is the field the live
+session is asking right now (the app sets it at every handshake and on every
+advance), and `findDigitsTarget()` picks a field the digits fixture can
+legitimately fill -- one the app's own `validateField` accepts the value into
+(via the inject hook's `validateFieldValue`).
 
 ## Pieces
 
@@ -59,9 +62,10 @@ the configuration that actually works (verified live on bd polyglot-pdf-g8w):
   and the app never mounts. Run vite yourself (the preview tool runs a plain
   `npm run dev`, which is NOT demo mode):
   `cd frontend && npm run build:worklet && VITE_WS_URL=ws://127.0.0.1:8001/ws/fill npx vite --mode demo --port 5174 --strictPort`
-  (the IPv4 literal matters: uvicorn binds IPv4 only, Chrome resolves
-  `localhost` to `[::1]`, and the build-time `VITE_WS_URL` wins over the
-  localStorage override. `build:worklet` regenerates the tracked
+  (the IPv4 literal matters: uvicorn binds IPv4 only and Chrome resolves
+  `localhost` to `[::1]`. Use it in BOTH places: with `__VFF_LOCAL_DEV` set the
+  app connects to the localStorage `__VFF_BACKEND_URL` first (`config.ts`
+  `getBackendUrl`), and `VITE_WS_URL` is the fallback. `build:worklet` regenerates the tracked
   `frontend/public/shared/audio-processor.worklet.js`; `git checkout` it after.)
 - **Pick a CORS-allowed frontend port.** The backend `allow_origins`
   (`backend/main.py`) lists `localhost:5173-5177`. Port `5174` works; a stray
@@ -108,8 +112,9 @@ cd "$WT/frontend" && npm run build:worklet && \
 Wait for `http://127.0.0.1:8001/health` and `http://localhost:5174` to respond.
 To stop a backgrounded uvicorn, kill it BY PORT (`netstat -ano | grep :8001`,
 then `taskkill //F //T //PID <pid>`) -- the reload child outlives the shell.
-(`gemini-3.8-live` is the default model; `USE_PREMIUM_MODEL=true` A/Bs 3.1 --
-known to skip `update_form_fields` more, expect more FLAKY.)
+(`gemini-3.8-live` is the default model. Keep `USE_PREMIUM_MODEL=false`: the
+premium 3.1 tier exists only on AI Studio, and live model work here is Vertex
+only.)
 
 ### 2. Open the app with the gates on (Chrome MCP)
 
@@ -399,7 +404,8 @@ reload and redo steps 3-6 (form pick, harness + discover + seed, Agree, cycle)
 RE-MOUNTS on that reload and must be dismissed again. (`runCycle`'s own `clearFieldState` at cycle start is a
 same-session backstop; it cannot undo a stale value already sent in a prior
 handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
-otherwise -- with the per-run breakdown and the model (3.8 vs 3.1). The harness
+otherwise -- with the per-run breakdown and the model id (the backend log's
+`"model"` field). The harness
 reports the rate, not a brittle boolean.
 
 ## Headless drivers (Playwright)
@@ -431,9 +437,11 @@ playwright install chromium-headless-shell` in any scratch dir; point
 - `driver_latin_storage.mjs`, `driver_latin_storage_ru.mjs`,
   `driver_ru_register.mjs` -- the Latin-storage / Russian-register W-7 arms.
 
-All drivers accept the disclaimer through `driver_common.mjs`
+The four W-7 drivers accept the disclaimer through `driver_common.mjs`
 `agreeAndWaitForHook`, which polls until Agree has been clicked AND the inject
 hook exists, in whichever order the intro-clip flag presents them.
+`driver_playwright.mjs` deliberately does NOT: it must seed the target BEFORE
+Agree, so it waits for the hook first and then clicks Agree itself.
 
 > **Same-page rerun (no reload).** The reload path above is still the recommended
 > retry. If you DO rerun on the same page, `clearFieldState` now prefers the app's

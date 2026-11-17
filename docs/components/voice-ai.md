@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: default Live model `gemini-3.8-live` -- no thinking config, BLOCKING tool behavior, thought tokens billed as text output.)*
+*Last updated: 2026-11-17. See [2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md](../journal/entries/2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -121,7 +121,12 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   `window.__VFF_TEST_INJECT` (only when `isTestHarnessEnabled()` — both
   `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` set) that pushes scripted PCM straight
   into `sendAudio`, bypassing the mic/worklet. Used by the E2E voice harness
-  (`tests/e2e/voice-harness/`); a no-op in production and normal dev.
+  (`tests/e2e/voice-harness/`); a no-op in production and normal dev. Beside the
+  audio methods it exposes `getLastNextField`, `resetFieldState`,
+  `seedFieldConfirmed` and `validateFieldValue` (runs the app's own
+  `validateField` -- the gate every AI fill passes -- on a candidate value, so
+  the harness's kit-agnostic target discovery never picks a field the app would
+  refuse to fill).
 - **Text/hints:** `send_text_message()` queues hints; `send_client_content()`
   prompts Gemini to actually speak. The actual wire send is **model-conditional**
   via `_send_text_turn()` (bd `polyglot-pdf-1g6`): the **3.1 family** rejects
