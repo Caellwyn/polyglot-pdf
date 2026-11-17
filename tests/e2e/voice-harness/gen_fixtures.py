@@ -79,7 +79,7 @@ UTTERANCES = [
     ("answer_dob_bare_digits.wav", "ten twelve two thousand five."),
     ("answer_country_birth.wav", "Mexico."),
     # Section-2 numeric value for the multi-section scenario (bd polyglot-pdf-8k8):
-    # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled
+    # a 5-digit value for a ZIP-shaped field (max_length 5). Expected filled
     # value "12345".
     ("digits_12345.wav", "one two three four five"),
     # Secretary cross-field query for the ask_secretary E2E (bd polyglot-pdf-p68s

@@ -537,6 +537,137 @@
   }
 
   /*
+   * TARGET DISCOVERY (bd polyglot-pdf-tcemw). Kits live in the GCS bucket and
+   * are republished constantly, so the harness names NO kit's field ids. It
+   * reads the schema the app actually loaded (sessionStorage) and picks its
+   * targets by PROPERTY:
+   *
+   *   - the field the live session is being asked = lastNextField(). The app
+   *     sets it at every handshake (computeNextFieldHintString -> onNextField)
+   *     and on every advance, so it is the authoritative "current question".
+   *   - a field that will accept a digits fixture = findDigitsTarget().
+   *
+   * The schema copy is the one SchemaFormStateManager persisted at form load,
+   * i.e. exactly what the handshake sent the backend.
+   */
+  function getSchema() {
+    try {
+      var raw = sessionStorage.getItem('schema_form_state');
+      if (!raw) return null;
+      var st = JSON.parse(raw);
+      return (st && st.schema && Array.isArray(st.schema.fields)) ? st.schema : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Words that mark a free-text field as numeric when the kit declares no
+  // validation.pattern. Matched against the field's id and its short
+  // voice-facing spoken_name, split on non-letters, so "foreign_tax_id_number"
+  // and "ZIP code" both hit. NOT the printed `name`: long form captions
+  // mention numbers in passing ("Street address, apartment number, ...").
+  var NUMERIC_WORDS = /^(number|num|no|id|tin|itin|ssn|ein|account|acct|zip|postal)$/i;
+
+  function looksNumeric(field) {
+    var text = [field.id, field.spoken_name || ''].join(' ');
+    var words = text.split(/[^A-Za-z]+/);
+    for (var i = 0; i < words.length; i++) {
+      if (NUMERIC_WORDS.test(words[i])) return true;
+    }
+    return false;
+  }
+
+  /*
+   * Pick a field the digits fixture can legitimately fill, in schema order.
+   * Eligible: a plain single-line text/number field that is unconditionally
+   * shown (no show_if, not hidden), editable, and long enough for the value.
+   * Tier 1: its own validation.pattern ACCEPTS expectDigits (the strongest
+   * evidence -- the kit says so). Tier 2: no pattern, but its id/label reads as
+   * a number (looksNumeric). A field whose pattern REJECTS the value is never
+   * picked. Returns { fieldId, tier, name } or null when the kit has no such
+   * field (the driver reports that as a setup error naming the kit).
+   */
+  function findDigitsTarget(expectDigits, schema) {
+    expectDigits = expectDigits || '1234567';
+    schema = schema || getSchema();
+    if (!schema) return null;
+    var tier2 = null;
+    for (var i = 0; i < schema.fields.length; i++) {
+      var f = schema.fields[i];
+      if (f.type !== 'text' && f.type !== 'number') continue;
+      if (f.show_if || f.hidden || f.read_only || f.multiline) continue;
+      var maxLen = f.max_length != null ? f.max_length
+        : (f.validation && f.validation.max_length != null ? f.validation.max_length : null);
+      if (maxLen != null && maxLen < expectDigits.length) continue;
+      var pattern = f.validation && f.validation.pattern;
+      if (pattern) {
+        var re = null;
+        try { re = new RegExp(pattern); } catch (e) { re = null; }
+        if (re && re.test(expectDigits)) {
+          return { fieldId: f.id, tier: 'pattern', name: f.name };
+        }
+        continue; // a pattern that rejects (or cannot compile) disqualifies
+      }
+      if (!tier2 && looksNumeric(f)) {
+        tier2 = { fieldId: f.id, tier: 'numeric-label', name: f.name };
+      }
+    }
+    return tier2;
+  }
+
+  // A non-empty placeholder of the right SHAPE for a seeded field. The value
+  // is never asserted on -- seeding only has to make the field read as
+  // answered-and-confirmed so navigation skips past it.
+  function seedValueFor(field) {
+    if (Array.isArray(field.options) && field.options.length) {
+      var opt = field.options[0];
+      return String(opt && opt.value != null ? opt.value : opt);
+    }
+    if (field.type === 'date') return '01/01/1990';
+    if (field.type === 'checkbox') return 'true';
+    if (field.type === 'number') return '1';
+    return 'Test';
+  }
+
+  /*
+   * Seed EVERY field that precedes `fieldId` in schema order (the app's
+   * navigation order, navigation.ts getFieldOrder) as filled-and-confirmed,
+   * so the next handshake's first question is `fieldId`. Hidden and
+   * show_if-gated fields are seeded too: a seeded option can REVEAL a
+   * conditional field, and seeding it up front keeps it out of the way.
+   * Must run BEFORE the handshake that should point at the target (the
+   * post-Agree switchToFirstSection re-handshake reads sessionStorage then);
+   * seeding afterwards does not re-prompt the live session.
+   */
+  function seedPrefixBefore(fieldId, schema) {
+    schema = schema || getSchema();
+    if (!schema) throw new Error('seedPrefixBefore: no schema in sessionStorage');
+    var map = {};
+    for (var i = 0; i < schema.fields.length; i++) {
+      var f = schema.fields[i];
+      if (f.id === fieldId) return seedFields(map);
+      map[f.id] = seedValueFor(f);
+    }
+    throw new Error('seedPrefixBefore: ' + fieldId + ' is not in the loaded schema');
+  }
+
+  /*
+   * One-call setup for a digits cycle: discover the target and seed its
+   * prefix. Call after the form loads and BEFORE clicking Agree; then wait
+   * for lastNextField() === target.fieldId to prove the handshake points
+   * there. Returns { fieldId, tier, name, seeded, failed } or
+   * { fieldId: null, reason } when the loaded kit has no eligible field.
+   */
+  function prepareDigitsTarget(expectDigits) {
+    var schema = getSchema();
+    if (!schema) return { fieldId: null, reason: 'no schema in sessionStorage (form not loaded yet?)' };
+    var t = findDigitsTarget(expectDigits, schema);
+    if (!t) return { fieldId: null, reason: 'loaded kit has no unconditional text field that accepts ' + (expectDigits || '1234567') };
+    var seed = seedPrefixBefore(t.fieldId, schema);
+    return { fieldId: t.fieldId, tier: t.tier, name: t.name, seeded: seed.seeded.length, failed: seed.failed };
+  }
+
+  /*
    * Run the full answer -> fill -> confirm -> advance cycle for one numeric field,
    * gating on concrete OUTCOMES (not audio). Returns a PASS/FAIL/FLAKY report the
    * agent reads back. Non-deterministic-LLM tolerant: normalizes digits, and
@@ -545,7 +676,12 @@
    */
   async function runCycle(opts) {
     opts = opts || {};
-    var fieldId = opts.fieldId;
+    // Default target: whatever field the live session is asking right now
+    // (discovered, never a kit-specific id -- bd polyglot-pdf-tcemw).
+    var fieldId = opts.fieldId || (function () { try { return lastNextField(); } catch (e) { return null; } })();
+    if (!fieldId) {
+      return { fieldId: null, steps: [], verdict: 'FLAKY', reason: 'setup-error: no fieldId given and lastNextField() is empty (no handshake yet?)' };
+    }
     var expectDigits = opts.expectDigits || '1234567';
     var digitsBuf = opts.digitsBuf;
     var yesBuf = opts.yesBuf;
@@ -804,10 +940,10 @@
    *
    * opts: {
    *   digitsBuf, yesBuf,                  // section-1 fixtures (reused from runCycle)
-   *   s1FieldId, s1ExpectDigits,          // default p1_line1_aliennumber / '1234567'
-   *   s1Seed,                             // { fieldId: value } confirmed before leg 1
+   *   s1FieldId, s1ExpectDigits,          // REQUIRED id / default '1234567'
+   *   s1Seed,                             // REQUIRED { fieldId: value } confirmed before leg 1
    *   s2FieldId, s2ExpectDigits, s2DigitsBuf, // section-2 voice field + its fixture
-   *   s2Seed,                             // { fieldId: value } confirmed before leg 2
+   *   s2Seed,                             // REQUIRED { fieldId: value } confirmed before leg 2
    *                                       //   (the section-2 fields BEFORE the voice
    *                                       //   target, so the target is the next field)
    *   targetSectionOrder                  // default 2
@@ -820,40 +956,32 @@
     opts = opts || {};
     var digitsBuf = opts.digitsBuf;
     var yesBuf = opts.yesBuf;
-    var s1FieldId = opts.s1FieldId || 'p1_line1_aliennumber';
+    // Every field id is a REQUIRED argument -- no kit's ids are baked in (bd
+    // polyglot-pdf-tcemw; kits live in the bucket and their ids move). s1Seed
+    // must leave s1FieldId as the LAST unconfirmed shown field of its section,
+    // and s2Seed must cover every section-2 field before s2FieldId (seed a
+    // revealing option's conditional fields too), or leg 2 is asked the wrong
+    // field. Build both from getSchema() for the kit under test.
+    //
+    // This scenario exercises the SECTION-RESET flow, which only runs with the
+    // backend's CONTINUOUS_SESSION=false. The default continuous session never
+    // crosses a section (one synthetic section, whole form), so under it leg 1
+    // can never see section_switched.
+    var s1FieldId = opts.s1FieldId;
     var s1ExpectDigits = opts.s1ExpectDigits || '1234567';
-    // Seed the non-target section-1 fields confirmed. checkbox4 is set to a
-    // NON-"[0]" option so the show_if-gated p1_line5a/b/c name fields stay hidden
-    // (shouldShowField equals-check) and do not block the section-complete ->
-    // switch transition -- verified against form-kits/i-90/schema.json.
-    var s1Seed = opts.s1Seed || {
-      p1_checkbox4: 'P1_checkbox4[1]',
-      p1_line2_acctidentifier: '123456789012',
-      p1_line3a_familyname: 'Smith',
-      p1_line3b_givenname: 'Jane',
-      p1_line3c_middlename: 'A'
-    };
-    var s2FieldId = opts.s2FieldId || 'p1_line6f_zipcode';
+    var s1Seed = opts.s1Seed;
+    var s2FieldId = opts.s2FieldId;
     var s2ExpectDigits = opts.s2ExpectDigits || '12345';
     var s2DigitsBuf = opts.s2DigitsBuf;
-    // Seed the section-2 fields that come BEFORE the voice target so the target
-    // is the NEXT field computeNextField returns -- otherwise Gemini is asked for
-    // the first mailing-address field (p1_line6a_incareofname), not the ZIP, and
-    // leg 2 times out on the wrong field (Codex/fresh-eyes PR #133). The unit
-    // radio (p1_unit_type6c_unit) is seeded non-empty, which SHOWS the apt field
-    // (show_if is_not_empty), so the apt field is seeded too -- verified against
-    // form-kits/i-90/schema.json. Only fields strictly before p1_line6f_zipcode.
-    var s2Seed = opts.s2Seed || {
-      p1_line6a_incareofname: 'Acme Corp',
-      p1_line6b_streetnumbername: '100 Main St',
-      p1_unit_type6c_unit: 'P1_checkbox6c_Unit[1]',
-      p1_line6c_aptsteflrnumber: '4B',
-      p1_line6d_cityortown: 'Springfield',
-      p1_line6e_state: 'IL'
-    };
+    var s2Seed = opts.s2Seed;
     var targetSectionOrder = opts.targetSectionOrder || 2;
 
     var result = { verdict: 'FLAKY', crossedToSection: false, legs: [] };
+
+    if (!s1FieldId || !s1Seed || !s2FieldId || !s2Seed) {
+      result.reason = 'setup-error: s1FieldId, s1Seed, s2FieldId and s2Seed are required (no kit defaults)';
+      return result;
+    }
 
     // s2DigitsBuf is mandatory: leg 2 (the second voice fill across the boundary)
     // is the scenario's reason to exist. A missing fixture is a SETUP error -- it
@@ -1013,12 +1141,19 @@
    */
   async function runSecretaryQuery(opts) {
     opts = opts || {};
-    var seedFieldId = opts.seedFieldId || 'p1_line1_aliennumber';
+    // seedFieldId is REQUIRED (bd polyglot-pdf-tcemw): pick it from the loaded
+    // kit, e.g. findDigitsTarget().fieldId, and pair it with a query fixture
+    // that asks about that field.
+    var seedFieldId = opts.seedFieldId;
     var seedValue = opts.seedValue || '1234567';
     var queryBuf = opts.queryBuf;
     var turnTimeoutMs = opts.turnTimeoutMs || 20000;
     var report = { verdict: 'FLAKY', seeded: false, steps: [] };
 
+    if (!seedFieldId) {
+      report.reason = 'setup-error: seedFieldId is required (no kit default)';
+      return report;
+    }
     if (!queryBuf) {
       report.reason = 'no queryBuf (load secretary_query_alien.wav first)';
       return report;
@@ -1068,6 +1203,10 @@
     readField: readField,
     lastNextField: lastNextField,
     runCycle: runCycle,
+    getSchema: getSchema,
+    findDigitsTarget: findDigitsTarget,
+    seedPrefixBefore: seedPrefixBefore,
+    prepareDigitsTarget: prepareDigitsTarget,
     seedFields: seedFields,
     getCurrentSection: getCurrentSection,
     getCompletedSections: getCompletedSections,
