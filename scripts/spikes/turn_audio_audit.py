@@ -152,6 +152,10 @@ class TurnAudioAudit:
         self._turn = None
         t["end_ts"] = ts
         t["end_reason"] = reason
+        # True only when the server's own completion edge (turn_complete /
+        # generation_complete) closed the turn -- not a barge-in, session
+        # close, the next user turn, or the end of the run.
+        t["turn_complete"] = reason == "turn_complete"
         t["flags"] = self.classify_turn(t)  # classify on the UNROUNDED value
         t["audio_ms"] = round(t["audio_ms"], 1)
         self.turns.append(t)

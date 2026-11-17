@@ -168,6 +168,19 @@ class TestCompletionAndRunaway:
         a.boundary(reason, 2.0)
         assert a.finalize(5.0)["missing_completion"] == 0
 
+    @pytest.mark.parametrize("reason,expected", [
+        ("turn_complete", True), ("interrupted", False),
+        ("session_close", False), ("next_user_turn", False), ("run_end", False)])
+    def test_per_turn_turn_complete_field(self, reason, expected):
+        a = taa.TurnAudioAudit()
+        a.audio(_ms(1500), 1.0)
+        if reason == "next_user_turn":
+            a.user_turn_end(2.0)
+        elif reason != "run_end":
+            a.boundary(reason, 2.0)
+        a.finalize(5.0)
+        assert a.turns[0]["turn_complete"] is expected
+
     def test_buffer_cap_does_not_split_a_runaway_turn(self):
         a = taa.TurnAudioAudit()
         a.audio(_ms(15_000), 1.0)
