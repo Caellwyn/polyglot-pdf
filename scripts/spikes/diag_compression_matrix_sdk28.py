@@ -112,13 +112,24 @@ _spec = importlib.util.spec_from_file_location("diag_compression_usage", _diag_p
 _diag = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_diag)
 
+# AI Studio ids per tier. "3.8" is the production standard tier; "2.5" is the
+# retired native-audio baseline pinned to its explicit id (backend/config.py no
+# longer carries it -- mapping "2.5" to MODEL_NATIVE_STANDARD silently ran 3.8
+# under a 2.5 label, bd polyglot-pdf-uzecd).
 MODELS = {
-    "2.5": MODEL_NATIVE_STANDARD,
+    "3.8": MODEL_NATIVE_STANDARD,
+    "2.5": "gemini-2.5-flash-native-audio-preview-12-2025",
     "3.1": MODEL_NATIVE_PREMIUM,
     # 2.5 routing-hypothesis aliases (bd h04c classification): UNVERIFIED strings --
     # a connect rejection is itself a data point (rules the alias out).
     "2.5-latest": "gemini-2.5-flash-native-audio-latest",
     "2.5-0925": "gemini-2.5-flash-native-audio-preview-09-2025",
+}
+# Tiers that have a Vertex id, and that id. Every other tier is AI-Studio-only
+# and 1008s on a Vertex client.
+VERTEX_IDS = {
+    "3.8": MODEL_NATIVE_STANDARD_VERTEX,
+    "2.5": "gemini-live-2.5-flash-native-audio",
 }
 
 # (label, enabled, trigger, window). on-inert trigger is far above anything a short
@@ -373,7 +384,7 @@ async def main_async(args: argparse.Namespace) -> int:
     # progress ratio stall short of its total (e.g. [15/30] then done),
     # reading as a crashed run (bd kbi1 outer review).
     def _will_run(tier: str) -> bool:
-        return (not on_vertex) or tier == "2.5" or getattr(
+        return (not on_vertex) or tier in VERTEX_IDS or getattr(
             args, "force_doomed_tiers", False)
 
     running_tiers = [t for t in model_tiers if _will_run(t)]
@@ -388,15 +399,14 @@ async def main_async(args: argparse.Namespace) -> int:
     n = 0
     for tier in model_tiers:
         model_name = MODELS[tier]
-        # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI
-        # Studio, and the AI Studio id 1008s on Vertex (backend/config.py
-        # MODEL_NATIVE_STANDARD_VERTEX). Swap it on the Vertex path, mirroring
-        # measure_form_session_costs.py. There is NO Vertex 3.1 id, so a 3.1
+        # A Live id can differ per service, and an AI Studio id 1008s on Vertex.
+        # Use the tier's Vertex id on the Vertex path (VERTEX_IDS, mirroring
+        # measure_form_session_costs.py). There is NO Vertex 3.1 id, so a 3.1
         # tier on Vertex is a known-1008 -- warn rather than pretend
         # (bd polyglot-pdf-kbi1 + a079).
         if on_vertex:
-            if tier == "2.5":
-                model_name = MODEL_NATIVE_STANDARD_VERTEX
+            if tier in VERTEX_IDS:
+                model_name = VERTEX_IDS[tier]
             else:
                 # EVERY other tier is an AI-Studio-shaped id: 3.1 has no Vertex
                 # equivalent, and the 2.5-latest / 2.5-0925 aliases are
@@ -459,10 +469,10 @@ async def main_async(args: argparse.Namespace) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-model compression support matrix on google-genai 2.8.x (bd h04c).")
-    ap.add_argument("--models", default="2.5,3.1",
-                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925. "
-                         "Only 2.5 has a Vertex id (the DEFAULT backend); "
-                         "3.1 and the 2.5-latest/2.5-0925 aliases are "
+    ap.add_argument("--models", default="3.8,3.1",
+                    help="comma list of tiers: 3.8,2.5,3.1,2.5-latest,2.5-0925. "
+                         "Only 3.8 and 2.5 have Vertex ids (the DEFAULT "
+                         "backend); 3.1 and the 2.5-latest/2.5-0925 aliases are "
                          "AI-Studio-only and 1008 on Vertex -- run those with "
                          "VERTEXAI=false plus GEMINI_API_KEY.")
     ap.add_argument("--configs", default="off,on-inert,on-live",
