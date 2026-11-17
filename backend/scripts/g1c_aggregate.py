@@ -1,8 +1,11 @@
 """Aggregate the G1c tuning runs (bd polyglot-pdf-08zv).
 
-Pools all g1c_precision_*.csv runs by (prompt, size) -- summing tp/fn/fp/tn across
-repeats so the recall/precision numbers average out per-call cheap-model noise --
-and prints the precision lever's baseline-vs-tuned comparison. Also summarizes the
+Pools all g1c_precision_*.csv runs by (model, prompt, size) -- summing tp/fn/fp/tn
+across repeats so the recall/precision numbers average out per-call cheap-model
+noise -- and prints the precision lever's per-model prompt comparison (every prompt
+arm present: baseline / tuned / prod). Runs are NEVER pooled across models (bd
+polyglot-pdf-u0kcc added --model; 08zv-era rows carry no model column and were
+all gemini-2.5-flash-lite). Also summarizes the
 latency lever (g1c_latency_*.csv) if present. STDLIB-only.
 """
 from __future__ import annotations
@@ -48,7 +51,8 @@ def _precision():
             if (r.get("corpus_fp") or "") != current_fp:
                 dropped_fp += 1
                 continue  # different corpus version -- never pool
-            k = (r["prompt"], r["size"])
+            # 08zv-era rows have no model column; they were all 2.5-flash-lite.
+            k = (r.get("model") or "gemini-2.5-flash-lite", r["prompt"], r["size"])
             c = agg[k]
             c["runs"].add(os.path.basename(f))
             err = r.get("error") or ""
@@ -67,18 +71,21 @@ def _precision():
         print(f"no rows match the current corpus_fp={current_fp}; "
               f"re-run probe_g1c_tuning.py on this corpus.")
         return
-    hdr = ("prompt", "size", "runs", "recall", "prec", "tp", "fn", "fp")
-    print(f"{hdr[0]:<9}{hdr[1]:>5}{hdr[2]:>5}{hdr[3]:>8}{hdr[4]:>7}"
-          f"{hdr[5]:>5}{hdr[6]:>4}{hdr[7]:>4}")
-    for prompt in ("baseline", "tuned"):
-        for size in ("20", "40", "132"):
-            c = agg.get((prompt, size))
-            if not c:
-                continue
-            rec = c["tp"] / (c["tp"] + c["fn"]) if (c["tp"] + c["fn"]) else 0.0
-            prec = c["tp"] / (c["tp"] + c["fp"]) if (c["tp"] + c["fp"]) else 0.0
-            print(f"{prompt:<9}{size:>5}{len(c['runs']):>5}{rec:>8.3f}{prec:>7.3f}"
-                  f"{c['tp']:>5}{c['fn']:>4}{c['fp']:>4}")
+    hdr = ("model", "prompt", "size", "runs", "recall", "prec", "tp", "fn", "fp")
+    print(f"{hdr[0]:<23}{hdr[1]:<9}{hdr[2]:>5}{hdr[3]:>5}{hdr[4]:>8}{hdr[5]:>7}"
+          f"{hdr[6]:>5}{hdr[7]:>4}{hdr[8]:>4}")
+    known = ["baseline", "tuned", "prod"]
+    prompts = known + sorted({k[1] for k in agg} - set(known))
+    for model in sorted({k[0] for k in agg}):
+        for prompt in prompts:
+            for size in ("20", "40", "132"):
+                c = agg.get((model, prompt, size))
+                if not c:
+                    continue
+                rec = c["tp"] / (c["tp"] + c["fn"]) if (c["tp"] + c["fn"]) else 0.0
+                prec = c["tp"] / (c["tp"] + c["fp"]) if (c["tp"] + c["fp"]) else 0.0
+                print(f"{model:<23}{prompt:<9}{size:>5}{len(c['runs']):>5}{rec:>8.3f}"
+                      f"{prec:>7.3f}{c['tp']:>5}{c['fn']:>4}{c['fp']:>4}")
 
 
 def _latency():
