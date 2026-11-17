@@ -590,8 +590,8 @@
    * unit test without the hook). It REJECTS any field carrying a
    * format_preset: presets (ssn, zip, uscis_account, phone, email, ...) are
    * enforced by the app, and guessing their rules here is exactly the
-   * hand-copied twin rule that drifts. Otherwise: length bounds, numeric
-   * bounds, and the field's own pattern.
+   * hand-copied twin rule that drifts. Otherwise: length bounds and numeric
+   * bounds (findDigitsTarget checks the field's own pattern itself).
    */
   function localAccepts(f, value) {
     if (f.validation && f.validation.format_preset) return false;

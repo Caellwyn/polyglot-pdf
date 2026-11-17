@@ -62,7 +62,10 @@ workaround can retire).
   claim was unscoped in testing.md/RUNBOOK (adopted); three wrong RUNBOOK
   statements (WS-URL precedence, "all drivers", 3.1 on Vertex; adopted). Filed:
   `polyglot-pdf-xvoeu` (driver comments claim Agree re-creates the connection
-  manager), `polyglot-pdf-nu6vm` (pre-existing RUNBOOK staleness). Also filed:
+  manager), `polyglot-pdf-nu6vm` (pre-existing RUNBOOK staleness). Opus round 2
+  (after the validator fix): NO-GAPS; it filed `polyglot-pdf-mcfi7` (a
+  pre-existing "never merged to dev" comment on `getPlaybackBacklog`) and noted
+  a `localAccepts` comment slip (fixed, comment only). Also filed:
   `polyglot-pdf-zc7t4` (`apply_details_w7.py` targets the retired `reason_a`).
 
 ## Lessons
