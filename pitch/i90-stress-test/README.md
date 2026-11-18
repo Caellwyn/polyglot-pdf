@@ -4,8 +4,8 @@ Everything the pitch needs from the 2026-07-14 stress-test series, in one place.
 Source of record for the numbers below is the epic `polyglot-pdf-00pt` run
 artifacts; this folder is a copy for pitch compilation.
 
-> **2026-11-18:** production now runs `gemini-3.8-live`. The figures below are the
-> 2.5 record. Read the dated update at the end before quoting any number.
+> **2026-11-18:** the default voice model is now `gemini-3.8-live`. The investor demo
+> still serves 2.5 until it is redeployed. The figures below are the 2.5 record. Read the dated update at the end before quoting any number.
 
 ## What's here
 
@@ -57,9 +57,9 @@ prompting / scorer / kit-hygiene fixes, each with a measured baseline to verify
 a fix against. The one with product consequence is a checkbox occasionally being
 checked when the user declined it (bd cx23).
 
-## 2026-11-18 update: the production model is now gemini-3.8-live
+## 2026-11-18 update: the default voice model is now gemini-3.8-live
 
-The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The production voice model is now `gemini-3.8-live`; 2.5 retires on Vertex on 2026-12-13.
+The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The default voice model in the code is now `gemini-3.8-live`. It has run deployed only once, on staging; the investor demo still serves 2.5. 2.5 retires on Vertex on 2026-12-13.
 
 Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say today:
 
@@ -71,9 +71,9 @@ Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say 
   | 3.8 | $0.905 ($0.87-0.94) | 21, 21, 21 of 22 | 1.16 s |
   | 2.5 | $0.697 ($0.67-0.74) | 19, 22, 21 of 22 | 1.31 s |
 
-  The increase comes from three things: 3.8's higher text-input price (1.5x), its longer spoken replies, and its "thinking". Source: `scripts/spikes/3p8_cost_bench_findings.md`.
+  The increase comes from three things: 3.8's higher text-input price (1.5x), its longer spoken replies, and its "thinking" (about 3%). Thinking is priced from the model's reported token counts. The one reconciled 3.8 billing day did NOT show thinking as billed text output (n=1, `scripts/spikes/3p8_deployed_telemetry_findings.md`), so treat that line as an upper bound. Source: `scripts/spikes/3p8_cost_bench_findings.md`.
 - **The I-90 estimate is an EXTRAPOLATION, not a measurement.** Applying the W-7 ratio to the $2.44 above gives about **$3.2 per full I-90 on 3.8**. That is an order-of-magnitude guide only, until a 3.8 I-90 completes.
-- **Context compression fires on 3.8 as it did on 2.5** (12-16 trims per W-7). That is what kept 2.5's cost linear in form length; linear cost on a full 3.8 I-90 is NOT yet measured.
+- **Context compression fires on 3.8, about twice as often as on 2.5** (12-16 trims per W-7 vs 6), because 3.8's longer speech fills the window faster. That is what kept 2.5's cost linear in form length; linear cost on a full 3.8 I-90 is NOT yet measured.
 - **Multilingual still holds on 3.8.** A 14-question W-7 slice in Spanish, Chinese, Hindi, Russian and Arabic was spoken in the right language on every question, with 13-14 of 14 fields correct (`scripts/spikes/3p8_quirk_retest_findings.md`).
 - **Error-catching:** the cheap helper model moved to `gemini-3.1-flash-lite` with no loss.
   - Planted-contradiction recall is 1.000 (68 of 68).
