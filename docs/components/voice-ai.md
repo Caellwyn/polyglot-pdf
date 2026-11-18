@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
+*Last updated: 2026-11-18. See [journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md](../journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -153,6 +153,19 @@ early-return guard that dropped manual signals when Gemini's own detector was
 running are all gone -- PTT *knows* when the user is speaking, so a second gate
 inferring it could only disagree. Full rationale in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
+
+## One server message, several fields
+
+A single Live server message can carry audio AND other `server_content` fields
+together. `gemini-3.8-live` bundles `output_transcription` into audio-bearing
+messages (2.5 sent it on its own message), and completion flags or input
+transcription can share a message with audio the same way. The receive loop
+therefore forwards `event.data` audio and then STILL processes that message's
+`server_content` (interrupt, completion flags, input/output transcription). It
+skips only the `model_turn` parts walk for that message, because those parts are
+the same audio already forwarded -- walking them would double-play it (bd
+polyglot-pdf-r3ham.6). `usage_metadata` arrives on its own message on both 2.5
+and 3.8.
 
 ## Barge-in
 

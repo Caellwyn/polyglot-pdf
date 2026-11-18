@@ -2671,6 +2671,16 @@ class LiveAIGemini(ILiveAI):
 
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []
+                                # True once this message's audio was forwarded via
+                                # event.data. The SAME message's server_content is
+                                # still processed below (bd polyglot-pdf-r3ham.6):
+                                # gemini-3.8-live bundles output_transcription (and
+                                # can bundle completion flags / input transcription)
+                                # into an audio-bearing message, and a post-audio
+                                # `continue` here dropped all of it. The flag keeps
+                                # the model_turn branch from forwarding the same
+                                # inline audio a second time.
+                                audio_forwarded = False
                                 try:
                                     if getattr(event, "data", None) is not None:
                                         audio_bytes: bytes | None = None
@@ -2711,7 +2721,7 @@ class LiveAIGemini(ILiveAI):
                                             # what the MODEL generated, not what was played.
                                             self._dev_dump_audio(audio_bytes)
                                             await self._on_audio(audio_bytes)
-                                            continue
+                                            audio_forwarded = True
 
                                     server_content = getattr(event, "server_content", None)
                                     if server_content is not None:
@@ -2886,13 +2896,22 @@ class LiveAIGemini(ILiveAI):
                                                          elapsed_since_first_audio_ms=elapsed_since_first_audio,
                                                          timestamp_ms=int(now * 1000))
                                             
-                                            # Reset audio tracking for next turn
-                                            self._audio_chunk_count = 0
-                                            self._first_audio_time = None
+                                            # Reset audio tracking for next turn -- only when
+                                            # the transcript arrived on its OWN message (the
+                                            # 2.5 shape, where it trails the audio). A
+                                            # transcript bundled with an audio chunk (3.8) is
+                                            # mid-generation; resetting there would re-fire
+                                            # the first-chunk path on every chunk.
+                                            if not audio_forwarded:
+                                                self._audio_chunk_count = 0
+                                                self._first_audio_time = None
                                             
                                             if self._on_transcript:
                                                 await self._on_transcript(transcription.text)
-                                        else:
+                                        elif not audio_forwarded:
+                                            # An audio-bearing message's model_turn IS that
+                                            # audio (already forwarded via event.data above);
+                                            # walking its parts again would double-play it.
                                             model_turn = getattr(server_content, "model_turn", None)
                                             if model_turn is not None:
                                                 parts = getattr(model_turn, "parts", [])
