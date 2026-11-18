@@ -133,6 +133,13 @@ async def _run_arm(gap_s: float, rep: int, turn_ms: int, verbose: bool) -> _ArmR
         # a noisier path than production takes.
         audio_events.append("audio")
 
+    async def on_tool_call(name: str, _args: Any = None, *a: Any, **k: Any) -> Dict[str, Any]:
+        # MUST be async and return a payload: the adapter awaits it and sends
+        # the result as the tool response. gemini-3.8-live answers the probe
+        # tone with a get_form_status call on turn 1 (call-then-speak), and a
+        # sync None-returning stub crashed that session (bd r3ham.4).
+        return {"success": True, "message": f"{name}: no fields filled yet."}
+
     def on_session_dropped(info: Any = None) -> None:
         closed["dropped"] = info
 
@@ -150,7 +157,7 @@ async def _run_arm(gap_s: float, rep: int, turn_ms: int, verbose: bool) -> _ArmR
         on_form_update=lambda *a, **k: None,
         on_transcript=lambda *a, **k: None,
         on_audio=on_audio,
-        on_tool_call=lambda *a, **k: None,
+        on_tool_call=on_tool_call,
         on_session_dropped=on_session_dropped,
         system_instruction=settings.DTI_SYSTEM_INSTRUCTION,
         tool_declarations=tool_declarations,
