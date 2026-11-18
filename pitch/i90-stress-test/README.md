@@ -73,7 +73,7 @@ Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say 
 
   The increase comes from three things: 3.8's higher text-input price (1.5x), its longer spoken replies, and its "thinking". Source: `scripts/spikes/3p8_cost_bench_findings.md`.
 - **The I-90 estimate is an EXTRAPOLATION, not a measurement.** Applying the W-7 ratio to the $2.44 above gives about **$3.2 per full I-90 on 3.8**. That is an order-of-magnitude guide only, until a 3.8 I-90 completes.
-- **Cost stays linear in form length.** Compression fires on 3.8 as it did on 2.5 (12-16 trims per W-7).
+- **Context compression fires on 3.8 as it did on 2.5** (12-16 trims per W-7). That is what kept 2.5's cost linear in form length; linear cost on a full 3.8 I-90 is NOT yet measured.
 - **Multilingual still holds on 3.8.** A 14-question W-7 slice in Spanish, Chinese, Hindi, Russian and Arabic was spoken in the right language on every question, with 13-14 of 14 fields correct (`scripts/spikes/3p8_quirk_retest_findings.md`).
 - **Error-catching:** the cheap helper model moved to `gemini-3.1-flash-lite` with no loss.
   - Planted-contradiction recall is 1.000 (68 of 68).
@@ -81,4 +81,4 @@ Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say 
 - **Latency:**
   - Every number above is still LOCAL.
   - The first deployed 3.8 telemetry is one staging session (`scripts/spikes/3p8_deployed_telemetry_findings.md`). That is too few to quote, and the demo still runs 2.5.
-  - The same honesty rule applies: "about 1.2 s locally, faster in production", or no hard number.
+  - Quote it as "about 1.2 s measured locally; deployed latency not yet measured on 3.8", or give no hard number.
