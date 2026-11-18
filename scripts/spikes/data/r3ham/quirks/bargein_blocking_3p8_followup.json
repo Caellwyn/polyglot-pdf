@@ -1,0 +1,281 @@
+{
+  "model": "gemini-3.8-live",
+  "trials": [
+    {
+      "arm": "control",
+      "first_call": {
+        "id": "fc_9187589408963015845",
+        "args": {
+          "value": "24981736",
+          "field_id": "foreign_tax_id_number"
+        }
+      },
+      "events": [
+        {
+          "t": 11.203,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.547,
+          "kind": "tool_call",
+          "id": "fc_9187589408963015845",
+          "name": "update_form_fields",
+          "args": {
+            "value": "24981736",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 12.094,
+          "kind": "audio"
+        },
+        {
+          "t": 12.094,
+          "kind": "say",
+          "text": "I have recorded your "
+        },
+        {
+          "t": 12.125,
+          "kind": "audio"
+        },
+        {
+          "t": 12.781,
+          "kind": "say",
+          "text": "foreign tax ID"
+        },
+        {
+          "t": 12.985,
+          "kind": "audio"
+        },
+        {
+          "t": 13.781,
+          "kind": "say",
+          "text": " number as 24981736."
+        },
+        {
+          "t": 13.985,
+          "kind": "audio"
+        },
+        {
+          "t": 14.797,
+          "kind": "say",
+          "text": " Is that"
+        },
+        {
+          "t": 14.985,
+          "kind": "audio"
+        },
+        {
+          "t": 15.781,
+          "kind": "say",
+          "text": " correct?"
+        },
+        {
+          "t": 16.016,
+          "kind": "audio"
+        },
+        {
+          "t": 18.203,
+          "kind": "turn_complete"
+        }
+      ],
+      "n_tool_calls": 1,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736"
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_787269926974586600",
+        "args": {
+          "value": "24981736",
+          "field_id": "foreign_tax_id_number"
+        }
+      },
+      "events": [
+        {
+          "t": 11.172,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.484,
+          "kind": "tool_call",
+          "id": "fc_787269926974586600",
+          "name": "update_form_fields",
+          "args": {
+            "value": "24981736",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 11.781,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.875,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.875,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.156,
+          "kind": "barge_end"
+        },
+        {
+          "t": 30.172,
+          "kind": "late_response_sent",
+          "id": "fc_787269926974586600"
+        },
+        {
+          "t": 40.188,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.578,
+          "kind": "followup_end"
+        }
+      ],
+      "n_tool_calls": 1,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736"
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_15577290266621451405",
+        "args": {
+          "value": "24981736",
+          "field_id": "foreign_tax_id_number"
+        }
+      },
+      "events": [
+        {
+          "t": 11.188,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.516,
+          "kind": "tool_call",
+          "id": "fc_15577290266621451405",
+          "name": "update_form_fields",
+          "args": {
+            "value": "24981736",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 11.829,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.891,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.891,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.204,
+          "kind": "barge_end"
+        },
+        {
+          "t": 30.204,
+          "kind": "late_response_sent",
+          "id": "fc_15577290266621451405"
+        },
+        {
+          "t": 40.235,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.563,
+          "kind": "followup_end"
+        }
+      ],
+      "n_tool_calls": 1,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736"
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_831410037316153019",
+        "args": {
+          "value": "24981736",
+          "field_id": "foreign_tax_id_number"
+        }
+      },
+      "events": [
+        {
+          "t": 11.172,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.5,
+          "kind": "tool_call",
+          "id": "fc_831410037316153019",
+          "name": "update_form_fields",
+          "args": {
+            "value": "24981736",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 11.813,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.891,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.891,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.172,
+          "kind": "barge_end"
+        },
+        {
+          "t": 30.188,
+          "kind": "late_response_sent",
+          "id": "fc_831410037316153019"
+        },
+        {
+          "t": 40.204,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.516,
+          "kind": "followup_end"
+        }
+      ],
+      "n_tool_calls": 1,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736"
+      ],
+      "duplicate_calls": 0
+    }
+  ]
+}
