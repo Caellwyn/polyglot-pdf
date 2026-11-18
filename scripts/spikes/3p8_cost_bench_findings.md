@@ -76,6 +76,9 @@ Source: the per-turn `token_usage` lines of each run log. Their sum matches the 
   - The order flips with session shape. In the longer sessions (unhappy W-7, I-90) audio-in leads on 3.8 too, because corrected answers and repeated questions add user audio.
   - So "text-in and audio-in are the two cost lines, together 85-95%" holds on both models. Which of the two is larger depends on the form and the path.
 - **Thinking is small: 2-3% of the form.** It is about 260 thinking tokens per W-7 question, and they are output-rate tokens that don't stay in the context.
+  - This line is priced at list rate from `usage_metadata`.
+  - The deployed-billing reconciliation in `3p8_deployed_telemetry_findings.md` (PR #908, n=1 session) found that the bill's 3.8 text-output roughly matched logged text-out *minus* thoughts. If that holds at scale, thinking is not billed, and every 3.8 figure here is about 3% high.
+  - The harness's cost totals include thinking, so they are the conservative side.
 - **Compression evicts more on 3.8:** 12-16 evictions per W-7, against 6 on 2.5. The longer 3.8 speech fills the window faster; the compression floor and window themselves are unchanged.
 
 ## Input transcription cost (asked by the epic orchestrator)
