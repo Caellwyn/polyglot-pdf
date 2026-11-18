@@ -11,7 +11,7 @@
 > eviction FIRES at the derived window: 12-16 evictions per full 22-field W-7 on
 > 3.8 vs 6 on 2.5 at the same script, because 3.8's longer speech fills the window
 > faster (n=3 each, `scripts/spikes/3p8_cost_bench_findings.md`, bd
-> `polyglot-pdf-e72on`). Earlier measurements on two other models --
+> `polyglot-pdf-e72on`). Eviction is also measured reliable on two other models:
 > `gemini-3.1-flash-live-preview`
 > (3/3 twenty-turn runs, 3-4 evictions each, 54-74% below the unbounded baseline
 > at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) and
