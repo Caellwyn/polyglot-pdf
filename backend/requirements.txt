@@ -12,7 +12,7 @@ anyio==4.15.1
 structlog==26.1.0
 pydantic==2.13.5
 python-multipart==0.0.32
-PyMuPDF==1.28.2
+PyMuPDF==2.1
 google-cloud-storage==2.18.2
 google-cloud-texttospeech==2.37.0
 firebase-admin==6.6.0
