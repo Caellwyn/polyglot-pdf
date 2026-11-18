@@ -98,7 +98,13 @@ The curves above are from a **gemini-2.5 native audio** run, the July 2026 produ
   - it speaks about twice as much audio per form;
   - it reports thinking tokens, priced here at the output rate. Thinking is priced from the model's reported token counts. The one reconciled 3.8 billing day did NOT show thinking as billed text output (n=1, `scripts/spikes/3p8_deployed_telemetry_findings.md`), so treat that line as an upper bound.
 
-  On the like-for-like W-7, measured 3.8 cost is about 30% above 2.5, against about 15% from repricing alone (`scripts/spikes/3p8_cost_bench_findings.md`). A measured 3.8 mitigated I-90 would therefore likely be nearer **$3.4-3.5** than $3.05. Treat that as an extrapolation. It differs from the about $3.2 in `pitch/i90-stress-test/README.md` because the bases are different runs:
+  - **Repricing alone** raises this I-90 run about 15% ($2.66 -> $3.05). The run is audio-heavy, and audio prices did not change.
+  - **On the like-for-like W-7,** repricing the 2.5 cost split in `scripts/spikes/3p8_cost_bench_findings.md` gives about +23%, but measured 3.8 cost is about +30%. The extra ~6% is 3.8's behavior.
+  - **So a measured 3.8 mitigated I-90 would likely land between about $3.2 and $3.5.**
+    - About $3.2 is $3.05 plus W-7's ~6% behavior gap.
+    - About $3.5 is $2.66 plus W-7's full +30%.
+
+    Treat that range as an extrapolation. The I-90 README's about $3.2 (+30% on its base) uses a different base run:
   - here, this single SPANISH-language 2.5 run ($2.66 all-in; the helper models add only $0.002);
   - there, the 3-run mean of the English stress-test series ($2.44 all-in).
 
