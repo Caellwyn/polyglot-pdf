@@ -139,7 +139,9 @@ backend/.venv
 # never-deployed spike, but these must NEVER be committed regardless of the run's
 # --out-dir (a repo-wide rule -- scripts/spikes/.gitignore only covered the default
 # location; Codex PR #246). The committable cost CSV/meta.json siblings are NOT
-# matched by this pattern.
+# matched by this pattern. Exception (maintainer decision 2026-11-17): a run whose
+# every answer is a SYNTHETIC scripted/simulated user may be committed by copying
+# it deliberately under <base>.synthetic-transcript.json; real speech never is.
 *.debug.json
 
 # Local project-scoped MCP server config (e.g. the gemini-docs MCP). Machine-
