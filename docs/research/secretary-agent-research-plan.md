@@ -29,7 +29,7 @@ their maiden name?").
 **Why this shape.** The measured cost reality AT THE TIME THIS PLAN WAS WRITTEN
 was that on the production model (2.5), the **system instruction re-sent every
 turn is 95-98% of the bill**. *(That figure is now OBSOLETE -- compression plus
-the SI diet capped text-in, and AUDIO-IN now leads; see
+the SI diet capped text-in, and text-in and audio-in are now the two cost lines; see
 [`../standards/logging-and-cost.md`](../standards/logging-and-cost.md) for the
 current split. The plan's SHAPE still follows: a thinner principal is still
 cheaper, it is just no longer the overwhelming lever it was. Left otherwise
