@@ -191,7 +191,8 @@ async function main() {
         // A spelled read-back pauses between letters, which briefly drains
         // the playback backlog; draining alone then injects "yes" MID
         // read-back. Also require a server turn_complete that arrives AFTER
-        // the read-back started (3.8 sends one for the tool-call turn first).
+        // the read-back started. Known weak: the WS turn_complete is sent per
+        // output-transcription chunk, not at the true turn end (bd ucmpg).
         const speakAt = Date.now();
         while (Date.now() - t0 < 25000 && !(window.__vffTcAt > speakAt)) {
           await sleep(100);

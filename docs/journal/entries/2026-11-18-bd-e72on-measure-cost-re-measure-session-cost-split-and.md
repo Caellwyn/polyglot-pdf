@@ -54,6 +54,7 @@ All runs were on Vertex, serial, at production config (`--compression --derive-c
 - **Also bumped:**
   - `docs/components/voice-ai.md`: input transcription is measured firing on 3.8.
   - `docs/standards/schema-key-visibility.md`: the text-in share now gives the 3.8 figure.
+- **Also corrected:** `docs/standards/ws-protocol.md` and `docs/components/websocket-routing.md` (the input-transcription path fires on 3.8).
 - **Stale comments corrected:** `backend/services/callback_handler.py` claimed input transcription never fires on Vertex; it fires on every 3.8 PTT turn (r3ham.4).
 - **Edited to drop the stale "audio-in now leads" restatement:** `docs/research/secretary-agent-research-plan.md` and `docs/sprint_20_sol-intro-tts_plan.md`, which are plan records.
 - **Other STALE flags** (admin-service.md and others) track files this branch did not touch, and were already stale.

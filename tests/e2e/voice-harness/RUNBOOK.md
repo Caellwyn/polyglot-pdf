@@ -467,7 +467,8 @@ Agree, so it waits for the hook first and then clicks Agree itself.
   `waitForConfirmed` (the authoritative sessionStorage `confirmed` flag), plus an
   advance wait. `waitForGeminiQuestion` (`vffOnAudioPlaybackEnd`) is PACING-only and
   routinely times out in an automated tab -- never gate correctness on it.
-  (`vffOnTurnComplete` was removed from this surface and is not used.)
+  (`vffOnTurnComplete` is used only by the `VFF_PACING=readback` guard, and it fires
+  on every output-transcription chunk, not at the true turn end -- bd ucmpg.)
 - **`domConfirmed` is NOT a confirm signal.** `fieldManager.applyUpdates` sets
   `data-vff-confirmed="true"` at FILL time, so it is true before any "yes" is
   processed. The real confirm signal is `ssConfirmed` (sessionStorage), set only by
