@@ -55,7 +55,7 @@ import re
 import tempfile
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,779 @@
+{
+ "bead": "polyglot-pdf-r3ham.3",
+ "model": "gemini-3.8-live",
+ "date": "2026-11-17/18 (UTC)",
+ "hand_class_legend": {
+  "OK": "audio spells the STORED value letter by letter (Cloud STT quirks accepted: 'j0hn', 'J Oshua', 's me T H')",
+  "STICKY": "audio spells an EARLIER name of the session instead of the stored value (text track correct)",
+  "TRUNC": "clip cut before the spelling finished -- the scripted 'yes' barged in; unscoreable",
+  "WORD": "shipped SI with the TTS tool off says the name back as a WORD; no spelling to score",
+  "NA": "nothing to spell (field never filled, or a non-name value such as 'N/A')"
+ },
+ "runs": [
+  {
+   "run": "pilot1_t04_off",
+   "arm": "shipped SI, TTS off",
+   "pacing": "default",
+   "live_temperature": 0.4,
+   "cost_usd": 0.6832,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "WORD"
+    }
+   ]
+  },
+  {
+   "run": "pilot2_t04_off_readback",
+   "arm": "shipped SI, TTS off",
+   "pacing": "readback-v1",
+   "live_temperature": 0.4,
+   "cost_usd": 1.1527,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "John, did I get that right?",
+     "stt_conf": 0.959,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "Joshua, did I get that right?",
+     "stt_conf": 0.978,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "Johnson, did I get that right?",
+     "stt_conf": 0.979,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "Maria, did I get that right?",
+     "stt_conf": 0.967,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSE",
+     "confirmed": true,
+     "readback_stt": "Jose did I get that right?",
+     "stt_conf": 0.94,
+     "hand_class": "WORD"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "Smith. Did I get that right?",
+     "stt_conf": 0.948,
+     "hand_class": "WORD"
+    }
+   ]
+  },
+  {
+   "run": "pilot3_t04_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v1",
+   "live_temperature": 0.4,
+   "cost_usd": 0.2465,
+   "verdict": {
+    "verdict": "PARTIAL",
+    "confirmed": 3,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": null,
+     "confirmed": false,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "NA"
+    }
+   ]
+  },
+  {
+   "run": "pilot4_t04_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v1",
+   "live_temperature": 0.4,
+   "cost_usd": 1.4458,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "You provided j0hn? John is that correct?",
+     "stt_conf": 0.874,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided J os8.",
+     "stt_conf": 0.639,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "You provided j0hn? John is that correct?",
+     "stt_conf": 0.873,
+     "hand_class": "STICKY"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "You provided m. A r. I a",
+     "stt_conf": 0.863,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided J Oshua.",
+     "stt_conf": 0.636,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "You provided s me T H Smith. Is that correct?",
+     "stt_conf": 0.829,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run5_t04_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 0.4,
+   "cost_usd": 1.1706,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "You provided the first name, j0hn John? Is that correct?",
+     "stt_conf": 0.917,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided the middle name, j Oshua. Joshua is that",
+     "stt_conf": 0.84,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "You provided the last name. J o h. N s o n Johnson. Is that correct?",
+     "stt_conf": 0.838,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "You provided the birth first name? M, a r. I a Maria. Is that correct?",
+     "stt_conf": 0.957,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSE",
+     "confirmed": true,
+     "readback_stt": "You provided the birth middle name. J o.",
+     "stt_conf": 0.865,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "You provided the birth last name s me T. H Smith. Is that correct?",
+     "stt_conf": 0.87,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run6_t04_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 0.4,
+   "cost_usd": 1.2429,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "I have recorded the first name as j0hn. John, is that correct?",
+     "stt_conf": 0.933,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "I have recorded the middle name as J.",
+     "stt_conf": 0.951,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "I have recorded the last name as j0hn. John, is that correct?",
+     "stt_conf": 0.931,
+     "hand_class": "STICKY"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth first name as m a r. I a Maria. Is that correct?",
+     "stt_conf": 0.964,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth middle name as J Oshua. Joshua is that correct?",
+     "stt_conf": 0.899,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth last name. As s me T. H Smith is",
+     "stt_conf": 0.86,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run1_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 1.0,
+   "cost_usd": 1.2511,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "The name I have is j0hn. John, is that correct?",
+     "stt_conf": 0.897,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "The name I have is j, o s Hua. Joshua is that correct?",
+     "stt_conf": 0.803,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "The name I have is j o hns o n Johnson. Is that correct?",
+     "stt_conf": 0.821,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "The name I have is m a r. I a",
+     "stt_conf": 0.955,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSE",
+     "confirmed": true,
+     "readback_stt": "The name I have is j o s e. Jose is that correct?",
+     "stt_conf": 0.848,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "The name I have is s me T H Smith. Is that correct?",
+     "stt_conf": 0.896,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run2_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 1.0,
+   "cost_usd": 1.2034,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "I have recorded your first name as j0hn. John, is that correct?",
+     "stt_conf": 0.926,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "I have recorded your middle name as J Oshua.",
+     "stt_conf": 0.853,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "I have recorded your last name as j. O h. N s o n Johnson. Is that correct?",
+     "stt_conf": 0.844,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth first name as m a r. I a Maria. Is that correct?",
+     "stt_conf": 0.935,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSE",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth. Middle name as J.",
+     "stt_conf": 0.932,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "I have recorded the birth last name as SMI T. H Smith is that correct?",
+     "stt_conf": 0.873,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run3_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 1.0,
+   "cost_usd": 1.2285,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "The name recorded is John, spelled j. O h n. Is that correct?",
+     "stt_conf": 0.829,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "The name recorded is Joshua. Spelled j. O.",
+     "stt_conf": 0.9,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "The name recorded is Johnson. Spelled j. O h. N s o n is that correct?",
+     "stt_conf": 0.853,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "The name recorded is Maria. Spelled m a r. I a is that correct?",
+     "stt_conf": 0.95,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSE",
+     "confirmed": true,
+     "readback_stt": "The name recorded is Jose, spelled j. O s e. Is that correct?",
+     "stt_conf": 0.876,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "The name recorded is Smith.",
+     "stt_conf": 0.993,
+     "hand_class": "TRUNC"
+    }
+   ]
+  },
+  {
+   "run": "run4_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v2",
+   "live_temperature": 1.0,
+   "cost_usd": 1.1588,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "You provided j. O.",
+     "stt_conf": 0.788,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided J Oshua. Joshua. Is that correct?",
+     "stt_conf": 0.851,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "You provided j0hns.",
+     "stt_conf": 0.693,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "MARIA",
+     "confirmed": true,
+     "readback_stt": "you provided m, a",
+     "stt_conf": 0.846,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided j. O.",
+     "stt_conf": 0.808,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "You provided s me T H Smith. Is that correct?",
+     "stt_conf": 0.807,
+     "hand_class": "OK"
+    }
+   ]
+  },
+  {
+   "run": "run5_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v3",
+   "live_temperature": 1.0,
+   "cost_usd": 1.1766,
+   "verdict": {
+    "verdict": "PASS",
+    "confirmed": 15,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHNSN",
+     "confirmed": true,
+     "readback_stt": "J? O, h, n s n, is that correct?",
+     "stt_conf": 0.92,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You entered j o.",
+     "stt_conf": 0.873,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSN",
+     "confirmed": true,
+     "readback_stt": "You entered j? O h, n s.",
+     "stt_conf": 0.882,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": "N/A",
+     "confirmed": true,
+     "readback_stt": "You entered na, is that correct?",
+     "stt_conf": 0.883,
+     "hand_class": "NA"
+    },
+    {
+     "field_id": "name_1b_middle",
+     "truth": "JOSE",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You entered J Oshua, is that correct?",
+     "stt_conf": 0.84,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_last",
+     "truth": "SMITH",
+     "stored": "SMITH",
+     "confirmed": true,
+     "readback_stt": "You entered s m.",
+     "stt_conf": 0.918,
+     "hand_class": "TRUNC"
+    }
+   ]
+  },
+  {
+   "run": "run6_t10_spellaloud",
+   "arm": "spell-aloud arm, TTS off",
+   "pacing": "readback-v3",
+   "live_temperature": 1.0,
+   "cost_usd": 0.5438,
+   "verdict": {
+    "verdict": "PARTIAL",
+    "confirmed": 6,
+    "total": 15,
+    "done": true
+   },
+   "spelled_steps": [
+    {
+     "field_id": "name_1a_first",
+     "truth": "JOHN",
+     "stored": "JOHN",
+     "confirmed": true,
+     "readback_stt": "You provided j0hn? John is that correct?",
+     "stt_conf": 0.866,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1a_middle",
+     "truth": "JOSHUA",
+     "stored": "JOSHUA",
+     "confirmed": true,
+     "readback_stt": "You provided j. O s.",
+     "stt_conf": 0.666,
+     "hand_class": "TRUNC"
+    },
+    {
+     "field_id": "name_1a_last",
+     "truth": "JOHNSON",
+     "stored": "JOHNSON",
+     "confirmed": true,
+     "readback_stt": "You provided j0hns o n Johnson. Is that correct?",
+     "stt_conf": 0.817,
+     "hand_class": "OK"
+    },
+    {
+     "field_id": "name_1b_first",
+     "truth": "MARIA",
+     "stored": null,
+     "confirmed": false,
+     "readback_stt": null,
+     "stt_conf": null,
+     "hand_class": "NA"
+    }
+   ]
+  }
+ ]
+}

@@ -2,7 +2,7 @@
 
 bd polyglot-pdf-jnjj.27. The ask_secretary call is BLOCKING: the principal (live
 voice model) waits mid-conversation for the secretary's answer. This probe measures
-the real round-trip latency of that lookup against LIVE gemini-2.5-flash-lite, in
+the real round-trip latency of that lookup against the LIVE lite secretary model, in
 three caching arms over the same I-90 static catalog + a battery of prose queries
 (reused from the Gate-1 corpus):
 
@@ -77,17 +77,21 @@ from backend.scripts.secretary_recall_corpus import (  # noqa: E402
     FIELD_VALUES,
     SHOWN_MAP,
 )
+from backend.scripts.lite_probe_textai import RecordingTextAI, new_record  # noqa: E402
 
-MODEL = "gemini-2.5-flash-lite"
+# The production secretary model: backend/config.py MODEL_LABELING's default
+# (bd polyglot-pdf-bd1zs). Override with --model.
+MODEL = "gemini-3.1-flash-lite"
 
-# Cheap-model fallback chain (all Gemini, so within the same BAA family). If the
-# preferred model is in a 503 outage (as 2.5-flash-lite was 2026-06-19), the probe
-# degrades to the next AVAILABLE one so measurement is not blocked by a Google-side
-# outage. The model actually used is recorded in the artifact.
+# Cheap-model fallback chain (all Gemini, so within the same BAA family) -- the
+# same lite chain TextAIGemini walks in production (DEFAULT_FALLBACK_MODELS). If
+# the preferred model is in a 503 outage, the probe degrades to the next
+# AVAILABLE one so measurement is not blocked by a Google-side outage. The model
+# actually used is recorded in the artifact. Both are served at Vertex location
+# `global` only (404 at us-central1), hence the probe's global default.
 MODEL_FALLBACKS = [
-    "gemini-2.5-flash-lite",        # preferred (the secretary's target model)
-    "gemini-3.1-flash-lite",        # newer lite tier; sub-second when 2.5-lite is down
-    "gemini-flash-lite-latest",     # rolling alias to the current lite model
+    "gemini-3.1-flash-lite",        # preferred (MODEL_LABELING default)
+    "gemini-3.5-flash-lite",        # the TextAIGemini outage fallback
 ]
 
 OUT_DIR = os.path.join(
@@ -121,7 +125,7 @@ def _client() -> genai.Client:
         return genai.Client(
             vertexai=True,
             project=project,
-            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            location=os.environ.get("VERTEX_LOCATION", "global"),
         )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
@@ -209,6 +213,31 @@ async def _timed_call(client, *, contents, cached_content=None, mime="applicatio
             await asyncio.sleep(wait)
 
 
+async def _prod_call(ai, query: str, ctx: dict, max_retries=5):
+    """bd u0kcc: one SHIPPED-path secretary call (TextAIGemini.ask -- production
+    SECRETARY_SI + catalog stable prefix + values-tail fresh tail, production
+    generate config). Same return contract as _timed_call plus (thoughts, output);
+    call_s is the model-call wall time the adapter's _generate saw. Retries a
+    transport error like _timed_call (blocked_s includes the backoff)."""
+    attempt = 0
+    t_first = time.monotonic()
+    while True:
+        rec = new_record()
+        await ai.ask(query, ctx)
+        if rec["error"]:
+            attempt += 1
+            if attempt > max_retries:
+                raise RuntimeError("prod secretary call failed: %s" % rec["error"])
+            wait = min(2 ** attempt, 30)
+            print("    (%s; retry %d/%d after %ds)" % (rec["error"], attempt,
+                                                       max_retries, wait), flush=True)
+            await asyncio.sleep(wait)
+            continue
+        u = rec["usage"] or {}
+        return (rec["latency_s"], time.monotonic() - t_first, u.get("cached", 0),
+                u.get("prompt", 0), u.get("thoughts", 0), u.get("output", 0))
+
+
 def _summary(label, lats):
     if not lats:
         return {"arm": label, "n": 0}
@@ -237,12 +266,16 @@ async def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="No API calls; wiring check.")
     ap.add_argument("--model", default=None,
                     help="Override the preferred model (else the fallback chain "
-                         "starting at gemini-2.5-flash-lite). Falls through to an "
+                         "starting at gemini-3.1-flash-lite). Falls through to an "
                          "available model on a single-model outage.")
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="bd u0kcc: time the corpus this many times per arm (a "
+                         "bigger n for the latency TAIL; 49 calls cannot see a "
+                         "1-in-100 spike)")
     args = ap.parse_args()
 
     arms_in = [a.strip() for a in args.arms.split(",") if a.strip()]
-    valid_arms = {"uncached", "implicit", "explicit"}
+    valid_arms = {"uncached", "implicit", "explicit", "prod"}
     bad_arms = [a for a in arms_in if a not in valid_arms]
     if bad_arms:
         print("ERROR: unknown arm(s) %s; valid: %s" % (bad_arms, sorted(valid_arms)),
@@ -298,6 +331,8 @@ async def main() -> None:
     client = _client()
     preferred_model = args.model or MODEL_FALLBACKS[0]
     used_model = await _resolve_model(client, preferred=args.model)
+    prod_ai = RecordingTextAI(used_model) if "prod" in arms else None
+    prod_ctx = {"schema": schema, "field_values": FIELD_VALUES, "shown_map": SHOWN_MAP}
     is_fallback = used_model != preferred_model
     print("using model: %s%s" % (used_model, " (fallback)" if is_fallback else ""),
           flush=True)
@@ -325,7 +360,9 @@ async def main() -> None:
 
         # Warm-up (not timed): primes implicit cache / first-call overhead.
         warm_q = "What is their date of birth?"
-        if arm == "explicit":
+        if arm == "prod":
+            await _prod_call(prod_ai, warm_q, prod_ctx)
+        elif arm == "explicit":
             # explicit: the catalog lives in the cache; only the fresh tail + query
             # go in contents.
             await _timed_call(client, contents=[values_tail + "\n\nQUESTION: " + warm_q],
@@ -335,9 +372,16 @@ async def main() -> None:
                                                 + values_tail + "\n\nQUESTION: " + warm_q])
 
         lats, blocked_lats, cached_hits, n_retried = [], [], [], 0
-        for i, case in enumerate(corpus):
+        thoughts_all = []
+        work = [c for _r in range(max(1, args.repeats)) for c in corpus]
+        for i, case in enumerate(work):
             q = case.query
-            if arm == "explicit":
+            thoughts, output = "", ""
+            if arm == "prod":
+                call_s, blocked_s, cached, prompt, thoughts, output = await _prod_call(
+                    prod_ai, q, prod_ctx)
+                thoughts_all.append(thoughts)
+            elif arm == "explicit":
                 contents = [values_tail + "\n\nQUESTION: " + q]
                 call_s, blocked_s, cached, prompt = await _timed_call(
                     client, contents=contents, cached_content=cache_name)
@@ -362,10 +406,11 @@ async def main() -> None:
                 "arm": arm, "case_id": case.case_id, "tier": case.tier,
                 "call_s": round(call_s, 3), "blocked_s": round(blocked_s, 3),
                 "cached_tokens": cached, "prompt_tokens": prompt,
+                "thoughts_tokens": thoughts, "output_tokens": output,
                 "retried": int(retried),
             })
             print("    [%s %d/%d] %-26s (%s) call=%.3fs blocked=%.3fs (cached=%d, prompt=%d)%s" % (
-                arm, i + 1, len(corpus), case.case_id, case.tier, call_s, blocked_s,
+                arm, i + 1, len(work), case.case_id, case.tier, call_s, blocked_s,
                 cached, prompt, " RETRIED" if retried else ""), flush=True)
 
         summ = _summary(arm, lats)
@@ -375,6 +420,16 @@ async def main() -> None:
         summ["n_retried"] = n_retried
         summ["mean_cached_tokens"] = round(statistics.mean(cached_hits), 1) if cached_hits else 0
         summ["cache_hit_rate"] = round(sum(1 for c in cached_hits if c > 0) / len(cached_hits), 3) if cached_hits else 0
+        # bd u0kcc: the deadline/timeout the shipped secretary runs under
+        # (backend/config.py SECRETARY_DEADLINE_S / SECRETARY_TIMEOUT_S) -- how
+        # many blocking pauses would have missed each, plus the far tail.
+        summ["n_over_2p5s"] = sum(1 for x in blocked_lats if x > 2.5)
+        summ["n_over_8s"] = sum(1 for x in blocked_lats if x > 8.0)
+        _sb = sorted(blocked_lats)
+        summ["blocked_p99_s"] = round(_sb[min(len(_sb) - 1, int(0.99 * len(_sb)))], 3) if _sb else None
+        if thoughts_all:
+            summ["thoughts_tokens_total"] = sum(thoughts_all)
+            summ["calls_with_thoughts"] = sum(1 for t in thoughts_all if t)
         results[arm] = summ
 
         if arm == "explicit" and cache_name:
@@ -413,7 +468,9 @@ async def main() -> None:
     meta_path = os.path.join(OUT_DIR, "secretary_latency_%s.meta.json" % stamp)
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({
-            "bead": "polyglot-pdf-jnjj.27",
+            "bead": "polyglot-pdf-jnjj.27 / polyglot-pdf-u0kcc",
+            "vertex_location": os.environ.get("VERTEX_LOCATION", "global"),
+            "repeats": args.repeats,
             "stamp": stamp,
             "model": MODEL,
             "preferred_model": preferred_model,

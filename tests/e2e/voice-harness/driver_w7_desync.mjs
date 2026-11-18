@@ -15,11 +15,15 @@
  *   VFF_FRONTEND_URL   (default http://localhost:5174)
  *   VFF_BACKEND_WS     (default ws://127.0.0.1:8001/ws/fill)
  *   VFF_PLAYWRIGHT_DIR (node_modules dir holding playwright, if out-of-repo)
+ *   VFF_KIT            (optional kit-label regex; default 'W-7')
  *   VFF_W7_STEPS       (optional: run only the first N steps -- smoke mode)
  *   VFF_PACING         (optional: 'polite' waits for the model's playback
  *                       backlog to drain before each injection; 'rude' waits
  *                       for the model to be MID-SPEECH and barges in; default
- *                       is the original fixed-sleep pacing)
+ *                       is the original fixed-sleep pacing; 'readback' is
+ *                       POLITE plus, before each "yes", a bounded wait for
+ *                       the model to START speaking -- needed for a
+ *                       call-then-speak model such as gemini-3.8-live)
  *
  * Usage: node tests/e2e/voice-harness/driver_w7_desync.mjs
  * Exit 0 = every step filled AND confirmed; 2 = partial; 1 = crash.
@@ -30,6 +34,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { agreeAndWaitForHook } from './driver_common.mjs';
 
 const require_ = createRequire(import.meta.url);
 const playwrightPath = process.env.VFF_PLAYWRIGHT_DIR
@@ -44,26 +50,41 @@ const MAX_STEPS = parseInt(process.env.VFF_W7_STEPS || '0', 10) || 0;
 
 const harnessSource = readFileSync(join(HERE, 'harness.js'), 'utf8');
 
-// (fieldId, fixture) in W-7 schema order. Names 1a = John/Joshua/Johnson
-// (the failing session's names); 1b = Maria/Jose/Smith (distinct on purpose --
-// an acoustic loop of the previous spelling must be DETECTABLE, not masked).
+// The scripted ANSWERS, in the order a W-7 session asks its questions. NO
+// field id is named here (bd polyglot-pdf-tcemw: kits live in the bucket and
+// are republished, so ids move). Each step answers WHATEVER field the app is
+// pointing the model at when the step starts (the inject hook's
+// getLastNextField, set at the handshake and on every advance), and the report
+// records which field each answer landed in -- so a republished kit that
+// reorders its questions shows up as a mis-paired step, not a silent timeout.
+// The "kind" is what the fixture says, for reading the report:
+//   choice  -- a radio/checkbox answer ("a new ITIN", "spouse of a U.S. person")
+//   spell   -- a name spelled letter by letter (the desync subject)
+//   text    -- a free-text answer
+// Names 1a = John/Joshua/Johnson (the failing session's names); 1b =
+// Maria/Jose/Smith (distinct on purpose -- an acoustic loop of the previous
+// spelling must be DETECTABLE, not masked).
 const STEPS = [
-  ['application_type', 'answer_new_itin'],
-  ['reason', 'answer_reason_spouse'],
-  ['us_person_name_ssn_itin', 'answer_usperson'],
-  ['name_1a_first', 'spell_john'],
-  ['name_1a_middle', 'spell_joshua'],
-  ['name_1a_last', 'spell_johnson'],
-  ['name_1b_first', 'spell_maria'],
-  ['name_1b_middle', 'spell_jose'],
-  ['name_1b_last', 'spell_smith'],
-  ['mailing_street', 'answer_street'],
-  ['mailing_city_state_country', 'answer_city'],
-  ['foreign_street', 'answer_foreign_street'],
-  ['foreign_city_state_country', 'answer_foreign_city'],
-  ['date_of_birth', 'answer_dob'],
-  ['country_of_birth', 'answer_country_birth'],
+  ['answer_new_itin', 'choice'],
+  ['answer_reason_spouse', 'choice'],
+  ['answer_usperson', 'text'],
+  ['spell_john', 'spell'],
+  ['spell_joshua', 'spell'],
+  ['spell_johnson', 'spell'],
+  ['spell_maria', 'spell'],
+  ['spell_jose', 'spell'],
+  ['spell_smith', 'spell'],
+  ['answer_street', 'text'],
+  ['answer_city', 'text'],
+  ['answer_foreign_street', 'text'],
+  ['answer_foreign_city', 'text'],
+  ['answer_dob', 'text'],
+  ['answer_country_birth', 'text'],
 ];
+
+// The kit-button regex: VFF_KIT overrides (a label regex); default the W-7,
+// which is what this conversation script answers.
+const KIT_PATTERN = new RegExp(process.env.VFF_KIT || 'W-7', 'i');
 
 function log(msg) {
   process.stderr.write(`[w7-driver] ${msg}\n`);
@@ -82,30 +103,9 @@ async function clickButton(page, re, label) {
   log(`clicked ${label}`);
 }
 
-/**
- * Click a button only if it is already on screen (bd polyglot-pdf-s1iex.7).
- *
- * Unlike clickButton this does NOT wait or fail when the control is absent --
- * the disclaimer modal's presence at this point depends on the intro-clip
- * flag, and the driver must work under both states.
- */
-async function clickIfPresent(page, pattern, label) {
-  const button = page.getByRole('button', { name: pattern }).first();
-  try {
-    if (await button.isVisible({ timeout: 2000 })) {
-      await button.click();
-      log(`clicked ${label}`);
-      return true;
-    }
-  } catch {
-    // Not present yet -- the caller's wait handles the other ordering.
-  }
-  return false;
-}
-
 async function main() {
   const steps = MAX_STEPS > 0 ? STEPS.slice(0, MAX_STEPS) : STEPS;
-  const fixtures = [...new Set(steps.map(([, f]) => f))];
+  const fixtures = [...new Set(steps.map(([f]) => f))];
 
   const browser = await chromium.launch({
     headless: true,
@@ -132,22 +132,12 @@ async function main() {
   await page.goto(FRONTEND, { waitUntil: 'domcontentloaded' });
 
   await clickButton(page, /^English/, 'English');
-  await clickButton(page, /W-7/, 'W-7 form');
+  await clickButton(page, KIT_PATTERN, 'form ' + KIT_PATTERN);
 
   log('waiting for connection + inject hook');
-  // Agree FIRST if the disclaimer modal is already up (bd polyglot-pdf-s1iex.7).
-  // ORDER IS FLAG-DEPENDENT, so this handles BOTH states rather than swapping:
-  //  - intro clip OFF (today): the app connects before Agree, so
-  //    __VFF_TEST_INJECT already exists and this click is simply early --
-  //    harmless, the modal is up either way.
-  //  - intro clip ON: NO session exists until Agree, so the hook does not
-  //    exist yet and waiting for it first would hang until timeout.
-  // Clicking when present, then waiting, is correct under both.
-  await clickIfPresent(page, /I Agree/, 'disclaimer I Agree (pre-hook)');
-
-  await page.waitForFunction(
-    () => typeof window.__VFF_TEST_INJECT === 'object' && window.__VFF_TEST_INJECT !== null,
-    undefined, { timeout: 30000 });
+  // Agree + inject hook, in whichever order the intro-clip flag presents
+  // them (driver_common.mjs agreeAndWaitForHook; bd polyglot-pdf-s1iex.7).
+  await agreeAndWaitForHook(page, /I Agree/, log);
 
   await page.evaluate(harnessSource);
   await page.waitForFunction(() => typeof window.__VFF_HARNESS === 'object');
@@ -161,9 +151,11 @@ async function main() {
     window.__vffYes = await H.loadFixture('/test-fixtures/confirm_yes.wav');
   }, fixtures);
 
-  // (Agree was clicked above by clickIfPresent -- clicking again would
-  // fail here, since clickButton waits 20s and throws when the modal is
-  // already dismissed. bd polyglot-pdf-s1iex.7)
+  // Step 1 answers whatever the post-Agree handshake points at, so wait for
+  // that handshake to set it (the restarted connection manager starts empty).
+  await page.waitForFunction(
+    () => !!window.__VFF_TEST_INJECT && !!window.__VFF_TEST_INJECT.getLastNextField(),
+    undefined, { timeout: 30000 });
 
   const PACING = process.env.VFF_PACING || 'default';
   log(`running W-7 sequence (pacing: ${PACING})`);
@@ -171,6 +163,13 @@ async function main() {
     window.__vffSeqReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // turn_complete timestamps for READBACK pacing (chains any existing hook).
+    window.__vffTcAt = 0;
+    const prevTc = window.vffOnTurnComplete;
+    window.vffOnTurnComplete = () => {
+      window.__vffTcAt = Date.now();
+      if (typeof prevTc === 'function') prevTc();
+    };
 
     // Pacing arms (bd 0rpu round 2). POLITE waits for the model's playback
     // backlog to fully drain before speaking (no interruptions possible);
@@ -179,7 +178,28 @@ async function main() {
       const hook = window.__VFF_TEST_INJECT;
       if (!hook || !hook.getPlaybackBacklog || pacing === 'default') return;
       const t0 = Date.now();
-      if (pacing === 'polite') {
+      // READBACK (bd polyglot-pdf-r3ham.3): a call-then-speak model
+      // (gemini-3.8-live) speaks its read-back AFTER update_form_fields, so at
+      // the moment the field fills the playback backlog is still empty and
+      // POLITE would inject "yes" over the read-back it never heard. Before the
+      // "yes", first wait (bounded) for the model to START speaking, then drain.
+      if (pacing === 'readback' && key === 'backlogAtYes') {
+        while (Date.now() - t0 < 8000 && hook.getPlaybackBacklog().aheadSec < 0.2) {
+          await sleep(100);
+        }
+        if (rec) rec.readbackStartMs = Date.now() - t0;
+        // A spelled read-back pauses between letters, which briefly drains
+        // the playback backlog; draining alone then injects "yes" MID
+        // read-back. Also require a server turn_complete that arrives AFTER
+        // the read-back started. Known weak: the WS turn_complete is sent per
+        // output-transcription chunk, not at the true turn end (bd ucmpg).
+        const speakAt = Date.now();
+        while (Date.now() - t0 < 25000 && !(window.__vffTcAt > speakAt)) {
+          await sleep(100);
+        }
+        if (rec) rec.turnCompleteMs = Date.now() - t0;
+      }
+      if (pacing === 'polite' || pacing === 'readback') {
         let calm = 0;
         while (Date.now() - t0 < 25000 && calm < 3) {
           calm = hook.getPlaybackBacklog().aheadSec < 0.15 ? calm + 1 : 0;
@@ -204,8 +224,22 @@ async function main() {
       return H.waitForConfirmed(fieldId, { timeoutMs: 20000 });
     }
 
-    async function runStep(fieldId, fixture) {
-      const rec = { fieldId, fixture, tStart: Date.now(), retries: 0 };
+    async function runStep(fixture, kind) {
+      // The field the app is asking right now -- discovered, not scripted.
+      // It must be an UNCONFIRMED field: right after a confirm the advance can
+      // lag, and answering the field just confirmed would false-pass (its
+      // value is already there for waitForFieldValue to find).
+      const cur = await H.waitForCondition(() => {
+        const id = H.lastNextField();
+        return id && H.readField(id).ssConfirmed !== true ? id : false;
+      }, { timeoutMs: 15000 });
+      const fieldId = cur.met ? cur.value : null;
+      const rec = { fieldId, fixture, kind, tStart: Date.now(), retries: 0 };
+      if (!fieldId) {
+        rec.confirmed = false;
+        rec.reason = 'app never pointed at an unconfirmed field (lastNextField=' + H.lastNextField() + ')';
+        return rec;
+      }
       for (let attempt = 0; attempt < 2; attempt++) {
         if (attempt) { rec.retries++; await sleep(2000); }
         await paceBeforeInject(rec, 'backlogAtAnswer');
@@ -228,8 +262,8 @@ async function main() {
 
     (async () => {
       const out = [];
-      for (const [fieldId, fixture] of stepList) {
-        const rec = await runStep(fieldId, fixture);
+      for (const [fixture, kind] of stepList) {
+        const rec = await runStep(fixture, kind);
         out.push(rec);
         if (!rec.confirmed) { rec.aborted = true; break; }
         // Let Gemini speak the next question before the next answer.

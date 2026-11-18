@@ -39,24 +39,22 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import sys
 import wave
 from pathlib import Path
 
-# Verdicts that mean "this row cannot support a conclusion" -- kept OUT of any
-# rate denominator, because counting them silently is how v1 produced phantom
-# statistics.
-_UNSCOREABLE = {
-    "WAV_MISSING", "TOO_SHORT", "NO_SPEECH_DETECTED",
-    "LOW_CONFIDENCE", "NO_TRANSCRIPT", "STT_ERROR", "TOO_SHORT_TO_JUDGE",
-}
+# The shared v2 helpers live in sim_user_stt.py (public names); the private
+# names below are thin aliases so this CLI reads as it always did.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sim_user_stt as _shared  # noqa: E402
 
-# Below this the clip cannot hold a spoken read-back; v1's artifacts were 0.11 s.
-_MIN_SECONDS = 0.60
-# Cloud STT confidence below this is not trustworthy enough to call a mismatch.
-_MIN_CONFIDENCE = 0.60
+_UNSCOREABLE = _shared.UNSCOREABLE
+_MIN_SECONDS = _shared.MIN_SECONDS
+_MIN_CONFIDENCE = _shared.MIN_CONFIDENCE
+_letters = _shared.letters
+_words = _shared.words
+_containment = _shared.containment
+_recognize = _shared.recognize
 
 
 def _wav_meta(path: Path) -> dict:
@@ -88,88 +86,6 @@ def _load_jsonl(path: Path) -> list:
             except Exception:
                 pass
     return rows
-
-
-def _letters(text: str) -> str:
-    """Extract spelled-letter runs ('J-O-H-N' / 'J. O. H. N.' -> 'JOHN').
-
-    Minimum THREE letters, and known acronyms excluded: two-letter dotted
-    abbreviations and acronyms are prose, not spell-outs.
-    """
-    # Cloud STT COLLAPSES a spelled run into a pseudo-word rather than emitting
-    # isolated letters (phrase hints do not stop it): "J-O-H-N" comes back as
-    # "J0hn", with a zero for the letter O. Recover the run in two steps --
-    # normalize the zero, then treat a leading-capital pseudo-word that the
-    # recognizer spelled (marked by that 0-for-O, or by mixed case mid-word) as
-    # a spelled sequence. Without this the letter comparator silently drops the
-    # single most diagnostic token in the corpus.
-    for m in set(re.findall(r"\b[A-Za-z]*0[A-Za-z]+\b", text)):
-        text = text.replace(m, "-".join(m.replace("0", "O").upper()))
-    out = []
-    for chunk in re.findall(r"\b(?:[A-Za-z][\s\.\-,]+){1,}[A-Za-z]\b", text):
-        letters = re.findall(r"[A-Za-z]", chunk)
-        seq = "".join(letters).upper()
-        if seq in {"ITIN", "SSN", "IRS", "USA", "ZIP", "VAD", "APO", "PO"}:
-            continue
-        if len(letters) >= 3:
-            out.append(seq)
-    return "".join(out)
-
-
-def _words(text: str) -> list:
-    stop = {"a", "an", "the", "is", "are", "and", "or", "of", "to", "your",
-            "you", "please", "say", "if", "so", "that", "what", "how", "do",
-            "okay", "on", "in", "it", "not", "from", "one", "just", "me",
-            "let", "check"}
-    up = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower())
-    return [w for w in up.split() if w and w not in stop]
-
-
-def _containment(audio_text: str, track_text: str):
-    """How much of the AUDIO's content appears in the transcript window."""
-    aw, tw = _words(audio_text), set(_words(track_text))
-    if not aw:
-        return None
-    return sum(1 for w in aw if w in tw) / len(aw)
-
-
-def _recognize(client, speech, audio_bytes: bytes, rate: int) -> dict:
-    """One independent Cloud STT request. No prompt, no context, no history.
-
-    SPELLED LETTERS. Left to itself the recognizer REASSEMBLES a spelled run
-    into a word -- "J-O-H-N" comes back as "J0hn" (with a zero for O). That is
-    the recognizer being helpful in precisely the wrong way here: the letters
-    ARE the measurement. Phrase hints bias it toward isolated letter tokens.
-    Hints are a decoding bias, not a prompt: they cannot invent content that
-    is not in the audio, so they do not reintroduce the v1 priming hazard.
-    """
-    letter_hints = speech.SpeechContext(
-        phrases=[chr(c) for c in range(ord("A"), ord("Z") + 1)],
-        boost=12.0,
-    )
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=rate,
-        language_code="en-US",
-        enable_automatic_punctuation=True,
-        # The model speaks digits and spelled letters; 'default' handles both
-        # better than the phone models for studio-quality synthetic audio.
-        model="default",
-        speech_contexts=[letter_hints],
-    )
-    resp = client.recognize(config=config, audio=speech.RecognitionAudio(content=audio_bytes))
-    parts, confs = [], []
-    for result in resp.results:
-        if not result.alternatives:
-            continue
-        alt = result.alternatives[0]
-        parts.append(alt.transcript)
-        confs.append(alt.confidence)
-    return {
-        "text": " ".join(p.strip() for p in parts).strip(),
-        "confidence": round(min(confs), 3) if confs else 0.0,
-        "n_results": len(parts),
-    }
 
 
 def main() -> int:
@@ -206,18 +122,7 @@ def main() -> int:
             return 1
 
     from google.cloud import speech as speech_mod
-    # Local ADC has no quota project, and speech.googleapis.com requires one
-    # (403 otherwise). Bind it explicitly to the same project Vertex bills to.
-    project = (os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
-               or os.environ.get("GOOGLE_CLOUD_PROJECT"))
-    if project:
-        import google.auth
-        creds, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        creds = creds.with_quota_project(project)
-        client = speech_mod.SpeechClient(credentials=creds)
-    else:
-        client = speech_mod.SpeechClient()
+    client = _shared.make_speech_client()
 
     results = []
     for d in dumps:
@@ -283,81 +188,17 @@ def main() -> int:
 
         base.update({"stt_text": rec["text"], "confidence": rec["confidence"]})
 
-        # Guard 2: the recognizer heard nothing. A dedicated STT returns empty
-        # rather than inventing -- exactly the property v1 lacked.
-        if not rec["text"]:
-            results.append({**base, "verdict": "NO_SPEECH_DETECTED"})
+        # Guards 2-4 + the verdict rules live in sim_user_stt.classify_pair
+        # (verbatim lift of the logic that used to be inline here).
+        verdict, extras = _shared.classify_pair(
+            rec["text"], rec["confidence"], text_track, text_neighbourhood,
+            meta["seconds"])
+        base.update(extras)
+        if "letters_stt" not in extras:  # a guard returned before comparison
+            results.append({**base, "verdict": verdict})
             continue
-        # Guard 3: heard something, but not confidently enough to accuse --
-        # UNLESS the clip contains a spelled run. Confidence is ALSO a
-        # corruption signal here (healthy rows 0.93-0.99, corrupted 0.34-0.65),
-        # so discarding low-confidence spellings deletes precisely the failures
-        # this scorer exists to find (the comma arm reported 0% while 2 of 6
-        # spelled read-backs were wrong). Score those rows and flag them for a
-        # human read instead.
-        _low_conf = rec["confidence"] < _MIN_CONFIDENCE
-        if _low_conf and not _letters(rec["text"]):
-            results.append({**base, "verdict": "LOW_CONFIDENCE"})
-            continue
-        base["needs_hand_check"] = bool(_low_conf)
-        # Guard 4: no transcript to compare against -> pairing cannot be judged.
-        if not text_track:
-            results.append({**base, "verdict": "NO_TRANSCRIPT"})
-            continue
-
-        letters_stt = _letters(rec["text"])
-        letters_txt = _letters(text_track)
-        # Spellings anywhere in the adjacent-inclusive neighbourhood.
-        letters_near = _letters(text_neighbourhood)
-        cont = _containment(rec["text"], text_track)
-        base.update({
-            "letters_stt": letters_stt,
-            "letters_transcript": letters_txt,
-            "letters_neighbourhood": letters_near,
-            "containment": round(cont, 3) if cont is not None else None,
-        })
-
-        # The two streams INTERLEAVE: a transcript fragment belonging to the
-        # next generation can carry a seq inside this generation's own range,
-        # so bounding the window is necessary but not sufficient. Guard the
-        # residue two ways.
-        #
-        # (a) CONTAINMENT VETO. If every word the audio spoke is present in the
-        #     window (containment 1.0), the two tracks said the SAME sentence --
-        #     a letter run appearing on only one side is then bleed, not a
-        #     desync. runA gen 8: sentences identical, a stray "J-O-S-E" from
-        #     the following turn made it a false SPELLING_DESYNC.
-        # (b) ONE-SIDED SPELLING is only evidence when the AUDIO spelled
-        #     something the text did not, or the two spellings CONFLICT. Text
-        #     spelling with silent audio is the classic bleed signature.
-        # A spelled run the AUDIO produced is only suspicious when it appears
-        # NOWHERE in the adjacent text -- otherwise it is a boundary artifact.
-        audio_spelling_supported = bool(letters_stt) and letters_stt in letters_near
-        spelling_conflict = (bool(letters_stt) and bool(letters_txt)
-                             and letters_stt != letters_txt
-                             and not audio_spelling_supported)
-        audio_only_spelling = (bool(letters_stt) and not letters_txt
-                               and not audio_spelling_supported)
-        if cont is None:
-            verdict = "NO_SPEECH_DETECTED"
-        elif spelling_conflict or audio_only_spelling:
-            verdict = "SPELLING_DESYNC"
-        elif letters_txt and not letters_stt:
-            # Text spelled, audio did not: real only if the sentences also
-            # diverge; otherwise it is window bleed.
-            verdict = ("SPELLING_DESYNC"
-                       if (cont < 0.6 and letters_txt not in letters_near)
-                       else "ALIGNED")
-        elif cont >= 0.6:
-            verdict = "ALIGNED"
-        elif meta["seconds"] < 2.0:
-            # Short clips give the containment metric too few words to be
-            # reliable (runA gen 19: 1.7 s, "born in" misheard as "boarding").
-            verdict = "TOO_SHORT_TO_JUDGE"
-        elif cont >= 0.35:
-            verdict = "PARTIAL"
-        else:
-            verdict = "UTTERANCE_DESYNC"
+        letters_stt = extras["letters_stt"]
+        letters_txt = extras["letters_transcript"]
         results.append({**base, "verdict": verdict})
 
         mark = "!! " if verdict.endswith("DESYNC") else "   "

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: default Live model `gemini-3.8-live` -- no thinking config, BLOCKING tool behavior, thought tokens billed as text output.)*
+*Last updated: 2026-11-18. See [journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md](../journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -33,7 +33,7 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   reads `event.go_away` (a `LiveServerGoAway` with a `time_left` string) and fires
   it so the client can pre-emptively reconnect before the server-initiated close
   (bd polyglot-pdf-c5t); detection is best-effort and never breaks the loop.
-  `on_user_activity` is optional and fires on a native-VAD input transcription (see
+  `on_user_activity` is optional and fires on a non-empty input transcription (see
   Response config below). `on_processing_done` is optional (bd polyglot-pdf-wpw.5):
   it fires when the agent's turn ends -- on a barge-in interrupt AND on a real
   `turn_complete`/`generation_complete` with no output audio -- so a UI "thinking"
@@ -121,7 +121,12 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   `window.__VFF_TEST_INJECT` (only when `isTestHarnessEnabled()` — both
   `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` set) that pushes scripted PCM straight
   into `sendAudio`, bypassing the mic/worklet. Used by the E2E voice harness
-  (`tests/e2e/voice-harness/`); a no-op in production and normal dev.
+  (`tests/e2e/voice-harness/`); a no-op in production and normal dev. Beside the
+  audio methods it exposes `getLastNextField`, `resetFieldState`,
+  `seedFieldConfirmed` and `validateFieldValue` (runs the app's own
+  `validateField` -- the gate every AI fill passes -- on a candidate value, so
+  the harness's kit-agnostic target discovery never picks a field the app would
+  refuse to fill).
 - **Text/hints:** `send_text_message()` queues hints; `send_client_content()`
   prompts Gemini to actually speak. The actual wire send is **model-conditional**
   via `_send_text_turn()` (bd `polyglot-pdf-1g6`): the **3.1 family** rejects
@@ -148,6 +153,19 @@ early-return guard that dropped manual signals when Gemini's own detector was
 running are all gone -- PTT *knows* when the user is speaking, so a second gate
 inferring it could only disagree. Full rationale in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
+
+## One server message, several fields
+
+A single Live server message can carry audio AND other `server_content` fields
+together. `gemini-3.8-live` bundles `output_transcription` into audio-bearing
+messages (2.5 sent it on its own message), and completion flags or input
+transcription can share a message with audio the same way. The receive loop
+therefore forwards `event.data` audio and then STILL processes that message's
+`server_content` (interrupt, completion flags, input/output transcription). It
+skips only the `model_turn` parts walk for that message, because those parts are
+the same audio already forwarded -- walking them would double-play it (bd
+polyglot-pdf-r3ham.6). `usage_metadata` arrives on its own message on both 2.5
+and 3.8.
 
 ## Barge-in
 
@@ -436,8 +454,8 @@ polyglot-pdf-l3a.4): a non-empty `server_content.input_transcription` fires
 It was ALSO the turn-start signal for the retired native-VAD mode, and the
 thinking-indicator START rode it there; with push-to-talk owning activation the
 indicator rides the PTT bracket instead (bd polyglot-pdf-v1m8g). Measured firing
-on the 2.5 native-audio model back when Gemini's own detector was enabled at high
-start-sensitivity -- that knob no longer exists. Requesting it never
+on every push-to-talk turn on `gemini-3.8-live`
+(`scripts/spikes/3p8_quirk_retest_findings.md`). Requesting it never
 forwards the text to the client (PHI stays server-side, bd hjo). VAD config
 (`realtime_input_config`) is covered in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).

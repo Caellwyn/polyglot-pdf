@@ -4,7 +4,7 @@ Extract complete widget inventory from PDF with field labels and metadata.
 This provides structured data for Gemini enhancement without needing OCR.
 """
 
-import fitz
+import pymupdf as fitz
 import json
 from typing import List, Dict, Any
 from pathlib import Path

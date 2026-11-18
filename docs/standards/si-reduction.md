@@ -2,9 +2,9 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the cost rationale pointer no
-longer asserts the obsolete "text-in is 95-98%" premise -- this epic plus
-compression capped text-in, so audio-in now leads).*
+*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the cost rationale pointer
+follows the 3.8 re-measurement -- text-in and audio-in are the two cost lines,
+neither dominant; see logging-and-cost.md).*
 
 Continuous-DTI is the production default (`USE_DTI` defaults true, bd
 polyglot-pdf-7872); the legacy full-SI is the deprecated section-reset fallback (bd
@@ -30,8 +30,9 @@ the ADDRESS-CONSISTENCY prose (permanent, not pending removal). The cost rationa
 [logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost work) --
 note that the invariant MOVED: the "text-in is 95-98% of 2.5 cost, and it's the
 per-turn SI" figure that motivated this epic is OBSOLETE. This epic plus context
-compression capped text-in, so AUDIO-IN now leads and SI size is no longer the
-single dominant lever. That is this work succeeding, not being invalidated -- but
+compression capped text-in, so SI size is no longer the
+single dominant lever (on the 3.8 production tier text-in
+and audio-in are the two cost lines, see logging-and-cost.md). That is this work succeeding, not being invalidated -- but
 plan new cost work against the current split, not this epic's founding premise;
 the model-selection rule lives in [ai-models.md](ai-models.md); this doc owns the
 **SI shape** contract.

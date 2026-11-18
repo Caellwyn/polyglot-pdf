@@ -226,8 +226,12 @@ and the real Gemini Live API, injecting committed 16 kHz PCM16 WAV fixtures
 through a dev-gated in-app hook (`window.__VFF_TEST_INJECT`) and asserting on
 concrete outcomes -- field value, confirmed flag, advance -- for the cycle
 "Gemini asks a field -> audio answer -> field fills -> audio confirm -> Gemini
-advances." It is agent-driven (the agent is the runner, via the `preview_*`
-Chrome tools), not a `pytest`/CI-collected suite.
+advances." It is run by an agent in a real-origin browser tab or headlessly by
+its Playwright drivers, not a `pytest`/CI-collected suite, and its harness
+module and two main drivers name no kit's field ids (the Latin/Russian W-7 arm
+drivers still do, bd `polyglot-pdf-w04up`): it discovers its target field from
+the schema the app loaded
+(bd `polyglot-pdf-tcemw`).
 
 It does not yet cover a full I-90 completion across all 6 field types,
 idle-timeout/reconnect, and PDF generation in one pass -- that broader sweep is

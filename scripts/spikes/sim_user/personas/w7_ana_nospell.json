@@ -1,0 +1,292 @@
+{
+  "persona_id": "w7_ana_nospell_v1",
+  "form": "w7",
+  "description": "Ana Reyes, a Guatemalan national applying for a new ITIN. She answers only what she is asked, in short natural sentences, and does NOT spell her names unless the interviewer asks her to.",
+  "behavior": {
+    "spells_unprompted": false,
+    "volunteers_extra_info": false
+  },
+  "facts": {
+    "application_type": {
+      "value": "apply_new_itin",
+      "label": "Application type",
+      "keywords": [
+        "application type",
+        "what type of application",
+        "applying for",
+        "new itin",
+        "renewing"
+      ],
+      "answer": "I am applying for a new ITIN.",
+      "spoken": "a new ITIN",
+      "spellable": false
+    },
+    "reason": {
+      "value": "b_nonresident_alien_return",
+      "label": "Reason for applying",
+      "keywords": [
+        "reason",
+        "why are you",
+        "why do you need",
+        "nonresident alien",
+        "tax return"
+      ],
+      "answer": "I am a nonresident alien filing a U.S. federal tax return.",
+      "spoken": "I am a nonresident alien filing a U.S. federal tax return",
+      "spellable": false
+    },
+    "name_1a_first": {
+      "value": "Ana",
+      "label": "First name",
+      "keywords": [
+        "first name",
+        "given name"
+      ],
+      "answer": "My first name is Ana.",
+      "spoken": "Ana",
+      "spellable": true,
+      "spell": "A - N - A"
+    },
+    "name_1a_middle": {
+      "value": "Lucia",
+      "label": "Middle name",
+      "keywords": [
+        "middle name"
+      ],
+      "answer": "My middle name is Lucia.",
+      "spoken": "Lucia",
+      "spellable": true,
+      "spell": "L - U - C - I - A"
+    },
+    "name_1a_last": {
+      "value": "Reyes",
+      "label": "Last name",
+      "keywords": [
+        "last name",
+        "family name",
+        "surname"
+      ],
+      "answer": "My last name is Reyes.",
+      "spoken": "Reyes",
+      "spellable": true,
+      "spell": "R - E - Y - E - S"
+    },
+    "mailing_street": {
+      "value": "418 Willow Street, Apartment 2B",
+      "label": "Mailing street address",
+      "keywords": [
+        "mailing address",
+        "street address",
+        "mailing street",
+        "street and apartment",
+        "apartment"
+      ],
+      "answer": "My street address is 418 Willow Street, apartment 2B.",
+      "spoken": "418 Willow Street, apartment 2B",
+      "spellable": false
+    },
+    "mailing_city_state_country": {
+      "value": "Springfield, Oregon, United States, 97477",
+      "label": "Mailing city, state, country and ZIP",
+      "keywords": [
+        "city, state",
+        "mailing city",
+        "zip code",
+        "postal code",
+        "state and country"
+      ],
+      "answer": "Springfield, Oregon, United States, 97477.",
+      "spoken": "Springfield, Oregon, United States, 97477",
+      "spellable": false
+    },
+    "foreign_street": {
+      "value": "12 Avenida Central",
+      "label": "Foreign street address",
+      "keywords": [
+        "foreign street address",
+        "foreign address",
+        "foreign street",
+        "address in your country",
+        "address outside the united states"
+      ],
+      "answer": "My foreign address is 12 Avenida Central.",
+      "spoken": "12 Avenida Central",
+      "spellable": false
+    },
+    "foreign_city_state_country": {
+      "value": "Quetzaltenango, Guatemala",
+      "label": "Foreign city, state, country",
+      "keywords": [
+        "foreign city",
+        "city and country",
+        "foreign country"
+      ],
+      "answer": "Quetzaltenango, Guatemala.",
+      "spoken": "Quetzaltenango, Guatemala",
+      "spellable": false
+    },
+    "date_of_birth": {
+      "value": "03/14/1990",
+      "label": "Date of birth",
+      "keywords": [
+        "date of birth",
+        "birth date",
+        "birthday",
+        "when were you born"
+      ],
+      "answer": "I was born on March 14th, 1990.",
+      "spoken": "March 14th, 1990",
+      "spellable": false
+    },
+    "country_of_birth": {
+      "value": "Guatemala",
+      "label": "Country of birth",
+      "keywords": [
+        "country of birth",
+        "which country were you born",
+        "country were you born"
+      ],
+      "answer": "I was born in Guatemala.",
+      "spoken": "Guatemala",
+      "spellable": false
+    },
+    "city_state_of_birth": {
+      "value": "Quetzaltenango",
+      "label": "City or state of birth",
+      "keywords": [
+        "city of birth",
+        "state of birth",
+        "city or state",
+        "where were you born",
+        "city were you born"
+      ],
+      "answer": "I was born in Quetzaltenango.",
+      "spoken": "Quetzaltenango",
+      "spellable": true,
+      "spell": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O"
+    },
+    "sex": {
+      "value": "female",
+      "label": "Sex",
+      "keywords": [
+        "sex",
+        "gender"
+      ],
+      "answer": "Female.",
+      "spoken": "female",
+      "spellable": false
+    },
+    "countries_of_citizenship": {
+      "value": "Guatemala",
+      "label": "Country of citizenship",
+      "keywords": [
+        "citizenship",
+        "citizen of",
+        "which country are you a citizen"
+      ],
+      "answer": "I am a citizen of Guatemala.",
+      "spoken": "Guatemala",
+      "spellable": false
+    },
+    "foreign_tax_id_number": {
+      "value": "24981736",
+      "label": "Foreign tax ID number",
+      "keywords": [
+        "foreign tax",
+        "tax id",
+        "tax identification"
+      ],
+      "answer": "My foreign tax I.D. number is 2 4 9 8 1 7 3 6.",
+      "spoken": "2 4 9 8 1 7 3 6",
+      "spellable": false
+    },
+    "us_visa_type_number_expiration": {
+      "value": "",
+      "label": "U.S. visa",
+      "keywords": [
+        "visa"
+      ],
+      "answer": "I do not have a U.S. visa.",
+      "spoken": "I do not have a U.S. visa",
+      "spellable": false
+    },
+    "id_document_type": {
+      "value": "passport",
+      "label": "Identification document type",
+      "keywords": [
+        "type of document",
+        "document type",
+        "identification document",
+        "which document",
+        "submitting"
+      ],
+      "answer": "I am submitting my passport.",
+      "spoken": "passport",
+      "spellable": false
+    },
+    "id_document_issued_by": {
+      "value": "Guatemala",
+      "label": "Document issued by",
+      "keywords": [
+        "issued by",
+        "issuing",
+        "who issued"
+      ],
+      "answer": "It was issued by Guatemala.",
+      "spoken": "Guatemala",
+      "spellable": false
+    },
+    "id_document_number": {
+      "value": "10472285",
+      "label": "Document number",
+      "keywords": [
+        "passport number",
+        "document number",
+        "id number"
+      ],
+      "answer": "The passport number is 1 0 4 7 2 2 8 5.",
+      "spoken": "1 0 4 7 2 2 8 5",
+      "spellable": false
+    },
+    "id_document_expiration_date": {
+      "value": "08/30/2029",
+      "label": "Document expiration date",
+      "keywords": [
+        "expiration",
+        "expires",
+        "expiry"
+      ],
+      "answer": "It expires on August 30th, 2029.",
+      "spoken": "August 30th, 2029",
+      "spellable": false
+    },
+    "date_of_entry_us": {
+      "value": "06/11/2023",
+      "label": "Date of entry into the U.S.",
+      "keywords": [
+        "date of entry",
+        "enter the united states",
+        "entered the united states",
+        "when did you enter",
+        "arrive"
+      ],
+      "answer": "I entered the United States on 06/11/2023.",
+      "spoken": "06/11/2023",
+      "spellable": false
+    },
+    "previously_received_itin_or_irsn": {
+      "value": "no_dont_know",
+      "label": "Previously received ITIN or IRSN",
+      "keywords": [
+        "previously received",
+        "itin or irsn",
+        "irsn",
+        "received an itin",
+        "ever received"
+      ],
+      "answer": "No, I have never received an ITIN or an IRSN.",
+      "spoken": "no",
+      "spellable": false
+    }
+  }
+}

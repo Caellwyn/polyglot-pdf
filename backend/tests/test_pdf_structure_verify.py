@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import pytest
 
 from backend.services.pdf_structure import (

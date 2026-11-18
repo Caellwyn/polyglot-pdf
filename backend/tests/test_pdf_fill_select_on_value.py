@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-fitz = pytest.importorskip("fitz")
+fitz = pytest.importorskip("pymupdf")
 
 from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf  # noqa: E402
 

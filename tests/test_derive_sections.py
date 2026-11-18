@@ -252,7 +252,7 @@ def test_derive_with_zero_page_doc_is_a_friendly_error():
     """A 0-page document raises a friendly ValueError instead of the raw
     doc[0] IndexError the prototype crashed with (6cfu.1 outer review).
     fitz cannot SAVE a 0-page file, so the open-doc core is tested directly."""
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     doc = fitz.open()
     try:
         with pytest.raises(ValueError, match="no pages"):

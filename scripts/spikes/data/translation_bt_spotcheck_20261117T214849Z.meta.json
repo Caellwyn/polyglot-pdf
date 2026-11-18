@@ -1,0 +1,106 @@
+{
+  "bead": "polyglot-pdf-u0kcc",
+  "mode": "bt-only",
+  "models": [
+    "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite"
+  ],
+  "langs": [
+    "spanish",
+    "chinese"
+  ],
+  "vertex_location": "global",
+  "summary": {
+    "gemini-2.5-flash-lite/spanish": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.973,
+      "plant_sim": 0.697,
+      "latency_s": 9.580408000038005,
+      "error": null,
+      "usage": {
+        "prompt": 436,
+        "cached": 0,
+        "output": 383,
+        "thoughts": 0,
+        "total": 819
+      }
+    },
+    "gemini-2.5-flash-lite/chinese": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.965,
+      "plant_sim": 0.722,
+      "latency_s": 1.2365285999840125,
+      "error": null,
+      "usage": {
+        "prompt": 371,
+        "cached": 0,
+        "output": 346,
+        "thoughts": 0,
+        "total": 717
+      }
+    },
+    "gemini-3.1-flash-lite/spanish": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.965,
+      "plant_sim": 0.622,
+      "latency_s": 5.435897599905729,
+      "error": null,
+      "usage": {
+        "prompt": 436,
+        "cached": 0,
+        "output": 384,
+        "thoughts": 0,
+        "total": 820
+      }
+    },
+    "gemini-3.1-flash-lite/chinese": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.907,
+      "plant_sim": 0.561,
+      "latency_s": 1.4029131000861526,
+      "error": null,
+      "usage": {
+        "prompt": 371,
+        "cached": 0,
+        "output": 377,
+        "thoughts": 0,
+        "total": 748
+      }
+    },
+    "gemini-3.5-flash-lite/spanish": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.864,
+      "plant_sim": 0.585,
+      "latency_s": 5.429844099911861,
+      "error": null,
+      "usage": {
+        "prompt": 436,
+        "cached": 0,
+        "output": 387,
+        "thoughts": 0,
+        "total": 823
+      }
+    },
+    "gemini-3.5-flash-lite/chinese": {
+      "n": 22,
+      "returned": 22,
+      "gold_sim": 0.895,
+      "plant_sim": 0.506,
+      "latency_s": 1.3935447999974713,
+      "error": null,
+      "usage": {
+        "prompt": 371,
+        "cached": 0,
+        "output": 368,
+        "thoughts": 0,
+        "total": 739
+      }
+    }
+  }
+}

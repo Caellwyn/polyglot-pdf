@@ -1,0 +1,1087 @@
+{
+ "note": "SYNTHETIC simulation run (bd polyglot-pdf-r3ham.2 smoke test, 2026-11-17). Every answer and field value comes from the harness's scripted fake applicant (scripts/spikes/measure_form_session_costs.py W7_QUESTIONS / I90V2_QUESTIONS); no real person's data. Committed deliberately per the maintainer's decision that synthetic-run transcripts may be kept (bd memory synthetic-sim-run-artifacts-may-be-committed). A --debug run of real speech is still LOCAL-ONLY. Per question: model_heard (input transcript), model_said (output speech), tool_io (exact args sent + response received), tools_reliable vs tools_legacy (two tool-attribution methods).",
+ "greeting_model_said": "Application Type. Are you applying for a new ITIN, or are you renewing an existing ITIN?",
+ "greeting_model_heard": "",
+ "questions": [
+  {
+   "q": 1,
+   "field_id": "application_type",
+   "model_heard": "I am applying for a new ITIN.",
+   "model_said": "You are applying for a new ITIN. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "application_type",
+      "value": "apply_new_itin"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "application_type"
+      ],
+      "message": "Fields updated successfully. Stored value: application_type = 'apply_new_itin'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "application_type": "apply_new_itin"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 2,
+   "field_id": "reason",
+   "model_heard": "Yes, that's correct.I am a nonresident alien filing a U.S. federal tax return.",
+   "model_said": "Reason for applying. Please choose the one reason that best explains why you need this number. The options are: a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h); b. Nonresident alien filing a U.S. federal tax return; c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return; d. Dependent of U.S. citizen or resident alien; e. Spouse of U.S. citizen or resident alien; f. Nonresident alien student, professor, or researcherYou are a",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "application_type",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "application_type",
+      "next_field_hint": "Next field to fill is #2: 'Reason you're submitting Form W-7 (if you check box b, c, d, e, f, or g, you must file a U.S. federal tax return with Form W-7 unless you meet an exception)'",
+      "message": "Field 'application_type' confirmed.",
+      "next_field_guidance": "ID: reason | Spoken: reason for applying | Type: checkbox_group | Required: true | Instructions: Choose the one reason that best explains why you need this number; a selection here is required even for a renewal. If more than one could apply, pick the one that best fits. If you choose the treaty-benefit reason, or the student, professor, or researcher reason while claiming an exception, you must also check the Other box and complete the extra treaty information. | Options (8 -- read ALL 8 aloud when asking; the user cannot see them): [\"a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h)\" (use value: a_treaty_benefit), \"b. Nonresident alien filing a U.S. federal tax return\" (use value: b_nonresident_alien_return), \"c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return\" (use value: c_resident_alien_return), \"d. Dependent of U.S. citizen/resident alien\" (use value: d_dependent_of_us_person), \"e. Spouse of U.S. citizen/resident alien\" (use value: e_spouse_of_us_person), \"f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h)\" (use value: f_student_professor_researcher), \"g. Dependent/spouse of a nonresident alien holding a U.S. visa\" (use value: g_dependent_spouse_of_visa_holder), \"h. Other (see instructions)\" (use value: h_other)] | Official reference text: Reason You're Submitting Form W-7\nYou must check the box to indicate the reason you're completing Form W-7 even if you're applying to renew your ITIN. If more than one box applies to you, check the box that best explains your reason for submitting Form W-7. A selection must be made in this section.\n\na. Nonresident alien required to get an ITIN to claim tax treaty benefit. Certain nonresident aliens must get an ITIN to claim certain tax treaty benefits even if they don't have to file a U.S. federal tax return. If you check this box to claim the benefits of a U.S. income tax treaty with a foreign country, you must also check box h. On the dotted line next to box h, enter the appropriate designation for Exception 1 or 2, whichever applies (see Exception 1 and Exception 2, later). Identify the exception by its number, alpha subsection, and category under which you're applying (for example, enter \"Exception 1d-Pension Income\" or \"Exception 2d-Gambling Winnings\"). Also, enter the name of the treaty country and treaty article number in the appropriate entry spaces below box h and attach the documents required under whichever exception applies. For more details on tax treaties, see Pub. 901.\n\nb. Nonresident alien filing a U.S. federal tax return. This category includes:\n• A nonresident alien who must file a U.S. federal tax return to report income effectively or not effectively connected with the conduct of a trade or business in the United States, and\n• A nonresident alien who is filing a U.S. federal tax return only to get a refund. See Pub. 519.\n\nIf you choose reason b, you must provide a complete foreign (non-U.S.) address on line 3. If you no longer have a permanent foreign residence, enter a complete foreign (non-U.S.) address for your most recent residence in the country where you permanently or normally resided.\n\nc. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return. A foreign individual living or present in the United States for a certain number of days (that is, meeting the test known as the \"substantial presence\" test) who doesn't have permission to work from the USCIS, and is ineligible for an SSN, may still be required to file a U.S. federal tax return or may file a U.S. federal tax return to claim a refund or report income. These individuals must check this box and include a date of entry into the United States on line 6d. For information about the substantial presence test, see Pub. 519.\n\nd. Dependent of U.S. citizen/resident alien. This is an individual who can be claimed as a dependent on a U.S. federal tax return and isn't eligible to get an SSN. Your spouse is never considered your dependent. See Pubs. 501 and 519. Dependents of U.S. military personnel can submit original documents, certified copies or notarized copies of identification documents. A copy of the servicemember's U.S. military ID is required if the documents are notarized. Additionally, the applicant must be applying from an overseas or APO/FPO address.\n\ne. Spouse of U.S. citizen/resident alien. This category includes:\n• A resident or nonresident alien spouse who isn't filing a U.S. federal tax return (including a joint return) and who isn't eligible to get an SSN but who, as a spouse, is claimed as an exemption; and\n• A resident or nonresident alien spouse who isn't eligible to get an SSN but who is electing to file a U.S. federal tax return jointly with a spouse who is a U.S. citizen or resident alien. For more information about this category, see Pubs. 501 and 519.\n\nf. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception. This is an individual who hasn't abandoned his or her residence in a foreign country and who is a bona fide student, professor, or researcher coming temporarily to the United States solely to attend classes at a recognized institution of education, to teach, or to perform research. For more information about the U.S. tax rules that apply to foreign students, professors, or researchers, see Pub. 519.\n\ng. Dependent/spouse of a nonresident alien holding a U.S. visa. This is an individual who can be claimed as a dependent for any tax year, or is a spouse on a U.S. federal tax return for a tax year before 2018, who is unable, or not eligible, to get an SSN, and who has entered the United States with a nonresident alien who holds a U.S. visa. If you apply for an ITIN under this category, remember to attach a copy of your visa to your Form W-7 and include a date of entry into the United States on line 6d.\n\nh. Other. If the reason for your ITIN request isn't described in boxes a through g, check this box. Describe in detail your reason for requesting an ITIN and attach supporting documents.\n\nAllowable tax benefit. For tax years after December 31, 2017, spouses and dependents are NOT eligible for an ITIN or to renew an ITIN unless they are claimed for an allowable tax benefit or they file their own tax return. Spouses and dependents must be listed on an attached U.S. federal tax return and include the schedule, form, or check the box on the return that applies to the allowable tax benefit. An allowable tax benefit includes:\n• A spouse filing a joint return,\n• Head of household (HOH),\n• Qualifying surviving spouse (QSS),\n• American opportunity tax credit (AOTC),\n• Premium tax credit (PTC),\n• Child and dependent care credit (CDCC), or\n• Credit for other dependents (ODC). | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "b_nonresident_alien_return",
+      "field_id": "reason"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "reason"
+      ],
+      "message": "Fields updated successfully. Stored value: reason = 'b_nonresident_alien_return'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "reason": "b_nonresident_alien_return"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 3,
+   "field_id": "name_1a_first",
+   "model_heard": "Yes, that's correct.My first name is Anna, A N A.",
+   "model_said": "What is your first <no speech>{pause}",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "reason",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "reason",
+      "next_field_hint": "Next field to fill is #3: '1a First name'",
+      "message": "Field 'reason' confirmed.",
+      "next_field_guidance": "ID: name_1a_first | Spoken: first name | Type: text | Required: true | Instructions: Give your legal first name exactly as it appears on your identifying documents, and as it will appear on your U.S. federal tax return. Your number will be established under this name, so a different name on the tax return can delay processing. If you are renewing and your legal name has changed, attach documentation of the change such as a marriage certificate or court order. | Official reference text: Line 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return.\nNote. If you're renewing your ITIN and your legal name has changed since the original assignment of your ITIN, you'll need to submit documentation to support your legal name change, such as your marriage certificate or a court order, which may include a divorce decree. Attach supporting documentation to Form W-7. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "name_1a_first",
+      "value": "Anna"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "name_1a_first"
+      ],
+      "message": "Fields updated successfully. Stored value: name_1a_first = 'Anna'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "name_1a_first": "Anna"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 4,
+   "field_id": "name_1a_middle",
+   "model_heard": "Yes, that's correct.My middle name is Lucia, L U C I A.",
+   "model_said": "What is your middle <no speech>{pause}",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "name_1a_first"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "name_1a_first",
+      "next_field_hint": "Next field to fill is #4: '1a Middle name'",
+      "message": "Field 'name_1a_first' confirmed.",
+      "next_field_guidance": "ID: name_1a_middle | Spoken: middle name | Type: text | Required: true | Instructions: Give your legal middle name as it appears on your identifying documents. If you have no middle name, say not applicable, because no part of a line should be left blank. | Format: name, or N/A | Official reference text: Line Instructions\nEnter \"N/A\" (not applicable) on all sections of each line that don't apply to you. Don't leave any section blank. For example, line 4 should have three separate entries.\nLine 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "name_1a_middle",
+      "value": "Lucia"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "name_1a_middle"
+      ],
+      "message": "Fields updated successfully. Stored value: name_1a_middle = 'Lucia'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "name_1a_middle": "Lucia"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 5,
+   "field_id": "name_1a_last",
+   "model_heard": "Yes, that's correct.My last name is Reyes, R E Y E S.",
+   "model_said": "What is your last <no speech>{pause}",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "name_1a_middle",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "name_1a_middle",
+      "next_field_hint": "Next field to fill is #5: '1a Last name'",
+      "message": "Field 'name_1a_middle' confirmed.",
+      "next_field_guidance": "ID: name_1a_last | Spoken: last name | Type: text | Required: true | Instructions: Give your legal last name as it appears on your identifying documents, and as it will appear on your U.S. federal tax return. The name, date of birth, and country of citizenship on your supporting documents must match what you put on this form. | Official reference text: Line 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return.\n\nYour ITIN will be established using this name. If you don't use this name on the U.S. federal tax return, the processing of the U.S. federal tax return may be delayed. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Reyes",
+      "field_id": "name_1a_last"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "name_1a_last"
+      ],
+      "message": "Fields updated successfully. Stored value: name_1a_last = 'Reyes'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "name_1a_last": "Reyes"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 6,
+   "field_id": "mailing_street",
+   "model_heard": "Yes, that's correct.My street address is 418 Willow Street, Apartment 2B.",
+   "model_said": "What is your Your address is",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "name_1a_last"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "name_1a_last",
+      "next_field_hint": "Next field to fill is #6: '2 Street address, apartment number, or rural route number. If you have a P.O. box, see separate instructions.'",
+      "message": "Field 'name_1a_last' confirmed.",
+      "next_field_guidance": "ID: mailing_street | Spoken: mailing street address | Type: text | Required: true | Instructions: Give the street address, apartment number, or rural route where you want mail sent, because this is where the IRS returns your original documents and sends notice of your number. If the postal service will not deliver to your physical location, use a post office box number from the U.S. Postal Service, not a box owned by a private firm. Avoid a post office box or an in-care-of address here if you are only entering a country name as your foreign address, since that can get your application rejected. | Official reference text: Line 2. Enter your complete mailing address on line 2. This is the address the IRS will use to return your original documents and send written notification of your ITIN application status.\nThe IRS won't use the address you enter to update its records for other purposes unless you include a U.S. federal tax return with your Form W-7. If you aren't including a U.S. federal tax return with your Form W-7 and you changed your home mailing address since you filed your last U.S. federal tax return, also file Form 8822, Change of Address, with the IRS at the address listed in the Form 8822 instructions.\nNote. If the U.S. Postal Service won't deliver mail to your physical location, enter the U.S. Postal Service's post office box number for your mailing address. Contact your local U.S. Post Office for more information. Don't use a post office box owned and operated by a private firm or company.\n\nDon't use a post office box or an \"in care of\" (c/o) address instead of a street address on line 2 if you're entering just a \"country\" name on line 3. If you do, your application may be rejected. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "mailing_street",
+      "value": "418 Willow Street, Apartment 2B"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mailing_street"
+      ],
+      "message": "Fields updated successfully. Stored value: mailing_street = '418 Willow Street, Apartment 2B'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mailing_street": "418 Willow Street, Apartment 2B"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 7,
+   "field_id": "mailing_city_state_country",
+   "model_heard": "Yes, that's correct.Springfield, Oregon, United States, 97477.",
+   "model_said": "What is your Springfield, Oregon,",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "mailing_street"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mailing_street",
+      "next_field_hint": "Next field to fill is #7: '2 City or town, state or province, and country. Include ZIP code or postal code where appropriate.'",
+      "message": "Field 'mailing_street' confirmed.",
+      "next_field_guidance": "ID: mailing_city_state_country | Spoken: mailing city, state, and country | Type: text | Required: true | Instructions: Give the city or town, the state or province, and the country for your mailing address, including the ZIP code or postal code where appropriate. This must be a complete address, because the IRS uses it to mail back your original documents and your number notice. | Official reference text: Line 2. Enter your complete mailing address on line 2. This is the address the IRS will use to return your original documents and send written notification of your ITIN application status. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Springfield, Oregon, United States, 97477",
+      "field_id": "mailing_city_state_country"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mailing_city_state_country"
+      ],
+      "message": "Fields updated successfully. Stored value: mailing_city_state_country = 'Springfield, Oregon, United States, 97477'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mailing_city_state_country": "Springfield, Oregon, United States, 97477"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 8,
+   "field_id": "foreign_street",
+   "model_heard": "Yes, that's correct.My foreign address is 12 Avenida Central.",
+   "model_said": "What is your Your foreign address",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "mailing_city_state_country"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mailing_city_state_country",
+      "next_field_hint": "Next field to fill is #8: '3 Foreign (non-U.S.) address -- Street address, apartment number, or rural route number. Don't use a P.O. box number.'",
+      "message": "Field 'mailing_city_state_country' confirmed.",
+      "next_field_guidance": "ID: foreign_street | Spoken: foreign street address | Type: text | Required: true | Instructions: Give the street address in the country where you permanently or normally live, even if it is the same as your mailing address, and do not use a post office box here. If you no longer have a permanent home abroad because you moved to the United States, give only the foreign country where you last lived. If you are applying as a nonresident alien filing a U.S. tax return, a complete foreign address is required. | Official reference text: Line 3. Enter your complete foreign (non-U.S.) address in the country where you permanently or normally reside, even if it's the same as the address on line 2. If you no longer have a permanent foreign residence due to your relocation to the United States, enter only the foreign country where you last resided on line 3. If you selected reason b, Nonresident alien filing a U.S. federal tax return, as the reason you're submitting Form W-7, then enter the complete foreign (non-U.S.) address for your most recent residence in the country where you permanently or normally resided. If you're claiming a benefit under an income tax treaty with the United States, the income tax treaty country must be the same as the country listed on line 3. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "12 Avenida Central",
+      "field_id": "foreign_street"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "foreign_street"
+      ],
+      "message": "Fields updated successfully. Stored value: foreign_street = '12 Avenida Central'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "foreign_street": "12 Avenida Central"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 9,
+   "field_id": "foreign_city_state_country",
+   "model_heard": "Yes, that's correct.Quetzaltenango, Guatemala.",
+   "model_said": "What is your foreign city, state,Your foreign city,",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "foreign_street",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "foreign_street",
+      "next_field_hint": "Next field to fill is #9: '3 Foreign (non-U.S.) address -- City or town, state or province, and country. Include postal code where appropriate.'",
+      "message": "Field 'foreign_street' confirmed.",
+      "next_field_guidance": "ID: foreign_city_state_country | Spoken: foreign city, state, and country | Type: text | Required: true | Instructions: Give the city or town, state or province, and country abroad where you permanently or normally live, with the postal code where appropriate. If you are claiming a treaty benefit, this country must match the treaty country you named. | Official reference text: Line 3. Enter your complete foreign (non-U.S.) address in the country where you permanently or normally reside, even if it's the same as the address on line 2. If you no longer have a permanent foreign residence due to your relocation to the United States, enter only the foreign country where you last resided on line 3. If you selected reason b, Nonresident alien filing a U.S. federal tax return, as the reason you're submitting Form W-7, then enter the complete foreign (non-U.S.) address for your most recent residence in the country where you permanently or normally resided. If you're claiming a benefit under an income tax treaty with the United States, the income tax treaty country must be the same as the country listed on line 3. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Quetzaltenango, Guatemala",
+      "field_id": "foreign_city_state_country"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "foreign_city_state_country"
+      ],
+      "message": "Fields updated successfully. Stored value: foreign_city_state_country = 'Quetzaltenango, Guatemala'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "foreign_city_state_country": "Quetzaltenango, Guatemala"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 10,
+   "field_id": "date_of_birth",
+   "model_heard": "Yes, that's correct.I was born on March 14, 1990.",
+   "model_said": "What is your Your date of birth",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "foreign_city_state_country",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "foreign_city_state_country",
+      "next_field_hint": "Next field to fill is #10: '4 Date of birth (month / day / year)'",
+      "message": "Field 'foreign_city_state_country' confirmed.",
+      "next_field_guidance": "ID: date_of_birth | Spoken: date of birth | Type: date | Required: true | Instructions: Give your date of birth as month, day, and year. It must match the date of birth shown on your supporting documents. | Store the value EXACTLY in this format: MM/DD/YYYY | Official reference text: Line 4. Enter your date of birth in the month/day/year (MM/DD/YYYY) format, where MM = 1 to 12 and DD = 1 to 31. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "date_of_birth",
+      "value": "03/14/1990"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "date_of_birth"
+      ],
+      "message": "Fields updated successfully. Stored value: date_of_birth = '03/14/1990'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "date_of_birth": "03/14/1990"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 11,
+   "field_id": "country_of_birth",
+   "model_heard": "Yes, that's correct.I was born in Guatemala.",
+   "model_said": "What is your Your country of birth",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "date_of_birth"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "date_of_birth",
+      "next_field_hint": "Next field to fill is #11: '4 Country of birth'",
+      "message": "Field 'date_of_birth' confirmed.",
+      "next_field_guidance": "ID: country_of_birth | Spoken: country of birth | Type: text | Required: true | Instructions: Name the country where you were born. Do not leave any part of this line blank; say not applicable if a part does not apply to you. | Official reference text: Line Instructions\nEnter \"N/A\" (not applicable) on all sections of each line that don't apply to you. Don't leave any section blank. For example, line 4 should have three separate entries. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "country_of_birth",
+      "value": "Guatemala"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "country_of_birth"
+      ],
+      "message": "Fields updated successfully. Stored value: country_of_birth = 'Guatemala'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "country_of_birth": "Guatemala"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 12,
+   "field_id": "city_state_of_birth",
+   "model_heard": "Yes, that's correct.I was born in Quetzaltenango.",
+   "model_said": "What is your city Your city of birth",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "country_of_birth"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "country_of_birth",
+      "next_field_hint": "Next field to fill is #12: '4 City and state or province of birth (optional)'",
+      "message": "Field 'country_of_birth' confirmed.",
+      "next_field_guidance": "ID: city_state_of_birth | Spoken: city of birth | Type: text | Instructions: This is optional, but if you give it, name the city and the state or province where you were born.  Otherwise say 'Not Applicable' | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "city_state_of_birth",
+      "value": "Quetzaltenango"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "city_state_of_birth"
+      ],
+      "message": "Fields updated successfully. Stored value: city_state_of_birth = 'Quetzaltenango'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "city_state_of_birth": "Quetzaltenango"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 13,
+   "field_id": "sex",
+   "model_heard": "Yes, that's correct.Female.",
+   "model_said": "Are you male You selected female.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "city_state_of_birth"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "city_state_of_birth",
+      "next_field_hint": "Next field to fill is #13: '5 Sex'",
+      "message": "Field 'city_state_of_birth' confirmed.",
+      "next_field_guidance": "ID: sex | Spoken: sex | Type: radio | Required: true | Instructions: Sex/Gender listed on passport or other documents | Options (2 -- ask ONE natural question that makes both choices clear; do not recite the labels as a list): [\"Male\" (use value: male), \"Female\" (use value: female)] | Official reference text: This selection must match passport and other immigration documents. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "sex",
+      "value": "female"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "sex"
+      ],
+      "message": "Fields updated successfully. Stored value: sex = 'female'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "sex": "female"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 14,
+   "field_id": "countries_of_citizenship",
+   "model_heard": "Yes, that's correct.I am a citizen of Guatemala.",
+   "model_said": "What is your Your country of citizenship is Guatemala.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "sex"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "sex",
+      "next_field_hint": "Next field to fill is #14: '6a Country(ies) of citizenship'",
+      "message": "Field 'sex' confirmed.",
+      "next_field_guidance": "ID: countries_of_citizenship | Spoken: country or countries of citizenship | Type: text | Required: true | Instructions: Name the country or countries where you are a citizen, and spell out the complete country name rather than abbreviating it. If you hold dual citizenship, name both. This must match the country of citizenship shown on your supporting documents. | Official reference text: Line 6a. Enter the country or countries (in the case of dual citizenship) in which you're a citizen. Enter the complete country name; don't abbreviate. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "countries_of_citizenship",
+      "value": "Guatemala"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "countries_of_citizenship"
+      ],
+      "message": "Fields updated successfully. Stored value: countries_of_citizenship = 'Guatemala'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "countries_of_citizenship": "Guatemala"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "get_form_status",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 15,
+   "field_id": "foreign_tax_id_number",
+   "model_heard": "Yes, that's correct.My foreign tax identification number is 24981736.",
+   "model_said": "Your foreign tax",
+   "tool_io": [
+    {
+     "tool": "get_form_status",
+     "args": {
+      "field_ids": [
+       "countries_of_citizenship"
+      ]
+     },
+     "response": {
+      "state": "countries_of_citizenship:Guatemala:unconfirmed"
+     }
+    },
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "countries_of_citizenship",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "countries_of_citizenship",
+      "next_field_hint": "Next field to fill is #15: '6b Foreign tax I.D. number (if any)'",
+      "message": "Field 'countries_of_citizenship' confirmed.",
+      "next_field_guidance": "ID: foreign_tax_id_number | Spoken: foreign tax I.D. number | Type: text | Instructions: If the country where you are a tax resident has issued you a tax identification number, give that number. For example, a resident of Canada would give the Canadian Social Insurance Number.  Otherwise say \"Not Applicable\" | Official reference text: Line 6b. If your country of residence for tax purposes has issued you a tax identification number, enter that number on line 6b. For example, if you're a resident of Canada, enter your Canadian social security number (known as the Canadian Social Insurance Number). | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "foreign_tax_id_number",
+      "value": "24981736"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "foreign_tax_id_number"
+      ],
+      "message": "Fields updated successfully. Stored value: foreign_tax_id_number = '24981736'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "foreign_tax_id_number": "24981736"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "get_form_status",
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 16,
+   "field_id": "us_visa_type_number_expiration",
+   "model_heard": "Yes, that's correct.I do not have a U.S. visa.",
+   "model_said": "What is your You indicated you do",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "foreign_tax_id_number"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "foreign_tax_id_number",
+      "next_field_hint": "Next field to fill is #16: '6c Type of U.S. visa (if any), number, and expiration date'",
+      "message": "Field 'foreign_tax_id_number' confirmed.",
+      "next_field_guidance": "ID: us_visa_type_number_expiration | Spoken: U.S. visa type, number, and expiration | Type: text | Instructions: Give only U.S. nonimmigrant visa information: the immigration classification, the visa number, and the expiration date as month, day, and year. For example, an F-1 or F-2 visa numbered 123456 would be entered with that classification and number, followed by the expiration date. If you hold an I-20 or I-94 document, attach a copy. | Format: Classification, number, then MM/DD/YYYY | Official reference text: Line 6c. Enter only U.S. nonimmigrant visa information. Include the USCIS classification, number of the U.S. visa, and the expiration date in month/day/year format. For example, if you have an F-1/F-2 visa with the number 123456, enter, in the entry space, F-1/F-2 and 123456, followed by the visa's expiration date in MM/DD/YYYY format. Individuals in possession of an I-20/I-94 document(s) should attach a copy to their Form W-7. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "us_visa_type_number_expiration",
+      "value": ""
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "us_visa_type_number_expiration"
+      ],
+      "message": "Fields updated successfully. Stored value: us_visa_type_number_expiration = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "us_visa_type_number_expiration": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 17,
+   "field_id": "id_document_type",
+   "model_heard": "Yes, that's correct.I am submitting my passport.",
+   "model_said": "Which identification document You selected passport.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "us_visa_type_number_expiration"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "us_visa_type_number_expiration",
+      "next_field_hint": "Next field to fill is #17: '6d Identification document(s) submitted (complete for the first document submitted)'",
+      "message": "Field 'us_visa_type_number_expiration' confirmed.",
+      "next_field_guidance": "ID: id_document_type | Spoken: identification document type | Type: radio | Required: true | Instructions: Which document you are submitting to prove your identity? If you are submitting more than one, give only the first document here and attach a separate sheet for the others with your name and the form name at the top. A valid passport, or a certified copy from the issuing agency, stands alone; otherwise you need at least two of the accepted document types, one of which carries your photograph. | Options (4 -- read ALL 4 aloud when asking; the user cannot see them): [\"Passport\" (use value: passport), \"Driver's license/State I.D.\" (use value: drivers_license_state_id), \"USCIS documentation\" (use value: uscis_documentation), \"Other\" (use value: other)] | Official reference text: Line 6d. Check the box indicating the type of document you're submitting to prove your identity. Enter the name of the state or country or other issuer, the identification number (if any) appearing on the document, the expiration date, and the date on which you entered the United States. Dates must be entered in the month/day/year format.\nIf you're submitting more than one document, enter only the information for the first document on this line. Attach a separate sheet showing the required information for the additional document(s). On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\nNote. If you're submitting a passport, or a certified copy of a passport from the issuing agency, no other documentation is required to prove your identity and foreign status. Ensure any visa information shown on the passport is entered on line 6c and the pages of the passport showing the U.S. visa (if a visa is required for your Form W-7) are included with your Form W-7. A passport that doesn't have a date of entry into the United States will no longer be accepted as a stand-alone identification document for dependents, unless the dependents are dependents of U.S. military personnel stationed overseas or the dependents are from Canada or Mexico and are claimed for any allowable tax benefit other than the credit for other dependents (ODC).\n\nIf you submit an original valid passport or a certified copy from the issuing agency, you don't need to submit any other documents from the table. Otherwise, you must submit at least two types of documents listed in the \"Supporting Documentation\" table that prove identity and foreign status, and that meet the photograph requirement explained earlier. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "passport",
+      "field_id": "id_document_type"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "id_document_type"
+      ],
+      "message": "Fields updated successfully. Stored value: id_document_type = 'passport'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "id_document_type": "passport"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 18,
+   "field_id": "id_document_issued_by",
+   "model_heard": "Yes, that's correct.It was issued by Guatemala.",
+   "model_said": "Which state or country Your identification document was issued",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "id_document_type",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "id_document_type",
+      "next_field_hint": "Next field to fill is #18: '6d Issued by'",
+      "message": "Field 'id_document_type' confirmed.",
+      "next_field_guidance": "ID: id_document_issued_by | Spoken: State or Country that issued your ID document | Type: text | Required: true | Instructions: Name the state, country, or other issuer shown on the identification document you are submitting. | Official reference text: Line 6d. Check the box indicating the type of document you're submitting to prove your identity. Enter the name of the state or country or other issuer, the identification number (if any) appearing on the document, the expiration date, and the date on which you entered the United States. Dates must be entered in the month/day/year format. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Guatemala",
+      "field_id": "id_document_issued_by"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "id_document_issued_by"
+      ],
+      "message": "Fields updated successfully. Stored value: id_document_issued_by = 'Guatemala'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "id_document_issued_by": "Guatemala"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 19,
+   "field_id": "id_document_number",
+   "model_heard": "Yes, that's correct.The passport number is 10472285.",
+   "model_said": "What is the The document number",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "id_document_issued_by",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "id_document_issued_by",
+      "next_field_hint": "Next field to fill is #19: '6d Number'",
+      "message": "Field 'id_document_issued_by' confirmed.",
+      "next_field_guidance": "ID: id_document_number | Spoken: document number | Type: text | Required: true | Instructions: Give the identification number that appears on the document you are submitting, if it has one. | Official reference text: Line 6d. Check the box indicating the type of document you're submitting to prove your identity. Enter the name of the state or country or other issuer, the identification number (if any) appearing on the document, the expiration date, and the date on which you entered the United States. Dates must be entered in the month/day/year format. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "id_document_number",
+      "value": "10472285"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "id_document_number"
+      ],
+      "message": "Fields updated successfully. Stored value: id_document_number = '10472285'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "id_document_number": "10472285"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 20,
+   "field_id": "id_document_expiration_date",
+   "model_heard": "Yes, that's correct.It expires on August 30th, 2029.",
+   "model_said": "What is the The expiration date",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "id_document_number"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "id_document_number",
+      "next_field_hint": "Next field to fill is #20: '6d Exp. date'",
+      "message": "Field 'id_document_number' confirmed.",
+      "next_field_guidance": "ID: id_document_expiration_date | Spoken: identification document expiration date | Type: date | Required: true | Instructions: Give the expiration date on the document as month, day, and year. Your documents must not be expired when you submit the application; a passport or national identification card counts as current only if its expiration date has not passed before you send the form. A civil birth certificate is always considered current because it has no expiration date. | Store the value EXACTLY in this format: MM/DD/YYYY | Official reference text: 3.\nThe documentation you provide must be current (that is, not expired at the time you submit your application).\n\nPassports and national identification cards. These documents will be considered current only if their expiration date hasn't passed prior to the date the Form W-7 is submitted. In general, the postmark date determines when the document was submitted. Certified copies of a passport from the issuing agency must include the U.S. visa pages if a visa is required for your Form W-7 application. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "08/30/2029",
+      "field_id": "id_document_expiration_date"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "id_document_expiration_date"
+      ],
+      "message": "Fields updated successfully. Stored value: id_document_expiration_date = '08/30/2029'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "id_document_expiration_date": "08/30/2029"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 21,
+   "field_id": "date_of_entry_us",
+   "model_heard": "Yes, that's correct.I entered the United States on the 11th of June, 2023.",
+   "model_said": "What is your date of The date of entry",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "id_document_expiration_date",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "id_document_expiration_date",
+      "next_field_hint": "Next field to fill is #21: '6d Date of entry into the United States (MM/DD/YYYY)'",
+      "message": "Field 'id_document_expiration_date' confirmed.",
+      "next_field_guidance": "ID: date_of_entry_us | Spoken: date of entry into the United States | Type: text | Required: true | Instructions: Give the complete date, month, day, and year, on which you entered the country for the purpose you are requesting this number for. If you have never entered the United States, enter exactly \"Never entered US\" instead of a date -- the printed box is only wide enough for that short form. A passport without an entry date does not prove U.S. residency and may not stand alone for certain dependents. | Format: MM/DD/YYYY or \"Never Entered US\" | Official reference text: The \"Date of entry into the United States\" must contain the complete date on which you entered the country for the purpose for which you're requesting an ITIN (if applicable). If you've never entered the United States, enter \"Never entered the United States\" on this line. A passport without an entry date doesn't prove U.S. residency and may not be used as a stand-alone document for certain dependents. See Supporting Documentation Requirements, earlier.\nExample. You entered the United States last year to work. You want to file a tax return for the income you earned in the United States that year. You aren't eligible to get a social security number. You file Form W-7 with your tax return for that year. On line 6d of your Form W-7, enter, as the \"Date of entry into the United States,\" the month, day, and year you entered the United States in MM/DD/YYYY format. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "06/11/2023",
+      "field_id": "date_of_entry_us"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "date_of_entry_us"
+      ],
+      "message": "Fields updated successfully. Stored value: date_of_entry_us = '06/11/2023'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "date_of_entry_us": "06/11/2023"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 22,
+   "field_id": "previously_received_itin_or_irsn",
+   "model_heard": "Yes, that's correct.No, I have never received an ITIN or an IRSN.",
+   "model_said": "Have you previously received an ITINYou have never",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "date_of_entry_us",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "date_of_entry_us",
+      "next_field_hint": "Next field to fill is #22: '6e Have you previously received an ITIN or an Internal Revenue Service Number (IRSN)?'",
+      "message": "Field 'date_of_entry_us' confirmed.",
+      "next_field_guidance": "ID: previously_received_itin_or_irsn | Spoken: previously received an ITIN or IRSN | Type: radio | Required: true | Instructions: Say yes if you have ever received an individual taxpayer number or an Internal Revenue Service Number, and then give those numbers. Say no or don't know if you never had one or don't know it. If you are renewing, you must answer yes and include your previously assigned number, or your application may be delayed. | Options (2 -- ask ONE natural question that makes both choices clear; do not recite the labels as a list): [\"No/Don't know. Skip line 6f.\" (use value: no_dont_know), \"Yes. Complete line 6f. If more than one, list on a sheet and attach to this form.\" (use value: yes)] | Official reference text: Line 6e. If you ever received an ITIN and/or an Internal Revenue Service Number (IRSN), check the \"Yes\" box and complete line 6f. If you never had an ITIN or an IRSN, or if you don't know your ITIN or IRSN, check the No/Don't know box.\nAn IRSN is a nine-digit number issued by the IRS to persons who file a return or make a payment without providing a taxpayer identification number. You would've been issued this number if you filed a U.S. federal tax return and didn't have an SSN. This IRSN will appear on any correspondence the IRS sent you concerning that return.\nIf you're submitting Form W-7 to renew your ITIN, you must include your previously assigned ITIN on line 6f to avoid delays in processing your Form W-7. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "previously_received_itin_or_irsn",
+      "value": "no_dont_know"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "previously_received_itin_or_irsn"
+      ],
+      "message": "Fields updated successfully. Stored value: previously_received_itin_or_irsn = 'no_dont_know'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "previously_received_itin_or_irsn": "no_dont_know"
+      }
+     }
+    },
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "previously_received_itin_or_irsn"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "previously_received_itin_or_irsn",
+      "next_field_hint": null,
+      "message": "Field 'previously_received_itin_or_irsn' confirmed. All fields confirmed."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "confirm_field"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  }
+ ],
+ "out_of_window_tool_io": []
+}

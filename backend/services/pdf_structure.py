@@ -170,7 +170,7 @@ def digest_of_bytes(pdf_bytes: bytes) -> Optional[str]:
     could not read that file", which is a different message from "that is not
     your form".
     """
-    import fitz  # local import: PyMuPDF is heavy and only needed on this path
+    import pymupdf as fitz  # local import: PyMuPDF is heavy and only needed on this path
 
     doc = None
     try:
@@ -230,7 +230,7 @@ def assert_matches_kit_form(
     structural difference means either the wrong file or a tampered one, and
     neither should reach form state.
     """
-    import fitz
+    import pymupdf as fitz
 
     uploaded = digest_of_bytes(uploaded_bytes)
     if uploaded is None:

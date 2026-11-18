@@ -19,8 +19,12 @@ field-level validation cannot see. It exists as a defense-in-depth second-pass
 net, ADDITIVE TO (not a replacement for) the in-system-instruction
 ADDRESS-CONSISTENCY prose the Live model still carries: the B-pillar rescope of
 2026-06-17 (bd polyglot-pdf-jnjj) found flash-lite contradiction recall (0.853,
-measured on `gemini-2.5-flash-lite`; not re-measured on 3.1)
-below the in-SI check's recall (1.000) and kept the prose as the primary check
+measured on `gemini-2.5-flash-lite`) below the in-SI check's recall (1.000) and
+kept the prose as the primary check. Re-measured 2026-11-17 on the shipped prompt
+(bd polyglot-pdf-u0kcc, `scripts/spikes/3p1_lite_revalidation_findings.md`):
+`gemini-3.1-flash-lite` and `gemini-3.5-flash-lite` both reach recall 1.000 with
+zero false positives on that corpus. The prose stays the primary check
+until that decision is revisited (bd polyglot-pdf-kmfsp)
 (the `"ADDRESS CONSISTENCY:"` block in `backend/config.py`; see `backend/services/validator_service.py`'s
 module docstring). The validator adds zero false positives on the G1 corpus, so
 it is safe to run as an extra pass, but it does not replace the SI prose.

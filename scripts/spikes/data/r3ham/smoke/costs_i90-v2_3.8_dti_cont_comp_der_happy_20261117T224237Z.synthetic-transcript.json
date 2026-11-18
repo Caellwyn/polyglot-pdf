@@ -1,0 +1,986 @@
+{
+ "note": "SYNTHETIC simulation run (bd polyglot-pdf-r3ham.2 smoke test, 2026-11-17). Every answer and field value comes from the harness's scripted fake applicant (scripts/spikes/measure_form_session_costs.py W7_QUESTIONS / I90V2_QUESTIONS); no real person's data. Committed deliberately per the maintainer's decision that synthetic-run transcripts may be kept (bd memory synthetic-sim-run-artifacts-may-be-committed). A --debug run of real speech is still LOCAL-ONLY. Per question: model_heard (input transcript), model_said (output speech), tool_io (exact args sent + response received), tools_reliable vs tools_legacy (two tool-attribution methods).",
+ "greeting_model_said": "We are starting with the Alien Registration Number. What is your A-Number?",
+ "greeting_model_heard": "",
+ "questions": [
+  {
+   "q": 1,
+   "field_id": "a_number",
+   "model_heard": "My A-Number is 087654321.",
+   "model_said": "The stored A-Number is zero eight seven six five four three two one. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "A-087654321",
+      "field_id": "a_number"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "a_number"
+      ],
+      "message": "Fields updated successfully. Stored value: a_number = '087654321'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "a_number": "087654321"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 2,
+   "field_id": "uscis_account",
+   "model_heard": "Yes, that's correct.My USCIS online account number is 944731258602.",
+   "model_said": "What is your USCIS account number?The stored USCIS account number is nine four four seven three one two five eight six zero two. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "a_number"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "a_number",
+      "next_field_hint": "Next field to fill is #2: 'USCIS Online Account Number (if any)'",
+      "message": "Field 'a_number' confirmed.",
+      "next_field_guidance": "ID: uscis_account | Spoken: USCIS account number | Type: text | Instructions: You only have a USCIS Online Account Number if you previously filed a form with a receipt number starting with I O E. If you filed online, it is in your account profile; if you mailed the form, it is at the top of the Account Access Notice we sent you. It is not the same as your A-Number. | Format: 12 digit number | pattern: ^[0-9]{12}$ | min_length: 12 | Official reference text: Item Number 2.  USCIS Online Account Number.  You will only have a USCIS Online Account Number (OAN) if you previously filed a form that has a receipt number that begins with IOE.  If you filed the form online, you can find your OAN in your account profile.  If you mailed us the form, you can find your OAN at the top of the Account Access Notice we sent you.  If you do not have a receipt number that begins with IOE, you do not have an OAN.  The OAN is not the same as an A-Number. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "uscis_account",
+      "value": "944731258602"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "uscis_account"
+      ],
+      "message": "Fields updated successfully. Stored value: uscis_account = '944731258602'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "uscis_account": "944731258602"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 3,
+   "field_id": "family_name",
+   "model_heard": "Yes, that's correct.My last name is Torres, T O R R E S.",
+   "model_said": "What is your last name? Please spell it exactly as it appears on your passport or green card.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "uscis_account"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "uscis_account",
+      "next_field_hint": "Next field to fill is #3: 'Family Name (Last Name)'",
+      "message": "Field 'uscis_account' confirmed.",
+      "next_field_guidance": "ID: family_name | Spoken: last name | Type: text | Required: true | Instructions: spell your full legal last name. Your new card will be issued in the name you provide here, so use your current legal name. | Format: Name | Official reference text: Item Numbers 3.a. - 3.c.  Your Full Name.  Provide your full legal name in the spaces provided. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Torres",
+      "field_id": "family_name"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "family_name"
+      ],
+      "message": "Fields updated successfully. Stored value: family_name = 'Torres'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "family_name": "Torres"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 4,
+   "field_id": "given_name",
+   "model_heard": "Yes, that's correct.My first name is Elena, E L E N A.",
+   "model_said": "What is your first name? Please spell it exactly as it appears on your passport or green card.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "family_name"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "family_name",
+      "next_field_hint": "Next field to fill is #4: 'Given Name (First Name)'",
+      "message": "Field 'family_name' confirmed.",
+      "next_field_guidance": "ID: given_name | Spoken: first name | Type: text | Required: true | Instructions: spell your full legal first name. Your new card will be issued in the name you provide here. | Format: Name | Official reference text: Item Numbers 3.a. - 3.c.  Your Full Name.  Provide your full legal name in the spaces provided. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Elena",
+      "field_id": "given_name"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "given_name"
+      ],
+      "message": "Fields updated successfully. Stored value: given_name = 'Elena'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "given_name": "Elena"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 5,
+   "field_id": "middle_name",
+   "model_heard": "Yes, that's correct.My middle name is Marisol, M A R I S O L.",
+   "model_said": "What is your middle name? Please spell it, or say N/A if you do not have one.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "given_name"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "given_name",
+      "next_field_hint": "Next field to fill is #5: 'Middle Name'",
+      "message": "Field 'given_name' confirmed.",
+      "next_field_guidance": "ID: middle_name | Spoken: middle name | Type: text | Instructions: spell your full legal middle name. If you do not have one, say N/A. | Format: name | Official reference text: Item Numbers 3.a. - 3.c.  Your Full Name.  Provide your full legal name in the spaces provided. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "middle_name",
+      "value": "Marisol"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "middle_name"
+      ],
+      "message": "Fields updated successfully. Stored value: middle_name = 'Marisol'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "middle_name": "Marisol"
+      }
+     }
+    },
+    {
+     "tool": "name_spellback",
+     "args": {},
+     "response": {
+      "success": true,
+      "status": "delivered",
+      "message": "The user has ALREADY heard the stored spelling and been asked whether it is correct. Do NOT ask again, do NOT repeat or spell the value, and do NOT speak now -- stay silent and listen for their yes or no."
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "name_spellback"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "name_spellback",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 6,
+   "field_id": "name_changed",
+   "model_heard": "Yes, that's correct.No, my name has not legally changed since my card was issued.",
+   "model_said": "Has your name legally changed since the issuance of your Permanent Resident Card? Please choose from the following options: Yes, No, or N/A - I never received my previous card.The stored answer is No. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "middle_name",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "middle_name",
+      "next_field_hint": "Next field to fill is #6: 'Has your name legally changed since the issuance of your Permanent Resident Card?'",
+      "message": "Field 'middle_name' confirmed.",
+      "next_field_guidance": "ID: name_changed | Spoken: has your name changed? | Type: radio | Required: true | Instructions: Answer yes only if your name was legally changed since your Permanent Resident Card was issued. If you answer yes, you must submit legal documents showing the change, such as a registered marriage certificate, divorce decree, adoption decree, or court order. Those documents must have been registered with the proper civil authority. | Options (3 -- read ALL 3 aloud when asking; the user cannot see them): [\"Yes (Proceed to Item Numbers 5.a. - 5.c.)\" (use value: yes), \"No (Proceed to Item Numbers 6.a. - 6.i.)\" (use value: no), \"N/A - I never received my previous card. (Proceed to Item Numbers 6.a. - 6.i.)\" (use value: na_never_received)] | Official reference text: Item Number 4.  Has your name legally changed since the issuance of your Permanent Resident Card?  Select the appropriate box.\n\nIf your name has changed since the issuance of your Permanent Resident Card, select “Yes” and proceed to Item Numbers 5.a. - 5.c.  If your name was legally changed to another name, you must submit appropriate legal documents that reflect the name change (for example a registered copy of your marriage certificate, divorce decree, adoption decree, or other court- issued document showing your name was legally changed).  Legal name change documents submitted as evidence of a name change must have been registered with the proper civil authority.\n\nIf your name has not changed since the issuance of your Permanent Resident Card or if you never previously received your Permanent Resident Card, select “No” and proceed to Item Numbers 6.a. - 6.f. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "name_changed",
+      "value": "no"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "name_changed"
+      ],
+      "message": "Fields updated successfully. Stored value: name_changed = 'no'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "name_changed": "no"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 7,
+   "field_id": "mail_in_care_of",
+   "model_heard": "Yes, that's correct.No one else needs to be listed for my mail.",
+   "model_said": "What is the In Care Of name for your mailing address?I have left the In Care Of name blank. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "name_changed",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "name_changed",
+      "next_field_hint": "Next field to fill is #7: 'Mailing Address - In Care Of Name'",
+      "message": "Field 'name_changed' confirmed.",
+      "next_field_guidance": "ID: mail_in_care_of | Spoken: in care of name | Type: text | Instructions: Enter name of person or organization who receives your mail | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "",
+      "field_id": "mail_in_care_of"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_in_care_of"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_in_care_of = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_in_care_of": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 8,
+   "field_id": "mail_street",
+   "model_heard": "Yes, that's correct.My street address is 2140 Elmwood Drive.",
+   "model_said": "What is the street number and name for your mailing address?The stored address is two one four zero Elmwood Drive. Is that correct?",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "mail_in_care_of"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_in_care_of",
+      "next_field_hint": "Next field to fill is #8: 'Mailing Address - Street Number and Name'",
+      "message": "Field 'mail_in_care_of' confirmed.",
+      "next_field_guidance": "ID: mail_street | Spoken: street address | Type: text | Required: true | Instructions: This is where you want to receive written correspondence about your application. USCIS will not mail a Permanent Resident Card to a foreign address, only to a valid U.S. address. If you are an alien commuter who still lives in a foreign contiguous territory, you may give a foreign mailing address. | Official reference text: Item Numbers 6.a. - 6.i. Mailing Address.  Provide the address where you would like to receive written correspondence regarding your application.\n\nNOTE:  USCIS will not mail a Permanent Resident Card to a foreign mailing address, only to a valid U.S. mailing address. If you are going to travel abroad and your Permanent Resident Card is about to expire, USCIS recommends you apply for and receive your new Permanent Resident Card prior to departing the United States.\n\nNOTE FOR ALIEN COMMUTERS: If you are currently an alien commuter who continues to reside in a foreign contiguous territory, you may provide a foreign mailing address. If you are an alien commuter who will take up actual residence in the United States, provide your U.S. mailing address. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "mail_street",
+      "value": "2140 Elmwood Drive"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_street"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_street = '2140 Elmwood Drive'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_street": "2140 Elmwood Drive"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 9,
+   "field_id": "mail_unit_type",
+   "model_heard": "Yes, that's correct.I do not have an apartment, suite, or floor.",
+   "model_said": "What is the unit type for your mailing address? Please choose from Apt., Ste., or Flr.I have left the",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_street",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_street",
+      "next_field_hint": "Next field to fill is #9: 'Mailing Address - Apt., Ste., or Flr.'",
+      "message": "Field 'mail_street' confirmed.",
+      "next_field_guidance": "ID: mail_unit_type | Spoken: unit type | Type: radio | Instructions: unit type of mailing address, if applicable | Options (3 -- read ALL 3 aloud when asking; the user cannot see them): [\"Apt.\" (use value: apt), \"Ste.\" (use value: ste), \"Flr.\" (use value: flr)] | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "mail_unit_type",
+      "value": ""
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_unit_type"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_unit_type = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_unit_type": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 10,
+   "field_id": "mail_unit_number",
+   "model_heard": "Yes, that's correct.There is no unit number.",
+   "model_said": "What is the unit I have left the",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "mail_unit_type"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_unit_type",
+      "next_field_hint": "Next field to fill is #10: 'Mailing Address - Apartment, Suite, or Floor Number'",
+      "message": "Field 'mail_unit_type' confirmed.",
+      "next_field_guidance": "ID: mail_unit_number | Spoken: unit number | Type: text | Instructions: unit number, if applicable | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "field_id": "mail_unit_number",
+      "value": ""
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_unit_number"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_unit_number = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_unit_number": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 11,
+   "field_id": "mail_city",
+   "model_heard": "Yes, that's correct.The city is Portland.",
+   "model_said": "What is the city or The stored city",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_unit_number",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_unit_number",
+      "next_field_hint": "Next field to fill is #11: 'Mailing Address - City or Town'",
+      "message": "Field 'mail_unit_number' confirmed.",
+      "next_field_guidance": "ID: mail_city | Spoken: city | Type: text | Required: true | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Portland",
+      "field_id": "mail_city"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_city"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_city = 'Portland'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_city": "Portland"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 12,
+   "field_id": "mail_state",
+   "model_heard": "Yes, that's correct.The state is Oregon.",
+   "model_said": "What is the state The stored state",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_city",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_city",
+      "next_field_hint": "Next field to fill is #12: 'Mailing Address - State'",
+      "message": "Field 'mail_city' confirmed.",
+      "next_field_guidance": "ID: mail_state | Spoken: state of mailing address | Type: select | Instructions: Part 1. Information About You. Mailing Address. 6. E. Select State from List of States. | Options (62 -- standard list; ask directly and offer to read all 62 aloud): [\"Armed Forces Americas (AA)\" (use value: AA), \"Armed Forces Europe (AE)\" (use value: AE), \"Alaska (AK)\" (use value: AK), \"Alabama (AL)\" (use value: AL), \"Armed Forces Pacific (AP)\" (use value: AP), \"Arkansas (AR)\" (use value: AR), \"American Samoa (AS)\" (use value: AS), \"Arizona (AZ)\" (use value: AZ), \"California (CA)\" (use value: CA), \"Colorado (CO)\" (use value: CO), \"Connecticut (CT)\" (use value: CT), \"District of Columbia (DC)\" (use value: DC), \"Delaware (DE)\" (use value: DE), \"Florida (FL)\" (use value: FL), \"Federated States of Micronesia (FM)\" (use value: FM), \"Georgia (GA)\" (use value: GA), \"Guam (GU)\" (use value: GU), \"Hawaii (HI)\" (use value: HI), \"Iowa (IA)\" (use value: IA), \"Idaho (ID)\" (use value: ID), \"Illinois (IL)\" (use value: IL), \"Indiana (IN)\" (use value: IN), \"Kansas (KS)\" (use value: KS), \"Kentucky (KY)\" (use value: KY), \"Louisiana (LA)\" (use value: LA), \"Massachusetts (MA)\" (use value: MA), \"Maryland (MD)\" (use value: MD), \"Maine (ME)\" (use value: ME), \"Marshall Islands (MH)\" (use value: MH), \"Michigan (MI)\" (use value: MI), \"Minnesota (MN)\" (use value: MN), \"Missouri (MO)\" (use value: MO), \"Northern Mariana Islands (MP)\" (use value: MP), \"Mississippi (MS)\" (use value: MS), \"Montana (MT)\" (use value: MT), \"North Carolina (NC)\" (use value: NC), \"North Dakota (ND)\" (use value: ND), \"Nebraska (NE)\" (use value: NE), \"New Hampshire (NH)\" (use value: NH), \"New Jersey (NJ)\" (use value: NJ), \"New Mexico (NM)\" (use value: NM), \"Nevada (NV)\" (use value: NV), \"New York (NY)\" (use value: NY), \"Ohio (OH)\" (use value: OH), \"Oklahoma (OK)\" (use value: OK), \"Oregon (OR)\" (use value: OR), \"Pennsylvania (PA)\" (use value: PA), \"Puerto Rico (PR)\" (use value: PR), \"Palau (PW)\" (use value: PW), \"Rhode Island (RI)\" (use value: RI), \"South Carolina (SC)\" (use value: SC), \"South Dakota (SD)\" (use value: SD), \"Tennessee (TN)\" (use value: TN), \"Texas (TX)\" (use value: TX), \"Utah (UT)\" (use value: UT), \"Virginia (VA)\" (use value: VA), \"U.S. Virgin Islands (VI)\" (use value: VI), \"Vermont (VT)\" (use value: VT), \"Washington (WA)\" (use value: WA), \"Wisconsin (WI)\" (use value: WI), \"West Virginia (WV)\" (use value: WV), \"Wyoming (WY)\" (use value: WY)] | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "OR",
+      "field_id": "mail_state"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_state"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_state = 'OR'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_state": "OR"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 13,
+   "field_id": "mail_zip",
+   "model_heard": "Yes, that's correct.The ZIP code is 97203.",
+   "model_said": "What is the ZIP code The stored ZIP",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_state",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_state",
+      "next_field_hint": "Next field to fill is #13: 'Mailing Address - ZIP Code'",
+      "message": "Field 'mail_state' confirmed.",
+      "next_field_guidance": "ID: mail_zip | Spoken: zip code | Type: text | Required: true | Instructions: Part 1. Information About You. Mailing Address. 6. F. Enter ZIP Code. | Format: 5 digits, or 5 digits plus 4 | pattern: ^[0-9]{5}$ | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "97203",
+      "field_id": "mail_zip"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_zip"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_zip = '97203'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_zip": "97203"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 14,
+   "field_id": "mail_province",
+   "model_heard": "Yes, that's correct.There is no province, that's not applicable.",
+   "model_said": "What is the province I have left the",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_zip",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_zip",
+      "next_field_hint": "Next field to fill is #14: 'Mailing Address - Province'",
+      "message": "Field 'mail_zip' confirmed.",
+      "next_field_guidance": "ID: mail_province | Spoken: province | Type: text | Instructions: Enter province only if applicable, otherwise N/A | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "",
+      "field_id": "mail_province"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_province"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_province = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_province": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 15,
+   "field_id": "mail_postal_code",
+   "model_heard": "Yes, that's correct.There is no postal code, that's not applicable.",
+   "model_said": "What is the postal code I have left the",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_province",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_province",
+      "next_field_hint": "Next field to fill is #15: 'Mailing Address - Postal Code'",
+      "message": "Field 'mail_province' confirmed.",
+      "next_field_guidance": "ID: mail_postal_code | Spoken: postal code | Type: text | Instructions: Enter postal code only if applicable, otherwise enter N/A | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "",
+      "field_id": "mail_postal_code"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_postal_code"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_postal_code = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_postal_code": ""
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 16,
+   "field_id": "mail_country",
+   "model_heard": "Yes, that's correct.The country is the United States.",
+   "model_said": "What is the country The stored country is the United",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_postal_code",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_postal_code",
+      "next_field_hint": "Next field to fill is #16: 'Mailing Address - Country'",
+      "message": "Field 'mail_postal_code' confirmed.",
+      "next_field_guidance": "ID: mail_country | Spoken: country of mailing address | Type: text | Required: true | Instructions: This is part of the mailing address, which is the address where you would like to receive written correspondence about your application. Note that a new Permanent Resident Card is only mailed to a United States address, not a foreign one. If you are an alien commuter who still lives in a neighboring foreign country, you may give a foreign country here. | Official reference text: ## Item Numbers 6.a. - 6.i. Mailing Address\n\nItem Numbers 6.a. - 6.i. Mailing Address.  Provide the address where you would like to receive written correspondence regarding your application.\n\nNOTE:  USCIS will not mail a Permanent Resident Card to a foreign mailing address, only to a valid U.S. mailing address. If you are going to travel abroad and your Permanent Resident Card is about to expire, USCIS recommends you apply for and receive your new Permanent Resident Card prior to departing the United States.\n\nNOTE FOR ALIEN COMMUTERS: If you are currently an alien commuter who continues to reside in a foreign contiguous territory, you may provide a foreign mailing address. If you are an alien commuter who will take up actual residence in the United States, provide your U.S. mailing address. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "United States",
+      "field_id": "mail_country"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "mail_country"
+      ],
+      "message": "Fields updated successfully. Stored value: mail_country = 'United States'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "mail_country": "United States"
+      }
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 17,
+   "field_id": "phys_street",
+   "model_heard": "Yes, that's correct.My physical address is the same, 2140 Elmwood Drive.Yes, that's correct.",
+   "model_said": "What is your I have left the I apologize, but I must have the physical street address even if it is the same as your mailing address.",
+   "tool_io": [
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "mail_country",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "mail_country",
+      "next_field_hint": "Next field to fill is #17: 'Physical Address - Street Number and Name (provide only if different than mailing address)'",
+      "message": "Field 'mail_country' confirmed.",
+      "next_field_guidance": "ID: phys_street | Spoken: physical street address | Type: text | Required: true | Instructions: Give your physical address only if it is different from your mailing address. If you are currently an alien commuter, give your foreign physical residence address. | Official reference text: Item Numbers 7.a. - 7.h.  Physical Address.  Provide your physical address if it is different from your mailing address.\n\nNOTE FOR ALIEN COMMUTERS:  If you currently are an alien commuter, provide your foreign physical residence address. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    },
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "",
+      "field_id": "phys_street"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "phys_street"
+      ],
+      "message": "Fields updated successfully. Stored value: phys_street = ''. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "phys_street": ""
+      }
+     }
+    },
+    {
+     "tool": "confirm_field",
+     "args": {
+      "confirmation_method": "verbal",
+      "field_id": "phys_street"
+     },
+     "response": {
+      "success": false,
+      "field_confirmed": null,
+      "next_field_hint": null,
+      "status": "error",
+      "retryable": false,
+      "error": "Field 'phys_street' has no value yet, so it cannot be confirmed. Do NOT call confirm_field for it again -- that will keep failing. Ask the user for the value and call update_form_fields to fill it; only THEN confirm. (Only if THIS field is OPTIONAL and the user has none may you fill it with an empty value via update_form_fields; for a REQUIRED field keep asking for a real value -- an empty value will be rejected. Never retry the bare confirm either way.)",
+      "message": "Field 'phys_street' has no value yet, so it cannot be confirmed. Do NOT call confirm_field for it again -- that will keep failing. Ask the user for the value and call update_form_fields to fill it; only THEN confirm. (Only if THIS field is OPTIONAL and the user has none may you fill it with an empty value via update_form_fields; for a REQUIRED field keep asking for a real value -- an empty value will be rejected. Never retry the bare confirm either way.)"
+     }
+    }
+   ],
+   "tools_reliable": [
+    "confirm_field",
+    "update_form_fields",
+    "confirm_field"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 18,
+   "field_id": "phys_unit_number",
+   "model_heard": "Yes, that's correct.There is no unit number.Yes, that's correct.",
+   "model_said": "Could you please provide your physical street address?The stored physical What is the physical unit number?",
+   "tool_io": [
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "2140 Elmwood Drive",
+      "field_id": "phys_street"
+     },
+     "response": {
+      "success": true,
+      "applied_fields": [
+       "phys_street"
+      ],
+      "message": "Fields updated successfully. Stored value: phys_street = '2140 Elmwood Drive'. Read THIS stored value back to the user for confirmation.",
+      "stored_values": {
+       "phys_street": "2140 Elmwood Drive"
+      }
+     }
+    },
+    {
+     "tool": "confirm_field",
+     "args": {
+      "field_id": "phys_street",
+      "confirmation_method": "verbal"
+     },
+     "response": {
+      "success": true,
+      "field_confirmed": "phys_street",
+      "next_field_hint": "Next field to fill is #18: 'Physical Address - Apartment, Suite, or Floor Number'",
+      "message": "Field 'phys_street' confirmed.",
+      "next_field_guidance": "ID: phys_unit_number | Spoken: physical unit number | Type: text | Instructions: Enter Apartment, Suite or Floor Number. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    }
+   ],
+   "tools_reliable": [
+    "update_form_fields",
+    "confirm_field"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "confirm_field"
+   ]
+  },
+  {
+   "q": 19,
+   "field_id": "phys_city",
+   "model_heard": "Yes, that's correct.The city is Portland.Yes, that's correct.",
+   "model_said": "Could you please provide the unit number for your physical address?What is the What is the physical city?",
+   "tool_io": [
+    {
+     "tool": "update_form_fields",
+     "args": {
+      "value": "Portland",
+      "field_id": "phys_city"
+     },
+     "response": {
+      "success": false,
+      "applied_fields": [],
+      "validation_errors": [],
+      "unknown_fields": [
+       "phys_city"
+      ],
+      "message": "ERRORS: phys_city: this field exists but is NOT the active field, so it cannot be filled right now. Do NOT retry update_form_fields with it -- that will keep failing. Call switch_to_field (with this field or the user's own words) to navigate to it first; once it is the active field, fill it."
+     }
+    },
+    {
+     "tool": "switch_to_field",
+     "args": {
+      "field": "phys_city"
+     },
+     "response": {
+      "success": true,
+      "message": "Now on field 'physical city'. It is currently unanswered -- ask the user for it.",
+      "field_guidance": "ID: phys_city | Spoken: physical city | Type: text | Required: true | Instructions: Part 1. Information About You. Physical Address. 7. C. Enter City or Town. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+     }
+    }
+   ],
+   "tools_reliable": [
+    "update_form_fields",
+    "switch_to_field"
+   ],
+   "tools_legacy": [
+    "update_form_fields",
+    "switch_to_field"
+   ]
+  },
+  {
+   "q": 20,
+   "field_id": "phys_state",
+   "model_heard": "Yes, that's correct.The state is Oregon.Yes, that's correct.",
+   "model_said": "Could you please provide the physical city?I understand, but first, what isWhat is the physical city?",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  },
+  {
+   "q": 21,
+   "field_id": "phys_zip",
+   "model_heard": "Yes, that's correct.The ZIP code is 97203.Yes, that's correct.",
+   "model_said": "Could you please provide the physical city?I understand, but first, what isWhat is the physical city?",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  },
+  {
+   "q": 22,
+   "field_id": "phys_province",
+   "model_heard": "Yes, that's correct.There is no province, that's not applicable.Yes, that's correct.",
+   "model_said": "Could you please provide the physical city?I understand, but first, what isWhat is the physical city?",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  },
+  {
+   "q": 23,
+   "field_id": "phys_postal_code",
+   "model_heard": "Yes, that's correct.There is no postal code, that's not applicable.Yes, that's correct.",
+   "model_said": "What is the physical city?I understand, but first, what is the physical city?What is the physical city?",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  },
+  {
+   "q": 24,
+   "field_id": "phys_country",
+   "model_heard": "The country is the United States.Yes, that's correct.",
+   "model_said": "I understand, but I need the city or town for your physical address.I still need the city or town for your physical address.",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  },
+  {
+   "q": 25,
+   "field_id": "phys_unit_type",
+   "model_heard": "Yes, that's correct.I do not have an apartment, suite, or floor.Yes, that's correct.",
+   "model_said": "To continue, I still need the city or town for your physical address.Thank you, but I still need the city or town for your physical address.I understand, but I still need the city or town for your physical address to continue.",
+   "tool_io": [],
+   "tools_reliable": [],
+   "tools_legacy": []
+  }
+ ],
+ "out_of_window_tool_io": []
+}

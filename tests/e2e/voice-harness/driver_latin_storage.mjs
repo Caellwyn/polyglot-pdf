@@ -33,6 +33,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { agreeAndWaitForHook } from './driver_common.mjs';
+
 const require_ = createRequire(import.meta.url);
 const playwrightPath = process.env.VFF_PLAYWRIGHT_DIR
   ? join(process.env.VFF_PLAYWRIGHT_DIR, 'playwright')
@@ -73,27 +75,6 @@ async function clickButton(page, re, label) {
   log(`clicked ${label}`);
 }
 
-/**
- * Click a button only if it is already on screen (bd polyglot-pdf-s1iex.7).
- *
- * Unlike clickButton this does NOT wait or fail when the control is absent --
- * the disclaimer modal's presence at this point depends on the intro-clip
- * flag, and the driver must work under both states.
- */
-async function clickIfPresent(page, pattern, label) {
-  const button = page.getByRole('button', { name: pattern }).first();
-  try {
-    if (await button.isVisible({ timeout: 2000 })) {
-      await button.click();
-      log(`clicked ${label}`);
-      return true;
-    }
-  } catch {
-    // Not present yet -- the caller's wait handles the other ordering.
-  }
-  return false;
-}
-
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -118,19 +99,9 @@ async function clickIfPresent(page, pattern, label) {
   await clickButton(page, /^English/, 'English');
   await clickButton(page, /W-7/, 'W-7 form');
 
-  // Agree FIRST if the disclaimer modal is already up (bd polyglot-pdf-s1iex.7).
-  // ORDER IS FLAG-DEPENDENT, so this handles BOTH states rather than swapping:
-  //  - intro clip OFF (today): the app connects before Agree, so
-  //    __VFF_TEST_INJECT already exists and this click is simply early --
-  //    harmless, the modal is up either way.
-  //  - intro clip ON: NO session exists until Agree, so the hook does not
-  //    exist yet and waiting for it first would hang until timeout.
-  // Clicking when present, then waiting, is correct under both.
-  await clickIfPresent(page, /I Agree/, 'disclaimer I Agree (pre-hook)');
-
-  await page.waitForFunction(
-    () => typeof window.__VFF_TEST_INJECT === 'object' && window.__VFF_TEST_INJECT !== null,
-    undefined, { timeout: 40000 });
+  // Agree + inject hook, in whichever order the intro-clip flag presents
+  // them (driver_common.mjs agreeAndWaitForHook; bd polyglot-pdf-s1iex.7).
+  await agreeAndWaitForHook(page, /I Agree/, log);
   await page.evaluate(harnessSource);
   await page.waitForFunction(() => typeof window.__VFF_HARNESS === 'object');
   log('harness installed; preloading fixtures');
@@ -142,10 +113,6 @@ async function clickIfPresent(page, pattern, label) {
     }
     window.__vffYes = await H.loadFixture('/test-fixtures/confirm_yes.wav');
   }, FIXTURES);
-
-  // (Agree was clicked above by clickIfPresent -- clicking again would
-  // fail here, since clickButton waits 20s and throws when the modal is
-  // already dismissed. bd polyglot-pdf-s1iex.7)
 
   const PACING = process.env.VFF_PACING || 'polite';
   log(`lead-in + probe (pacing: ${PACING})`);

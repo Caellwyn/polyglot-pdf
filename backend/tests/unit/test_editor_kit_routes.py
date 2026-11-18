@@ -3156,7 +3156,7 @@ _DERIVABLE_DRAFT = {
 
 
 def _real_pdf_bytes() -> bytes:
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open()
     doc.new_page(width=612, height=792)
     data = doc.tobytes()

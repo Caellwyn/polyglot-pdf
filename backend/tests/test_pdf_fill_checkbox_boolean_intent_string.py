@@ -23,7 +23,7 @@ import asyncio
 import json
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import pytest
 
 from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf

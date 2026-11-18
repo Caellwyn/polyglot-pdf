@@ -1,0 +1,39 @@
+{
+  "bead": "polyglot-pdf-jnjj.5 / polyglot-pdf-u0kcc",
+  "stamp": "20261117T134008",
+  "today_for_date_checks": "2026-06-17",
+  "models": {
+    "flash_lite": "gemini-2.5-flash-lite"
+  },
+  "lite_prompt": "prod",
+  "repeats": 2,
+  "vertex_location": "global",
+  "corpus": {
+    "total": 80,
+    "contradiction": 34,
+    "clean": 46,
+    "provenance": "SYNTHETIC injection over real I-90 field structure"
+  },
+  "summary": {
+    "flash_lite": {
+      "recall": 0.7941176470588235,
+      "precision": 0.9642857142857143,
+      "tp": 54,
+      "fn": 14,
+      "fp": 2,
+      "tn": 90,
+      "strict_recall": 0.5882352941176471,
+      "errors": 0
+    },
+    "no_check": {
+      "recall": 0.0,
+      "precision": null,
+      "tp": 0,
+      "fn": 68,
+      "fp": 0,
+      "tn": 92,
+      "strict_recall": 0.0,
+      "errors": 0
+    }
+  }
+}

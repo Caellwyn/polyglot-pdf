@@ -387,7 +387,7 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     failing (the same degrade-quietly convention the other real-kit guards use);
     fields whose widget name does not resolve are also skipped -- an unclaimed
     widget is a different concern (the coverage ledger's)."""
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     kits_root = _REPO / "form-kits"
     if not kits_root.is_dir():
         pytest.skip("form-kits/ not present in this checkout")
@@ -1106,7 +1106,7 @@ def test_acroform_dumper_type_names_cover_every_widget_type():
     sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
     try:
         import acroform_dump
-        import fitz
+        import pymupdf as fitz
     except ImportError:
         pytest.skip("acroform_dump / fitz not importable")
     # Buttons specifically (the f31h regression) map to the literal "button".
@@ -1267,7 +1267,7 @@ def test_the_guard_reads_the_same_on_state_key_the_dump_writes():
     committed kits (0 names cover >1 widget), so no real-kit assertion can
     catch it -- this pins the key agreement directly.
     """
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     kit = _REPO / "form-kits" / "i-90" / "form.pdf"
     if not kit.exists():
         pytest.skip("i-90 form.pdf not present in this checkout")
@@ -1638,7 +1638,7 @@ def test_the_completion_position_fix_is_idempotent(tmp_path):
 
 def _family_pdf(tmp_path, leaf="P2_checkbox3", n=3):
     """A real 1-page PDF carrying ONE minable checkbox family."""
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
     for i in range(n):
@@ -1743,7 +1743,7 @@ def test_stamped_provenance_discriminates_all_three_wirings(tmp_path, monkeypatc
     (b) a GHOST field claiming a widget that does not exist, so the honest
     unresolved count is 1, not 0.
     """
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
     for i in range(3):                       # the minable family
@@ -2052,7 +2052,7 @@ def test_the_real_i90_pdf_yields_its_exact_dropdown_option_counts(tmp_path):
     choice-parsing loop for THIS PDF's naming convention would otherwise be
     caught by no test at all -- only by someone re-running the check by hand.
     """
-    pytest.importorskip("fitz")
+    pytest.importorskip("pymupdf")
     pdf = _REPO / "form-kits" / "i-90" / "form.pdf"
     if not pdf.is_file():
         pytest.skip("form-kits/i-90/form.pdf not present in this checkout")
@@ -2217,7 +2217,7 @@ def test_a_REAL_pdf_dropdown_gets_speakable_labels_end_to_end(tmp_path):
     the genuine acroform_dump -> _backfill_dropdown_options path, same
     importorskip convention as the sibling real-PDF tests here.
     """
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
     w = fitz.Widget()
@@ -2263,7 +2263,7 @@ def test_the_unspeakable_report_ROUND_TRIPS_to_the_saved_schema(tmp_path, monkey
     exercised this read path with an always-empty list -- safe, but never a
     genuine round-trip of a POPULATED report.
     """
-    fitz = pytest.importorskip("fitz")
+    fitz = pytest.importorskip("pymupdf")
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
     w = fitz.Widget()

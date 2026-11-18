@@ -642,7 +642,7 @@ def _minimal_pdf_bytes() -> bytes:
     """A real, minimal, one-page PDF -- valid enough for fitz.open to parse
     past the structural-check mock into the (real) read-back step later in
     the route."""
-    import fitz as _fitz
+    import pymupdf as _fitz
 
     doc = _fitz.open()
     try:
