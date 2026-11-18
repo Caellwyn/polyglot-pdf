@@ -2,31 +2,17 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-l2kcp: the derived compression
-figures RE-EXECUTED against today's shipped config -- the spell-back cutover,
-bd polyglot-pdf-apkdl, made SPELLBACK_TOOL_ENABLED default true, so a session
-now ships 7 tool declarations, not 6: floor 5499 -> window 6098 -> trigger
-7598, still above the 5000 API bound so the clamp does not fire. These match
-`derive_compression_window`'s own docstring figures (measured 2026-08-25,
-bd polyglot-pdf-apkdl's cutover) exactly -- expected, since re-running the
-same function against an unchanged SI and tool list reproduces the same
-numbers; this stamp records that the re-execution was actually done today,
-not merely copied forward. Three sites across this repo still asserted the
-pre-cutover count; this doc was one of them. As with the prior stamp, these
-figures are a point-in-time reading -- RE-EXECUTE `derive_compression_window`
-rather than trusting any written-down number, since it moves with the SI
-text and the tool list. Also fixed (bd polyglot-pdf-eev3n): the
-`injection_budget_tokens` consumption citations, which had drifted onto
-unrelated code, re-anchored to symbol names.)
-See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
+*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
 > `CONTEXT_COMPRESSION_ENABLED` defaults TRUE; the continuous whole-form session
 > is bounded by the sliding window on every production connect. The default
-> `gemini-3.8-live` ACCEPTS the compression config (Vertex connect with the
-> production config, 2026-10-21) but its eviction behavior has NOT been measured.
-> Sliding-window eviction is real and reliable on the two models it was measured
-> on -- `gemini-3.1-flash-live-preview`
+> `gemini-3.8-live` ACCEPTS the compression config, and its sliding-window
+> eviction FIRES at the derived window: 12-16 evictions per full 22-field W-7 on
+> 3.8 vs 6 on 2.5 at the same script, because 3.8's longer speech fills the window
+> faster (n=3 each, `scripts/spikes/3p8_cost_bench_findings.md`, bd
+> `polyglot-pdf-e72on`). Earlier measurements on two other models --
+> `gemini-3.1-flash-live-preview`
 > (3/3 twenty-turn runs, 3-4 evictions each, 54-74% below the unbounded baseline
 > at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) and
 > `gemini-2.5-flash-native-audio-preview-12-2025` (2-3 evictions each; ON

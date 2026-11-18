@@ -52,7 +52,7 @@ Source: `scripts/spikes/data/r3ham/spelling/readbacks_20261117.json`. It has one
 | Stored-value errors, every 3.8 spelled fill (bd r3ham.15) | 8 / 63 | 13% | 6.6-23.1% |
 
 - **The 2.5 baseline** for the sticky defect is 9.7%, from the bd 0rpu control arm with corrected pairing (`0rpu_desync_attribution_findings.md`).
-- Every 3.8 interval above overlaps it. At this n, the evidence is that 3.8 has NOT removed the defect, not that it is worse.
+- Every 3.8 sticky-read-back interval above overlaps it. At this n, the evidence is that 3.8 has NOT removed the defect, not that it is worse.
 - The decision rule needs 0 errors, and the 0.4 arm already has 2.
 
 - **Scoreable** means the read-back audio carried the whole spelling, and the class is OK or STICKY. Read-backs the scripted "yes" cut off are excluded; see "Instrument limits" below.
