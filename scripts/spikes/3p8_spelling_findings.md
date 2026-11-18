@@ -39,6 +39,22 @@ Source: `scripts/spikes/data/r3ham/spelling/readbacks_20261117.json`. It has one
 | Spell-aloud arm, TTS off | **0.4** | 4 (1 stalled) | **15** | **2** (13%) | 0 | 2 of 18 (JOSE -> JOSHUA x2) |
 | Spell-aloud arm, TTS off | 1.0 | 6 (1 stalled) | 21 | 0 | 0 | 5 of 33 (JOSE -> JOSHUA x2, JOHN -> JOHNSN, JOHNSON -> JOHNSN, MARIA -> N/A) |
 
+**Rates with Wilson 95% intervals:**
+
+| Rate | k / n | Rate | 95% interval |
+|---|---|---|---|
+| Sticky read-back, 3.8 at 0.4 | 2 / 15 | 13% | 3.7-37.9% |
+| Sticky read-back, 3.8 at 1.0 | 0 / 21 | 0% | 0-15.5% |
+| Sticky read-back, both 3.8 arms pooled | 2 / 36 | 5.6% | 1.5-18.1% |
+| Read-back letter errors (added or dropped), all 3.8 arms | 0 / 36 | 0% | 0-9.6% |
+| Stored-value errors, spell-aloud arm at 0.4 | 2 / 18 | 11% | 3.1-32.8% |
+| Stored-value errors, spell-aloud arm at 1.0 | 5 / 33 | 15% | 6.7-30.9% |
+| Stored-value errors, every 3.8 spelled fill (bd r3ham.15) | 8 / 63 | 13% | 6.6-23.1% |
+
+- **The 2.5 baseline** for the sticky defect is 9.7%, from the bd 0rpu control arm with corrected pairing (`0rpu_desync_attribution_findings.md`).
+- Every 3.8 interval above overlaps it. At this n, the evidence is that 3.8 has NOT removed the defect, not that it is worse.
+- The decision rule needs 0 errors, and the 0.4 arm already has 2.
+
 - **Scoreable** means the read-back audio carried the whole spelling, and the class is OK or STICKY. Read-backs the scripted "yes" cut off are excluded; see "Instrument limits" below.
 - **Sticky** means the audio spells an earlier name of the session while the text track is correct. This is the same signature as 2.5, and both cases spoke JOHN for JOHNSON.
 - **No added or dropped letters were found in the read-back audio.** Every OK read-back spelled what was stored. The letter errors developers report on 3.8 showed up in the stored values instead: `JOHNSN` for JOHN and for JOHNSON.

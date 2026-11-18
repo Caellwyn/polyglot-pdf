@@ -51,6 +51,10 @@ All runs were on Vertex, serial, at production config (`--compression --derive-c
   - `docs/standards/logging-and-cost.md`: invariant rewritten, new stamp. Its stamp stack, now 7, is tracked in bd `polyglot-pdf-1igex`.
   - `docs/standards/si-reduction.md`: the cost-rationale pointer.
   - `CLAUDE.md`: the doc-map cost line.
+- **Also bumped:**
+  - `docs/components/voice-ai.md`: input transcription is measured firing on 3.8.
+  - `docs/standards/schema-key-visibility.md`: the text-in share now gives the 3.8 figure.
+- **Stale comments corrected:** `backend/services/callback_handler.py` claimed input transcription never fires on Vertex; it fires on every 3.8 PTT turn (r3ham.4).
 - **Edited to drop the stale "audio-in now leads" restatement:** `docs/research/secretary-agent-research-plan.md` and `docs/sprint_20_sol-intro-tts_plan.md`, which are plan records.
 - **Other STALE flags** (admin-service.md and others) track files this branch did not touch, and were already stale.
 
@@ -67,3 +71,6 @@ All runs were on Vertex, serial, at production config (`--compression --derive-c
 - `tests/e2e/voice-harness/RUNBOOK.md`, `driver_w7_desync.mjs`: spelling-run driver.
 - `docs/standards/logging-and-cost.md`, `docs/standards/si-reduction.md`, `CLAUDE.md`, `docs/research/secretary-agent-research-plan.md`, `docs/sprint_20_sol-intro-tts_plan.md`.
 - `backend/tests/unit/test_52qm4_secretary_visibility_boundary.py`: docstring only.
+- `backend/services/callback_handler.py`: two comments only.
+- `docs/components/voice-ai.md`, `docs/standards/schema-key-visibility.md`.
+- `scripts/spikes/3p8_spelling_findings.md`: Wilson 95% intervals added.

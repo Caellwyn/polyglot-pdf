@@ -19,15 +19,19 @@ The harness `--debug` transcripts (`*.debug.json`) and the run logs stay local a
 | Item | Verdict vs 2.5 | One line |
 |---|---|---|
 | PTT barge-in during a pending BLOCKING call | **changed: new 3.8 failure** | No `tool_call_cancellation` arrives, the barge is lost, and the session stays dead for the NEXT turn too (3 of 3, twice). Filed as bd **polyglot-pdf-dakii** (P1). |
-| Temperature 0.4 vs 1.0 | **unchanged** | Cost, fill and latency are the same at both. Keep 0.4: its reasons (clearer speech, judged by ear, and spell-back validated at 0.4) were not re-tested. |
+| Temperature 0.4 vs 1.0 | **unchanged** | Cost, fill, latency, tool reliability and silent-turn rate are the same within n. Keep 0.4: its reasons (clearer speech, judged by ear, and spell-back validated at 0.4) were not re-tested. |
 | Language lock (es / zh / hi / ru / ar) | **unchanged** | All 5 languages were spoken in the target script on 14 of 14 questions. Fill was 13-14 of 14. |
 | `speech_config.language_code` on vs off (Spanish) | **unchanged; no effect on clean audio** | Accepted on 3.8 (no 1007). Language lock, fill and cost were identical with it off. Not shown removable (see details). |
 | 1011 tool-shape probe | **unchanged** | All 36 turns clean: 4 cells x 3 reps x 3 turns. |
 | `confirm_field` sequencing probe | **unchanged** | `confirm_field` fired after the "yes" in 3 of 3 runs, never early. |
 | Idle gap (frame-free session gap) | **unchanged** | All 5 scored sessions answered the turn after a gap (15 s, 60 s, 90 s, and 180 s twice), with no close, as on 2.5. |
-| Input transcription (bd fa4x) | **unchanged** | Fires on every PTT turn: 6 of 6 in the cost probe, and on every barge-in trial. |
+| Input transcription (bd fa4x) | **unchanged; a code comment was wrong** | Fires on every PTT turn: 6 of 6 in the cost probe, and on every barge-in trial. The `callback_handler.py` comments claiming it never fires on Vertex were false; corrected in this branch. |
 | Voice name (Algieba) | **unchanged** | Accepted on 3.8. A bogus name is rejected with 1007, as on 2.5. |
 | Session over 15 min, resumption off vs on (bd r3ham.11) | **inconclusive** | GoAway arrived at about 9.5-10 min, as on 2.5. Both resumption arms were confounded by the q17 desync (bd r3ham.10, now 4 of 5 I-90 runs). |
+
+**Bead-listed items not exercised:**
+- **The barge-in on `ask_secretary`.** Every declaration is BLOCKING on 3.8, and the wedge does not depend on which tool is pending, so bd dakii covers it.
+- **Duplicate-call dedupe (`_dedupe_responses_by_id`) and the spell-back cooldown (bd kvrfq).** These were not exercised: the barge never produced a second call (`duplicate_calls: 0` in all 6 trials), so there was nothing to dedupe.
 
 **No workaround was shown removable** by this batch. Every 2.5-era guard tested still holds or is harmless on 3.8, so no removal beads were filed.
 
@@ -67,7 +71,15 @@ W-7 happy path, n=2 at 1.0 against the n=3 Phase 3 group at 0.4 (`3p8_cost_bench
 | 1.0 | $0.899, $0.886 | 21, 21 of 22 | 1.20 s, 1.22 s |
 | 0.4 | $0.905 mean | 21, 21, 21 | 1.16 s pooled |
 
-The one miss is the same at both temperatures (`Ana` stored as `Anna`, bd r3ham.15). Nothing measurable depends on temperature.
+- **Fill:** the one miss is the same at both temperatures (`Ana` stored as `Anna`, bd r3ham.15). Tool reliability is 21 of 22 fields at both.
+- **Silent turns** are taken from the turn-audio audit in each `.meta.json`. Turns that are silent because they play the `name_spellback` clip are excluded (bd r3ham.8).
+  - At 0.4: 0 silent turns in 135.
+  - At 1.0: 1 in 92, a silent turn after `confirm_field`, the bd r3ham.13 shape.
+
+  At this n, that difference is noise.
+- **`LIVE_TEMPERATURE` is not recorded in the run artifacts.** The 1.0 arm is identified by the run timestamps in the batch order, not by a field in `.meta.json`.
+
+Nothing measurable depends on temperature.
 
 The 0.4 setting rests on speech clarity judged by ear and on the spell-back validation having been run at 0.4 (`backend/config.py`, bd 0rpu). This batch does not re-test either, so there is no case for changing it.
 
@@ -119,13 +131,16 @@ This matches 2.5. Like the 1011 probe it does not set BLOCKING. The harness runs
 
 - **2.5 record:** 6 of 6 survived at 30 s, 90 s and 180 s (`idle_gap_5j3im_findings.md`). This is unchanged.
 - **Probe bug, fixed in this branch.** The first attempt crashed because 3.8 answers the tone with a `get_form_status` call on turn 1, and the probe's tool stub was a sync function returning None, which the adapter cannot await. The stub is now async and returns a payload. 2.5 never called a tool in this probe.
-- **Three more arms were unscored** (`INCONCLUSIVE_TURN1`). In those, 3.8 gave no reply to the 1.2 s tone on turn 1, before any gap. That is about the stimulus (a tone, not speech), not the gap.
+- **Two more arms were unscored** (`INCONCLUSIVE_TURN1`: the 15 s arm in `idle_gap_3p8.json` and the 180 s arm in `idle_gap_3p8_b.json`). In those, 3.8 gave no reply to the 1.2 s tone on turn 1, before any gap. That is about the stimulus (a tone, not speech), not the gap.
 
 Data: `idle_gap_3p8.json`, `idle_gap_3p8_b.json`, `idle_gap_3p8_c.json`.
 
 ### Input transcription (bd fa4x), voice name
 
 - **Input transcription:** `input_transcription` events fire on every PTT turn on 3.8. That was 6 of 6 turns in `probe_input_transcription_cost.py` (see `3p8_cost_bench_findings.md`) and every trial of the barge-in probe. On 2.5 it fired at START=HIGH. Unchanged.
+  - The bead also asked whether the `backend/services/callback_handler.py` claim holds ("the native-audio model emits NO input_transcription on Vertex"). It does not: `on_user_activity` fires on every real turn on 3.8, alongside the PTT `send_activity_end` path. Both set the same deduplicated processing flag.
+  - Both comments are corrected in this branch, along with `docs/components/voice-ai.md`.
+  - Whether a late transcription could re-raise the thinking indicator after the reply starts was not measured (0 of 2 checkable trials); it is filed as bd polyglot-pdf-uyt4w.
 - **Voice name:** `backend/scripts/probe_voice_name.py` shows the configured `Algieba` opens a session on 3.8, and a nonsense name is rejected with 1007 "No matching speaker voice". Unchanged.
 
 ### Long session, resumption off vs on (bd r3ham.11)
