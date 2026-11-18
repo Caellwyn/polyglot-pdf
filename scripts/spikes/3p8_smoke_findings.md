@@ -12,7 +12,7 @@
 - `--arm dti --continuous --compression --derive-compression --text-ai --pro-pass`.
 - `LIVE_TEMPERATURE=0.4` and `SPELLBACK_TOOL_ENABLED=true`, the same as `deploy/channels/*.env`.
 - Push-to-talk activity brackets.
-- `--audit-transcripts --debug`. The debug artifacts contain transcripts, so they stay local and are not committed.
+- `--audit-transcripts --debug`. The five debug transcripts are committed next to the run data as `scripts/spikes/data/r3ham/smoke/*.synthetic-transcript.json`. Every answer in them comes from the harness's scripted fake applicant, and the maintainer decided synthetic-run transcripts may be kept (bd memory `synthetic-sim-run-artifacts-may-be-committed`). The harness still writes `*.debug.json` by default, which stays git-ignored; a run is committed only by deliberately copying it under the synthetic name. The 3-question pilots' transcripts are not included.
 
 **Model spend for this phase:** about $5.8 across six runs:
 - 3-question pilots;
@@ -59,7 +59,7 @@ For reference, the 2.5 I-90 v2 production-config runs on 2026-08-28 (bd 2nikx) s
 | Confirm before "yes" | NOT OBSERVED | -- |
 | Duplicate / missed tool calls | **3.8: none duplicated. 2.5: repeats on 5/22 questions** | From `per_question_tools`. 2.5 called `update_form_fields` or `confirm_field` twice on q6, q7, q14, q16 and q18, and all were harmless re-writes or re-confirms. On 3.8, the only missed call is the declined-field row below. |
 | Date format (MM/DD/YYYY) | **PASS** | All four W-7 dates were written as MM/DD/YYYY on both models, for example `03/14/1990`. |
-| Declined field ("I do not have a U.S. visa") | **CHANGED vs 2.5** | On 3.8 `us_visa_type_number_expiration` ended empty (`''`, scored `missing`), which is the run's miss. 2.5 wrote `N/A`. 3.8 did call `update_form_fields` + `confirm_field` on this question (q16), and neither turn has a measured first-audio latency. So 3.8 most likely wrote an empty value and moved on; the payload itself is in the uncommitted debug transcript, so this is unverified. It is unrelated to the q14 silent turn. n=1; filed as bd r3ham.12. |
+| Declined field ("I do not have a U.S. visa") | **CHANGED vs 2.5** | On 3.8 `us_visa_type_number_expiration` ended empty (`''`, scored `missing`), which is the run's miss. 2.5 wrote `N/A`. The committed transcript shows how: on q16, 3.8 sent `update_form_fields(us_visa_type_number_expiration, value="")`, and on q17 it confirmed that empty field. Neither turn has a measured first-audio latency. It is unrelated to the q14 silent turn. n=1; filed as bd r3ham.12. |
 | Language drift | NOT TESTED | English only in this phase; the Spanish slice moved to r3ham.4. |
 | Reconnect state restore | **DEGRADED** (I-90, n=1) | The fields already written were kept after the GoAway reconnect, but the resumed session behaved badly (see the GoAway row). Filed as r3ham.11. |
 | Full option recital | **WORKS** (39 s) | All 8 `reason` options were read verbatim. The length is a UX problem, not a model defect. |
