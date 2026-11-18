@@ -62,6 +62,7 @@ from backend.scripts.secretary_context import (  # noqa: E402
     CONTEXT_FORMATS,
     estimate_tokens,
 )
+from backend.scripts.lite_probe_textai import RecordingTextAI, new_record  # noqa: E402
 from backend.scripts.secretary_recall_corpus import (  # noqa: E402
     build_corpus,
     FIELD_VALUES,
@@ -144,13 +145,54 @@ def _client() -> genai.Client:
         return genai.Client(
             vertexai=True,
             project=project,
-            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            location=os.environ.get("VERTEX_LOCATION", "global"),
         )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
+
+
+# bd u0kcc: --prod-path drives the SHIPPED secretary call instead of this file's
+# SECRETARY_PROMPT copy (which predates the production kind-A/B/C rubric):
+# TextAIGemini.ask() with the production SECRETARY_SI + render_static_catalog
+# stable prefix + render_values_tail fresh tail and the production generate
+# config. Set in main(); None keeps the historical raw-call path.
+PROD_AI = None
+PROD_CONTEXT = None
+
+
+async def _ask_secretary_prod(query: str, max_retries: int = 5) -> dict:
+    """One shipped-path secretary call. The adapter fail-opens every failure to an
+    empty answer, so the outcome is read from the RecordingTextAI record: the RAW
+    model JSON (its own sourced_from, before the adapter's schema resolution), the
+    model-call latency, and the usage incl. thinking + cached tokens."""
+    attempt = 0
+    while True:
+        rec = new_record()
+        await PROD_AI.ask(query, PROD_CONTEXT)
+        meta = {"latency_s": rec["latency_s"], "usage": rec["usage"] or {},
+                "retries": attempt}
+        if rec["error"]:
+            attempt += 1
+            if attempt > max_retries:
+                return {"answer": "", "sourced_from": [], "_error": rec["error"],
+                        "_meta": meta}
+            await asyncio.sleep(min(2 ** attempt, 30))
+            continue
+        try:
+            v = json.loads(rec["raw"] or "")
+        except json.JSONDecodeError:
+            return {"answer": "", "sourced_from": [], "_parse": "json_error", "_meta": meta}
+        if not isinstance(v, dict):
+            return {"answer": "", "sourced_from": [], "_parse": "not_object", "_meta": meta}
+        sourced = v.get("sourced_from", [])
+        if not isinstance(sourced, list):
+            return {"answer": str(v.get("answer", "")), "sourced_from": [],
+                    "_parse": "bad_sourced_type", "_meta": meta}
+        return {"answer": str(v.get("answer", "")),
+                "sourced_from": [str(x) for x in sourced], "_meta": meta}
 
 
 async def _ask_secretary(client, context: str, query: str, max_retries: int = 5) -> dict:
@@ -162,6 +204,8 @@ async def _ask_secretary(client, context: str, query: str, max_retries: int = 5)
     49-case run (this is a RECALL probe, so retry wait is irrelevant to the score).
     A genuine non-transient error, or exhausted retries, returns the error marker.
     """
+    if PROD_AI is not None:
+        return await _ask_secretary_prod(query, max_retries=max_retries)
     prompt = SECRETARY_PROMPT.replace("{context}", context).replace("{query}", query)
     attempt = 0
     while True:
@@ -392,6 +436,10 @@ async def main() -> None:
                          "target-model number when it is healthy. A format COMPARISON "
                          "is relative, so hold the model CONSTANT across formats; the "
                          "model used is recorded in the artifact." % MODEL_SECRETARY)
+    ap.add_argument("--prod-path", action="store_true",
+                    help="bd u0kcc: call the SHIPPED TextAIGemini.ask() (production "
+                         "SECRETARY_SI + catalog/values-tail) instead of this file's "
+                         "SECRETARY_PROMPT; records latency + usage per call")
     args = ap.parse_args()
 
     MODEL_SECRETARY = args.model
@@ -454,6 +502,11 @@ async def main() -> None:
         return False
 
     client = None if args.dry_run else _client()
+    global PROD_AI, PROD_CONTEXT
+    if args.prod_path and not args.dry_run:
+        PROD_AI = RecordingTextAI(MODEL_SECRETARY)
+        PROD_CONTEXT = {"schema": schema, "field_values": FIELD_VALUES,
+                        "shown_map": SHOWN_MAP}
 
     rows = []
     errors = []  # (case_id, marker) for API/parse failures
@@ -520,7 +573,17 @@ async def main() -> None:
             s["hallucinated"] += 1 if judge.get("hallucinated") else 0
             s["over_inclusion"] += 1 if judge.get("over_inclusion") else 0
 
+        _meta = result.get("_meta") or {}
+        _usage = _meta.get("usage") or {}
         rows.append({
+            "model": MODEL_SECRETARY,
+            "latency_s": (round(_meta["latency_s"], 3)
+                          if _meta.get("latency_s") is not None else ""),
+            "retries": _meta.get("retries", ""),
+            "prompt_tok": _usage.get("prompt", ""),
+            "cached_tok": _usage.get("cached", ""),
+            "output_tok": _usage.get("output", ""),
+            "thoughts_tok": _usage.get("thoughts", ""),
             "case_id": case.case_id,
             "tier": case.tier,
             "query": case.query,
@@ -602,7 +665,8 @@ async def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     # Tag artifacts by format so a multi-format comparison (jnjj.37) does not collide.
-    base = "secretary_recall_%s_%s" % (args.format, stamp)
+    base = "secretary_recall_%s_%s" % (
+        ("prod_" + MODEL_SECRETARY) if args.prod_path else args.format, stamp)
     csv_path = os.path.join(OUT_DIR, base + ".csv")
     meta_path = os.path.join(OUT_DIR, base + ".meta.json")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -618,6 +682,8 @@ async def main() -> None:
             "probe": "secretary_recall (jnjj.26 harness; reused jnjj.37+)",
             "stamp": stamp,
             "secretary_model": MODEL_SECRETARY,
+            "prod_path": bool(args.prod_path),
+            "vertex_location": os.environ.get("VERTEX_LOCATION", "global"),
             "judge_model": None if args.no_judge else JUDGE_MODEL,
             "context_format": args.format,
             "context_tokens_est": ctx_tokens,

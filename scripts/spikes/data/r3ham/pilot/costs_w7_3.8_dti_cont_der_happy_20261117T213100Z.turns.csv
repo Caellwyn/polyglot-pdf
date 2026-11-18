@@ -1,0 +1,8 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,application_type,value,False,11621,11165,456,180,101,11902,0.011764,0.018812,1.156
+2,1,application_type,confirm,True,11621,0,0,0,0,0,0.0,0.018812,1.422
+3,2,reason,value,False,13837,13093,744,455,982,15274,0.025883,0.044695,
+4,2,reason,confirm,False,18267,15279,2988,176,23,18466,0.021491,0.066186,1.016
+5,3,name_1a_first,value,False,18785,15665,3120,87,29,18901,0.021848,0.088035,
+6,3,name_1a_first,confirm,False,9625,7968,1657,85,36,9746,0.011761,0.099796,
+7,3,name_1a_first,confirm-nudge,False,9737,7985,1752,91,165,9993,0.013634,0.11343,0.75

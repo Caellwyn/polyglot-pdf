@@ -72,10 +72,17 @@ from backend.scripts.probe_g1b_model_size_bakeoff import (  # noqa: E402
     _client,
 )
 
-# Per-1M USD text rates (input, output) -- the two tiers 08zv tunes (G1b table).
+from backend.scripts.lite_probe_textai import RecordingTextAI, new_record  # noqa: E402
+from backend.services.validator_service import render_validator_payload  # noqa: E402
+
+# Per-1M USD text rates (input, output). 08zv tuned the first two; the 3.x lite
+# rows are the u0kcc re-measure (bd polyglot-pdf-u0kcc), copied from
+# backend/config.py::GEMINI_PRICING_BY_FAMILY. Thinking tokens bill at "out".
 RATES = {
     "gemini-2.5-flash-lite": {"in": 0.10, "out": 0.40},
     "gemini-3.5-flash":      {"in": 1.50, "out": 6.00},
+    "gemini-3.1-flash-lite": {"in": 0.25, "out": 1.50},
+    "gemini-3.5-flash-lite": {"in": 0.30, "out": 2.50},
 }
 _PER_1M = 1_000_000
 
@@ -174,6 +181,12 @@ async def _run_with_prompt(client, model, fields, prompt_template):
             u = resp.usage_metadata
             in_tok = getattr(u, "prompt_token_count", None) if u else None
             out_tok = getattr(u, "candidates_token_count", None) if u else None
+            # Thinking tokens bill at the OUTPUT rate but are reported outside
+            # candidates_token_count (bd u0kcc): fold them into out_tok, keep
+            # the split in think_tok.
+            think_tok = (getattr(u, "thoughts_token_count", 0) or 0) if u else 0
+            if out_tok is not None:
+                out_tok += think_tok
             raw = resp.text or ""
             conflicts = _parse_conflicts(raw)
             if conflicts is None:
@@ -182,10 +195,11 @@ async def _run_with_prompt(client, model, fields, prompt_template):
                 # transport would exclude it from accuracy and inflate the numbers
                 # (Codex review on PR #262).
                 return {"verdict": {"conflicts": []}, "latency_s": dt,
-                        "in_tok": in_tok, "out_tok": out_tok,
+                        "in_tok": in_tok, "out_tok": out_tok, "think_tok": think_tok,
                         "error": "json_error", "retries": attempt}
             return {"verdict": {"conflicts": conflicts}, "latency_s": dt,
-                    "in_tok": in_tok, "out_tok": out_tok, "error": "", "retries": attempt}
+                    "in_tok": in_tok, "out_tok": out_tok, "think_tok": think_tok,
+                    "error": "", "retries": attempt}
         except Exception as exc:  # noqa: BLE001
             last_exc = type(exc).__name__
             transient = last_exc in (
@@ -203,6 +217,45 @@ async def _run_with_prompt(client, model, fields, prompt_template):
             "in_tok": None, "out_tok": None, "error": last_exc, "retries": 4}
 
 
+async def _run_prod(ai, fields):
+    """One checker call through the SHIPPED path (bd u0kcc): the production
+    render_validator_payload (CONTRADICTION_SI stable prefix + FIELDS fresh tail)
+    into TextAIGemini.validate(), with the production generate config (no
+    thinking_config). The adapter fail-opens every failure to an empty verdict, so
+    the outcome is read from the RecordingTextAI record instead: a transport error
+    is retried (same budget as _run_with_prompt), a non-JSON / wrong-shape reply is
+    a json_error (scored as a miss, as for the other prompts)."""
+    filled = [{"field_id": f["field_id"], "name": f["name"], "value": f["value"]}
+              for f in fields if f["value"] not in ("", None)]
+    payload = render_validator_payload(filled, today=TODAY)
+    t0 = time.time()
+    last = "unknown"
+    for attempt in range(4):
+        rec = new_record()
+        await ai.validate(payload)
+        u = rec["usage"] or {}
+        in_tok = u.get("prompt") if u else None
+        think_tok = u.get("thoughts", 0) if u else 0
+        out_tok = (u.get("output", 0) + think_tok) if u else None
+        if rec["error"]:
+            last = rec["error"]
+            if attempt < 3:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t0,
+                    "in_tok": None, "out_tok": None, "think_tok": 0, "error": last,
+                    "retries": attempt}
+        conflicts = _parse_conflicts(rec["raw"] or "")
+        common = {"latency_s": time.time() - t0, "in_tok": in_tok, "out_tok": out_tok,
+                  "think_tok": think_tok, "cached_tok": u.get("cached", 0) if u else 0,
+                  "retries": attempt}
+        if conflicts is None:
+            return {"verdict": {"conflicts": []}, "error": "json_error", **common}
+        return {"verdict": {"conflicts": conflicts}, "error": "", **common}
+    return {"verdict": {"conflicts": []}, "latency_s": time.time() - t0,
+            "in_tok": None, "out_tok": None, "think_tok": 0, "error": last, "retries": 4}
+
+
 def _cost(model, in_tok, out_tok):
     r = RATES[model]
     if in_tok is None or out_tok is None:
@@ -211,8 +264,17 @@ def _cost(model, in_tok, out_tok):
 
 
 async def _lever_precision(args):
-    """LEVER 2: baseline vs tuned prompt on 2.5-flash-lite, all sizes."""
-    model = "gemini-2.5-flash-lite"
+    """LEVER 2: baseline vs tuned prompt on 2.5-flash-lite, all sizes.
+
+    --model picks the model (default the 08zv 2.5-flash-lite); --prompts picks
+    the arms: baseline / tuned (the probe-local templates) and prod (the shipped
+    CONTRADICTION_SI through TextAIGemini.validate -- see _run_prod)."""
+    model = args.model
+    prompt_names = [p for p in args.prompts.split(",") if p]
+    for p in prompt_names:
+        if p not in PROMPTS and p != "prod":
+            raise SystemExit(f"unknown prompt arm {p!r}")
+    prod_ai = RecordingTextAI(model) if ("prod" in prompt_names and not args.dry_run) else None
     sizes = [int(s) for s in args.sizes.split(",")] if args.sizes else [20, 40, 132]
     client = None if args.dry_run else _client()
     sem = asyncio.Semaphore(args.concurrency)
@@ -227,7 +289,10 @@ async def _lever_precision(args):
                  "latency_s": 0.0, "in_tok": 10, "out_tok": 2, "error": "", "retries": 0}
             return size, case, prompt_name, r
         async with sem:
-            r = await _run_with_prompt(client, model, case.fields, PROMPTS[prompt_name])
+            if prompt_name == "prod":
+                r = await _run_prod(prod_ai, case.fields)
+            else:
+                r = await _run_with_prompt(client, model, case.fields, PROMPTS[prompt_name])
         return size, case, prompt_name, r
 
     def _record(size, case, prompt_name, r):
@@ -250,7 +315,9 @@ async def _lever_precision(args):
             "size": size, "case_id": case.case_id, "cls": case.cls,
             "is_contradiction": int(case.is_contradiction), "detected": int(det),
             "n_flagged": len(flagged), "latency_s": round(r["latency_s"], 3),
-            "in_tok": r["in_tok"], "out_tok": r["out_tok"], "cost_usd": cost,
+            "in_tok": r["in_tok"], "out_tok": r["out_tok"],
+            "think_tok": r.get("think_tok", 0), "cached_tok": r.get("cached_tok", ""),
+            "retries": r.get("retries", 0), "cost_usd": cost,
             "error": r["error"], "corpus_fp": corpus_fingerprint(),
             "flagged_groups": "|".join(";".join(sorted(s)) for s in flagged),
         })
@@ -258,10 +325,12 @@ async def _lever_precision(args):
     tasks = []
     for size in sizes:
         for case in build_corpus(size):
-            for prompt_name in ("baseline", "tuned"):
-                tasks.append(_one(size, case, prompt_name))
+            for _rep in range(args.repeats):
+                for prompt_name in prompt_names:
+                    tasks.append(_one(size, case, prompt_name))
     print(f"precision lever: {len(tasks)} calls "
-          f"({model}, baseline+tuned, sizes {sizes})", flush=True)
+          f"({model}, {'+'.join(prompt_names)}, sizes {sizes}, "
+          f"repeats {args.repeats})", flush=True)
     done = 0
     for coro in asyncio.as_completed(tasks):
         size, case, prompt_name, r = await coro
@@ -277,7 +346,7 @@ async def _lever_precision(args):
     print(f"{'prompt':<10} {'size':>5} {'recall':>7} {'prec':>6} {'fp':>4} "
           f"{'tp':>4} {'fn':>4} {'lat_p50':>8} {'err':>4}", flush=True)
     summary = {}
-    for prompt_name in ("baseline", "tuned"):
+    for prompt_name in prompt_names:
         for size in sizes:
             c = cell.get((prompt_name, size))
             if not c:
@@ -295,10 +364,10 @@ async def _lever_precision(args):
     if args.dry_run:
         print("\n[dry-run] precision scoring verified; no live numbers.", flush=True)
         return
-    _write(rows, summary, "precision")
+    _write(rows, summary, "precision", model=model)
 
 
-def _write(rows, summary, lever):
+def _write(rows, summary, lever, model=None):
     os.makedirs(OUT_DIR, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     csv_path = os.path.join(OUT_DIR, f"g1c_{lever}_{stamp}.csv")
@@ -318,7 +387,9 @@ def _write(rows, summary, lever):
         return o
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(_nan_to_none({
-            "bead": "polyglot-pdf-08zv", "lever": lever, "stamp": stamp,
+            "bead": "polyglot-pdf-08zv" if model is None else "polyglot-pdf-u0kcc",
+            "lever": lever, "stamp": stamp, "model": model,
+            "vertex_location": os.environ.get("VERTEX_LOCATION", "global"),
             "corpus_fp": corpus_fingerprint(), "today_for_date_checks": TODAY,
             "summary": summary,
         }), f, indent=2)
@@ -509,6 +580,13 @@ async def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--sizes", default="")
     ap.add_argument("--concurrency", type=int, default=6)
+    ap.add_argument("--model", default="gemini-2.5-flash-lite",
+                    help="precision lever model (bd u0kcc: the 3.x lite tier is "
+                         "served at Vertex location global -- set VERTEX_LOCATION)")
+    ap.add_argument("--prompts", default="baseline,tuned",
+                    help="comma list of arms: baseline, tuned, prod")
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="run each (case x prompt) this many times (pooling)")
     args = ap.parse_args()
     if args.lever == "precision":
         await _lever_precision(args)

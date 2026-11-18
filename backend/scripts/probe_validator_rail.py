@@ -493,10 +493,16 @@ async def run_real_validator(fields: list, dry_run: bool) -> dict:
 
     from backend.adapters.text_ai_gemini import TextAIGemini
 
+    # The TEXT client takes the adapter's own default location (`global`), NOT
+    # VERTEX_LOCATION: that env var picks the LIVE model's region (us-central1),
+    # and the 3.x lite text models 404 there, so the validator would silently
+    # fail-open to "no conflicts" (bd polyglot-pdf-u0kcc). TEXT_VERTEX_LOCATION
+    # overrides it deliberately.
     text_ai = TextAIGemini(
         vertexai=_is_vertex(),
         project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
-        location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        location=os.environ.get("TEXT_VERTEX_LOCATION",
+                                TextAIGemini.DEFAULT_VERTEX_LOCATION),
     )
     return await ValidatorService(text_ai).validate(fields)
 

@@ -34,6 +34,7 @@ from google.genai import types
 # Local imports (run from repo root or with this dir on sys.path).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schema_contract import SCHEMA_CONTRACT, acroform_field_list  # noqa: E402
+from usage_tokens import gemini_usage_tokens  # noqa: E402
 
 
 def _extract_json(text: str) -> dict:
@@ -145,10 +146,8 @@ def run(pdf_path: str, mode: str, model: str,
     schema["_bakeoff"].update({"arm": f"gemini-{mode}", "model": model})
     usage = getattr(resp, "usage_metadata", None)
     if usage is not None:
-        schema["_bakeoff"]["tokens"] = {
-            "input": getattr(usage, "prompt_token_count", None),
-            "output": getattr(usage, "candidates_token_count", None),
-        }
+        # output = answer + thinking tokens (billed at the output rate).
+        schema["_bakeoff"]["tokens"] = gemini_usage_tokens(usage)
     return schema
 
 

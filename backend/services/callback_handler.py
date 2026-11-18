@@ -71,8 +71,8 @@ class CallbackHandler:
         # send_activity_end, the PTT release, which is the only turn signal
         # (bd polyglot-pdf-v1m8g). on_user_activity (input transcription) ALSO sets it
         # and still bumps liveness, but it was the retired native-VAD mode's turn-start
-        # signal and the native-audio model emits no input_transcription on Vertex, so
-        # in practice the PTT bracket is what fires this. Backend-driven either way. _ws_audio_chunk_count is session-cumulative, so
+        # signal. gemini-3.8-live emits input_transcription on every PTT turn, so both
+        # paths fire on a real turn; the PTT bracket is the authoritative one. Backend-driven either way. _ws_audio_chunk_count is session-cumulative, so
         # this flag (not the count) marks "first audio AFTER a start" as the clear edge.
         self._processing_active = False
         self._form_id = form_id  # For confirmation logging
@@ -352,11 +352,11 @@ class CallbackHandler:
         here (the adapter passes none).
 
         SCOPE (bd polyglot-pdf-fa4x): this fires on Gemini input_transcription, which
-        was the retired native-VAD mode's turn-start signal. The gemini-live
-        native-audio model emits NO input_transcription on Vertex, so in practice this
-        does not fire and the indicator is driven by signal_processing_start via
-        send_activity_end -- the PTT release, now the only turn signal (bd
-        polyglot-pdf-v1m8g). Kept because it still chains the idle-watchdog liveness
+        was the retired native-VAD mode's turn-start signal. gemini-3.8-live emits
+        input_transcription on every PTT turn (bd polyglot-pdf-r3ham.4), so this
+        fires alongside signal_processing_start via send_activity_end -- the PTT
+        release, the authoritative turn signal (bd polyglot-pdf-v1m8g). Setting the
+        flag twice is idempotent. Kept because it chains the idle-watchdog liveness
         bump. The CLEAR path (first response audio / turn_complete) is unaffected."""
         await self._set_processing(True)
         if self._on_user_activity_inner is not None:
