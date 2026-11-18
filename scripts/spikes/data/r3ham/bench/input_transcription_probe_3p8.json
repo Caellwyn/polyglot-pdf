@@ -1,0 +1,179 @@
+{
+  "summary": {
+    "model": "gemini-3.8-live",
+    "turns_per_arm": {
+      "on": 6,
+      "off": 6
+    },
+    "mean_per_turn": {
+      "on": {
+        "in_audio": 305.33,
+        "in_text": 1333.5,
+        "input_transcript_chars": 32.33,
+        "out_audio": 137.5,
+        "out_text": 35.83,
+        "output_transcript_chars": 70.67,
+        "thoughts": 57.33,
+        "usage_events": 1
+      },
+      "off": {
+        "in_audio": 306,
+        "in_text": 1317.83,
+        "input_transcript_chars": 0,
+        "out_audio": 135.17,
+        "out_text": 20.17,
+        "output_transcript_chars": 62.83,
+        "thoughts": 52.67,
+        "usage_events": 1
+      }
+    },
+    "delta_on_minus_off": {
+      "in_audio": -0.67,
+      "in_text": 15.67,
+      "input_transcript_chars": 32.33,
+      "out_audio": 2.33,
+      "out_text": 15.66,
+      "output_transcript_chars": 7.84,
+      "thoughts": 4.66,
+      "usage_events": 0
+    }
+  },
+  "turns": {
+    "on": [
+      {
+        "input_transcript_chars": 29,
+        "output_transcript_chars": 70,
+        "in_text": 1297,
+        "in_audio": 72,
+        "out_audio": 109,
+        "out_text": 29,
+        "thoughts": 57,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 31,
+        "output_transcript_chars": 78,
+        "in_audio": 268,
+        "in_text": 1333,
+        "out_audio": 137,
+        "out_text": 40,
+        "thoughts": 50,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 37,
+        "output_transcript_chars": 72,
+        "in_text": 1373,
+        "in_audio": 581,
+        "out_text": 40,
+        "out_audio": 174,
+        "thoughts": 78,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 29,
+        "output_transcript_chars": 65,
+        "in_audio": 72,
+        "in_text": 1297,
+        "out_audio": 109,
+        "out_text": 27,
+        "thoughts": 52,
+        "usage_events": 1,
+        "session": 1
+      },
+      {
+        "input_transcript_chars": 31,
+        "output_transcript_chars": 69,
+        "in_audio": 268,
+        "in_text": 1331,
+        "out_audio": 127,
+        "out_text": 39,
+        "thoughts": 67,
+        "usage_events": 1,
+        "session": 1
+      },
+      {
+        "input_transcript_chars": 37,
+        "output_transcript_chars": 70,
+        "in_audio": 571,
+        "in_text": 1370,
+        "out_text": 40,
+        "out_audio": 169,
+        "thoughts": 40,
+        "usage_events": 1,
+        "session": 1
+      }
+    ],
+    "off": [
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 70,
+        "in_audio": 72,
+        "in_text": 1288,
+        "out_audio": 126,
+        "out_text": 17,
+        "thoughts": 75,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 69,
+        "in_audio": 285,
+        "in_text": 1314,
+        "out_text": 24,
+        "out_audio": 136,
+        "thoughts": 56,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 69,
+        "in_audio": 597,
+        "in_text": 1354,
+        "out_text": 23,
+        "out_audio": 174,
+        "thoughts": 42,
+        "usage_events": 1,
+        "session": 0
+      },
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 57,
+        "in_audio": 72,
+        "in_text": 1288,
+        "out_audio": 101,
+        "out_text": 16,
+        "thoughts": 35,
+        "usage_events": 1,
+        "session": 1
+      },
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 56,
+        "in_audio": 260,
+        "in_text": 1313,
+        "out_text": 21,
+        "out_audio": 114,
+        "thoughts": 51,
+        "usage_events": 1,
+        "session": 1
+      },
+      {
+        "input_transcript_chars": 0,
+        "output_transcript_chars": 56,
+        "in_text": 1350,
+        "in_audio": 550,
+        "out_text": 20,
+        "out_audio": 160,
+        "thoughts": 57,
+        "usage_events": 1,
+        "session": 1
+      }
+    ]
+  }
+}
