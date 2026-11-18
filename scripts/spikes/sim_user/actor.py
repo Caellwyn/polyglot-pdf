@@ -10,10 +10,11 @@ Pieces:
   - move_schema / validate_decision: the strict structured-output contract.
   - render: move -> spoken text, templates + fact strings only.
   - StubActor: deterministic offline backend (and the fallback).
-  - HaikuVertexActor: Claude Haiku 5.5 on Vertex, strict JSON output.
+  - HaikuActor: Claude Haiku 5.5, strict JSON output, via the Claude API
+    (default) or Vertex; HaikuVertexActor pins the Vertex provider.
 
 Offline-importable: the `anthropic` package is imported lazily in
-HaikuVertexActor only. ASCII only.
+HaikuActor only. ASCII only.
 """
 from __future__ import annotations
 
@@ -381,10 +382,31 @@ def _usage_dict(u: Any) -> dict:
             "cache_creation": g("cache_creation_input_tokens")}
 
 
-class HaikuVertexActor:
-    def __init__(self, persona: Persona, project_id: Optional[str] = None,
-                 client: Any = None, max_tokens: int = 200):
+PROVIDERS = ("api", "vertex")
+
+
+class HaikuActor:
+    """Claude Haiku 5.5 actor with strict JSON output.
+
+    provider="api" (default) calls the Claude API with ANTHROPIC_API_KEY.
+    provider="vertex" calls Claude on Vertex (project_id, region global); that
+    path needs a non-zero base-model quota for anthropic-claude-haiku.
+    A missing API key raises at construction rather than letting every turn
+    silently fall back to the stub.
+    """
+
+    def __init__(self, persona: Persona, provider: str = "api",
+                 project_id: Optional[str] = None, client: Any = None,
+                 max_tokens: int = 200):
+        if provider not in PROVIDERS:
+            raise ValueError("provider must be one of %r, got %r"
+                             % (PROVIDERS, provider))
+        if (provider == "api" and client is None
+                and not os.environ.get("ANTHROPIC_API_KEY")):
+            raise RuntimeError("provider='api' needs ANTHROPIC_API_KEY in the "
+                               "environment")
         self.persona = persona
+        self.provider = provider
         self.project_id = (project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
                            or DEFAULT_PROJECT)
         self._client = client
@@ -395,9 +417,12 @@ class HaikuVertexActor:
 
     def _get_client(self):
         if self._client is None:
-            from anthropic import AnthropicVertex  # lazy: not in the venv
-            self._client = AnthropicVertex(project_id=self.project_id,
-                                           region="global")
+            import anthropic  # lazy: keeps the module offline-importable
+            if self.provider == "api":
+                self._client = anthropic.Anthropic()
+            else:
+                self._client = anthropic.AnthropicVertex(
+                    project_id=self.project_id, region="global")
         return self._client
 
     def build_request(self, model_text: str, history: list) -> dict:
@@ -464,3 +489,12 @@ class HaikuVertexActor:
             return await self._fallback(
                 model_text, history,
                 {"error": "%s: %s" % (type(exc).__name__, exc)}, usage, t0)
+
+
+class HaikuVertexActor(HaikuActor):
+    """HaikuActor pinned to provider='vertex'."""
+
+    def __init__(self, persona: Persona, project_id: Optional[str] = None,
+                 client: Any = None, max_tokens: int = 200):
+        super().__init__(persona, provider="vertex", project_id=project_id,
+                         client=client, max_tokens=max_tokens)

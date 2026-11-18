@@ -61,8 +61,20 @@ independent:
 
   Two mutations initially SURVIVED (the partial threshold, and PARTIAL left
   out of the divergent count). Tests were added until both went red.
+- **Haiku via the Claude API (maintainer decision, same day).** `HaikuActor`
+  now defaults to `provider="api"` (`anthropic.Anthropic()`, ANTHROPIC_API_KEY),
+  and `HaikuVertexActor` pins `provider="vertex"`. A missing key raises at
+  construction, so a run cannot quietly degrade to the stub; the test for this
+  was mutation-verified. A live smoke test made two calls through the API, at
+  about $0.0003 in total:
+  - "What is your first name?" gave `answer`/first name, with no fallback;
+  - "Could you spell it?" gave `spell`, rendered as "A - N - A".
+
+  Prompt caching hit on the second turn (1670 cache-read tokens).
+  `anthropic` 2.10.0 was installed into the backend venv; it is not added to
+  any requirements file because it is a spike-only dependency.
 - **Not verified live.** The real `AnthropicVertex` call is pinned only by an
-  injected-client test. `anthropic` is not installed in the venv, and Haiku on
+  injected-client test (the Claude API path IS live-verified, above). `anthropic` is not installed in the venv, and Haiku on
   Vertex currently returns a 429 for a zero base-model quota in
   polyglot-demo-aa709, which the maintainer has to raise. The live diff2 CLI
   replay also was not re-run, because it needs WAVs and STT.

@@ -385,3 +385,36 @@ class TestHaikuActor:
         c = actor.estimate_cost_usd({"input": 1_000_000, "output": 1_000_000,
                                      "cache_read": 0, "cache_creation": 0})
         assert c == pytest.approx(0.60)
+
+
+# ------------------------------------------------------------ provider switch
+class TestHaikuProvider:
+    def test_api_is_the_default_provider(self, persona, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+        assert actor.HaikuActor(persona).provider == "api"
+
+    def test_api_without_key_fails_fast(self, persona, monkeypatch):
+        # A missing key must stop the run up front, not let every turn
+        # quietly fall back to the stub and pass as a Haiku run.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+            actor.HaikuActor(persona, provider="api")
+
+    def test_vertex_needs_no_api_key(self, persona, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        a = actor.HaikuVertexActor(persona, client=object())
+        assert a.provider == "vertex"
+
+    def test_unknown_provider_rejected(self, persona):
+        with pytest.raises(ValueError):
+            actor.HaikuActor(persona, provider="bedrock", client=object())
+
+    @pytest.mark.parametrize("provider", ["api", "vertex"])
+    def test_request_shape_is_provider_independent(self, persona, provider):
+        a = actor.HaikuActor(persona, provider=provider, client=object())
+        req = a.build_request("What is your first name?", [])
+        assert req["model"] == actor.HAIKU_MODEL
+        assert req["thinking"] == {"type": "disabled"}
+        assert req["output_config"]["format"]["type"] == "json_schema"
+        for k in ("temperature", "top_p", "top_k"):
+            assert k not in req
