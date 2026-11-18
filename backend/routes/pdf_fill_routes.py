@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import structlog
 
 from backend.config import get_settings

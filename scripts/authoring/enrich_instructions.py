@@ -45,7 +45,7 @@ _REPO = os.path.abspath(os.path.join(_HERE, "..", ".."))
 sys.path.insert(0, _REPO)
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
 
-import fitz  # noqa: E402  (PyMuPDF)
+import pymupdf as fitz  # noqa: E402  (PyMuPDF)
 
 from backend.services import guidance_contract  # noqa: E402
 from backend.services.schema_lint import lint_schema  # noqa: E402

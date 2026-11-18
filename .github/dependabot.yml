@@ -94,7 +94,6 @@ updates:
           - "fastapi"
           - "starlette"
           # HELD until its upgrade bead lands (see the ignore: block below).
-          - "PyMuPDF"
           - "firebase-admin"
           - "google-cloud-storage"
     ignore:
@@ -111,7 +110,6 @@ updates:
       # PR. Each upgrade bead's PR REMOVES its own entries here (and from the
       # exclude-patterns above and HELD_FOR_UPGRADE in
       # tests/test_dependabot_config.py) when it lands.
-      - dependency-name: "PyMuPDF"               # bd polyglot-pdf-k5dnc
       - dependency-name: "firebase-admin"        # bd polyglot-pdf-d5rsx
       - dependency-name: "google-cloud-storage"  # bd polyglot-pdf-d5rsx
   - package-ecosystem: "npm"

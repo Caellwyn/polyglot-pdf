@@ -42,7 +42,7 @@ _I90_SCHEMA = _REPO / "form-kits" / "i-90" / "schema.json"
 needs_i90 = pytest.mark.skipif(
     not _I90_PDF.exists(), reason="i-90 kit not present")
 
-pytest.importorskip("fitz", reason="PyMuPDF required to render the overlay")
+pytest.importorskip("pymupdf", reason="PyMuPDF required to render the overlay")
 
 
 def _unmodeled_widget_count(schema, pdf_path=None):
@@ -55,7 +55,7 @@ def _unmodeled_widget_count(schema, pdf_path=None):
     to a snapshot of how complete the schema happened to be (bd
     polyglot-pdf-lzyi).
     """
-    import fitz  # already importorskip'd above
+    import pymupdf as fitz  # already importorskip'd above
 
     claimed = set()
     for f in ov._iter_fields(schema):

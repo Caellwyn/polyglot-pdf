@@ -33,7 +33,7 @@ import json
 import pathlib
 import sys
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import pytest
 
 _REPO = pathlib.Path(__file__).resolve().parent.parent

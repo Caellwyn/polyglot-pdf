@@ -222,7 +222,7 @@ class _TwoKitStore:
     async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
         if pdf_filename == "REAL":
             # A minimal VALID pdf, for the fill route (fitz must open it).
-            import fitz
+            import pymupdf as fitz
 
             doc = fitz.open()
             doc.new_page()
@@ -631,7 +631,7 @@ def test_fill_pdf_refuses_a_traversing_kit_id_or_pdf_filename(
     # non-PDF payload here would make an unguarded route 500 instead
     # (Failed to open stream) -- still wrong, but not distinguishable from
     # any other 4xx/5xx failure, so it would not pin what this test claims.
-    import fitz
+    import pymupdf as fitz
     decoy_doc = fitz.open()
     decoy_doc.new_page()
     decoy_bytes = decoy_doc.tobytes()

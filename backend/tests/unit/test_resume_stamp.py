@@ -11,7 +11,7 @@ Two jobs, and the second is the one that would otherwise rot:
 
 import json
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import pytest
 
 from backend.services.resume_stamp import (

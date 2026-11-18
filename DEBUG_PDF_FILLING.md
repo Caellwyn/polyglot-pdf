@@ -166,7 +166,7 @@ Is wrapped? true
 # Compare schema field names to actual PDF field names
 cd form-kits/i-90
 python3 -c "
-import fitz
+import pymupdf as fitz
 doc = fitz.open('form.pdf')
 for page in doc:
     for widget in page.widgets():
