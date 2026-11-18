@@ -137,8 +137,8 @@ estimated_cost = sum over each (model, arm) of:
 
 ## Running the probe itself
 
-1. **Vertex only, always.** ALL live-model work -- probes, harnesses, spikes,
-   production -- runs on Vertex (`GOOGLE_CLOUD_PROJECT` + ADC), never AI Studio
+1. **Gemini runs on Vertex only, always.** ALL live GEMINI work -- probes,
+   harnesses, spikes, production -- runs on Vertex (`GOOGLE_CLOUD_PROJECT` + ADC), never AI Studio
    (`GEMINI_API_KEY`), so spend lands on the tracked billing project. AI Studio
    is a deliberate, explicitly-flagged exception only (e.g. a model not yet
    available on Vertex). If a script builds `genai.Client(api_key=...)`,
@@ -148,6 +148,11 @@ estimated_cost = sum over each (model, arm) of:
    conversion (Vertex-default with an explicit VERTEXAI=false escape hatch,
    bd polyglot-pdf-p5h2); the sweep of the remaining AI-Studio-keyed scripts
    is bd polyglot-pdf-rve5. (bd memory `all-live-model-work-runs-on-vertex`)
+   **Claude models are the exception: Claude API, never Vertex.** Claude calls
+   (e.g. the sim-user Haiku actor, `scripts/spikes/sim_user/actor.py`) go
+   through the `anthropic` SDK with `ANTHROPIC_API_KEY`, which spends Anthropic
+   credits. Vertex would bill the maintainer's Google pay-as-you-go account
+   (maintainer decision 2026-11-18).
 2. **Deploy-fidelity for anything touching the live/voice path.** A probe of
    the live Gemini session (tool declarations, system-instruction path,
    content shape) must represent what deploy actually sends -- production tool

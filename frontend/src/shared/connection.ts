@@ -40,6 +40,13 @@ declare global {
 			// multi-section scenario can confirm one VOICE field and trigger the real
 			// section auto-advance. Returns false if no form state is loaded yet.
 			seedFieldConfirmed: (fieldId: string, value: string) => boolean
+			// bd polyglot-pdf-tcemw: run the app's OWN validateField -- the gate
+			// every AI fill passes (applyAiValueWithValidation) -- on a candidate
+			// value, so the harness's target discovery never picks a field the app
+			// would refuse to fill. Returns the error message, or null when the
+			// value would be accepted (or 'unknown field ...' for an id not in the
+			// loaded schema). Pure read; no state change.
+			validateFieldValue: (fieldId: string, value: string) => string | null
 			// MEASUREMENT-ONLY (bd 0rpu experiment branch): playback-backlog read
 			// used by the harness pacing arms. Never merged to dev.
 			getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean }
@@ -58,6 +65,7 @@ import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
 import { groupInputsFor } from './groupMembership'
+import { validateField } from '../schema-forms/utils/validation'
 
 /**
  * Pure gate function: should the mic audio chunk be forwarded to the backend?
@@ -1650,6 +1658,14 @@ export function createConnectionManager(
 					state = updated
 					connection?.reloadState()
 					return true
+				},
+				validateFieldValue: (fieldId: string, value: string) => {
+					const current = SchemaFormStateManager.load()
+					const field = current?.schema?.fields?.find((f) => f.id === fieldId)
+					if (!field) {
+						return `unknown field ${fieldId}`
+					}
+					return validateField(field, value)
 				},
 			}
 			console.log('[VFF Connection] TEST harness inject hook installed (__VFF_TEST_INJECT)')

@@ -5,10 +5,20 @@ Gemini asks a field -> user audio answer -> field fills -> Gemini asks to verify
 -> user audio confirm -> Gemini advances -- works end to end, against the real
 frontend + backend + Gemini, without a human at the mic.
 
-This is a procedure **the agent executes with the `preview_*` (Chrome) tools**. It
-is not an automated test runner; the agent is the driver. It injects scripted
-audio fixtures into the running app through a dev-gated hook and reads back field
-state for assertions.
+This is a procedure **the agent executes with a real-origin browser tool**, or
+headlessly with the Playwright drivers (see "Headless drivers" below). It is not
+a CI-collected test suite. It injects scripted audio fixtures into the running
+app through a dev-gated hook and reads back field state for assertions.
+
+**The harness module and the two main drivers bake in no field id** (bd
+`polyglot-pdf-tcemw`, CLAUDE.md scar #10); the Latin-storage / Russian W-7 arm
+drivers still do (bd `polyglot-pdf-w04up`). Kits live in the GCS bucket and are
+republished from the editor, so their ids move. The harness DISCOVERS its
+targets from the schema the app loaded: `lastNextField()` is the field the live
+session is asking right now (the app sets it at every handshake and on every
+advance), and `findDigitsTarget()` picks a field the digits fixture can
+legitimately fill -- one the app's own `validateField` accepts the value into
+(via the inject hook's `validateFieldValue`).
 
 ## Pieces
 
@@ -30,9 +40,11 @@ state for assertions.
 - **Harness** (`tests/e2e/voice-harness/harness.js`): browser module installed as
   `window.__VFF_HARNESS` via `preview_eval`. Provides `loadFixture`,
   `injectUtterance`, `waitForGeminiQuestion`, `readField`, `lastNextField`,
-  `runCycle` (single field), and -- for the multi-section demo rehearsal --
-  `runMultiSectionScenario`, `seedFields`, `getCurrentSection`,
-  `getCompletedSections`, `waitForSection`, `waitForSectionGreeting`.
+  `runCycle` (single field), the target discovery helpers `getSchema`,
+  `findDigitsTarget`, `seedPrefixBefore` and `prepareDigitsTarget`, and -- for
+  the multi-section scenario -- `runMultiSectionScenario`, `seedFields`,
+  `getCurrentSection`, `getCompletedSections`, `waitForSection`,
+  `waitForSectionGreeting`.
 
 ## Environment (the part that bites you)
 
@@ -49,7 +61,12 @@ the configuration that actually works (verified live on bd polyglot-pdf-g8w):
   config; otherwise `firebase/config.ts` throws `auth/invalid-api-key` at import
   and the app never mounts. Run vite yourself (the preview tool runs a plain
   `npm run dev`, which is NOT demo mode):
-  `cd frontend && npm run build:worklet && VITE_WS_URL=ws://localhost:8001/ws/fill npx vite --mode demo --port 5174 --strictPort`
+  `cd frontend && npm run build:worklet && VITE_WS_URL=ws://127.0.0.1:8001/ws/fill npx vite --mode demo --port 5174 --strictPort`
+  (the IPv4 literal matters: uvicorn binds IPv4 only and Chrome resolves
+  `localhost` to `[::1]`. Use it in BOTH places: with `__VFF_LOCAL_DEV` set the
+  app connects to the localStorage `__VFF_BACKEND_URL` first (`config.ts`
+  `getBackendUrl`), and `VITE_WS_URL` is the fallback. `build:worklet` regenerates the tracked
+  `frontend/public/shared/audio-processor.worklet.js`; `git checkout` it after.)
 - **Pick a CORS-allowed frontend port.** The backend `allow_origins`
   (`backend/main.py`) lists `localhost:5173-5177`. Port `5174` works; a stray
   port (e.g. 5180) fails the `/api/form-kits` preflight and the form list won't
@@ -57,9 +74,19 @@ the configuration that actually works (verified live on bd polyglot-pdf-g8w):
 - **Run a backend with auth disabled.** The WS handshake hangs (10s timeout, then
   "Localhost failed, trying cloud") unless the backend runs with
   `VFF_DISABLE_AUTH=true` (it otherwise tries to verify the Firebase id token via
-  ADC and times out). Start a worktree backend on a free port:
-  `VERTEXAI=false VFF_DISABLE_AUTH=true PYTHONPATH=$WT <venv>/python -m uvicorn backend.main:app --port 8001`
-  and point the frontend WS at it via `localStorage['__VFF_BACKEND_URL']`.
+  ADC and times out). Start a worktree backend on a free port (full command in
+  step 1) and point the frontend WS at it via `localStorage['__VFF_BACKEND_URL']`.
+- **Live model calls are Vertex only** (`VERTEXAI=true`, the default, with
+  `GOOGLE_CLOUD_PROJECT=polyglot-demo-aa709`; local gcloud ADC works). Never
+  `VERTEXAI=false` (AI Studio).
+- **Serve kits from the bucket**, not a local copy: `FORM_KITS_MODE=gcs
+  FORM_KITS_GCS_BUCKET=polyglot-demo-aa709-form-kits`. The kit picker then
+  lists exactly the published kits, and the schema the harness discovers from
+  is the canonical one.
+- **Set `GOOGLE_CLOUD_QUOTA_PROJECT=polyglot-demo-aa709`.** User ADC carries no
+  quota project, and Cloud TTS refuses it (`spellback_tts_failed`,
+  `PermissionDenied` in the backend log), so the `name_spellback` tool fails and
+  spelled-name confirms stall. The deployed service account does not need this.
 - **`javascript_tool` has NO top-level await.** Use `.then()` chains, or launch an
   `(async()=>{...})()` that writes its result to a `window.*` object and poll it
   with later evals. And use `el.click()` in JS for buttons -- `computer {ref}`
@@ -72,17 +99,22 @@ the configuration that actually works (verified live on bd polyglot-pdf-g8w):
 Bash is not deny-blocked (powershell is). From the worktree:
 ```
 WT=<worktree-abs-path>; PY=<main-repo>/backend/.venv/Scripts/python.exe
-# backend on 8001, auth disabled (run_in_background):
-cd "$WT" && VERTEXAI=false USE_PREMIUM_MODEL=false PYTHONPATH="$WT" \
-  VFF_DISABLE_AUTH=true SEND_TRANSCRIPT=true \
+# backend on 8001, auth disabled, Vertex, kits from the bucket (run_in_background):
+cd "$WT" && VERTEXAI=true GOOGLE_CLOUD_PROJECT=polyglot-demo-aa709 \
+  GOOGLE_CLOUD_QUOTA_PROJECT=polyglot-demo-aa709 USE_PREMIUM_MODEL=false \
+  FORM_KITS_MODE=gcs FORM_KITS_GCS_BUCKET=polyglot-demo-aa709-form-kits \
+  PYTHONPATH="$WT" VFF_DISABLE_AUTH=true SEND_TRANSCRIPT=true \
   "$PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
 # frontend on 5174, demo mode (run_in_background):
 cd "$WT/frontend" && npm run build:worklet && \
-  VITE_WS_URL=ws://localhost:8001/ws/fill npx vite --mode demo --port 5174 --strictPort
+  VITE_WS_URL=ws://127.0.0.1:8001/ws/fill npx vite --mode demo --port 5174 --strictPort
 ```
-Wait for `http://localhost:8001/health` and `http://localhost:5174` to respond.
-(`gemini-3.8-live` is the default model; `USE_PREMIUM_MODEL=true` A/Bs 3.1 --
-known to skip `update_form_fields` more, expect more FLAKY.)
+Wait for `http://127.0.0.1:8001/health` and `http://localhost:5174` to respond.
+To stop a backgrounded uvicorn, kill it BY PORT (`netstat -ano | grep :8001`,
+then `taskkill //F //T //PID <pid>`) -- the reload child outlives the shell.
+(`gemini-3.8-live` is the default model. Keep `USE_PREMIUM_MODEL=false`: the
+premium 3.1 tier exists only on AI Studio, and live model work here is Vertex
+only.)
 
 ### 2. Open the app with the gates on (Chrome MCP)
 
@@ -90,7 +122,7 @@ known to skip `update_form_fields` more, expect more FLAKY.)
 ```js
 localStorage.setItem('__VFF_LOCAL_DEV','true');
 localStorage.setItem('__VFF_TEST_HARNESS','true');
-localStorage.setItem('__VFF_BACKEND_URL','ws://localhost:8001/ws/fill');
+localStorage.setItem('__VFF_BACKEND_URL','ws://127.0.0.1:8001/ws/fill');
 ```
 Then `navigate` to the URL again (reload) so the app boots with the gates set
 (they live in localStorage now, so they survive the reload -- `isTestHarnessEnabled()`
@@ -99,56 +131,35 @@ reads window OR localStorage). The harness gate also installs a **mock auth user
 
 ### 3. Walk to the form (JS clicks)
 
-Language modal: click the English button, then -- after the React re-render -- the
-i-90 form button. Use `el.click()` in JS (not `computer {ref}`):
+Language modal: click the English button, then -- after the React re-render --
+the button of the kit you want to test. Any published kit works; the picker
+shows exactly what `GET /api/form-kits` lists (with auth disabled, any
+`Authorization: Bearer x` header reads it). Use `el.click()` in JS (not
+`computer {ref}`):
 ```js
 [...document.querySelectorAll('button')].find(b=>/^English/i.test(b.innerText.trim())).click();
-// (re-read; then on the form step)
-[...document.querySelectorAll('button')].find(b=>/i-90/i.test(b.innerText)).click();
+// (re-read; then on the form step -- KIT_LABEL is the kit's label)
+[...document.querySelectorAll('button')].find(b=>b.innerText.includes(KIT_LABEL)).click();
 ```
-The form loads and the disclaimer ("I Agree") appears.
+The form loads and the disclaimer ("I Agree") appears. Do NOT click it yet:
+the target has to be seeded first (steps 4-5).
 
 **Whether the voice auto-connects HERE depends on the intro-clip flag** (bd
 `polyglot-pdf-s1iex.7`):
 
 - **`VITE_INTRO_CLIP_ENABLED` off (today's default)** -- the app connects
-  BEFORE Agree, so confirm status is `connected` and
-  `typeof window.__VFF_TEST_INJECT === 'object'` at this point, then click
-  Agree.
-- **Flag on** -- there is NO session until Agree (Sol's clip plays against
-  nothing), so `__VFF_TEST_INJECT` does not exist yet. Click Agree FIRST, then
-  wait for the hook.
+  BEFORE Agree, so `typeof window.__VFF_TEST_INJECT === 'object'` at this
+  point. The discovery path below needs this.
+- **Flag on** -- there is NO session, and so no hook, until Agree. Seeding a
+  target is then impossible before the handshake; click Agree first and run
+  the cycle on whatever `lastNextField()` reports.
 
-Clicking Agree when the modal is up and waiting for the hook afterwards is
-correct under BOTH states -- which is exactly what the five drivers do via
-their `clickIfPresent` helper. Do not wait for the hook before clicking, or
-the flag-on path hangs until timeout.
-
-**Match the TRANSLATED label.** The agree button is per-language
-(`DisclaimerModal.BUTTON_TRANSLATIONS`), so a Russian session shows
-"Prinimayu", not "I Agree" -- the two RU drivers pass a bilingual pattern for
-exactly this reason (an English-only match silently hits nothing and leaves
-the flag-on path hanging). Any new driver in a non-English session must do the
-same.
-
-Click Agree here -- bilingual, so it works in an English OR Russian session
-(add the label for any other language you drive):
-
-```js
-[...document.querySelectorAll('button')]
-  .find(b=>/Принимаю|I Agree/i.test(b.innerText)).click();
-```
-
-This is the ONLY Agree click in this procedure -- step 5 below is a
-placeholder, not a second click.
-
-### 4. Install the harness + pre-load fixtures
+### 4. Install the harness, pre-load fixtures, discover + seed the target
 
 Inject the FULL body of `tests/e2e/voice-harness/harness.js` (it self-installs
-`window.__VFF_HARNESS`). Then pre-load the fixtures into window vars (so the cycle
-never awaits the network mid-turn). The third fixture (`digits_12345.wav`) is only
-needed for the multi-section scenario (step 6b); the single-field cycle needs only
-the first two:
+`window.__VFF_HARNESS`). Pre-load the fixtures into window vars (so the cycle
+never awaits the network mid-turn); `digits_12345.wav` is only needed for the
+multi-section scenario (step 6b):
 ```js
 Promise.all([
   window.__VFF_HARNESS.loadFixture('/test-fixtures/digits_1234567.wav'),
@@ -156,38 +167,48 @@ Promise.all([
   window.__VFF_HARNESS.loadFixture('/test-fixtures/digits_12345.wav')
 ]).then(([d,y,d2]) => { window.__vffDigits = d; window.__vffYes = y; window.__vffDigits2 = d2; window.__vffReady = true; });
 ```
+Then discover a field the digits fixture can fill and seed every field before
+it as answered-and-confirmed:
+```js
+window.__vffTarget = window.__VFF_HARNESS.prepareDigitsTarget('1234567');
+// -> { fieldId, tier, name, seeded, failed }  or  { fieldId: null, reason }
+```
+`findDigitsTarget` walks the schema in order over plain single-line text/number
+fields that are unconditionally shown and editable and long enough. **Tier
+`pattern`:** the field's own `validation.pattern` accepts the value (the
+strongest evidence). **Tier `numeric-label`:** no pattern, but its id or
+`spoken_name` contains a number word (number, id, tin, ssn, account, zip, ...).
+A field whose pattern REJECTS the value is never picked. `fieldId: null` means
+the kit has no such field -- choose another kit. `failed` non-empty means a seed
+did not read back confirmed (a setup error).
 
-### 5. Agree to the disclaimer -- ALREADY DONE in step 3
+### 5. Agree to the disclaimer, then prove the handshake points at the target
 
-Nothing to click here. Step 3 dismisses the modal, so a second click would
-find no button and throw (`.find(...)` returns undefined) -- and an
-English-only selector would miss a translated label anyway. This step is kept
-as a numbered placeholder so the step numbering below stays stable.
-
-What that step-3 click did, on the **flag-OFF** path: it calls
-`switchToFirstSection` -> restarts Gemini for field 1 on the same connection
-(the hook stays valid; `isNativeVad()` still resolves). With the intro clip
-flag ON there is no session yet at that point, so Agree CONNECTS instead and
-`switchToFirstSection` is never reached.
+Click Agree -- bilingual, so it works in an English OR Russian session (add the
+label for any other language you drive; the button is per-language,
+`DisclaimerModal.BUTTON_TRANSLATIONS`):
+```js
+[...document.querySelectorAll('button')]
+  .find(b=>/Принимаю|I Agree/i.test(b.innerText)).click();
+```
+On the flag-OFF path this calls `switchToFirstSection`, which re-handshakes
+FROM sessionStorage -- so the seeded prefix is in the handshake and the model's
+first question is the target. Confirm before spending audio:
+```js
+window.__VFF_HARNESS.lastNextField() === window.__vffTarget.fieldId  // must be true
+```
+Seeding AFTER Agree does not work: the live session was already prompted, and
+`seedFieldConfirmed` only updates browser state.
 
 ### 6. Run the cycle (outcome-gated)
 
-**The field id below is an EXAMPLE from an older i-90 revision.** Kits are
-republished from the editor and their ids move (the current i-90's first field
-is `a_number`). Read the live one first and pass THAT -- a stale id makes
-`runCycle` watch a field that never fills while the model happily fills the
-real one (verdict FLAKY, "field never filled"; two wasted cycles on
-2026-09-16):
-
-```js
-window.__VFF_HARNESS.lastNextField();   // e.g. 'a_number' -- use it as fieldId
-```
-
-Launch `runCycle` async and poll its result object (no top-level await):
+Launch `runCycle` async and poll its result object (no top-level await).
+`fieldId` defaults to `lastNextField()`, but pass the target explicitly so a
+mis-pointed session fails loudly instead of cycling some other field:
 ```js
 window.__vffReport = null;
 window.__VFF_HARNESS.runCycle({
-  fieldId: 'p1_line1_aliennumber', expectDigits: '1234567',
+  fieldId: window.__vffTarget.fieldId, expectDigits: '1234567',
   digitsBuf: window.__vffDigits, yesBuf: window.__vffYes
 }).then(r => { window.__vffReport = r; });
 ```
@@ -234,42 +255,51 @@ A live native-VAD run (2.5 native-audio, START=HIGH) showed
 `{sawStart:true, sawClearAfterStart:true, count:4}` across two turns -- the indicator
 arms and clears in native VAD.
 
-### 6b. Run the MULTI-SECTION scenario (the demo rehearsal -- bd polyglot-pdf-8k8)
+### 6b. Run the MULTI-SECTION scenario (section-reset flow only -- bd polyglot-pdf-8k8)
 
-The single-field cycle (step 6) proves one field round-trips. The **demo** the epic
-(`polyglot-pdf-wpw`) is judged by is a multi-field run that crosses a SECTION
-boundary. `runMultiSectionScenario` is that rehearsal. Launch it the same async-poll
-way:
+**Only meaningful with the backend's `CONTINUOUS_SESSION=false`** (the
+deprecated section-reset flow). The default continuous session runs the whole
+form as ONE synthetic section and never crosses a section boundary, so under it
+leg 1 can never see `section_switched`.
+
+`runMultiSectionScenario` fills one digits field by voice in section 1, asserts
+the real section auto-advance, then fills a second digits field in section 2.
+It names no kit's ids: `s1FieldId`, `s1Seed`, `s2FieldId` and `s2Seed` are
+REQUIRED (missing any returns a `setup-error` FLAKY). Build them from
+`window.__VFF_HARNESS.getSchema()` for the kit under test:
+
+- `s1FieldId` -- a section-1 field the 7-digit fixture fits (`findDigitsTarget`
+  criteria); `s1Seed` -- every OTHER field of section 1 that would otherwise be
+  shown, as `{ id: value }`, so the target is the LAST unconfirmed shown field.
+  Pick option values that keep `show_if`-gated fields hidden, or seed those too.
+- `s2FieldId` -- a section-2 field the 5-digit `digits_12345.wav` fits;
+  `s2Seed` -- every section-2 field BEFORE it (including any a seeded option
+  reveals), so the switch handshake points the model at it.
+
+Seeding happens up front, before leg 1: the switch builds the new section's
+handshake from sessionStorage AT SWITCH TIME, so a later seed is too late.
 ```js
 window.__vffMultiReport = null;
 window.__VFF_HARNESS.runMultiSectionScenario({
+  s1FieldId: S1, s1Seed: S1_SEED, s2FieldId: S2, s2Seed: S2_SEED,
   digitsBuf: window.__vffDigits, yesBuf: window.__vffYes,
   s2DigitsBuf: window.__vffDigits2
 }).then(r => { window.__vffMultiReport = r; });
 ```
-Poll `window.__vffMultiReport` until non-null.
-
-**What it does (Strategy A -- seed-and-confirm):** Section 1 of the I-90 has 9
-fields, but only the numeric `p1_line1_aliennumber` is fillable by the canned
-digit/yes audio. So the scenario **seeds the other section-1 fields confirmed**
-through the dev hook (`__VFF_TEST_INJECT.seedFieldConfirmed`, which routes through
-the SAME `SchemaFormStateManager` write path a real confirm uses), leaving the
-alien-number as the LAST unconfirmed field. It sets `p1_checkbox4` to a non-"[0]"
-option so the three `show_if`-gated `p1_line5*` name fields stay HIDDEN and don't
-block completion. Then:
-- **Leg 1 (section 1):** voice-fill + confirm `p1_line1_aliennumber`. Because it is
-  now the last unconfirmed VISIBLE field, the FE's REAL auto-advance fires
+Poll `window.__vffMultiReport` until non-null. Then:
+- **Leg 1 (section 1):** voice-fill + confirm `s1FieldId`. Because it is the last
+  unconfirmed VISIBLE field, the FE's REAL auto-advance fires
   (`handleConfirmFieldRequest` -> `computeNextField` null -> `switchToSection`).
 - **section-cross:** assert `getCurrentSection().order === 2`, the old section is in
   `completedSections`, `vffOnSectionChanged` fired, and `lastNextField` points at
-  the first section-2 field.
-- **Leg 2 (section 2):** voice-fill + confirm `p1_line6f_zipcode` (the 5-digit
-  `digits_12345.wav` fixture) -- proves a SECOND field fills in a DIFFERENT section
-  after the switch.
+  `s2FieldId`.
+- **Leg 2 (section 2):** voice-fill + confirm `s2FieldId` -- proves a SECOND field
+  fills in a DIFFERENT section after the switch.
 
 Returns `{ verdict: 'PASS'|'FAIL'|'FLAKY', crossedToSection: bool, legs: [...] }`.
 Confirm is **order-tolerant** (the `runCycle` change for bd par/tfz): a proactive
-2.5 confirm that lands on the verify turn BEFORE "yes" counts as success.
+confirm that lands on the verify turn BEFORE "yes" counts as success. The headless
+driver runs it with `--multi` and the four ids as JSON in `VFF_MULTI_OPTS`.
 
 **Known-RED path (do NOT confuse with a harness regression):** the scenario above
 crosses sections via the FE auto-advance / `manual_section_switch` path, which is
@@ -299,18 +329,23 @@ Pre-load the query fixture alongside the others (step 4):
 window.__VFF_HARNESS.loadFixture('/test-fixtures/secretary_query_alien.wav')
   .then(b => { window.__vffSecretaryQ = b; });
 ```
-Then launch the scenario (async-poll, like the others):
+`seedFieldId` is REQUIRED (no kit default): seed a field the query asks about.
+The committed query fixture asks "what alien registration number did I give
+earlier?", so seed the loaded kit's alien-number field if it has one (read its
+id from `getSchema()`); for a kit without one, record a new query fixture in
+`gen_fixtures.py` that asks about a field it does have. Then launch the scenario
+(async-poll, like the others):
 ```js
 window.__vffSecReport = null;
 window.__VFF_HARNESS.runSecretaryQuery({
-  seedFieldId: 'p1_line1_aliennumber', seedValue: '1234567',
+  seedFieldId: SEED_FIELD, seedValue: '1234567',
   queryBuf: window.__vffSecretaryQ
 }).then(r => { window.__vffSecReport = r; });
 ```
-Poll `window.__vffSecReport` until non-null. It seeds the alien number confirmed
-(the recallable answer), waits for Gemini's field question, injects "what alien
-registration number did I give earlier?", and waits out the model turn. A
-`verdict: 'DRIVEN'` means the query audio went out after a clean seed.
+Poll `window.__vffSecReport` until non-null. It seeds that field confirmed
+(the recallable answer), waits for Gemini's field question, injects the query,
+and waits out the model turn. A `verdict: 'DRIVEN'` means the query audio went
+out after a clean seed.
 
 **Authoritative assertion = the BACKEND LOG, not the browser.** The secretary
 answer rides Gemini's audio/transcript (not on the webFormConnection message path
@@ -364,16 +399,58 @@ clean rerun of the first-field cycle. **Before each retry's reload, clear the
 field state explicitly:** `preview`/`javascript_tool`-eval
 `sessionStorage.removeItem('schema_form_state')` (or
 `window.__VFF_HARNESS.clearFieldState(FIELD)` then also clear the rest), THEN
-reload and redo the Agree click (step 3) and the cycle (step 6) -- clearing
-`schema_form_state` also wipes `disclaimerAccepted`, so the modal RE-MOUNTS on
-that reload and must be dismissed again. (This used to read "steps 5-6", from
-when step 5 was the Agree click; the click moved to step 3 in bd
-`polyglot-pdf-s1iex.7` and step 5 is now a placeholder, so "5-6" would skip
-the Agree entirely and run the cycle against a blocked page.) (`runCycle`'s own `clearFieldState` at cycle start is a
+reload and redo steps 3-6 (form pick, harness + discover + seed, Agree, cycle)
+-- clearing `schema_form_state` also wipes `disclaimerAccepted`, so the modal
+RE-MOUNTS on that reload and must be dismissed again. (`runCycle`'s own `clearFieldState` at cycle start is a
 same-session backstop; it cannot undo a stale value already sent in a prior
 handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
-otherwise -- with the per-run breakdown and the model (2.5 vs 3.1). The harness
+otherwise -- with the per-run breakdown and the model id (the backend log's
+`"model"` field). The harness
 reports the rate, not a brittle boolean.
+
+## Headless drivers (Playwright)
+
+The same flow, scripted. Prereqs: the step-1 servers, plus Playwright with its
+headless Chromium somewhere node can resolve it (`npm i playwright && npx
+playwright install chromium-headless-shell` in any scratch dir; point
+`VFF_PLAYWRIGHT_DIR` at its `node_modules`). Each prints a JSON report on stdout.
+
+- **`driver_playwright.mjs`** -- steps 2-6 above: picks the kit (`VFF_KIT`, a
+  label regex, else the first kit `/api/form-kits` lists), runs
+  `prepareDigitsTarget`, clicks Agree, asserts the handshake points at the
+  target, runs `runCycle`. Exit 0 PASS, 2 FLAKY (including a `setup-error:`
+  reason -- e.g. the kit has no digits-fillable field), 1 FAIL.
+  ```
+  VFF_PLAYWRIGHT_DIR=<dir>/node_modules node tests/e2e/voice-harness/driver_playwright.mjs
+  ```
+- **`driver_w7_desync.mjs`** -- a scripted W-7 conversation (choices, six
+  letter-by-letter spelled names, addresses, birth details). Each step answers
+  WHATEVER field the app is asking at that moment (`lastNextField`, waited
+  until it points at an unconfirmed field) and the report records the field each
+  answer landed in, so a republished kit that reorders its questions shows as a
+  mis-paired step rather than a timeout. `VFF_W7_STEPS=N` runs the first N
+  steps (5 reaches the first two spelled names); `VFF_KIT` overrides the
+  `W-7` label. For the read-back scoring the backend also needs
+  `LIVE_DEV_TRANSCRIPTS=true LIVE_DEV_AUDIO_DUMP=true`; to A/B the Cloud TTS
+  spelled-name read-back, set `SPELLBACK_TOOL_ENABLED=false` on the backend.
+  With the tool off, the shipped system instruction has the model say a name
+  back as a WORD, never letter by letter, so that arm alone cannot show a
+  spelling error (see `scripts/spikes/3p8_spelling_findings.md`).
+  `VFF_PACING` picks when the scripted user speaks: unset = fixed sleeps;
+  `polite` = wait for the playback backlog to drain; `rude` = barge in
+  mid-speech; `readback` = `polite`, plus before each "yes" wait for the model
+  to START speaking and for a turn_complete after that. Use `readback` for
+  `gemini-3.8-live`: it calls the fill tool first and speaks the read-back
+  afterwards, so the other modes say "yes" over the read-back.
+  Exit 0 = every step filled AND confirmed, 2 = partial, 1 = crash.
+- `driver_latin_storage.mjs`, `driver_latin_storage_ru.mjs`,
+  `driver_ru_register.mjs` -- the Latin-storage / Russian-register W-7 arms.
+
+The four W-7 drivers accept the disclaimer through `driver_common.mjs`
+`agreeAndWaitForHook`, which polls until Agree has been clicked AND the inject
+hook exists, in whichever order the intro-clip flag presents them.
+`driver_playwright.mjs` deliberately does NOT: it must seed the target BEFORE
+Agree, so it waits for the hook first and then clicks Agree itself.
 
 > **Same-page rerun (no reload).** The reload path above is still the recommended
 > retry. If you DO rerun on the same page, `clearFieldState` now prefers the app's
@@ -390,7 +467,8 @@ reports the rate, not a brittle boolean.
   `waitForConfirmed` (the authoritative sessionStorage `confirmed` flag), plus an
   advance wait. `waitForGeminiQuestion` (`vffOnAudioPlaybackEnd`) is PACING-only and
   routinely times out in an automated tab -- never gate correctness on it.
-  (`vffOnTurnComplete` was removed from this surface and is not used.)
+  (`vffOnTurnComplete` is used only by the `VFF_PACING=readback` guard, and it fires
+  on every output-transcription chunk, not at the true turn end -- bd ucmpg.)
 - **`domConfirmed` is NOT a confirm signal.** `fieldManager.applyUpdates` sets
   `data-vff-confirmed="true"` at FILL time, so it is true before any "yes" is
   processed. The real confirm signal is `ssConfirmed` (sessionStorage), set only by
@@ -399,14 +477,10 @@ reports the rate, not a brittle boolean.
 - **Inject only after the field/connection settles.** Injecting during a section
   switch can be dropped by the backend's `drop_audio` guard; the disclaimer-agree
   -> first-question pacing wait covers this.
-- **VAD mode is auto-handled.** `injectUtterance` branches on `isNativeVad()`:
-  manual VAD brackets with activity_start/end; native VAD streams the utterance
-  then CONTINUOUS real-time silence until the next utterance (bd
-  polyglot-pdf-95uy: a fixed 500 ms tail then dead air never closes the turn --
-  Gemini's native VAD needs an unbroken stream). `stopSilenceStream()` ends it
-  explicitly if a driver needs quiet. `runCycle` also retries the "yes" once on
-  a confirm timeout (the 95uy ctrl46 second-turn_complete stall quirk). No
-  caller action needed.
+- **Turns are push-to-talk.** `injectUtterance` brackets every utterance with
+  activity_start/end, exactly as the real client does on a button press/release
+  (PTT is the only input mode, bd polyglot-pdf-v1m8g). `runCycle` also retries
+  the "yes" once on a confirm timeout. No caller action needed.
 - **FIXED backend bug (bd polyglot-pdf-0ux, fixed 2026-06-09):** on native-audio
   the `update_form_fields` FunctionResponse could be sent without an `id`,
   crashing the receive loop AFTER the first fill (fill PASSED, confirm/advance

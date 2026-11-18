@@ -4,12 +4,11 @@ the shipped W-7 kit.
 Two models see the form and they must see DIFFERENT things:
 
   voice (Live, expensive)  -- per-field guidance only. The SI is re-billed
-      EVERY turn (~2.1 billed events/turn), so a form-level booklet leak here
-      is a COST bug, not just a tidiness one. (This docstring used to cite
-      "text-in is 95-98% of session cost"; that figure is OBSOLETE -- audio-in
-      now leads and text-in is ~36-47%, bd polyglot-pdf-77j0d. The argument is
-      UNCHANGED: what makes a leak expensive is the per-turn re-billing, not
-      text-in's share of the total. See docs/standards/logging-and-cost.md.)
+      EVERY turn and on every tool round-trip, so a form-level booklet leak
+      here is a COST bug, not just a tidiness one. Text-in is one of the two
+      large cost lines (about 44-50% of a W-7 on 3.8, alongside audio-in;
+      docs/standards/logging-and-cost.md). What makes a leak expensive is the
+      per-turn re-billing, not text-in's exact share of the total.
   secretary (text, cheap)  -- the whole-form catalog PLUS the verbatim booklet
       (bd wsao.1), so form-level and orphaned-passage questions are answerable.
 

@@ -2,10 +2,7 @@
 
 **Tracks:** backend/services/ai_context.py backend/services/manifest_service.py backend/services/secretary_context.py backend/services/form_filling_service.py backend/config.py frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/state/hiddenFieldCounting.test.ts
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-om8q6: the unfiltered `Progress:
-N/M` render was attributed to `ai_context.py`; the template actually lives
-in `backend/config.py` -- corrected the citation and added the file to the
-tracked-source declaration above).*
+*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
 
 Two models read the form and they must read **different** things. This doc is the
 single answer to "if I add a key to a form-kit schema, who sees it?"
@@ -21,7 +18,7 @@ secretary is *for*, this one says which keys reach it.
 
 | Surface | Built by | Scope | Cost profile |
 |---------|----------|-------|--------------|
-| **Voice SI** (Live model) | `manifest_service.get_field_guidance` -> `ai_context.render_field_guidance` | the CURRENT field only (DTI) | re-billed EVERY turn; text-in is ~36-47% of session cost and the SI is the part this doc controls ([`logging-and-cost.md`](logging-and-cost.md)) |
+| **Voice SI** (Live model) | `manifest_service.get_field_guidance` -> `ai_context.render_field_guidance` | the CURRENT field only (DTI) | re-billed EVERY turn; text-in is ~44-50% of a W-7 session on 3.8 and the SI is the part this doc controls ([`logging-and-cost.md`](logging-and-cost.md)) |
 | **Secretary context** (text model) | `secretary_context.render_static_catalog` + `render_values_tail` | the WHOLE form + verbatim booklet | cheap model, implicit-cache prefix |
 
 The asymmetry is the point: the expensive realtime model gets one field; the

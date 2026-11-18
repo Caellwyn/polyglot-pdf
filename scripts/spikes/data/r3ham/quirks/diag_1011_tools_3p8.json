@@ -1,0 +1,977 @@
+{
+  "model": "gemini-3.8-live",
+  "sdk_version": "2.8.0",
+  "ts": "2026-11-18T02:51:05+00:00",
+  "summary": [
+    {
+      "cell": "P1",
+      "shape": "name1",
+      "persona": "form",
+      "n": 3,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "P2",
+      "shape": "typed1",
+      "persona": "form",
+      "n": 3,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "P3",
+      "shape": "omit",
+      "persona": "form",
+      "n": 3,
+      "verdict": "SURVIVE",
+      "wire_tools": "__ABSENT__",
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "C1",
+      "shape": "full",
+      "persona": "form",
+      "n": 3,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge the user briefly first, in the user's language.",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask the user, in the session language, whether the value is correct, and wait for their confirmation. If confirmed, call this tool. If the user says it is wrong, ask for the correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user verified it in the UI)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Ask the secretary a plain-language question about the form. Three uses: (1) recall a past ANSWER/value -- 'what previous name did they give?', 'have we got their date of birth yet?'; (2) IDENTIFY which field the user means when you need to jump to a field you do NOT currently hold -- 'which field is the mailing city?'; (3) get the OFFICIAL INSTRUCTION TEXT quoted back when the current field's reference text does not cover something -- 'what do the instructions say about exception 3?'. Use (3) to obtain the form's OWN WORDS, which you may then read to the user. On anything shaped like 'do I qualify' or 'would my document work', it answers FROM the official text, flags the conditions that text puts on it, and defers the applicant's own situation to the firm or professional reviewing the form -- it never concludes their case. Relay all three parts: do not trim the conditions to give a cleaner yes, and do not add a verdict of your own. Ask it what the instructions SAY, never what the user SHOULD DO. The secretary holds the whole form catalog + the applicant's answers and replies in prose; when it identifies fields, the response also carries a `fields` list of exact {field_id, spoken_name} you can pass straight to switch_to_field. Do NOT ask it for the CURRENT field's own name or id -- that is always in your latest guidance block already.",
+              "name": "ask_secretary",
+              "parameters": {
+                "properties": {
+                  "query": {
+                    "description": "The plain-language question: a past answer/value ('what is their mailing zip code?'), which field the user means for navigation ('which field is the apartment number?'), or what the official instructions SAY about something ('what do the instructions say about exception 3?'). Phrase a guidance question as what the text says, never as what this applicant should do or qualifies for.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Skip a REQUIRED field the user cannot answer right now (they want to ask a translator or look it up later). This is NOT 'not applicable' -- for a question that does not apply (e.g. no middle name), use update_form_fields with an empty value instead. First CONFIRM with the user, in the session language, that they want to skip this question for now; only call this after they say yes. The question stays flagged for follow-up and the form can still be completed. Use the exact field_id from the schema.",
+              "name": "skip_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Jump to ONE SPECIFIC field so it becomes the current field -- use it when the user wants to change or revisit an earlier answer (e.g. 'go back to my mailing city'). Just pass what the USER called the field, in their own words -- an exact field_id if you have one in a recent guidance block, otherwise the field's spoken name OR even a rough description ('that government id with 12 digits', 'the box where they sign'). The tool figures out which field that is for you -- do NOT reconstruct or guess a field_id from memory. If it cannot tell which field you mean, the response says so and may list options to pick from -- ask the user which, then call again with that field. On success the response carries that field's guidance -- ask the user about THAT field next. This does NOT navigate sections; for a whole different section use switch_section.",
+              "name": "switch_to_field",
+              "parameters": {
+                "properties": {
+                  "field": {
+                    "description": "The target field, in whatever form you have: an exact field_id from a recent guidance block, the field's spoken name, or a plain-language description of it (the tool resolves a description to the field). Do not invent a field_id.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    }
+  ],
+  "records": [
+    {
+      "model": "gemini-3.8-live",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "typed1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P2",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "typed1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P2",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "typed1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P2",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "omit",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": "__ABSENT__",
+      "wire_assert_ok": true,
+      "cell": "P3",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "omit",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": "__ABSENT__",
+      "wire_assert_ok": true,
+      "cell": "P3",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "omit",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": "__ABSENT__",
+      "wire_assert_ok": true,
+      "cell": "P3",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge the user briefly first, in the user's language.",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask the user, in the session language, whether the value is correct, and wait for their confirmation. If confirmed, call this tool. If the user says it is wrong, ask for the correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user verified it in the UI)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Ask the secretary a plain-language question about the form. Three uses: (1) recall a past ANSWER/value -- 'what previous name did they give?', 'have we got their date of birth yet?'; (2) IDENTIFY which field the user means when you need to jump to a field you do NOT currently hold -- 'which field is the mailing city?'; (3) get the OFFICIAL INSTRUCTION TEXT quoted back when the current field's reference text does not cover something -- 'what do the instructions say about exception 3?'. Use (3) to obtain the form's OWN WORDS, which you may then read to the user. On anything shaped like 'do I qualify' or 'would my document work', it answers FROM the official text, flags the conditions that text puts on it, and defers the applicant's own situation to the firm or professional reviewing the form -- it never concludes their case. Relay all three parts: do not trim the conditions to give a cleaner yes, and do not add a verdict of your own. Ask it what the instructions SAY, never what the user SHOULD DO. The secretary holds the whole form catalog + the applicant's answers and replies in prose; when it identifies fields, the response also carries a `fields` list of exact {field_id, spoken_name} you can pass straight to switch_to_field. Do NOT ask it for the CURRENT field's own name or id -- that is always in your latest guidance block already.",
+              "name": "ask_secretary",
+              "parameters": {
+                "properties": {
+                  "query": {
+                    "description": "The plain-language question: a past answer/value ('what is their mailing zip code?'), which field the user means for navigation ('which field is the apartment number?'), or what the official instructions SAY about something ('what do the instructions say about exception 3?'). Phrase a guidance question as what the text says, never as what this applicant should do or qualifies for.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Skip a REQUIRED field the user cannot answer right now (they want to ask a translator or look it up later). This is NOT 'not applicable' -- for a question that does not apply (e.g. no middle name), use update_form_fields with an empty value instead. First CONFIRM with the user, in the session language, that they want to skip this question for now; only call this after they say yes. The question stays flagged for follow-up and the form can still be completed. Use the exact field_id from the schema.",
+              "name": "skip_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Jump to ONE SPECIFIC field so it becomes the current field -- use it when the user wants to change or revisit an earlier answer (e.g. 'go back to my mailing city'). Just pass what the USER called the field, in their own words -- an exact field_id if you have one in a recent guidance block, otherwise the field's spoken name OR even a rough description ('that government id with 12 digits', 'the box where they sign'). The tool figures out which field that is for you -- do NOT reconstruct or guess a field_id from memory. If it cannot tell which field you mean, the response says so and may list options to pick from -- ask the user which, then call again with that field. On success the response carries that field's guidance -- ask the user about THAT field next. This does NOT navigate sections; for a whole different section use switch_section.",
+              "name": "switch_to_field",
+              "parameters": {
+                "properties": {
+                  "field": {
+                    "description": "The target field, in whatever form you have: an exact field_id from a recent guidance block, the field's spoken name, or a plain-language description of it (the tool resolves a description to the field). Do not invent a field_id.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge the user briefly first, in the user's language.",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask the user, in the session language, whether the value is correct, and wait for their confirmation. If confirmed, call this tool. If the user says it is wrong, ask for the correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user verified it in the UI)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Ask the secretary a plain-language question about the form. Three uses: (1) recall a past ANSWER/value -- 'what previous name did they give?', 'have we got their date of birth yet?'; (2) IDENTIFY which field the user means when you need to jump to a field you do NOT currently hold -- 'which field is the mailing city?'; (3) get the OFFICIAL INSTRUCTION TEXT quoted back when the current field's reference text does not cover something -- 'what do the instructions say about exception 3?'. Use (3) to obtain the form's OWN WORDS, which you may then read to the user. On anything shaped like 'do I qualify' or 'would my document work', it answers FROM the official text, flags the conditions that text puts on it, and defers the applicant's own situation to the firm or professional reviewing the form -- it never concludes their case. Relay all three parts: do not trim the conditions to give a cleaner yes, and do not add a verdict of your own. Ask it what the instructions SAY, never what the user SHOULD DO. The secretary holds the whole form catalog + the applicant's answers and replies in prose; when it identifies fields, the response also carries a `fields` list of exact {field_id, spoken_name} you can pass straight to switch_to_field. Do NOT ask it for the CURRENT field's own name or id -- that is always in your latest guidance block already.",
+              "name": "ask_secretary",
+              "parameters": {
+                "properties": {
+                  "query": {
+                    "description": "The plain-language question: a past answer/value ('what is their mailing zip code?'), which field the user means for navigation ('which field is the apartment number?'), or what the official instructions SAY about something ('what do the instructions say about exception 3?'). Phrase a guidance question as what the text says, never as what this applicant should do or qualifies for.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Skip a REQUIRED field the user cannot answer right now (they want to ask a translator or look it up later). This is NOT 'not applicable' -- for a question that does not apply (e.g. no middle name), use update_form_fields with an empty value instead. First CONFIRM with the user, in the session language, that they want to skip this question for now; only call this after they say yes. The question stays flagged for follow-up and the form can still be completed. Use the exact field_id from the schema.",
+              "name": "skip_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Jump to ONE SPECIFIC field so it becomes the current field -- use it when the user wants to change or revisit an earlier answer (e.g. 'go back to my mailing city'). Just pass what the USER called the field, in their own words -- an exact field_id if you have one in a recent guidance block, otherwise the field's spoken name OR even a rough description ('that government id with 12 digits', 'the box where they sign'). The tool figures out which field that is for you -- do NOT reconstruct or guess a field_id from memory. If it cannot tell which field you mean, the response says so and may list options to pick from -- ask the user which, then call again with that field. On success the response carries that field's guidance -- ask the user about THAT field next. This does NOT navigate sections; for a whole different section use switch_section.",
+              "name": "switch_to_field",
+              "parameters": {
+                "properties": {
+                  "field": {
+                    "description": "The target field, in whatever form you have: an exact field_id from a recent guidance block, the field's spoken name, or a plain-language description of it (the tool resolves a description to the field). Do not invent a field_id.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    },
+    {
+      "model": "gemini-3.8-live",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge the user briefly first, in the user's language.",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask the user, in the session language, whether the value is correct, and wait for their confirmation. If confirmed, call this tool. If the user says it is wrong, ask for the correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user verified it in the UI)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Ask the secretary a plain-language question about the form. Three uses: (1) recall a past ANSWER/value -- 'what previous name did they give?', 'have we got their date of birth yet?'; (2) IDENTIFY which field the user means when you need to jump to a field you do NOT currently hold -- 'which field is the mailing city?'; (3) get the OFFICIAL INSTRUCTION TEXT quoted back when the current field's reference text does not cover something -- 'what do the instructions say about exception 3?'. Use (3) to obtain the form's OWN WORDS, which you may then read to the user. On anything shaped like 'do I qualify' or 'would my document work', it answers FROM the official text, flags the conditions that text puts on it, and defers the applicant's own situation to the firm or professional reviewing the form -- it never concludes their case. Relay all three parts: do not trim the conditions to give a cleaner yes, and do not add a verdict of your own. Ask it what the instructions SAY, never what the user SHOULD DO. The secretary holds the whole form catalog + the applicant's answers and replies in prose; when it identifies fields, the response also carries a `fields` list of exact {field_id, spoken_name} you can pass straight to switch_to_field. Do NOT ask it for the CURRENT field's own name or id -- that is always in your latest guidance block already.",
+              "name": "ask_secretary",
+              "parameters": {
+                "properties": {
+                  "query": {
+                    "description": "The plain-language question: a past answer/value ('what is their mailing zip code?'), which field the user means for navigation ('which field is the apartment number?'), or what the official instructions SAY about something ('what do the instructions say about exception 3?'). Phrase a guidance question as what the text says, never as what this applicant should do or qualifies for.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Skip a REQUIRED field the user cannot answer right now (they want to ask a translator or look it up later). This is NOT 'not applicable' -- for a question that does not apply (e.g. no middle name), use update_form_fields with an empty value instead. First CONFIRM with the user, in the session language, that they want to skip this question for now; only call this after they say yes. The question stays flagged for follow-up and the form can still be completed. Use the exact field_id from the schema.",
+              "name": "skip_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Jump to ONE SPECIFIC field so it becomes the current field -- use it when the user wants to change or revisit an earlier answer (e.g. 'go back to my mailing city'). Just pass what the USER called the field, in their own words -- an exact field_id if you have one in a recent guidance block, otherwise the field's spoken name OR even a rough description ('that government id with 12 digits', 'the box where they sign'). The tool figures out which field that is for you -- do NOT reconstruct or guess a field_id from memory. If it cannot tell which field you mean, the response says so and may list options to pick from -- ask the user which, then call again with that field. On success the response carries that field's guidance -- ask the user about THAT field next. This does NOT navigate sections; for a whole different section use switch_section.",
+              "name": "switch_to_field",
+              "parameters": {
+                "properties": {
+                  "field": {
+                    "description": "The target field, in whatever form you have: an exact field_id from a recent guidance block, the field's spoken name, or a plain-language description of it (the tool resolves a description to the field). Do not invent a field_id.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-11-18T02:51:05+00:00"
+    }
+  ]
+}

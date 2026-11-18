@@ -634,6 +634,86 @@ def run_language(client, language, items, glossary, usage,
     return summary
 
 
+def run_bt_spotcheck(models: List[str], langs: List[str],
+                     gold_data: Dict[str, Any]) -> int:
+    """bd polyglot-pdf-u0kcc: the back-translate stage ALONE, through the
+    SHIPPED adapter call (TextAIGemini.back_translate -- the production prompt,
+    temperature 0, no thinking_config) on each lite model, over the gold +
+    planted items (no kit filler -- no kit is tracked). The verify loop needs
+    the lite back-translation to be FAITHFUL: a gold string should round-trip
+    close to its English source, and a planted corruption should NOT be
+    smoothed back into the source meaning (or the pro judge cannot see it).
+    Scored deterministically by a character-similarity ratio vs the English
+    source; a spot check, not a gate -- the verbatim back-translations are in
+    the CSV for a human read."""
+    import asyncio
+    import difflib
+
+    from backend.scripts.lite_probe_textai import RecordingTextAI, new_record
+
+    def _sim(a: str, b: str) -> float:
+        return difflib.SequenceMatcher(None, (a or "").lower(),
+                                       (b or "").lower()).ratio()
+
+    lang_code = {"spanish": "es", "chinese": "zh"}
+    lang_name = {"spanish": "Spanish", "chinese": "Chinese"}
+    rows: List[Dict[str, Any]] = []
+    summary: Dict[str, Any] = {}
+
+    async def _run() -> None:
+        for model in models:
+            ai = RecordingTextAI(model)
+            for language in langs:
+                items = build_items(language, gold_data, 0)
+                payload = {it["id"]: it["translation"] for it in items}
+                rec = new_record()
+                result = await ai.back_translate(
+                    payload, lang_name[language], lang_code[language])
+                result = result or {}
+                usage = rec["usage"] or {}
+                cell = {"n": len(items), "returned": 0, "gold_sim": [],
+                        "plant_sim": [], "latency_s": rec["latency_s"],
+                        "error": rec["error"], "usage": usage}
+                for it in items:
+                    bt = result.get(it["id"], "")
+                    sim = _sim(bt, it["source_en"])
+                    if bt:
+                        cell["returned"] += 1
+                    cell["gold_sim" if it["group"] == "gold" else "plant_sim"].append(sim)
+                    rows.append({
+                        "model": model, "language": language, "id": it["id"],
+                        "group": it["group"], "class": it["class"] or "",
+                        "source_en": it["source_en"], "translation": it["translation"],
+                        "back_translation": bt, "sim_to_source": round(sim, 3),
+                    })
+                for key in ("gold_sim", "plant_sim"):
+                    vals = cell[key]
+                    cell[key] = round(sum(vals) / len(vals), 3) if vals else None
+                summary["%s/%s" % (model, language)] = cell
+                print("%s %s: returned %d/%d gold_sim=%s plant_sim=%s lat=%.2fs "
+                      "usage=%s err=%s" % (
+                          model, language, cell["returned"], cell["n"],
+                          cell["gold_sim"], cell["plant_sim"],
+                          cell["latency_s"] or -1, usage, cell["error"]),
+                      flush=True)
+
+    asyncio.run(_run())
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    csv_path = DATA_DIR / ("translation_bt_spotcheck_%s.csv" % stamp)
+    meta_path = DATA_DIR / ("translation_bt_spotcheck_%s.meta.json" % stamp)
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    with open(meta_path, "w", encoding="utf-8") as fh:
+        json.dump({"bead": "polyglot-pdf-u0kcc", "mode": "bt-only",
+                   "models": models, "langs": langs,
+                   "vertex_location": os.environ.get("VERTEX_LOCATION", "global"),
+                   "summary": summary}, fh, indent=2, ensure_ascii=False)
+    print("\nwrote %s + %s" % (csv_path.name, meta_path.name), flush=True)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--langs", default="es,zh,ur",
@@ -641,12 +721,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--max-filler", type=int, default=30)
     parser.add_argument("--dry-run", action="store_true",
                         help="zero-API pass: corpus + lint stage only")
+    parser.add_argument("--bt-only", default="",
+                        help="bd u0kcc: comma list of lite models; run ONLY the "
+                             "back-translate stage through the shipped adapter on "
+                             "each (es/zh gold + plants), no judge/rectify spend")
     args = parser.parse_args(argv)
 
     langs = [SPOKEN_LANG_NAME[code.strip()] for code in
              args.langs.split(",") if code.strip() in SPOKEN_LANG_NAME]
     with open(GOLD_PATH, encoding="utf-8") as fh:
         gold_data = json.load(fh)
+    if args.bt_only:
+        bt_langs = [lang for lang in langs if lang in ("spanish", "chinese")]
+        return run_bt_spotcheck(
+            [m.strip() for m in args.bt_only.split(",") if m.strip()],
+            bt_langs, gold_data)
     glossary = load_glossary()
     if glossary is None:
         print("ERROR: glossary unavailable")
