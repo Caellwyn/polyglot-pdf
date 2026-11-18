@@ -95,7 +95,7 @@ The curves above are from a **gemini-2.5 native audio** run, the July 2026 produ
   - How the naive line was split: the Methodology above says the naive curve reuses the measured run's per-question voice-in, voice-out and text-out. So its text-input cost is the remainder, about 90% of the naive total, and only that part was repriced.
   - The script that built the naive curve is not in the repo. This split is inferred from the method as described, not re-derived. Question 1, where nothing has accumulated yet, is consistent with it: naive $0.0086 vs mitigated $0.0086.
 - **This is a REPRICING, not a 3.8 run.** It holds every token count from the 2.5 run fixed and changes only the prices. Two things on 3.8 add cost that repricing cannot see:
-  - it speaks about twice as much audio per form;
+  - it speaks about twice as much audio per form (measured on the W-7);
   - it reports thinking tokens, priced at the output rate. The one reconciled 3.8 billing day did NOT show thinking as billed text output (n=1, `scripts/spikes/3p8_deployed_telemetry_findings.md`), so treat that line as an upper bound.
 - **How big the gap is, and what a measured 3.8 I-90 would likely cost.**
   - Repricing alone raises this I-90 run about 15% ($2.66 -> $3.05). The run is audio-heavy, and audio prices did not change.

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
-*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the measured cost invariant is re-measured on the production tier `gemini-3.8-live` -- text-in leads the happy path narrowly, audio-in leads corrections; 3.8 costs ~30% more per W-7 than 2.5; thinking and input transcription costed as their own lines. 2.5 kept as the prior record. See `scripts/spikes/3p8_cost_bench_findings.md`. bd polyglot-pdf-r3ham.5: thinking is framed as an upper bound throughout.)*
+*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the measured cost invariant is re-measured on the production tier `gemini-3.8-live` -- text-in leads the happy path narrowly, audio-in leads corrections; 3.8 costs ~30% more per W-7 than 2.5; thinking and input transcription costed as their own lines. 2.5 kept as the prior record. See `scripts/spikes/3p8_cost_bench_findings.md`. bd polyglot-pdf-r3ham.5: thinking is framed as an upper bound.)*
 
 *Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
 
@@ -140,7 +140,7 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > text-input and audio-input together are ~85-95% of a form's cost. Which of the
 > two leads depends on the session's shape:
 >
-> | 3.8, full 22-field W-7, n=3 each | text-in | audio-in | audio-out | thinking | other text-out | $ / form | $ / correct field |
+> | 3.8, full 22-field W-7, n=3 each | text-in | audio-in | audio-out | thinking (upper bound) | other text-out | $ / form | $ / correct field |
 > |---|---|---|---|---|---|---|---|
 > | happy path | **~50%** | ~40% | ~6% | ~3% | ~1% | $0.87-0.94 | ~$0.043 |
 > | unhappy path (every answer corrected once) | ~44% | **~46%** | ~6% | ~3% | ~1% | $1.50-1.83 | ~$0.088 |
