@@ -10,8 +10,9 @@ Pieces:
   - move_schema / validate_decision: the strict structured-output contract.
   - render: move -> spoken text, templates + fact strings only.
   - StubActor: deterministic offline backend (and the fallback).
-  - HaikuActor: Claude Haiku 5.5, strict JSON output, via the Claude API
-    (default) or Vertex; HaikuVertexActor pins the Vertex provider.
+  - HaikuActor: Claude Haiku 5.5 via the Claude API (anthropic SDK,
+    ANTHROPIC_API_KEY), strict JSON output. Deliberately NOT Vertex: Vertex
+    bills Google pay-as-you-go, the Claude API uses Anthropic credits.
 
 Offline-importable: the `anthropic` package is imported lazily in
 HaikuActor only. ASCII only.
@@ -34,12 +35,11 @@ FIELD_MOVES = frozenset({"answer", "spell", "reject_and_correct"})
 NONE_KEY = "none"
 
 HAIKU_MODEL = "claude-haiku-5-5"
-DEFAULT_PROJECT = "polyglot-demo-aa709"
 # Claude API list price, USD per million tokens, for prompts of 100K tokens or
-# fewer. The Vertex rate may differ -- re-check before trusting a cost line.
+# fewer.
 HAIKU_55_USD_PER_MTOK = {"input": 0.10, "output": 0.50}
 # Cache multipliers are the standard Anthropic ratios (read 0.1x, 5-min write
-# 1.25x of the input rate); an assumption, not a measured Vertex figure.
+# 1.25x of the input rate); an assumption, not a measured figure.
 _CACHE_READ_MULT = 0.10
 _CACHE_WRITE_MULT = 1.25
 
@@ -319,7 +319,7 @@ class StubActor:
 
 
 # --------------------------------------------------------------------------
-# HaikuVertexActor
+# HaikuActor
 # --------------------------------------------------------------------------
 _MOVE_HELP = {
     "answer": "give the fact the interviewer just asked about (needs field_key)",
@@ -382,33 +382,19 @@ def _usage_dict(u: Any) -> dict:
             "cache_creation": g("cache_creation_input_tokens")}
 
 
-PROVIDERS = ("api", "vertex")
-
-
 class HaikuActor:
-    """Claude Haiku 5.5 actor with strict JSON output.
+    """Claude Haiku 5.5 actor with strict JSON output, via the Claude API.
 
-    provider="api" (default) calls the Claude API with ANTHROPIC_API_KEY.
-    provider="vertex" calls Claude on Vertex (project_id, region global); that
-    path needs a non-zero base-model quota for anthropic-claude-haiku.
-    A missing API key raises at construction rather than letting every turn
-    silently fall back to the stub.
+    Uses anthropic.Anthropic() with ANTHROPIC_API_KEY. A missing key raises at
+    construction rather than letting every turn silently fall back to the stub.
     """
 
-    def __init__(self, persona: Persona, provider: str = "api",
-                 project_id: Optional[str] = None, client: Any = None,
+    def __init__(self, persona: Persona, client: Any = None,
                  max_tokens: int = 200):
-        if provider not in PROVIDERS:
-            raise ValueError("provider must be one of %r, got %r"
-                             % (PROVIDERS, provider))
-        if (provider == "api" and client is None
-                and not os.environ.get("ANTHROPIC_API_KEY")):
-            raise RuntimeError("provider='api' needs ANTHROPIC_API_KEY in the "
+        if client is None and not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("HaikuActor needs ANTHROPIC_API_KEY in the "
                                "environment")
         self.persona = persona
-        self.provider = provider
-        self.project_id = (project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-                           or DEFAULT_PROJECT)
         self._client = client
         self.max_tokens = max_tokens
         self.stub = StubActor(persona)
@@ -418,11 +404,7 @@ class HaikuActor:
     def _get_client(self):
         if self._client is None:
             import anthropic  # lazy: keeps the module offline-importable
-            if self.provider == "api":
-                self._client = anthropic.Anthropic()
-            else:
-                self._client = anthropic.AnthropicVertex(
-                    project_id=self.project_id, region="global")
+            self._client = anthropic.Anthropic()
         return self._client
 
     def build_request(self, model_text: str, history: list) -> dict:
@@ -490,11 +472,3 @@ class HaikuActor:
                 model_text, history,
                 {"error": "%s: %s" % (type(exc).__name__, exc)}, usage, t0)
 
-
-class HaikuVertexActor(HaikuActor):
-    """HaikuActor pinned to provider='vertex'."""
-
-    def __init__(self, persona: Persona, project_id: Optional[str] = None,
-                 client: Any = None, max_tokens: int = 200):
-        super().__init__(persona, provider="vertex", project_id=project_id,
-                         client=client, max_tokens=max_tokens)

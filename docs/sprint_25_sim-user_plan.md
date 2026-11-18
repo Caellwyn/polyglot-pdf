@@ -89,7 +89,7 @@ what the model actually SAID, not just what it claimed it said.
 
 | Child | Writes (surfaces) | Inherits | Tier | Order |
 |---|---|---|---|---|
-| E.1 Actor core. The W-7 non-spelling persona and fact sheet (JSON). The strict move schema. The value renderer. Actor backends: Haiku 5.5 through the Claude API (Vertex selectable), plus an offline scripted stub. Offline unit tests, including a fact-sheet vs `W7_EXPECTED` drift test. | `scripts/spikes/sim_user/` (actor, personas), `backend/tests/unit/test_sim_user_actor.py` | 3 | sonnet | parallel with E.2 |
+| E.1 Actor core. The W-7 non-spelling persona and fact sheet (JSON). The strict move schema. The value renderer. Actor backends: Haiku 5.5 through the Claude API, plus an offline scripted stub. Offline unit tests, including a fact-sheet vs `W7_EXPECTED` drift test. | `scripts/spikes/sim_user/` (actor, personas), `backend/tests/unit/test_sim_user_actor.py` | 3 | sonnet | parallel with E.2 |
 | E.2 STT divergence scorer. Lift the v2 helpers out of `stt_readback_diff2.py` into a shared module that diff2 then imports. Per-generation scoring (transcript vs STT, divergence score, letter diffs) and a run summary. Offline tests on synthetic inputs. | `scripts/spikes/sim_user_stt.py`, `scripts/spikes/stt_readback_diff2.py`, `backend/tests/unit/test_sim_user_stt.py` | 4 | sonnet | parallel with E.1 |
 | E.3 Harness integration. `--user sim --ears {transcript,stt}`. Per-generation PCM capture in `send_bytes`. The playback-aware turn gate. The TTS mouth (gTTS cache, plus Chirp3 LINEAR16). Strict scoring from the fact sheet. Cost lines for the actor, TTS and STT. Committed per-generation records. | `scripts/spikes/measure_form_session_costs.py` | 1, 2 | sonnet | after E.1 and E.2 |
 | E.4 Measurement. A pilot, then n=3 runs on each of the 2 models. Findings doc and committed data. | `scripts/spikes/sim_user_findings.md`, `scripts/spikes/data/sim_user/` | 1, 5 | sonnet (+opus to read the results) | after E.3 |
@@ -130,10 +130,12 @@ real client data.
 That is 6 measured runs plus about 4 pilot and debug runs, roughly **$12**.
 **Hard cap: $20.**
 
-**Haiku access: the Claude API.** The actor calls Haiku through the Claude API
-with the maintainer's `ANTHROPIC_API_KEY` (maintainer decision, 2026-11-18). A
-Vertex path remains selectable (`provider="vertex"`), but project
-`polyglot-demo-aa709` has a zero base-model quota for `anthropic-claude-haiku`
-and returns 429. The key is set machine-wide on the maintainer's computer, so a
-session started before it existed does not inherit it. Pass it to the run from
-the Windows machine environment without printing it.
+**Haiku access: the Claude API only.** The actor calls Haiku through the
+`anthropic` SDK with the maintainer's `ANTHROPIC_API_KEY` (maintainer decision,
+2026-11-18). That spend draws on Anthropic credits. There is deliberately NO
+Vertex path, because Vertex bills the Google pay-as-you-go account; a test pins
+that no Vertex client is constructed. The STT and Chirp3 TTS lines in the cost
+table above still bill Google, while gTTS is free. The key is set machine-wide
+on the maintainer's computer, so a session started before it existed does not
+inherit it. Pass it to the run from the Windows machine environment without
+printing it.

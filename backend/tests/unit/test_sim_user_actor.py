@@ -8,7 +8,7 @@ Pins, with NO network and NO named kit field id (CLAUDE.md scar #10):
   - the renderer can only speak fact-sheet strings (no off-sheet value);
   - the non-spelling persona does not spell until asked;
   - StubActor drives a whole session offline;
-  - HaikuVertexActor builds the pinned request shape and falls back on bad output.
+  - HaikuActor builds the pinned request shape and falls back on bad output.
 
 Field ids are always DERIVED from the persona JSON / W7_EXPECTED, never typed.
 ASCII only.
@@ -283,7 +283,7 @@ class TestStubActor:
             assert d.field_key == fid, (fid, kw)
 
 
-# --------------------------------------------------------- HaikuVertexActor
+# --------------------------------------------------------------- HaikuActor
 class FakeClient:
     def __init__(self, text=None, usage=None, stop_reason="end_turn", exc=None):
         self.calls = []
@@ -306,7 +306,7 @@ class TestHaikuActor:
     def test_request_shape(self, persona):
         k = _name_key(persona)
         fc = FakeClient(json.dumps({"move": "answer", "field_key": k}))
-        a = actor.HaikuVertexActor(persona, client=fc)
+        a = actor.HaikuActor(persona, client=fc)
         run(a.decide("What is your first name?", []))
         kw = fc.calls[0]
         assert kw["model"] == "claude-haiku-5-5"
@@ -325,7 +325,7 @@ class TestHaikuActor:
     def test_history_alternates_user_assistant(self, persona):
         k = _name_key(persona)
         fc = FakeClient(json.dumps({"move": "confirm", "field_key": "none"}))
-        a = actor.HaikuVertexActor(persona, client=fc)
+        a = actor.HaikuActor(persona, client=fc)
         hist = [{"model_text": "q1", "move": "answer", "field_key": k}]
         run(a.decide("is that right?", hist))
         msgs = fc.calls[0]["messages"]
@@ -343,7 +343,7 @@ class TestHaikuActor:
     def test_valid_reply_parses(self, persona):
         k = _name_key(persona)
         fc = FakeClient(json.dumps({"move": "spell", "field_key": k}))
-        d = run(actor.HaikuVertexActor(persona, client=fc).decide("spell it", []))
+        d = run(actor.HaikuActor(persona, client=fc).decide("spell it", []))
         assert (d.move, d.field_key) == ("spell", k)
         assert d.valid and not d.fallback_used
         assert d.usage == {"input": 1200, "output": 15,
@@ -359,7 +359,7 @@ class TestHaikuActor:
     ])
     def test_invalid_output_falls_back_to_stub(self, persona, bad):
         k = _name_key(persona)
-        a = actor.HaikuVertexActor(persona, client=FakeClient(bad))
+        a = actor.HaikuActor(persona, client=FakeClient(bad))
         prompt = "What is your %s?" % persona.facts[k]["keywords"][0]
         d = run(a.decide(prompt, []))
         assert d.fallback_used is True
@@ -368,53 +368,37 @@ class TestHaikuActor:
         assert d.usage["input"] == 1200
 
     def test_exception_and_refusal_fall_back(self, persona):
-        a = actor.HaikuVertexActor(persona, client=FakeClient(exc=RuntimeError("429")))
+        a = actor.HaikuActor(persona, client=FakeClient(exc=RuntimeError("429")))
         d = run(a.decide("Welcome.", []))
         assert d.fallback_used and d.move == "acknowledge"
-        a2 = actor.HaikuVertexActor(
+        a2 = actor.HaikuActor(
             persona, client=FakeClient('{"move":"confirm","field_key":"none"}',
                                        stop_reason="refusal"))
         d2 = run(a2.decide("Welcome.", []))
         assert d2.fallback_used and d2.move == "acknowledge"
 
-    def test_default_project_and_cost(self, persona, monkeypatch):
-        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-        assert actor.HaikuVertexActor(persona, client=object()).project_id == "polyglot-demo-aa709"
-        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "other-proj")
-        assert actor.HaikuVertexActor(persona, client=object()).project_id == "other-proj"
+    def test_cost(self, persona):
         c = actor.estimate_cost_usd({"input": 1_000_000, "output": 1_000_000,
                                      "cache_read": 0, "cache_creation": 0})
         assert c == pytest.approx(0.60)
 
 
-# ------------------------------------------------------------ provider switch
-class TestHaikuProvider:
-    def test_api_is_the_default_provider(self, persona, monkeypatch):
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
-        assert actor.HaikuActor(persona).provider == "api"
-
+# --------------------------------------------------------- API key / no Vertex
+class TestHaikuApiOnly:
     def test_api_without_key_fails_fast(self, persona, monkeypatch):
         # A missing key must stop the run up front, not let every turn
         # quietly fall back to the stub and pass as a Haiku run.
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
-            actor.HaikuActor(persona, provider="api")
+            actor.HaikuActor(persona)
 
-    def test_vertex_needs_no_api_key(self, persona, monkeypatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        a = actor.HaikuVertexActor(persona, client=object())
-        assert a.provider == "vertex"
+    def test_constructs_with_key(self, persona, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+        actor.HaikuActor(persona)
 
-    def test_unknown_provider_rejected(self, persona):
-        with pytest.raises(ValueError):
-            actor.HaikuActor(persona, provider="bedrock", client=object())
-
-    @pytest.mark.parametrize("provider", ["api", "vertex"])
-    def test_request_shape_is_provider_independent(self, persona, provider):
-        a = actor.HaikuActor(persona, provider=provider, client=object())
-        req = a.build_request("What is your first name?", [])
-        assert req["model"] == actor.HAIKU_MODEL
-        assert req["thinking"] == {"type": "disabled"}
-        assert req["output_config"]["format"]["type"] == "json_schema"
-        for k in ("temperature", "top_p", "top_k"):
-            assert k not in req
+    def test_no_vertex_client_anywhere(self):
+        # Maintainer decision: Haiku goes through the Claude API (Anthropic
+        # credits), never Vertex (Google pay-as-you-go billing).
+        src = Path(actor.__file__).read_text(encoding="utf-8")
+        assert "AnthropicVertex" not in src
+        assert not hasattr(actor, "HaikuVertexActor")
