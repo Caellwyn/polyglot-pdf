@@ -254,6 +254,25 @@ EXCEPTION_LOGGING_SITES = (
 # freeze the default. Part 1 removes that ordering dependency outright.
 
 
+class PiiSafeBoundLogger(structlog.stdlib.BoundLogger):
+	"""stdlib BoundLogger whose .exception() hands the stdlib logger NO exc_info.
+
+	structlog >= 24 forwards `.exception()` to `logging.Logger.exception`, which
+	stamps the live exception onto the LogRecord. Any stdlib Formatter then
+	appends the full traceback -- exception MESSAGE included -- after our
+	already-rendered JSON line, so a field value in the message reaches Cloud
+	Logging even though pii_safe_exception_processor scrubbed the event (bd
+	polyglot-pdf-6wkzi; the P0 shape of bd polyglot-pdf-p84m). Routing through
+	.error() -- what structlog < 24 did -- keeps exc_info inside the processor
+	chain, where pii_safe_exception_processor consumes it, and hands the stdlib
+	logger only the rendered string.
+	"""
+
+	def exception(self, event=None, *args, **kw):
+		kw.setdefault("exc_info", True)
+		return self.error(event, *args, **kw)
+
+
 def _configure_structlog() -> None:
 	"""Install the processor chain. Idempotent -- safe to call repeatedly."""
 	structlog.configure(
@@ -278,7 +297,9 @@ def _configure_structlog() -> None:
 			structlog.processors.JSONRenderer(),
 		],
 		logger_factory=structlog.stdlib.LoggerFactory(),
-		wrapper_class=structlog.stdlib.BoundLogger,  # Use stdlib bound logger, not filtering one
+		# stdlib bound logger (not a filtering one), with .exception() kept off
+		# the stdlib LogRecord -- see PiiSafeBoundLogger.
+		wrapper_class=PiiSafeBoundLogger,
 		cache_logger_on_first_use=True,
 	)
 
