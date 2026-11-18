@@ -108,8 +108,9 @@ location (endpoint-verified 2026-10-21).
   > only once it is **GA for Vertex customers**.
 
   The **demo** runs `VERTEXAI=true` (Vertex, SA ADC) with `USE_PREMIUM_MODEL=false`
-  and does **not** pin `MODEL_NATIVE`, so the standard tier resolves to
-  `gemini-3.8-live` on its own. A/B-ing 3.1 requires the AI-Studio path
+  and does **not** pin `MODEL_NATIVE`, so on its next deploy the standard tier
+  resolves to `gemini-3.8-live` on its own (the demo build deployed 2026-09-23
+  still serves 2.5; `scripts/spikes/3p8_deployed_telemetry_findings.md`). A/B-ing 3.1 requires the AI-Studio path
   (`VERTEXAI=false`, `USE_PREMIUM_MODEL=true`), so it is a **LOCAL-ONLY** exercise.
   Not surfaced on `/health` (which reports no configuration at all since
   sprint 23 B1b); the startup refusal IS the enforcement.

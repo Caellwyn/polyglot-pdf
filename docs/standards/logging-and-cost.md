@@ -152,7 +152,8 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > **3.8 costs ~30% more per form than 2.5 on the identical script.** Prompt size
 > is about the same on both (~610k vs ~640k text-in tokens per W-7). The gap is:
 > 3.8's text-in rate is 1.5x (0.75 vs 0.50), 3.8 speaks about twice as much
-> audio, and 3.8 bills thinking. So the audio-in-leads ordering measured on 2.5
+> audio, and 3.8 reports thinking tokens (priced at the output rate; an upper
+> bound, see lever 4). So the audio-in-leads ordering measured on 2.5
 > flipped back to text-in on the 3.8 happy path, as the rate table predicted, but
 > only narrowly: corrections and long sessions add user audio and put audio-in
 > back on top.

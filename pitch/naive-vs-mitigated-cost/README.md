@@ -91,11 +91,17 @@ The curves above are from a **gemini-2.5 native audio** run, the July 2026 produ
 | 2.5 rates (measured run, above) | $2.66 | $18.74 | 7.1x |
 | 3.8 rates, SAME token counts | $3.05 | $27.17 | 8.9x |
 
-- **The ratio grows on 3.8.** The naive baseline is almost all re-sent text (about 90% of its cost is text input), and text input is the line 3.8 made more expensive. Mitigation matters more on 3.8, not less.
+- **The ratio grows on 3.8.** The naive baseline is mostly re-sent text, and text input is the line 3.8 made more expensive. Mitigation matters more on 3.8, not less.
+  - How the naive line was split: the Methodology above says the naive curve reuses the measured run's per-question voice-in, voice-out and text-out. So its text-input cost is the remainder, about 90% of the naive total, and only that part was repriced.
+  - The script that built the naive curve is not in the repo. This split is inferred from the method as described, not re-derived. Question 1, where nothing has accumulated yet, is consistent with it: naive $0.0086 vs mitigated $0.0086.
 - **This is a REPRICING, not a 3.8 run.** It holds every token count from the 2.5 run fixed and changes only the prices. Two things on 3.8 add cost that repricing cannot see:
   - it speaks about twice as much audio per form;
   - it reports thinking tokens, priced here at the output rate. Thinking is priced from the model's reported token counts. The one reconciled 3.8 billing day did NOT show thinking as billed text output (n=1, `scripts/spikes/3p8_deployed_telemetry_findings.md`), so treat that line as an upper bound.
 
-  On the like-for-like W-7, measured 3.8 cost is about 30% above 2.5, against about 15% from repricing alone (`scripts/spikes/3p8_cost_bench_findings.md`). A measured 3.8 mitigated I-90 would therefore likely be nearer **$3.4-3.5** than $3.05. Treat that as an extrapolation. It differs from the about $3.2 in `pitch/i90-stress-test/README.md` because the bases differ. Here the base is this single 2.5 run ($2.66, voice cost). There it is the 3-run mean of the July stress-test series ($2.44, all-in). Both apply the same +30%.
+  On the like-for-like W-7, measured 3.8 cost is about 30% above 2.5, against about 15% from repricing alone (`scripts/spikes/3p8_cost_bench_findings.md`). A measured 3.8 mitigated I-90 would therefore likely be nearer **$3.4-3.5** than $3.05. Treat that as an extrapolation. It differs from the about $3.2 in `pitch/i90-stress-test/README.md` because the bases are different runs:
+  - here, this single SPANISH-language 2.5 run ($2.66 all-in; the helper models add only $0.002);
+  - there, the 3-run mean of the English stress-test series ($2.44 all-in).
+
+  Both apply the same +30%.
 - **There is no measured full-I-90 run on 3.8 yet.** The current I-90 kit does not complete on 3.8 (bd `polyglot-pdf-r3ham.10`), so this chart cannot be re-drawn from a 3.8 run until it does.
 - The same caveats as above apply. The naive curve is a model, and both curves move with Google's price list.
