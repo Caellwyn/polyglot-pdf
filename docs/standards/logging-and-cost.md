@@ -2,6 +2,8 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
+*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the measured cost invariant is re-measured on the production tier `gemini-3.8-live` -- text-in leads the happy path narrowly, audio-in leads corrections; 3.8 costs ~30% more per W-7 than 2.5; thinking and input transcription costed as their own lines. 2.5 kept as the prior record. See `scripts/spikes/3p8_cost_bench_findings.md`.)*
+
 *Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
 
 *Last updated: 2026-09-18 (bd polyglot-pdf-vm2fu: `scripts/setup-telemetry.sh`'s sink-table detection now goes through a new `scripts/telemetry_bq_setup.py list-tables` subcommand instead of `bq ls --project_id=... --format=csv "$DATASET" 2>/dev/null | tail -n +2` -- that pipeline swallowed stderr and treated an EMPTY listing as "no tables yet", indistinguishable from a `bq` CLI that failed to list at all (observed live: a broken `bq` shim on one machine returned nothing while the sink's stdout table was confirmed present via the same google-cloud-bigquery client this script already depends on for LOCATION derivation and the dataset-scoped IAM grants). `list-tables` exits non-zero with a message on any real API error, which the script now aborts on rather than silently reporting every gated cost view PENDING.)*
@@ -131,15 +133,29 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`). The cumulative cost in
 > `token_usage.jsonl` is the baseline that work measures against.
 
-> **MEASURED COST INVARIANT -- AUDIO-IN NOW LEADS (do not re-derive from the rate
-> table).** On the **2.5** native-audio model with the production configuration
-> (continuous DTI + DERIVED context compression), **audio-input is the largest
-> single cost line**, with text-input close behind on the happy path:
+> **MEASURED COST INVARIANT -- TEXT-IN AND AUDIO-IN ARE THE TWO COST LINES; ON
+> 3.8 TEXT-IN LEADS THE HAPPY PATH (do not re-derive from the rate table).** On
+> the production tier, **`gemini-3.8-live`**, with the production configuration
+> (continuous DTI + DERIVED context compression, push-to-talk, transcription on),
+> text-input and audio-input together are ~85-95% of a form's cost. Which of the
+> two leads depends on the session's shape:
 >
-> | | audio-in | text-in | other |
-> |---|---|---|---|
-> | happy path | ~49% | ~47% | ~4% |
-> | unhappy path (corrections) | ~60% | ~36% | ~5% |
+> | 3.8, full 22-field W-7, n=3 each | text-in | audio-in | audio-out | thinking | other text-out | $ / form | $ / correct field |
+> |---|---|---|---|---|---|---|---|
+> | happy path | **~50%** | ~40% | ~6% | ~3% | ~1% | $0.87-0.94 | ~$0.043 |
+> | unhappy path (every answer corrected once) | ~44% | **~46%** | ~6% | ~3% | ~1% | $1.50-1.83 | ~$0.088 |
+>
+> The prior record, on the **2.5** native-audio model (same script and config,
+> n=3, 2026-11-18): happy path audio-in ~50% / text-in ~45% / other ~5%, at
+> $0.67-0.74 per form. 2.5 native audio retires on Vertex on 2026-12-13.
+>
+> **3.8 costs ~30% more per form than 2.5 on the identical script.** Prompt size
+> is about the same on both (~610k vs ~640k text-in tokens per W-7). The gap is:
+> 3.8's text-in rate is 1.5x (0.75 vs 0.50), 3.8 speaks about twice as much
+> audio, and 3.8 bills thinking. So the audio-in-leads ordering measured on 2.5
+> flipped back to text-in on the 3.8 happy path, as the rate table predicted, but
+> only narrowly: corrections and long sessions add user audio and put audio-in
+> back on top.
 >
 > **This is an EVOLUTION and a WIN, not a contradiction of the older number.**
 > Text-in genuinely *was* 95-98% of session cost when it was measured (bd
@@ -148,46 +164,42 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > everything. Two pieces of work removed that -- **context-window compression**
 > (bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`) bounds the re-sent context to the
 > derived sliding window, and the **SI diet** (epic `polyglot-pdf-jnjj`, shipped in
-> bd `polyglot-pdf-6a79`) cut the static backbone. With text-in capped, the ~6x
-> per-token price gap on audio finally shows through. The text side has been
-> optimized to where it is no longer the dominant problem; what remains is largely
-> the irreducible cost of a voice product.
+> bd `polyglot-pdf-6a79`) cut the static backbone. Text-in leading again on 3.8 is
+> a per-token PRICE effect, not a return of unbounded context.
 >
-> **Implication -- the cost levers have MOVED:**
-> 1. **Audio-in** (how much the user speaks, and how many turns they take) is now
->    the biggest line. A correction costs disproportionately because it adds
->    expensive audio, not cheap text -- measured: the unhappy path's audio-in is
->    2.52x the happy path's while its text-in is only 1.54x.
-> 2. **Billed events per turn.** A turn averages ~2.1 billed events because a tool
->    call re-sends the whole context, so per-turn text-in runs ~1.7x the context
->    size. Cutting one tool round-trip per field saves a whole context re-send.
-> 3. **SI size** still matters (it sets the compression floor, and a bigger SI
->    derives a bigger window -> fewer evictions) but it is no longer the single
->    dominant line it was.
+> **Implication -- the cost levers:**
+> 1. **Text-in per turn** (the re-sent context x tool round-trips per turn). A
+>    tool call re-sends the whole context. 2.5 reports that as ~2 `usage_metadata`
+>    events per turn; 3.8 reports ONE combined event per turn at about twice the
+>    size (~13.5k vs ~6.8k text-in tokens per event on W-7). Text-in per form is
+>    the same on both models, so do not compare per-event counts across models.
+>    Cutting one tool round-trip per field still saves a whole context re-send,
+>    and on 3.8 that text costs 1.5x the 2.5 price.
+> 2. **Audio-in** (how much the user speaks, and how many turns they take). A
+>    correction costs disproportionately because it adds expensive audio.
+> 3. **SI size** still sets the compression floor (a bigger SI derives a bigger
+>    window -> fewer evictions) but it is no longer the single dominant line.
+> 4. **Thinking** is ~3% (about 260 tokens per question, output rate). It is
+>    priced from `usage_metadata`; PR #908's deployed-billing reconciliation (n=1)
+>    found 3.8 thought tokens did not appear as a billed line, so treat it as an
+>    upper bound.
+> 5. **Input transcription** costs ~16 text-out + ~16 text-in tokens per turn
+>    (the transcript of the user's speech), with audio unchanged: ~$0.00008 per
+>    turn, ~0.3% of a form. Measured 2026-11-18,
+>    `scripts/spikes/probe_input_transcription_cost.py`.
 >
-> **PROVENANCE, and what would invalidate this.** The underlying run is bd
-> `polyglot-pdf-89mt` (full 22-field W-7, both paths, deploy-fidelity config;
-> $0.59 happy / $1.25 unhappy all-in, ~$0.05/field flat across the form). Its
-> raw artifacts were deliberately NOT shipped -- the numbers live in that bead's
-> close reason, which is the citable record. **Its raw split (56% / 66% audio-in)
-> was measured on a ~2,485-token SI; the SHIPPED `DTI_SYSTEM_INSTRUCTION` is
-> ~3,363 tokens today** (measure it: `len(Settings().DTI_SYSTEM_INSTRUCTION)/4`),
-> so the table above re-weights that extra text at ~2.1 events/turn. **The
-> ORDERING is the durable finding; treat the percentages as approximate.**
-> Re-measure if the SI changes materially, and note the split depends on
+> **PROVENANCE, and what would invalidate this.** Runs and per-modality split:
+> `scripts/spikes/3p8_cost_bench_findings.md` (bd `polyglot-pdf-e72on`), raw
+> artifacts in `scripts/spikes/data/r3ham/bench/`. The split was summed from
+> each run's per-turn `token_usage` lines, which match the harness's `voice_usd`
+> to within ~3%. **The ORDERING is the durable finding, and it is close on 3.8 --
+> treat the percentages as approximate.** Re-measure if the SI changes
+> materially, if the model or its rates change, and note the split depends on
 > compression being ON and DERIVED -- on a loose 12000/9000 window text-in
-> re-inflates and the old "SI is everything" shape returns (cost/field rose 2.10x
-> across a form vs 1.15x with the derived window).
->
-> **The production tier is now 3.8** (bd `polyglot-pdf-bd1zs`), and this split
-> has NOT been re-measured on it. Audio rates are identical to 2.5, but text-in
-> costs 1.5x more per token on 3.8 (0.75 vs 0.50), so at the same token counts the
-> happy-path split above re-weights to roughly text-in ~70 vs audio-in ~49 --
-> **the audio-in-leads ORDERING likely FLIPS back to text-in on 3.8**, and any
-> reasoning additionally bills as *output* at 4.50. Do not quote either ordering
-> for 3.8 until the 89mt shape is re-run on it (bd `polyglot-pdf-e72on`). Older source tables, superseded but retained for
-> the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
-> and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
+> re-inflates and the old "SI is everything" shape returns. Older source tables,
+> superseded but retained: bd `polyglot-pdf-89mt` (the 2.5 measurement this
+> replaces, numbers in its close reason), `scripts/spikes/form_session_costs_findings.md`
+> and `scripts/spikes/jnjj_g2_jit_cost_findings.md` (pre-compression baseline).
 
 ## Structured event schemas
 

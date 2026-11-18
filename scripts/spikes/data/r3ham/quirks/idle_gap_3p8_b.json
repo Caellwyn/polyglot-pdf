@@ -1,0 +1,28 @@
+[
+  {
+    "gap_s": 15.0,
+    "rep": 1,
+    "model": "gemini-3.8-live",
+    "vertexai": true,
+    "turn1_answered": true,
+    "turn2_answered": true,
+    "verdict": "SURVIVED",
+    "close_code": null,
+    "close_reason": null,
+    "error": null,
+    "seconds": 25.0
+  },
+  {
+    "gap_s": 180.0,
+    "rep": 1,
+    "model": "gemini-3.8-live",
+    "vertexai": true,
+    "turn1_answered": false,
+    "turn2_answered": false,
+    "verdict": "INCONCLUSIVE_TURN1",
+    "close_code": null,
+    "close_reason": null,
+    "error": null,
+    "seconds": 30.9
+  }
+]

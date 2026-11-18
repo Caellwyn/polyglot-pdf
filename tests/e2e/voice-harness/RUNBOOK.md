@@ -433,6 +433,15 @@ playwright install chromium-headless-shell` in any scratch dir; point
   `W-7` label. For the read-back scoring the backend also needs
   `LIVE_DEV_TRANSCRIPTS=true LIVE_DEV_AUDIO_DUMP=true`; to A/B the Cloud TTS
   spelled-name read-back, set `SPELLBACK_TOOL_ENABLED=false` on the backend.
+  With the tool off, the shipped system instruction has the model say a name
+  back as a WORD, never letter by letter, so that arm alone cannot show a
+  spelling error (see `scripts/spikes/3p8_spelling_findings.md`).
+  `VFF_PACING` picks when the scripted user speaks: unset = fixed sleeps;
+  `polite` = wait for the playback backlog to drain; `rude` = barge in
+  mid-speech; `readback` = `polite`, plus before each "yes" wait for the model
+  to START speaking and for a turn_complete after that. Use `readback` for
+  `gemini-3.8-live`: it calls the fill tool first and speaks the read-back
+  afterwards, so the other modes say "yes" over the read-back.
   Exit 0 = every step filled AND confirmed, 2 = partial, 1 = crash.
 - `driver_latin_storage.mjs`, `driver_latin_storage_ru.mjs`,
   `driver_ru_register.mjs` -- the Latin-storage / Russian-register W-7 arms.
@@ -458,7 +467,8 @@ Agree, so it waits for the hook first and then clicks Agree itself.
   `waitForConfirmed` (the authoritative sessionStorage `confirmed` flag), plus an
   advance wait. `waitForGeminiQuestion` (`vffOnAudioPlaybackEnd`) is PACING-only and
   routinely times out in an automated tab -- never gate correctness on it.
-  (`vffOnTurnComplete` was removed from this surface and is not used.)
+  (`vffOnTurnComplete` is used only by the `VFF_PACING=readback` guard, and it fires
+  on every output-transcription chunk, not at the true turn end -- bd ucmpg.)
 - **`domConfirmed` is NOT a confirm signal.** `fieldManager.applyUpdates` sets
   `data-vff-confirmed="true"` at FILL time, so it is true before any "yes" is
   processed. The real confirm signal is `ssConfirmed` (sessionStorage), set only by

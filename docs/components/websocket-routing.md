@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-11-17. See [2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md](../journal/entries/2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md) for closeout details.*
+*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the credential in the first frame, the Origin allowlist, the auth timeout, the text-frame cap, the staff kit-scope gate; `?token=` deprecated.)*
 
 *Last updated: 2026-09-09 (bd polyglot-pdf-e4dt8: every close on `/fill`
@@ -259,8 +259,9 @@ In native VAD mode the client streams continuous audio incl. silence, so countin
 audio bytes as activity made the timeout un-fireable when a user walked away with
 the mic open (the session then burned Gemini's 15-min audio cap at ~$0.0045/min).
 The idle clock now resets only on: (a) a real user turn -- the adapter's
-`on_user_activity` callback, fired when Gemini's native VAD produces an
-`input_transcription` (background noise/silence do NOT produce one); and (b)
+`on_user_activity` callback, fired on a non-empty `input_transcription`, which
+`gemini-3.8-live` emits on every PTT turn (background noise/silence do NOT
+produce one); and (b)
 non-audio control/text messages (ping, form_state, hint). Gemini's OUTPUT audio
 (model speaking) does not count. Server-side only; no client-side VAD, no new
 per-session server state.

@@ -49,8 +49,8 @@ honestly -- in that order.
 
 **Cost was NOT the motivation** -- do this for the three reasons above. (This
 plan originally cited the old "text-in is 95-98%, audio is negligible" invariant
-here. That figure is OBSOLETE: per `docs/standards/logging-and-cost.md`, AUDIO-IN
-is now the largest single cost line. Note this cuts the other way from how the
+here. That figure is OBSOLETE: per `docs/standards/logging-and-cost.md`, audio-in
+is one of the two largest cost lines (with text-in). Note this cuts the other way from how the
 sentence read -- moving speech off the Live model and onto deterministic Cloud TTS
 plausibly IS a cost win now, not a neutral change. Not re-argued here; flagged so
 the next reader does not inherit the stale premise. See bd
