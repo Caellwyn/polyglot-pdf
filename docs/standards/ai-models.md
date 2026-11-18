@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py
 
-*Last updated: 2026-10-21 (bd polyglot-pdf-bd1zs: standard voice tier -> `gemini-3.8-live`; lite text tier -> `gemini-3.1-flash-lite` on the Vertex `global` location.)*
+*Last updated: 2026-11-18. See [2026-11-18-bd-r3ham.5-docs-cost-pitch-fold-3-8-findings-into-logging.md](../journal/entries/2026-11-18-bd-r3ham.5-docs-cost-pitch-fold-3-8-findings-into-logging.md) for closeout details.*
 
 How the Gemini models are selected, how to A/B two voice tiers in live testing,
 and how that selection drives cost. The cost mechanics themselves live in
@@ -34,11 +34,17 @@ location (endpoint-verified 2026-10-21).
 > - **No thinking config.** Any `thinking_config` makes the connect `1007`
 >   ("not allowlisted to customize the thinking level"). The adapter sends the
 >   2.5-only `thinking_budget=0` solely to the 2.5 family, so 3.8 gets none.
+>   3.8 therefore always thinks: about 260 thinking tokens per question,
+>   about 3% of a form's cost at the output rate (an upper bound; see
+>   `logging-and-cost.md`).
 > - **Function calls default to `NON_BLOCKING`.** Unmarked, 3.8 called
 >   `update_form_fields` and then ended its turn silently after the tool result.
 >   The adapter marks every declaration `behavior: BLOCKING` for the 3.8 family,
 >   restoring the wait-for-result-then-speak contract every tool here is written
->   for.
+>   for. Known cost of BLOCKING: a push-to-talk barge-in while a call is still
+>   unanswered gets no `tool_call_cancellation` and wedges the session until a
+>   reconnect (bd `polyglot-pdf-dakii`,
+>   `scripts/spikes/3p8_quirk_retest_findings.md`).
 > - **`send_client_content` works for the whole session**, and on 3.8
 >   `turn_complete=True` **interrupts** any generation in progress. The adapter's
 >   text turns use it unchanged.
