@@ -20,7 +20,10 @@
  *   VFF_PACING         (optional: 'polite' waits for the model's playback
  *                       backlog to drain before each injection; 'rude' waits
  *                       for the model to be MID-SPEECH and barges in; default
- *                       is the original fixed-sleep pacing)
+ *                       is the original fixed-sleep pacing; 'readback' is
+ *                       POLITE plus, before each "yes", a bounded wait for
+ *                       the model to START speaking -- needed for a
+ *                       call-then-speak model such as gemini-3.8-live)
  *
  * Usage: node tests/e2e/voice-harness/driver_w7_desync.mjs
  * Exit 0 = every step filled AND confirmed; 2 = partial; 1 = crash.
@@ -160,6 +163,13 @@ async function main() {
     window.__vffSeqReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // turn_complete timestamps for READBACK pacing (chains any existing hook).
+    window.__vffTcAt = 0;
+    const prevTc = window.vffOnTurnComplete;
+    window.vffOnTurnComplete = () => {
+      window.__vffTcAt = Date.now();
+      if (typeof prevTc === 'function') prevTc();
+    };
 
     // Pacing arms (bd 0rpu round 2). POLITE waits for the model's playback
     // backlog to fully drain before speaking (no interruptions possible);
@@ -168,7 +178,27 @@ async function main() {
       const hook = window.__VFF_TEST_INJECT;
       if (!hook || !hook.getPlaybackBacklog || pacing === 'default') return;
       const t0 = Date.now();
-      if (pacing === 'polite') {
+      // READBACK (bd polyglot-pdf-r3ham.3): a call-then-speak model
+      // (gemini-3.8-live) speaks its read-back AFTER update_form_fields, so at
+      // the moment the field fills the playback backlog is still empty and
+      // POLITE would inject "yes" over the read-back it never heard. Before the
+      // "yes", first wait (bounded) for the model to START speaking, then drain.
+      if (pacing === 'readback' && key === 'backlogAtYes') {
+        while (Date.now() - t0 < 8000 && hook.getPlaybackBacklog().aheadSec < 0.2) {
+          await sleep(100);
+        }
+        if (rec) rec.readbackStartMs = Date.now() - t0;
+        // A spelled read-back pauses between letters, which briefly drains
+        // the playback backlog; draining alone then injects "yes" MID
+        // read-back. Also require a server turn_complete that arrives AFTER
+        // the read-back started (3.8 sends one for the tool-call turn first).
+        const speakAt = Date.now();
+        while (Date.now() - t0 < 25000 && !(window.__vffTcAt > speakAt)) {
+          await sleep(100);
+        }
+        if (rec) rec.turnCompleteMs = Date.now() - t0;
+      }
+      if (pacing === 'polite' || pacing === 'readback') {
         let calm = 0;
         while (Date.now() - t0 < 25000 && calm < 3) {
           calm = hook.getPlaybackBacklog().aheadSec < 0.15 ? calm + 1 : 0;
