@@ -108,6 +108,6 @@ The curves above are from a **gemini-2.5 native audio** run, the July 2026 produ
   - here, this single SPANISH-language 2.5 run ($2.66 all-in; the helper models add only $0.002);
   - there, the 3-run mean of the English stress-test series ($2.44 all-in).
 
-  Both apply the same +30%.
+  That README's $3.2 and the $3.5 end of the range here both apply the full +30%; they differ only in the base run.
 - **There is no measured full-I-90 run on 3.8 yet.** The current I-90 kit does not complete on 3.8 (bd `polyglot-pdf-r3ham.10`), so this chart cannot be re-drawn from a 3.8 run until it does.
 - The same caveats as above apply. The naive curve is a model, and both curves move with Google's price list.
