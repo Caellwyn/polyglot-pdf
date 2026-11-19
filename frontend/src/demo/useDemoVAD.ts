@@ -58,27 +58,9 @@ SOFTWARE.
 import { useRef, useEffect } from 'react'
 import * as VAD from "@ricky0123/vad-react"
 import { MIC_AUDIO_CONSTRAINTS } from "../shared/audioConstraints"
-
-/**
- * Get VAD asset base URL (uses CDN for reliability)
- * CDN works for both dev and production (no CORS issues)
- */
-function getVADAssetBase(): string {
-	// Use CDN for both dev and production (reliable, no CORS issues)
-	return 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/'
-}
-
-/**
- * Get ONNX Runtime WASM base URL (uses CDN for reliability)
- * CDN works for both dev and production (no CORS issues)
- */
-function getORTAssetBase(): string {
-	// Use CDN for both dev and production (reliable, no CORS issues)
-	return 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
-}
-
-const VAD_ASSET_BASE = getVADAssetBase()
-const ORT_ASSET_BASE = getORTAssetBase()
+// Runtime assets come from the CDN (dev and production alike); their
+// versions must match the bundled JS -- see vadAssetVersions.ts.
+import { VAD_ASSET_BASE, ORT_ASSET_BASE } from "./vadAssetVersions"
 
 /**
  * Default VAD configuration values
@@ -155,7 +137,8 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Don't start automatically - wait for user to click "Connect"
 		startOnLoad: false,
 
-		// Serve model + worklet assets from self-hosted location (faster, more reliable)
+		// Model + worklet and ORT WASM come from the jsdelivr CDN, pinned to the
+		// locked package versions (vadAssetVersions.ts).
 		baseAssetPath: VAD_ASSET_BASE,
 		onnxWASMBasePath: ORT_ASSET_BASE,
 
@@ -195,9 +178,6 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Timing parameters
 		minSpeechMs: sensitivity.minSpeechMs ?? DEFAULT_VAD_CONFIG.minSpeechMs,
 		redemptionMs: sensitivity.redemptionMs ?? DEFAULT_VAD_CONFIG.redemptionMs,
-
-		// Model files - use default CDN (library will handle this automatically)
-		// The library uses jsdelivr CDN by default for model files
 
 		// Callbacks
 		onSpeechStart: () => {

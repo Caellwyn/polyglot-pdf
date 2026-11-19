@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-11-17. See [2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md](../journal/entries/2026-11-17-bd-tcemw-fix-voice-harness-e2e-harness-hardcoded-to.md) for closeout details.*
+*Last updated: 2026-11-19. See [2026-11-19-bd-hhlce-fix-frontend-vad-onnxruntime-cdn-asset-urls-must.md](../journal/entries/2026-11-19-bd-hhlce-fix-frontend-vad-onnxruntime-cdn-asset-urls-must.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -85,6 +85,14 @@ tool-call rejection window is a **separate** hardcoded constant —
 `BARGE_IN_GRACE_PERIOD_MS = 150` in `frontend/src/shared/metrics.ts`. Barge-in /
 latency metrics are collected in metrics.ts (local-only — see
 [hipaa-pii-policy.md](hipaa-pii-policy.md)).
+
+The hook's JavaScript is bundled from `node_modules`, but `MicVAD` fetches its
+runtime assets -- the Silero model + audio worklet and the ONNX Runtime WASM --
+from the jsdelivr CDN at mount (even under push-to-talk, where it never starts).
+Those CDN URLs are pinned in `frontend/src/demo/vadAssetVersions.ts` and must
+equal the versions of `@ricky0123/vad-web` and `onnxruntime-web` in
+`frontend/package-lock.json`; `vadAssetVersions.test.ts` fails CI when a
+dependency bump moves the lock without moving them.
 
 > **There are no Gemini-side VAD knobs.** The `VAD_*` env fields that used to
 > tune the detector are gone with it (bd polyglot-pdf-v1m8g) -- Gemini's automatic

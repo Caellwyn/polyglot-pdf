@@ -375,8 +375,9 @@ def test_every_group_in_every_ecosystem_batches_only_minor_and_patch():
     assert not bad, "groups that batch majors (or have no update-types): " + repr(bad)
 
 
-# npm packages reverted in #888 and HELD out of Dependabot until their own
-# upgrade bead lands (bd polyglot-pdf-fx8gg). Each upgrade bead's PR removes
+# npm packages HELD out of Dependabot until their own upgrade bead lands --
+# mostly the majors reverted in #888 (bd polyglot-pdf-fx8gg); the bead id on
+# each entry says why. Each upgrade bead's PR removes
 # its packages from this map AND from every npm entry in dependabot.yml.
 NPM_HELD_FOR_UPGRADE = {
     "react": "polyglot-pdf-lhrnq",
@@ -389,6 +390,9 @@ NPM_HELD_FOR_UPGRADE = {
     "react-router-dom": "polyglot-pdf-vxssq",
     "jsdom": "polyglot-pdf-50zcc",
     "@testing-library/jest-dom": "polyglot-pdf-50zcc",
+    # vad-web 0.0.31 (via vad-react 0.0.37) throws on destroy-before-start,
+    # which push-to-talk always hits (bd polyglot-pdf-hhlce).
+    "@ricky0123/vad-react": "polyglot-pdf-lpk9k",
 }
 
 
