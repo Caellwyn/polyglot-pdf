@@ -115,29 +115,39 @@ class _Rx:
         self.events.append({"t": round(time.monotonic() - self.t0, 3), "kind": kind, **kw})
 
     async def _pump(self):
+        # session.receive() ENDS its iterator after every turn_complete (google-genai
+        # 2.8.0 live.py: `if ...turn_complete: yield; break`). The production adapter
+        # wraps it in `while True`; the r3ham.4 version of this probe did not, so it
+        # stopped reading at the barge's turn_complete and recorded everything after
+        # it as "lost" (bd polyglot-pdf-dakii). Re-enter receive() per turn.
         try:
-            async for msg in self.s.receive():
-                if msg.tool_call is not None:
-                    for fc in msg.tool_call.function_calls or []:
-                        self._ev("tool_call", id=fc.id, name=fc.name, args=dict(fc.args or {}))
-                        await self.calls.put(fc)
-                if msg.tool_call_cancellation is not None:
-                    self._ev("tool_call_cancellation", ids=list(msg.tool_call_cancellation.ids or []))
-                sc = msg.server_content
-                if sc is not None:
-                    if sc.interrupted:
-                        self._ev("interrupted")
-                    if sc.model_turn and any(getattr(p, "inline_data", None) for p in sc.model_turn.parts or []):
-                        if not self.events or self.events[-1]["kind"] != "audio":
-                            self._ev("audio")
-                    if sc.output_transcription is not None and sc.output_transcription.text:
-                        self._ev("say", text=sc.output_transcription.text)
-                    if sc.input_transcription is not None and sc.input_transcription.text:
-                        self._ev("heard", text=sc.input_transcription.text)
-                    if sc.turn_complete:
-                        self._ev("turn_complete")
-                if msg.go_away is not None:
-                    self._ev("go_away")
+            while True:
+                async for msg in self.s.receive():
+                    um = getattr(msg, "usage_metadata", None)
+                    if um is not None:
+                        self._ev("usage", prompt=getattr(um, "prompt_token_count", None),
+                                 response=getattr(um, "response_token_count", None))
+                    if msg.tool_call is not None:
+                        for fc in msg.tool_call.function_calls or []:
+                            self._ev("tool_call", id=fc.id, name=fc.name, args=dict(fc.args or {}))
+                            await self.calls.put(fc)
+                    if msg.tool_call_cancellation is not None:
+                        self._ev("tool_call_cancellation", ids=list(msg.tool_call_cancellation.ids or []))
+                    sc = msg.server_content
+                    if sc is not None:
+                        if sc.interrupted:
+                            self._ev("interrupted")
+                        if sc.model_turn and any(getattr(p, "inline_data", None) for p in sc.model_turn.parts or []):
+                            if not self.events or self.events[-1]["kind"] != "audio":
+                                self._ev("audio")
+                        if sc.output_transcription is not None and sc.output_transcription.text:
+                            self._ev("say", text=sc.output_transcription.text)
+                        if sc.input_transcription is not None and sc.input_transcription.text:
+                            self._ev("heard", text=sc.input_transcription.text)
+                        if sc.turn_complete:
+                            self._ev("turn_complete")
+                    if msg.go_away is not None:
+                        self._ev("go_away")
         except Exception as exc:  # session closed
             self._ev("closed", error=f"{type(exc).__name__}: {str(exc)[:160]}")
 
@@ -150,8 +160,8 @@ def _resp(fc, value_note: str):
 
 
 async def _trial(client, model: str, barge: bool, delay: float, observe: float,
-                 followup: bool = False) -> dict:
-    out = {"arm": "barge" if barge else "control"}
+                 followup: bool = False, late: float | None = None) -> dict:
+    out = {"arm": ("barge" if barge else "control") + ("" if late is None or not barge else f"_late{late}")}
     async with client.aio.live.connect(model=model, config=_config()) as s:
         rx = _Rx(s)
         await _say(s, _clip(FIRST))
@@ -168,15 +178,32 @@ async def _trial(client, model: str, barge: bool, delay: float, observe: float,
             await asyncio.sleep(observe)
         else:
             await asyncio.sleep(delay)
+
+            async def _late_send():
+                rx._ev("late_response_sent", id=fc.id)
+                try:
+                    await s.send_tool_response(function_responses=[_resp(fc, str((fc.args or {}).get("value")))])
+                except Exception as exc:
+                    rx._ev("late_response_error", error=f"{type(exc).__name__}: {str(exc)[:160]}")
+
             rx._ev("barge_start")
-            await _say(s, _clip(BARGE))
-            rx._ev("barge_end")
-            await asyncio.sleep(observe)
-            rx._ev("late_response_sent", id=fc.id)
-            try:
-                await s.send_tool_response(function_responses=[_resp(fc, str((fc.args or {}).get("value")))])
-            except Exception as exc:
-                rx._ev("late_response_error", error=f"{type(exc).__name__}: {str(exc)[:160]}")
+            if late is None:
+                # Original r3ham.4 shape: answer only after the barge + observe window.
+                await _say(s, _clip(BARGE))
+                rx._ev("barge_end")
+                await asyncio.sleep(observe)
+                await _late_send()
+            else:
+                # Production shape: the adapter answers the moment the (slow) callback
+                # returns, which can be WHILE the barge audio is still streaming.
+                async def _timed():
+                    await asyncio.sleep(late)
+                    await _late_send()
+                t_late = asyncio.create_task(_timed())
+                await _say(s, _clip(BARGE))
+                rx._ev("barge_end")
+                await t_late
+                await asyncio.sleep(observe)
             # Answer any further calls so the turn can finish.
             end = time.monotonic() + observe
             while time.monotonic() < end:
@@ -220,6 +247,11 @@ async def main() -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--followup", action="store_true",
                     help="after the late response, send one more utterance to test recovery")
+    ap.add_argument("--late", type=float, default=None,
+                    help="send the late tool response this many seconds after barge_start "
+                         "(concurrent with the barge audio, as production does); default: "
+                         "after barge_end + --observe (the original r3ham.4 shape)")
+    ap.add_argument("--no-control", action="store_true", help="skip the control arm")
     args = ap.parse_args()
     project = os.getenv("GOOGLE_CLOUD_PROJECT")
     if not project:
@@ -227,9 +259,10 @@ async def main() -> int:
         return 1
     client = genai.Client(vertexai=True, project=project,
                           location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
-    results = [await _trial(client, args.model, False, args.delay, args.observe)]
+    results = [] if args.no_control else [await _trial(client, args.model, False, args.delay, args.observe)]
     for _ in range(args.trials):
-        results.append(await _trial(client, args.model, True, args.delay, args.observe, args.followup))
+        results.append(await _trial(client, args.model, True, args.delay, args.observe, args.followup,
+                                    args.late))
     for r in results:
         print(json.dumps({k: v for k, v in r.items() if k != "events"}))
         for e in r.get("events", []):
