@@ -22,12 +22,19 @@ approved closing #923 and holding PyMuPDF majors (2026-11-18).
 - `tests/test_dependabot_config.py`: `MAJORS_HELD` plus three tests -- the ignore
   is exactly semver-major (no `versions`, no full ignore); minor/patch still flow
   (not in any pip group's exclude-patterns, not in `HELD_FOR_UPGRADE`); and the
-  package is actually pinned in `requirements.txt`. Mutation-verified: removing
-  the entry, widening it to a full ignore, scoping it to semver-minor, or adding
-  PyMuPDF to the group's exclude-patterns each fail.
+  package is actually pinned in `requirements.txt`. The ignore-side and
+  exclude-side checks scan EVERY entry with case-insensitive glob matching, so a
+  duplicate or wildcard entry cannot hide a full hold. Mutation-verified, each
+  failing exactly one test: removing the entry; widening it to a full ignore;
+  scoping it to semver-minor; adding PyMuPDF to the group's exclude-patterns; a
+  bare duplicate entry before the scoped one; an extra `*mupdf*` ignore; a
+  `*MuPDF*` exclude-pattern.
 - #923 closed with an explanation.
 - Fresh-eyes (Haiku) round 1: GAPS-FOUND (1) -- the minor/patch half was unpinned
-  (verified by the exclude-pattern mutation). Fixed inline. Its two
+  (verified by the exclude-pattern mutation). Fixed inline. Round 2: GAPS-FOUND
+  (1) -- the tests read only the last ignore entry per name and matched
+  exclude-patterns exactly, so a duplicate or wildcard full hold passed. Fixed
+  inline (scan every entry, glob-match). Round 1's two
   unverifiable notes -- Dependabot name-case matching and whether grouped updates
   honor a per-package update-types ignore -- were settled by repo evidence: the
   earlier full hold spelled it `PyMuPDF` (the manifest spelling, which GitHub's
@@ -39,7 +46,8 @@ approved closing #923 and holding PyMuPDF majors (2026-11-18).
 
 - A scoped hold has two halves -- what is blocked and what must still flow --
   and a test that pins only the first lets a later edit silently turn it into a
-  full hold. Pin both.
+  full hold. Pin both -- and match the way the consumer matches (Dependabot
+  names are globs; several entries can apply), not one exact-key lookup.
 
 ## Doc freshness
 

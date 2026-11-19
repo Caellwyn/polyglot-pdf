@@ -87,6 +87,7 @@ exclude-patterns or ignore: list fails
 test_all_ts_toolchain_packages_are_excluded_from_every_npm_group /
 test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update.
 """
+import fnmatch
 import re
 
 import yaml
@@ -430,24 +431,28 @@ MAJORS_HELD = (
 )
 
 
+def _matches(pattern, package):
+    """Dependabot names may be globs ("*" wildcards); compare case-insensitively."""
+    return fnmatch.fnmatchcase(package.lower(), str(pattern).lower())
+
+
 def test_majors_held_packages_ignore_exactly_semver_major():
+    """EVERY ignore entry that matches a major-held package (exact, glob, or a
+    duplicate) must be exactly the semver-major scope -- one unscoped match
+    anywhere in the list would fully hold the package."""
     update = _pip_backend_update(_load_dependabot_config())
-    ignored = {
-        e["dependency-name"].lower(): e
-        for e in update.get("ignore", []) if "dependency-name" in e
-    }
-    missing = [p for p in MAJORS_HELD if p not in ignored]
-    assert not missing, "major-held packages missing from ignore: " + repr(missing)
-    wrong = {
-        p: ignored[p] for p in MAJORS_HELD
-        if "versions" in ignored[p]
-        or ignored[p].get("update-types") != ["version-update:semver-major"]
-    }
-    assert not wrong, (
-        "major-held packages must ignore update-types "
-        "['version-update:semver-major'] and nothing else (no versions key, "
-        "no full ignore): " + repr(wrong)
-    )
+    entries = [e for e in update.get("ignore", []) if "dependency-name" in e]
+    for p in MAJORS_HELD:
+        hits = [e for e in entries if _matches(e["dependency-name"], p)]
+        assert hits, "major-held package missing from ignore: " + p
+        wrong = [e for e in hits
+                 if "versions" in e
+                 or e.get("update-types") != ["version-update:semver-major"]]
+        assert not wrong, (
+            "every ignore entry matching '{}' must be exactly update-types "
+            "['version-update:semver-major'] (no versions key, no full "
+            "ignore): {}".format(p, wrong)
+        )
 
 
 def test_majors_held_packages_still_receive_minor_and_patch():
@@ -459,8 +464,8 @@ def test_majors_held_packages_still_receive_minor_and_patch():
         if update.get("package-ecosystem") != "pip":
             continue
         for group_name, group in update.get("groups", {}).items():
-            excluded = {p.lower() for p in group.get("exclude-patterns", [])}
-            blocked = [p for p in MAJORS_HELD if p in excluded]
+            blocked = [p for p in MAJORS_HELD
+                       if any(_matches(x, p) for x in group.get("exclude-patterns", []))]
             assert not blocked, "pip group '{}' excludes major-held packages, which " \
                 "stops their minor/patch updates: {}".format(group_name, blocked)
     full = [p for p in MAJORS_HELD if p in {h.lower() for h in HELD_FOR_UPGRADE}]
