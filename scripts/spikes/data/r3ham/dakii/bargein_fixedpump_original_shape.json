@@ -1,0 +1,710 @@
+{
+  "model": "gemini-3.8-live",
+  "trials": [
+    {
+      "arm": "control",
+      "first_call": {
+        "id": "fc_12414210586657415851",
+        "args": {
+          "field_id": "foreign_tax_id_number",
+          "value": "24981736"
+        }
+      },
+      "events": [
+        {
+          "t": 11.359,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.703,
+          "kind": "tool_call",
+          "id": "fc_12414210586657415851",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981736"
+          }
+        },
+        {
+          "t": 12.297,
+          "kind": "audio"
+        },
+        {
+          "t": 12.297,
+          "kind": "say",
+          "text": "I've stored your foreign "
+        },
+        {
+          "t": 12.344,
+          "kind": "audio"
+        },
+        {
+          "t": 13.016,
+          "kind": "say",
+          "text": "tax ID number"
+        },
+        {
+          "t": 13.172,
+          "kind": "audio"
+        },
+        {
+          "t": 14.016,
+          "kind": "say",
+          "text": " as 24981736."
+        },
+        {
+          "t": 14.219,
+          "kind": "audio"
+        },
+        {
+          "t": 15.016,
+          "kind": "say",
+          "text": " Is"
+        },
+        {
+          "t": 15.203,
+          "kind": "audio"
+        },
+        {
+          "t": 16.016,
+          "kind": "say",
+          "text": " that"
+        },
+        {
+          "t": 16.219,
+          "kind": "audio"
+        },
+        {
+          "t": 17.016,
+          "kind": "say",
+          "text": " correct?"
+        },
+        {
+          "t": 17.25,
+          "kind": "audio"
+        },
+        {
+          "t": 18.922,
+          "kind": "usage",
+          "prompt": 3193,
+          "response": 248
+        },
+        {
+          "t": 18.922,
+          "kind": "turn_complete"
+        }
+      ],
+      "n_tool_calls": 1,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736"
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_17752625934717531265",
+        "args": {
+          "field_id": "foreign_tax_id_number",
+          "value": "24981736"
+        }
+      },
+      "events": [
+        {
+          "t": 11.25,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.579,
+          "kind": "tool_call",
+          "id": "fc_17752625934717531265",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981736"
+          }
+        },
+        {
+          "t": 11.891,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.954,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.954,
+          "kind": "usage",
+          "prompt": 1531,
+          "response": 51
+        },
+        {
+          "t": 11.954,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.297,
+          "kind": "barge_end"
+        },
+        {
+          "t": 22.594,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 22.985,
+          "kind": "tool_call",
+          "id": "fc_17413996080040032537",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981738"
+          }
+        },
+        {
+          "t": 30.313,
+          "kind": "late_response_sent",
+          "id": "fc_17752625934717531265"
+        },
+        {
+          "t": 30.813,
+          "kind": "audio"
+        },
+        {
+          "t": 30.813,
+          "kind": "say",
+          "text": "I've updated your foreign "
+        },
+        {
+          "t": 30.86,
+          "kind": "audio"
+        },
+        {
+          "t": 31.532,
+          "kind": "say",
+          "text": "tax ID number"
+        },
+        {
+          "t": 31.688,
+          "kind": "audio"
+        },
+        {
+          "t": 32.532,
+          "kind": "say",
+          "text": " to 24981738."
+        },
+        {
+          "t": 32.719,
+          "kind": "audio"
+        },
+        {
+          "t": 33.547,
+          "kind": "say",
+          "text": " Is"
+        },
+        {
+          "t": 33.735,
+          "kind": "audio"
+        },
+        {
+          "t": 34.532,
+          "kind": "say",
+          "text": " that"
+        },
+        {
+          "t": 34.735,
+          "kind": "audio"
+        },
+        {
+          "t": 35.532,
+          "kind": "say",
+          "text": " correct?"
+        },
+        {
+          "t": 35.766,
+          "kind": "audio"
+        },
+        {
+          "t": 36.625,
+          "kind": "usage",
+          "prompt": 3587,
+          "response": 228
+        },
+        {
+          "t": 36.625,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 40.329,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.719,
+          "kind": "followup_end"
+        },
+        {
+          "t": 50.985,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 51.313,
+          "kind": "tool_call",
+          "id": "fc_17289285257277904849",
+          "name": "confirm_field",
+          "args": {
+            "confirmation_method": "verbal",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 52.125,
+          "kind": "audio"
+        },
+        {
+          "t": 52.125,
+          "kind": "say",
+          "text": "Thank you. "
+        },
+        {
+          "t": 52.157,
+          "kind": "audio"
+        },
+        {
+          "t": 52.813,
+          "kind": "say",
+          "text": "That's confirmed."
+        },
+        {
+          "t": 53.032,
+          "kind": "audio"
+        },
+        {
+          "t": 53.735,
+          "kind": "usage",
+          "prompt": 4376,
+          "response": 101
+        },
+        {
+          "t": 53.735,
+          "kind": "turn_complete"
+        }
+      ],
+      "n_tool_calls": 3,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736",
+        "24981738",
+        null
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_8499482038769350344",
+        "args": {
+          "field_id": "foreign_tax_id_number",
+          "value": "24981736"
+        }
+      },
+      "events": [
+        {
+          "t": 11.141,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.469,
+          "kind": "tool_call",
+          "id": "fc_8499482038769350344",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981736"
+          }
+        },
+        {
+          "t": 11.782,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.86,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.86,
+          "kind": "usage",
+          "prompt": 1531,
+          "response": 51
+        },
+        {
+          "t": 11.86,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.125,
+          "kind": "barge_end"
+        },
+        {
+          "t": 22.407,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 22.75,
+          "kind": "tool_call",
+          "id": "fc_207179472258310624",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981738"
+          }
+        },
+        {
+          "t": 30.125,
+          "kind": "late_response_sent",
+          "id": "fc_8499482038769350344"
+        },
+        {
+          "t": 30.641,
+          "kind": "audio"
+        },
+        {
+          "t": 30.641,
+          "kind": "say",
+          "text": "I have updated your "
+        },
+        {
+          "t": 30.672,
+          "kind": "audio"
+        },
+        {
+          "t": 31.313,
+          "kind": "say",
+          "text": "foreign tax ID number"
+        },
+        {
+          "t": 31.485,
+          "kind": "audio"
+        },
+        {
+          "t": 32.329,
+          "kind": "say",
+          "text": " to 24981738."
+        },
+        {
+          "t": 32.532,
+          "kind": "audio"
+        },
+        {
+          "t": 33.344,
+          "kind": "say",
+          "text": " Is"
+        },
+        {
+          "t": 33.516,
+          "kind": "audio"
+        },
+        {
+          "t": 34.329,
+          "kind": "say",
+          "text": " this"
+        },
+        {
+          "t": 34.516,
+          "kind": "audio"
+        },
+        {
+          "t": 35.329,
+          "kind": "say",
+          "text": " correct?"
+        },
+        {
+          "t": 35.563,
+          "kind": "audio"
+        },
+        {
+          "t": 37.313,
+          "kind": "usage",
+          "prompt": 3561,
+          "response": 249
+        },
+        {
+          "t": 37.313,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 40.125,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.516,
+          "kind": "followup_end"
+        },
+        {
+          "t": 50.766,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 51.094,
+          "kind": "tool_call",
+          "id": "fc_5009828275749877274",
+          "name": "confirm_field",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "confirmation_method": "verbal"
+          }
+        },
+        {
+          "t": 51.797,
+          "kind": "audio"
+        },
+        {
+          "t": 51.797,
+          "kind": "say",
+          "text": "Great. That field "
+        },
+        {
+          "t": 51.844,
+          "kind": "audio"
+        },
+        {
+          "t": 52.485,
+          "kind": "say",
+          "text": "is confirmed."
+        },
+        {
+          "t": 52.719,
+          "kind": "audio"
+        },
+        {
+          "t": 53.704,
+          "kind": "usage",
+          "prompt": 4410,
+          "response": 107
+        },
+        {
+          "t": 53.704,
+          "kind": "turn_complete"
+        }
+      ],
+      "n_tool_calls": 3,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736",
+        "24981738",
+        null
+      ],
+      "duplicate_calls": 0
+    },
+    {
+      "arm": "barge",
+      "first_call": {
+        "id": "fc_17213438004061362816",
+        "args": {
+          "field_id": "foreign_tax_id_number",
+          "value": "24981736"
+        }
+      },
+      "events": [
+        {
+          "t": 11.203,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981736."
+        },
+        {
+          "t": 11.594,
+          "kind": "tool_call",
+          "id": "fc_17213438004061362816",
+          "name": "update_form_fields",
+          "args": {
+            "field_id": "foreign_tax_id_number",
+            "value": "24981736"
+          }
+        },
+        {
+          "t": 11.891,
+          "kind": "barge_start"
+        },
+        {
+          "t": 11.985,
+          "kind": "interrupted"
+        },
+        {
+          "t": 11.985,
+          "kind": "usage",
+          "prompt": 1531,
+          "response": 51
+        },
+        {
+          "t": 11.985,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 22.297,
+          "kind": "barge_end"
+        },
+        {
+          "t": 22.625,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 22.985,
+          "kind": "tool_call",
+          "id": "fc_7110801588259547834",
+          "name": "update_form_fields",
+          "args": {
+            "value": "24981738",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 30.313,
+          "kind": "late_response_sent",
+          "id": "fc_17213438004061362816"
+        },
+        {
+          "t": 30.891,
+          "kind": "audio"
+        },
+        {
+          "t": 30.891,
+          "kind": "say",
+          "text": "The foreign tax ID "
+        },
+        {
+          "t": 30.938,
+          "kind": "audio"
+        },
+        {
+          "t": 31.625,
+          "kind": "say",
+          "text": "number has been updated"
+        },
+        {
+          "t": 31.781,
+          "kind": "audio"
+        },
+        {
+          "t": 32.625,
+          "kind": "say",
+          "text": " to 24981738."
+        },
+        {
+          "t": 32.828,
+          "kind": "audio"
+        },
+        {
+          "t": 33.625,
+          "kind": "say",
+          "text": " Is"
+        },
+        {
+          "t": 33.813,
+          "kind": "audio"
+        },
+        {
+          "t": 34.625,
+          "kind": "say",
+          "text": " that"
+        },
+        {
+          "t": 34.828,
+          "kind": "audio"
+        },
+        {
+          "t": 35.641,
+          "kind": "say",
+          "text": " correct?"
+        },
+        {
+          "t": 35.86,
+          "kind": "audio"
+        },
+        {
+          "t": 37.297,
+          "kind": "usage",
+          "prompt": 3575,
+          "response": 241
+        },
+        {
+          "t": 37.297,
+          "kind": "turn_complete"
+        },
+        {
+          "t": 40.328,
+          "kind": "followup_start"
+        },
+        {
+          "t": 50.719,
+          "kind": "followup_end"
+        },
+        {
+          "t": 51.094,
+          "kind": "heard",
+          "text": "My foreign tax ID number is 24981738."
+        },
+        {
+          "t": 51.391,
+          "kind": "tool_call",
+          "id": "fc_3293007326284536880",
+          "name": "confirm_field",
+          "args": {
+            "confirmation_method": "verbal",
+            "field_id": "foreign_tax_id_number"
+          }
+        },
+        {
+          "t": 51.906,
+          "kind": "audio"
+        },
+        {
+          "t": 51.906,
+          "kind": "say",
+          "text": "Thank you, that "
+        },
+        {
+          "t": 51.938,
+          "kind": "audio"
+        },
+        {
+          "t": 52.766,
+          "kind": "say",
+          "text": "is confirmed."
+        },
+        {
+          "t": 52.922,
+          "kind": "audio"
+        },
+        {
+          "t": 53.719,
+          "kind": "usage",
+          "prompt": 4384,
+          "response": 105
+        },
+        {
+          "t": 53.719,
+          "kind": "turn_complete"
+        }
+      ],
+      "n_tool_calls": 3,
+      "cancelled_ids": [],
+      "first_call_cancelled": false,
+      "values_written": [
+        "24981736",
+        "24981738",
+        null
+      ],
+      "duplicate_calls": 0
+    }
+  ]
+}

@@ -41,10 +41,13 @@ location (endpoint-verified 2026-10-21).
 >   `update_form_fields` and then ended its turn silently after the tool result.
 >   The adapter marks every declaration `behavior: BLOCKING` for the 3.8 family,
 >   restoring the wait-for-result-then-speak contract every tool here is written
->   for. Known cost of BLOCKING: a push-to-talk barge-in while a call is still
->   unanswered gets no `tool_call_cancellation` and wedges the session until a
->   reconnect (bd `polyglot-pdf-dakii`,
->   `scripts/spikes/3p8_quirk_retest_findings.md`).
+>   for. A push-to-talk barge-in while a call is still unanswered gets NO
+>   `tool_call_cancellation`: the call stays open and still takes its response,
+>   `interrupted` and `turn_complete` arrive on one message, and the model then
+>   issues a new call for the barge and answers the next turn. The adapter
+>   recovers because it re-enters `receive()` per turn (the SDK's iterator ends
+>   at every `turn_complete`) -- bd `polyglot-pdf-dakii`,
+>   `scripts/spikes/3p8_quirk_retest_findings.md`.
 > - **`send_client_content` works for the whole session**, and on 3.8
 >   `turn_complete=True` **interrupts** any generation in progress. The adapter's
 >   text turns use it unchanged.

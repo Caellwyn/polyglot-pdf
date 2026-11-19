@@ -18,7 +18,7 @@ The harness `--debug` transcripts (`*.debug.json`) and the run logs stay local a
 
 | Item | Verdict vs 2.5 | One line |
 |---|---|---|
-| PTT barge-in during a pending BLOCKING call | **changed: new 3.8 failure** | No `tool_call_cancellation` arrives, the barge is lost, and the session stays dead for the NEXT turn too (3 of 3, twice). Filed as bd **polyglot-pdf-dakii** (P1). |
+| PTT barge-in during a pending BLOCKING call | **changed shape, no wedge** (corrected 2026-11-18, bd dakii) | No `tool_call_cancellation`; `interrupted` + `turn_complete` arrive together; the barge is then transcribed and a NEW call made, and the next turn is answered (3 of 3). The original "session wedges" verdict was a probe bug: its reader stopped at the first `turn_complete`. |
 | Temperature 0.4 vs 1.0 | **unchanged** | Cost, fill, latency, tool reliability and silent-turn rate are the same within n. Keep 0.4: its reasons (clearer speech, judged by ear, and spell-back validated at 0.4) were not re-tested. |
 | Language lock (es / zh / hi / ru / ar) | **unchanged** | All 5 languages were spoken in the target script on 14 of 14 questions. Fill was 13-14 of 14. |
 | `speech_config.language_code` on vs off (Spanish) | **unchanged; no effect on clean audio** | Accepted on 3.8 (no 1007). Language lock, fill and cost were identical with it off. Not shown removable (see details). |
@@ -30,37 +30,62 @@ The harness `--debug` transcripts (`*.debug.json`) and the run logs stay local a
 | Session over 15 min, resumption off vs on (bd r3ham.11) | **inconclusive** | GoAway arrived at about 9.5-10 min, as on 2.5. Both resumption arms were confounded by the q17 desync (bd r3ham.10, now 4 of 5 I-90 runs). |
 
 **Bead-listed items not exercised:**
-- **The barge-in on `ask_secretary`.** Every declaration is BLOCKING on 3.8, and the wedge does not depend on which tool is pending, so bd dakii covers it.
-- **Duplicate-call dedupe (`_dedupe_responses_by_id`) and the spell-back cooldown (bd kvrfq).** These were not exercised: the barge never produced a second call (`duplicate_calls: 0` in all 6 trials), so there was nothing to dedupe.
+- **The barge-in on `ask_secretary`.** Every declaration is BLOCKING on 3.8, and the recovery above does not depend on which tool is pending; the `--late 1.0` arm stands in for a slow tool that returns mid-barge.
+- **Duplicate-call dedupe (`_dedupe_responses_by_id`) and the spell-back cooldown (bd kvrfq).** Not exercised as a duplicate: the barge's second call carries a NEW id and different args, so `_dedupe_responses_by_id` (which drops only a repeated id within one event) correctly leaves it alone.
 
 **No workaround was shown removable** by this batch. Every 2.5-era guard tested still holds or is harmless on 3.8, so no removal beads were filed.
 
 ## Details
 
-### PTT barge-in during a pending BLOCKING call (new on 3.8)
+### PTT barge-in during a pending BLOCKING call (new shape on 3.8, no wedge)
 
-**Probe:** `scripts/spikes/probe_bargein_blocking_3p8.py`, run twice: 3 trials plus a control, then 3 more trials with `--followup`. The setup mirrors deploy for the parts under test:
+**Correction (bd polyglot-pdf-dakii, 2026-11-18).** The first version of this
+section reported that a barge-in wedged the session, 3 of 3 twice. That was a
+**probe bug**. google-genai 2.8.0 `AsyncSession.receive()` ends its iterator
+after every `turn_complete`. The probe iterated it once, and on 3.8 the barge's
+`interrupted` and `turn_complete` arrive on ONE message, so the probe stopped
+reading right there. Everything it recorded as "lost" after that point (the barge
+transcript, the reply to the late tool response, the follow-up turn) was simply
+never read. The production adapter re-enters `receive()` per turn, so it never
+had this blind spot.
+
+**Probe:** `scripts/spikes/probe_bargein_blocking_3p8.py`, with its reader now
+re-entering `receive()` per turn. The setup mirrors deploy for the parts under test:
 - every declaration is BLOCKING, as the adapter sets on 3.8;
 - AUDIO response modality;
 - input and output transcription on;
 - PTT activity brackets.
 
-**Sequence, in all 6 barge trials:**
-1. The utterance produces an `update_form_fields` call. The probe does not answer it.
-2. 0.3 s later the user speaks again.
-3. The server sends `interrupted` and `turn_complete` within about 0.1 s.
-4. No `tool_call_cancellation` arrives, and no new tool call is made.
-5. The barge utterance is not transcribed.
-6. The late tool response for the original id gets no reply.
-7. With `--followup`, a further PTT turn 10 s later is not transcribed or answered either.
+**Measured sequence on 3.8** (Vertex; 3 of 3 trials per arm; data in
+`scripts/spikes/data/r3ham/dakii/`):
+1. The utterance produces an `update_form_fields` call A. The probe does not answer it.
+2. 0.3 s later the user speaks again (a corrected value).
+3. The server sends `interrupted` and `turn_complete` on one message within about 0.1 s.
+4. No `tool_call_cancellation` arrives.
+5. When the barge audio ends, it is transcribed and the model issues a NEW
+   `update_form_fields` call B with the corrected value. Call A is still open.
+6. Once the responses for A and B are sent, the model reads back the CORRECTED
+   value and asks to confirm.
+7. The next PTT turn is transcribed and answered (`confirm_field`).
 
-**The control arm,** where the call is answered at once, replies normally.
+Two arms, both 3 of 3 recovered:
+- `bargein_fixedpump_original_shape.json`: the late response for A is sent 8 s after the barge ends (the original r3ham.4 timing).
+- `bargein_fixedpump_late1s.json`: the response for A is sent 1 s after the barge
+  starts, WHILE the barge audio is still streaming. This is what production does
+  when a slow tool returns mid-barge, since the adapter answers as soon as the
+  callback returns.
 
-**Reading:** a barge during a pending call wedges the whole session until a reconnect. Exposure in production:
-- small for the fast tools (update/confirm are answered in milliseconds);
-- real for slow ones: `ask_secretary`, the `name_spellback` TTS render, and validator-backed writes.
+**Field-state reading.** The client applies call A's write as soon as the call
+arrives, then call B's write. The last write is therefore the corrected value,
+and that is the value the model reads back. The pending call is never cancelled,
+so answering it, as the adapter always does, is correct and not a protocol error.
 
-The adapter has no `tool_call_cancellation` handler and nothing reconnects a silent session. The candidate fixes are in bd dakii.
+**Spend for the corrected re-run:** about 60k prompt and 2.6k response tokens over
+7 sessions, under $0.25 even if every token is billed at the audio rates.
+
+**The guard that matters** is the adapter's per-turn re-entry of `receive()`,
+pinned by `backend/tests/unit/test_bargein_pending_blocking_call.py` with a fake
+session that reproduces the SDK's per-turn iterator.
 
 ### Temperature 0.4 vs 1.0
 

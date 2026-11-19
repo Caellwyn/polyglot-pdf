@@ -176,7 +176,14 @@ audio-chunk tracking (`_audio_chunk_count = 0`, `_first_audio_time = None`), fir
 `on_processing_done` if registered (an interrupted turn produces no audio/
 transcript, so the thinking indicator would otherwise stay set until its
 max-duration timer, bd polyglot-pdf-wpw.5), and `continue`s -- skipping the rest of
-that event so no stale audio/tool-calls are processed. The backend does **not**
+that event so no stale audio/tool-calls are processed. The `continue` stays inside
+the `while True` re-entry of `session.receive()` -- that iterator ends after EVERY
+`turn_complete`, and on 3.8 a barge's `interrupted` and `turn_complete` arrive on
+one message, so a reader that iterated it once would go deaf at the barge. On 3.8
+a barge during a pending BLOCKING call sends no `tool_call_cancellation`: the
+pending call still gets its response when its callback returns, and the model
+then issues a NEW call for the barge utterance (bd polyglot-pdf-dakii; pinned by
+`backend/tests/unit/test_bargein_pending_blocking_call.py`). The backend does **not**
 push a flush signal to the client; the actual playback flush is **frontend-driven**
 -- `connection.ts onVADSpeechStart` calls `audioManager.flushAudioQueue()` the
 instant the local VAD fires, for sub-perceptual latency (see
