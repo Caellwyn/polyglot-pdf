@@ -57,6 +57,7 @@ from google.genai import types
 # Allow running as a module from repo root (PYTHONPATH=.).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from backend.adapters.text_ai_claude_cli import claude_cli_env  # noqa: E402
 from backend.scripts.secretary_context import (  # noqa: E402
     render_context,
     CONTEXT_FORMATS,
@@ -375,7 +376,8 @@ def _judge_case(case, result: dict, expected_values: dict, full_state: dict,
     cmd = [exe, "-p", "--model", JUDGE_MODEL, "--output-format", "json"]
     try:
         proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
-                              encoding="utf-8", timeout=timeout_s)
+                              encoding="utf-8", timeout=timeout_s,
+                              env=claude_cli_env())
         if proc.returncode != 0:
             return {"_judge_error": "cli_exit_%d" % proc.returncode}
         env = json.loads(proc.stdout)
