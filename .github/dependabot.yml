@@ -111,7 +111,9 @@ updates:
       # is a deliberate upgrade bead with a before/after fill comparison, the
       # way #896 did 1.24 -> 1.28 -- not an automated single-package PR.
       # Minor + patch still arrive in the all-pip-backend batch.
-      - dependency-name: "pymupdf"
+      # Spelled as in requirements.txt -- the same spelling the earlier full
+      # hold used, which Dependabot honored.
+      - dependency-name: "PyMuPDF"
         update-types:
           - "version-update:semver-major"
       # HELD packages (bd polyglot-pdf-niwcu): pinned back from #882 and being

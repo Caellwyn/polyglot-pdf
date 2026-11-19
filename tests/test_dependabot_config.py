@@ -450,6 +450,23 @@ def test_majors_held_packages_ignore_exactly_semver_major():
     )
 
 
+def test_majors_held_packages_still_receive_minor_and_patch():
+    """The other half of the scoped hold: minor + patch must keep flowing, so a
+    major-held package may not be excluded from any pip group, nor appear in
+    HELD_FOR_UPGRADE (a full hold)."""
+    config = _load_dependabot_config()
+    for update in config["updates"]:
+        if update.get("package-ecosystem") != "pip":
+            continue
+        for group_name, group in update.get("groups", {}).items():
+            excluded = {p.lower() for p in group.get("exclude-patterns", [])}
+            blocked = [p for p in MAJORS_HELD if p in excluded]
+            assert not blocked, "pip group '{}' excludes major-held packages, which " \
+                "stops their minor/patch updates: {}".format(group_name, blocked)
+    full = [p for p in MAJORS_HELD if p in {h.lower() for h in HELD_FOR_UPGRADE}]
+    assert not full, "major-held packages are also fully HELD: " + repr(full)
+
+
 def test_every_majors_held_package_is_actually_pinned_in_the_requirements():
     backend = Path(__file__).resolve().parents[1] / "backend"
     pinned = set()
