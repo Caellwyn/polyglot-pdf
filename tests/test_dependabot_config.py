@@ -374,8 +374,9 @@ def test_every_group_in_every_ecosystem_batches_only_minor_and_patch():
     assert not bad, "groups that batch majors (or have no update-types): " + repr(bad)
 
 
-# npm packages reverted in #888 and HELD out of Dependabot until their own
-# upgrade bead lands (bd polyglot-pdf-fx8gg). Each upgrade bead's PR removes
+# npm packages HELD out of Dependabot until their own upgrade bead lands --
+# mostly the majors reverted in #888 (bd polyglot-pdf-fx8gg); the bead id on
+# each entry says why. Each upgrade bead's PR removes
 # its packages from this map AND from every npm entry in dependabot.yml.
 NPM_HELD_FOR_UPGRADE = {
     "react": "polyglot-pdf-lhrnq",
