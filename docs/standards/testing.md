@@ -366,14 +366,16 @@ broke the staging verify gate, and were pinned back / reverted in
 `#887`/`#888`). The five voice-path pip packages (google-genai, websockets,
 uvicorn, fastapi, starlette) are excluded from automatic bumps altogether, and
 the npm groups exclude the TypeScript toolchain the same way (see
-`docs/doctrine/promotion-tiers.md`). Packages pinned back or reverted in
-those PRs are HELD the same way (fully ignored and excluded) until their own
-upgrade bead lands, because several of the jumps were MINOR to Dependabot
-(PyMuPDF 1.24 -> 1.28, soundfile 0.12 -> 0.14) and a major-only rule would
-still let others race the validated upgrade; each upgrade's PR removes its own
-entries. All of it is pinned by `tests/test_dependabot_config.py`
-(`HELD_FOR_UPGRADE` and `NPM_HELD_FOR_UPGRADE` name the held sets), which
-parses the YAML.
+`docs/doctrine/promotion-tiers.md`). A package awaiting a deliberate,
+validated upgrade is HELD the same way (fully ignored and excluded) until its
+upgrade bead lands -- a full hold rather than a major-only one, because a
+risky jump can be MINOR to Dependabot (PyMuPDF 1.24 -> 1.28 was); each upgrade's PR
+removes its own entries. PyMuPDF is held for MAJORS only (a scoped
+`update-types: [version-update:semver-major]` ignore): its minor and patch
+releases still batch, while a major is a deliberate upgrade with a before/after
+fill comparison. All of it is pinned by `tests/test_dependabot_config.py`
+(`HELD_FOR_UPGRADE` and `NPM_HELD_FOR_UPGRADE` name the fully held sets,
+`MAJORS_HELD` the major-only set), which parses the YAML.
 
 **xfail counts as pass everywhere.** A spec-test that documents a known defect is
 marked `@pytest.mark.xfail` (pytest) or `test.fails` (vitest); neither runner

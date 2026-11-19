@@ -314,12 +314,12 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
             )
 
 
-# Packages pinned back from #882 and HELD out of Dependabot until their own
-# upgrade bead lands (bd polyglot-pdf-niwcu). Several #882 jumps were MINOR to
-# Dependabot (PyMuPDF 1.24 -> 1.28, soundfile 0.12 -> 0.14, 0.x librosa /
-# pytest-asyncio), so the minor+patch group alone would re-propose them in the
-# next batch, around the validation each bead exists to do. An upgrade bead's
-# PR removes its packages from this map AND from dependabot.yml together.
+# Pip packages fully HELD out of Dependabot until their own upgrade bead lands
+# (bd polyglot-pdf-niwcu; empty at present). A full hold, not a major-only one,
+# because some breaking jumps are MINOR to Dependabot, so the minor+patch group
+# alone would re-propose them around the validation each bead exists to do. An
+# upgrade bead's PR removes its packages from this map AND from dependabot.yml
+# together. (Major-only holds live in MAJORS_HELD below.)
 HELD_FOR_UPGRADE = {
 }
 

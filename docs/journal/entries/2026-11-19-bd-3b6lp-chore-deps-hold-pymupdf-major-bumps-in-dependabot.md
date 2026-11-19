@@ -52,10 +52,19 @@ approved closing #923 and holding PyMuPDF majors (2026-11-18).
 ## Doc freshness
 
 - `docs/standards/testing.md` (tracks `.github/dependabot.yml` and this test
-  file): reviewed, left -- it describes the hold mechanism in general and lists
-  no per-package majors-only holds; it was already stale from other files.
+  file): the Dependabot paragraph now states PyMuPDF's major-only hold and names
+  `MAJORS_HELD`, and no longer cites PyMuPDF as a full hold (Opus outer review,
+  round 1, GAPS-FOUND (1); round 2 confirmed the fix commit non-behavioral and
+  returned NO-GAPS). Its
+  `*Last updated:*` lines were left as they are: the doc already carries three
+  stacked stamps (a pre-existing doc-conventions violation the prep checker
+  reports), and rewriting them is outside this bead.
+- The orphaned "HELD packages" comments in `.github/dependabot.yml` and above
+  `HELD_FOR_UPGRADE` (which still cited PyMuPDF as fully held) were rewritten to
+  current state -- bd polyglot-pdf-ri3z1, filed by the Opus review, closed here.
 
 ## Files touched
 
-- `.github/dependabot.yml` -- scoped PyMuPDF major ignore
-- `tests/test_dependabot_config.py` -- MAJORS_HELD + three tests
+- `.github/dependabot.yml` -- scoped PyMuPDF major ignore; hold comments
+- `tests/test_dependabot_config.py` -- MAJORS_HELD + three tests; hold comment
+- `docs/standards/testing.md` -- Dependabot hold policy paragraph
