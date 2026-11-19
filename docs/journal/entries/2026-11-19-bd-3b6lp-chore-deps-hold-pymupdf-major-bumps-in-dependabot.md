@@ -1,0 +1,70 @@
+---
+date: 2026-11-19
+bead: polyglot-pdf-3b6lp
+title: "chore(deps): hold PyMuPDF MAJOR bumps in Dependabot; close #923 (2.1)"
+tags: [testing, conventions]
+---
+
+## Trigger
+
+Dependabot opened #923 (PyMuPDF 1.28.2 -> 2.1) the day after the deliberate
+1.28 upgrade (#896, bd k5dnc) removed PyMuPDF from the hold list. PyMuPDF fills
+and renders every PDF on the deployed backend, and its last upgrade was done
+with a before/after fill comparison. In an open-PR triage the maintainer
+approved closing #923 and holding PyMuPDF majors (2026-11-18).
+
+## What shipped
+
+- `.github/dependabot.yml`: a SCOPED ignore on the pip `/backend` entry --
+  `dependency-name: "PyMuPDF"`, `update-types: ["version-update:semver-major"]`.
+  Minor and patch keep arriving in the `all-pip-backend` batch (the k5dnc
+  decision to un-hold PyMuPDF is not reopened).
+- `tests/test_dependabot_config.py`: `MAJORS_HELD` plus three tests -- the ignore
+  is exactly semver-major (no `versions`, no full ignore); minor/patch still flow
+  (not in any pip group's exclude-patterns, not in `HELD_FOR_UPGRADE`); and the
+  package is actually pinned in `requirements.txt`. The ignore-side and
+  exclude-side checks scan EVERY entry with case-insensitive glob matching, so a
+  duplicate or wildcard entry cannot hide a full hold. Mutation-verified, each
+  failing exactly one test: removing the entry; widening it to a full ignore;
+  scoping it to semver-minor; adding PyMuPDF to the group's exclude-patterns; a
+  bare duplicate entry before the scoped one; an extra `*mupdf*` ignore; a
+  `*MuPDF*` exclude-pattern.
+- #923 closed with an explanation.
+- Fresh-eyes (Haiku) round 1: GAPS-FOUND (1) -- the minor/patch half was unpinned
+  (verified by the exclude-pattern mutation). Fixed inline. Round 2: GAPS-FOUND
+  (1) -- the tests read only the last ignore entry per name and matched
+  exclude-patterns exactly, so a duplicate or wildcard full hold passed. Fixed
+  inline (scan every entry, glob-match). Round 1's two
+  unverifiable notes -- Dependabot name-case matching and whether grouped updates
+  honor a per-package update-types ignore -- were settled by repo evidence: the
+  earlier full hold spelled it `PyMuPDF` (the manifest spelling, which GitHub's
+  docs say to match) and Dependabot honored it (the 2026-11-07 batch #907
+  carried other minors but not PyMuPDF 1.24 -> 1.28), so the entry now uses that
+  spelling. Grouped-update behavior will be confirmed by the next weekly run.
+
+## Lessons
+
+- A scoped hold has two halves -- what is blocked and what must still flow --
+  and a test that pins only the first lets a later edit silently turn it into a
+  full hold. Pin both -- and match the way the consumer matches (Dependabot
+  names are globs; several entries can apply), not one exact-key lookup.
+
+## Doc freshness
+
+- `docs/standards/testing.md` (tracks `.github/dependabot.yml` and this test
+  file): the Dependabot paragraph now states PyMuPDF's major-only hold and names
+  `MAJORS_HELD`, and no longer cites PyMuPDF as a full hold (Opus outer review,
+  round 1, GAPS-FOUND (1); round 2 confirmed the fix commit non-behavioral and
+  returned NO-GAPS). Its
+  `*Last updated:*` lines were left as they are: the doc already carries three
+  stacked stamps (a pre-existing doc-conventions violation the prep checker
+  reports), and rewriting them is outside this bead.
+- The orphaned "HELD packages" comments in `.github/dependabot.yml` and above
+  `HELD_FOR_UPGRADE` (which still cited PyMuPDF as fully held) were rewritten to
+  current state -- bd polyglot-pdf-ri3z1, filed by the Opus review, closed here.
+
+## Files touched
+
+- `.github/dependabot.yml` -- scoped PyMuPDF major ignore; hold comments
+- `tests/test_dependabot_config.py` -- MAJORS_HELD + three tests; hold comment
+- `docs/standards/testing.md` -- Dependabot hold policy paragraph

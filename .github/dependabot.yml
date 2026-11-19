@@ -97,7 +97,7 @@ updates:
           # EXACTLY (==0.28.1), so an httpx bump inside the batch cannot resolve.
           # Kept out of the group; a firebase-admin upgrade PR must bump it by hand.
           - "httpx"
-          # HELD until its upgrade bead lands (see the ignore: block below).
+          # A fully HELD package (see the ignore: block below) is also listed here.
     ignore:
       - dependency-name: "google-genai"
       - dependency-name: "websockets"
@@ -106,14 +106,21 @@ updates:
       - dependency-name: "starlette"
       # httpx: see the exclude-patterns note -- exact-pinned by firebase-admin 7.x.
       - dependency-name: "httpx"
-      # HELD packages (bd polyglot-pdf-niwcu): pinned back from #882 and being
-      # upgraded deliberately, each behind its own validation. Several of their
-      # #882 jumps were MINOR by Dependabot's reckoning (PyMuPDF 1.24 -> 1.28,
-      # soundfile 0.12 -> 0.14, and 0.x bumps of librosa / pytest-asyncio), so
-      # update-types alone would put them straight back into the next grouped
-      # PR. Each upgrade bead's PR REMOVES its own entries here (and from the
-      # exclude-patterns above and HELD_FOR_UPGRADE in
-      # tests/test_dependabot_config.py) when it lands.
+      # PyMuPDF MAJORS only (bd polyglot-pdf-3b6lp). PyMuPDF fills and renders
+      # every PDF on the deployed backend; a major (#923 proposed 1.28 -> 2.1)
+      # is a deliberate upgrade bead with a before/after fill comparison, the
+      # way #896 did 1.24 -> 1.28 -- not an automated single-package PR.
+      # Minor + patch still arrive in the all-pip-backend batch.
+      # Spelled as in requirements.txt -- the same spelling the earlier full
+      # hold used, which Dependabot honored.
+      - dependency-name: "PyMuPDF"
+        update-types:
+          - "version-update:semver-major"
+      # Fully HELD packages (bd polyglot-pdf-niwcu; none at present): a package
+      # awaiting a deliberate, validated upgrade is ignored here with NO
+      # update-types (some breaking jumps are MINOR to Dependabot) and excluded
+      # from the group above, and listed in HELD_FOR_UPGRADE in
+      # tests/test_dependabot_config.py. Its upgrade PR removes all three.
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:

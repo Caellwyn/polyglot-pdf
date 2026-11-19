@@ -87,6 +87,7 @@ exclude-patterns or ignore: list fails
 test_all_ts_toolchain_packages_are_excluded_from_every_npm_group /
 test_all_ts_toolchain_packages_are_fully_ignored_in_every_npm_update.
 """
+import fnmatch
 import re
 
 import yaml
@@ -313,12 +314,12 @@ def test_every_pip_group_batches_only_minor_and_patch_updates():
             )
 
 
-# Packages pinned back from #882 and HELD out of Dependabot until their own
-# upgrade bead lands (bd polyglot-pdf-niwcu). Several #882 jumps were MINOR to
-# Dependabot (PyMuPDF 1.24 -> 1.28, soundfile 0.12 -> 0.14, 0.x librosa /
-# pytest-asyncio), so the minor+patch group alone would re-propose them in the
-# next batch, around the validation each bead exists to do. An upgrade bead's
-# PR removes its packages from this map AND from dependabot.yml together.
+# Pip packages fully HELD out of Dependabot until their own upgrade bead lands
+# (bd polyglot-pdf-niwcu; empty at present). A full hold, not a major-only one,
+# because some breaking jumps are MINOR to Dependabot, so the minor+patch group
+# alone would re-propose them around the validation each bead exists to do. An
+# upgrade bead's PR removes its packages from this map AND from dependabot.yml
+# together. (Major-only holds live in MAJORS_HELD below.)
 HELD_FOR_UPGRADE = {
 }
 
@@ -419,6 +420,67 @@ def test_every_npm_held_package_is_declared_by_some_app():
             declared.update(pkg.get(section, {}))
     stray = [p for p in NPM_HELD_FOR_UPGRADE if p not in declared]
     assert not stray, "held but declared by no app: " + repr(stray)
+
+
+# Packages whose MAJOR bumps are ignored while minor + patch flow normally
+# (bd polyglot-pdf-3b6lp). Unlike HELD_FOR_UPGRADE (a full hold), the ignore
+# here is deliberately SCOPED to semver-major: a full ignore would also stop
+# the routine patch releases these packages should keep receiving.
+MAJORS_HELD = (
+    "pymupdf",
+)
+
+
+def _matches(pattern, package):
+    """Dependabot names may be globs ("*" wildcards); compare case-insensitively."""
+    return fnmatch.fnmatchcase(package.lower(), str(pattern).lower())
+
+
+def test_majors_held_packages_ignore_exactly_semver_major():
+    """EVERY ignore entry that matches a major-held package (exact, glob, or a
+    duplicate) must be exactly the semver-major scope -- one unscoped match
+    anywhere in the list would fully hold the package."""
+    update = _pip_backend_update(_load_dependabot_config())
+    entries = [e for e in update.get("ignore", []) if "dependency-name" in e]
+    for p in MAJORS_HELD:
+        hits = [e for e in entries if _matches(e["dependency-name"], p)]
+        assert hits, "major-held package missing from ignore: " + p
+        wrong = [e for e in hits
+                 if "versions" in e
+                 or e.get("update-types") != ["version-update:semver-major"]]
+        assert not wrong, (
+            "every ignore entry matching '{}' must be exactly update-types "
+            "['version-update:semver-major'] (no versions key, no full "
+            "ignore): {}".format(p, wrong)
+        )
+
+
+def test_majors_held_packages_still_receive_minor_and_patch():
+    """The other half of the scoped hold: minor + patch must keep flowing, so a
+    major-held package may not be excluded from any pip group, nor appear in
+    HELD_FOR_UPGRADE (a full hold)."""
+    config = _load_dependabot_config()
+    for update in config["updates"]:
+        if update.get("package-ecosystem") != "pip":
+            continue
+        for group_name, group in update.get("groups", {}).items():
+            blocked = [p for p in MAJORS_HELD
+                       if any(_matches(x, p) for x in group.get("exclude-patterns", []))]
+            assert not blocked, "pip group '{}' excludes major-held packages, which " \
+                "stops their minor/patch updates: {}".format(group_name, blocked)
+    full = [p for p in MAJORS_HELD if p in {h.lower() for h in HELD_FOR_UPGRADE}]
+    assert not full, "major-held packages are also fully HELD: " + repr(full)
+
+
+def test_every_majors_held_package_is_actually_pinned_in_the_requirements():
+    backend = Path(__file__).resolve().parents[1] / "backend"
+    pinned = set()
+    for line in (backend / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\s*([A-Za-z0-9_.\-]+)(\[[^\]]*\])?\s*==", line)
+        if m:
+            pinned.add(m.group(1).lower())
+    stray = [p for p in MAJORS_HELD if p not in pinned]
+    assert not stray, "major-held but not pinned in requirements.txt: " + repr(stray)
 
 
 def test_httpx_is_held_while_firebase_admin_exact_pins_it():
