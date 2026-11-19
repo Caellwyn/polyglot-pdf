@@ -156,12 +156,12 @@ steps:
   - id: gate-build-checks
     # python:3.12, NOT cloud-sdk:slim. This step only needs pip and
     # google-cloud-firestore -- record_build_check.py invokes no gcloud. The
-    # cloud-sdk image is Debian-based and ships PEP 668's EXTERNALLY-MANAGED
-    # marker, under which a bare `pip install` into the system interpreter
-    # exits non-zero ("error: externally-managed-environment"); with
+    # cloud-sdk:slim image has no python3 or pip on PATH at all (its only
+    # interpreter is the one gcloud bundles for itself, bd
+    # polyglot-pdf-mm3e0), so a `pip install` there fails; with
     # `set -euo pipefail` that fails this step, and since this is the FIRST
     # step of every deploy target it would make the whole gate inert. An
-    # official python image carries no such marker.
+    # official python image ships python and pip ready to use.
     name: python:3.12
     entrypoint: bash
     args:
@@ -682,7 +682,7 @@ steps:
   # --------------------------------------------------------------------
   - id: firestore-rules-deploy
     # node:22, NOT cloud-sdk:slim: this step's only tool is `npx
-    # firebase-tools`, and cloud-sdk:slim is gcloud + Debian + Python only --
+    # firebase-tools`, and cloud-sdk:slim is gcloud on Debian only --
     # it ships no Node/npx at all, so `npx` fails outright with "command not
     # found" on that image (review round: bd polyglot-pdf-ywxoh; every other
     # npx/npm step in this file -- verify-frontend, verify-admin-console,
