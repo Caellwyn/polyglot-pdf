@@ -68,8 +68,10 @@ demo backend deploy would hit the same failure.
 
 - `docs/technical_guide.md` 31b "Build callers" / "Pinned by": updated to the
   gcloud-interpreter mechanism. That doc carries no stamp by design.
-- No `components/` or `standards/` doc makes a claim about the image's Python,
-  including `docs/components/config-deployment.md`; reviewed, no change.
+- `docs/components/config-deployment.md` tracks `cloudbuild.yaml`: added the
+  interpreter paragraph to the reachability-gate section and bumped the stamp.
+- The other docs that freshness flagged STALE track files this branch did not
+  touch; they were stale before it.
 - CLAUDE.md is unchanged.
 
 ## Files touched
@@ -78,3 +80,4 @@ demo backend deploy would hit the same failure.
 - `tests/test_cloudbuild_yaml.py`: the bare-python / gcloud-interpreter set
   tests and the stubbed per-step runs.
 - `docs/technical_guide.md`: 31b prose.
+- `docs/components/config-deployment.md`: interpreter paragraph and stamp.
