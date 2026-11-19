@@ -51,6 +51,21 @@ def windowless_creationflags() -> int:
     return 0
 
 
+def claude_cli_env() -> dict:
+    """Environment for a `claude -p` subprocess, with ANTHROPIC_API_KEY removed.
+
+    The CLI bills the metered Claude API whenever ANTHROPIC_API_KEY is in its
+    environment, instead of using the maintainer's subscription login. The key
+    is set machine-wide for the scripts that genuinely need the API (e.g. the
+    sim-user actor), so every `claude` spawn strips it to stay on the
+    subscription (bd polyglot-pdf-hfhtp). Pinned by
+    backend/tests/unit/test_claude_cli_subscription_env.py.
+    """
+    env = dict(os.environ)
+    env.pop("ANTHROPIC_API_KEY", None)
+    return env
+
+
 # bd polyglot-pdf-xlvba: how old an orphaned _cli_*.json scratch file must be
 # before a sweep reclaims it. The normal lifetime of one of these files is
 # the length of one CLI call (seconds to a couple minutes); an hour gives
@@ -225,7 +240,7 @@ class ClaudeCliProvider:
         try:
             proc = subprocess.run(
                 cmd, input=wrapped, capture_output=True, text=True,
-                encoding="utf-8", timeout=timeout_s,
+                encoding="utf-8", timeout=timeout_s, env=claude_cli_env(),
                 creationflags=windowless_creationflags(),
             )
             if proc.returncode != 0:
@@ -395,7 +410,7 @@ def run_json_claude_cli(prompt: str, model: str) -> tuple[dict, dict]:
     try:
         proc = subprocess.run(
             cmd, input=wrapped, capture_output=True, text=True,
-            encoding="utf-8", timeout=timeout_s,
+            encoding="utf-8", timeout=timeout_s, env=claude_cli_env(),
             creationflags=windowless_creationflags(),
         )
         if proc.returncode != 0:
