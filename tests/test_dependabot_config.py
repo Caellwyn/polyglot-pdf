@@ -421,6 +421,46 @@ def test_every_npm_held_package_is_declared_by_some_app():
     assert not stray, "held but declared by no app: " + repr(stray)
 
 
+# Packages whose MAJOR bumps are ignored while minor + patch flow normally
+# (bd polyglot-pdf-3b6lp). Unlike HELD_FOR_UPGRADE (a full hold), the ignore
+# here is deliberately SCOPED to semver-major: a full ignore would also stop
+# the routine patch releases these packages should keep receiving.
+MAJORS_HELD = (
+    "pymupdf",
+)
+
+
+def test_majors_held_packages_ignore_exactly_semver_major():
+    update = _pip_backend_update(_load_dependabot_config())
+    ignored = {
+        e["dependency-name"].lower(): e
+        for e in update.get("ignore", []) if "dependency-name" in e
+    }
+    missing = [p for p in MAJORS_HELD if p not in ignored]
+    assert not missing, "major-held packages missing from ignore: " + repr(missing)
+    wrong = {
+        p: ignored[p] for p in MAJORS_HELD
+        if "versions" in ignored[p]
+        or ignored[p].get("update-types") != ["version-update:semver-major"]
+    }
+    assert not wrong, (
+        "major-held packages must ignore update-types "
+        "['version-update:semver-major'] and nothing else (no versions key, "
+        "no full ignore): " + repr(wrong)
+    )
+
+
+def test_every_majors_held_package_is_actually_pinned_in_the_requirements():
+    backend = Path(__file__).resolve().parents[1] / "backend"
+    pinned = set()
+    for line in (backend / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\s*([A-Za-z0-9_.\-]+)(\[[^\]]*\])?\s*==", line)
+        if m:
+            pinned.add(m.group(1).lower())
+    stray = [p for p in MAJORS_HELD if p not in pinned]
+    assert not stray, "major-held but not pinned in requirements.txt: " + repr(stray)
+
+
 def test_httpx_is_held_while_firebase_admin_exact_pins_it():
     """firebase-admin 7.x declares httpx[http2]==0.28.1 (an EXACT pin), so an
     httpx bump in the grouped batch would be unresolvable (bd polyglot-pdf-1aq49).

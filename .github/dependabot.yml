@@ -106,6 +106,14 @@ updates:
       - dependency-name: "starlette"
       # httpx: see the exclude-patterns note -- exact-pinned by firebase-admin 7.x.
       - dependency-name: "httpx"
+      # PyMuPDF MAJORS only (bd polyglot-pdf-3b6lp). PyMuPDF fills and renders
+      # every PDF on the deployed backend; a major (#923 proposed 1.28 -> 2.1)
+      # is a deliberate upgrade bead with a before/after fill comparison, the
+      # way #896 did 1.24 -> 1.28 -- not an automated single-package PR.
+      # Minor + patch still arrive in the all-pip-backend batch.
+      - dependency-name: "pymupdf"
+        update-types:
+          - "version-update:semver-major"
       # HELD packages (bd polyglot-pdf-niwcu): pinned back from #882 and being
       # upgraded deliberately, each behind its own validation. Several of their
       # #882 jumps were MINOR by Dependabot's reckoning (PyMuPDF 1.24 -> 1.28,
