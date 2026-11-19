@@ -1,6 +1,6 @@
 # Config & deployment
 
-*Last updated: 2026-10-22. See [2026-10-22-bd-bd1zs-gemini-3p8-live-and-3p1-flash-lite-migration.md](../journal/entries/2026-10-22-bd-bd1zs-gemini-3p8-live-and-3p1-flash-lite-migration.md) for closeout details.*
+*Last updated: 2026-11-19. See [2026-11-19-bd-mm3e0-fix-deploy-cloud-sdk-slim-no-longer-has-python3.md](../journal/entries/2026-11-19-bd-mm3e0-fix-deploy-cloud-sdk-slim-no-longer-has-python3.md) for closeout details.*
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/services/promotion_gate.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore cloudbuild.yaml deploy/channels/ scripts/deploy_preflight.sh scripts/setup-cloud-build.sh scripts/record_build_check.py scripts/record_deployment.py scripts/promotion_gate.py scripts/verify_service_reachable.py scripts/deploy_build_targets.sh scripts/write_kits_manifest.py scripts/audit/infra_posture.sh deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts firestore.rules frontend/vite.config.schema.ts
 
@@ -457,6 +457,14 @@ does now, so the module has exactly one kind of caller.
 `tests/test_verify_service_reachable.py` exercises it directly via dependency
 injection, and `tests/test_deploy_wrappers.py` pins that no wrapper
 reintroduces a bash copy.
+
+Those three steps run on `cloud-sdk:slim`, which has **no `python3` on PATH**.
+The only interpreter in the image is the one gcloud bundles, so each step
+resolves it with `gcloud info --format='value(basic.python_location)'` and runs
+the module with that (bd `polyglot-pdf-mm3e0`). The fatal backend gate aborts if
+no interpreter is reported. The warn steps print `WARN: reachability check did
+not complete (exit N)` and carry on. `tests/test_cloudbuild_yaml.py` pins this
+as a set: no step off a `python:*` image may invoke a bare `python`.
 
 The module spawns `gcloud` through `shutil.which` (bd `polyglot-pdf-o4f7c`):
 on Windows, a bare `gcloud` resolves only to a `gcloud.exe` that the Cloud

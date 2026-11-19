@@ -2949,16 +2949,22 @@ exactly one place instead of drifting per caller.
   reintroduces a bash copy (neither the function nor a bare `get-iam-policy`
   query).
 - **Build callers:** `backend-reachability-gate` (fatal),
-  `editor-reachability-warn` and `admin-console-reachability-warn` (warn) call
-  `python3 scripts/verify_service_reachable.py` directly on the
-  `cloud-sdk:slim` image (which bundles its own `python3` for gcloud's
-  internal use -- NOT `python:3.12`, which has no `gcloud` binary on PATH for
-  the module's default `gcloud_runner` to shell out to).
+  `editor-reachability-warn` and `admin-console-reachability-warn` (warn) run
+  `scripts/verify_service_reachable.py` on the `cloud-sdk:slim` image -- NOT
+  `python:3.12`, which has no `gcloud` binary on PATH for the module's
+  default `gcloud_runner` to shell out to. `cloud-sdk:slim` has **no
+  `python3` on PATH**; its only interpreter is the one gcloud bundles, so each
+  step resolves it with `gcloud info --format='value(basic.python_location)'`
+  and runs the module with that (bd `polyglot-pdf-mm3e0`). The fatal gate
+  aborts if no interpreter is reported; the warn steps print a `WARN:` line
+  and carry on.
 - **Pinned by:** `tests/test_verify_service_reachable.py` (the module's
   behavior); `tests/test_deploy_wrappers.py` (no wrapper carries a bash copy);
   `tests/test_cloudbuild_yaml.py`
   (the build steps run on `cloud-sdk:slim`, not `python:3.12`, and precede
-  their target's mutating step).
+  their target's mutating step; no step off a `python:*` image invokes a bare
+  `python`, and each one that runs a `.py` script runs it on gcloud's
+  interpreter, executed against a stubbed `gcloud` per step).
 
 **31c. The staging-before-demo gate: build-side enforcement of a rule
 bead 4.3's admin route also enforces.**
