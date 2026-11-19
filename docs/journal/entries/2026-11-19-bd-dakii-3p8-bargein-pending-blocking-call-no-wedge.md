@@ -20,8 +20,8 @@ staging deploy on it.
 **The wedge was a probe bug, not a 3.8 bug.** google-genai 2.8.0
 `AsyncSession.receive()` ends its iterator after EVERY `turn_complete`
 (`live.py`: `if ...turn_complete: yield result; break`). The probe iterated it
-once. On 3.8 a barge's `interrupted` and `turn_complete` arrive on ONE message,
-so the probe stopped reading exactly there, and everything after it was
+once. On 3.8 a barge's `interrupted` message is followed in the same millisecond
+by `turn_complete`, so the probe stopped reading exactly there, and everything after it was
 recorded as "lost" because it was never read. The control arm only ever has
 one turn, which is why it looked healthy. The production adapter re-enters
 `receive()` in a `while True` loop and never had this blind spot.

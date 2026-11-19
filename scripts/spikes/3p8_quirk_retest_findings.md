@@ -18,7 +18,7 @@ The harness `--debug` transcripts (`*.debug.json`) and the run logs stay local a
 
 | Item | Verdict vs 2.5 | One line |
 |---|---|---|
-| PTT barge-in during a pending BLOCKING call | **changed shape, no wedge** (corrected 2026-11-18, bd dakii) | No `tool_call_cancellation`; `interrupted` + `turn_complete` arrive together; the barge is then transcribed and a NEW call made, and the next turn is answered (3 of 3). The original "session wedges" verdict was a probe bug: its reader stopped at the first `turn_complete`. |
+| PTT barge-in during a pending BLOCKING call | **changed shape, no wedge** (corrected 2026-11-18, bd dakii) | No `tool_call_cancellation`; `interrupted` is followed in the same millisecond by `turn_complete`; the barge is then transcribed and a NEW call made, and the next turn is answered (3 of 3). The original "session wedges" verdict was a probe bug: its reader stopped at the first `turn_complete`. |
 | Temperature 0.4 vs 1.0 | **unchanged** | Cost, fill, latency, tool reliability and silent-turn rate are the same within n. Keep 0.4: its reasons (clearer speech, judged by ear, and spell-back validated at 0.4) were not re-tested. |
 | Language lock (es / zh / hi / ru / ar) | **unchanged** | All 5 languages were spoken in the target script on 14 of 14 questions. Fill was 13-14 of 14. |
 | `speech_config.language_code` on vs off (Spanish) | **unchanged; no effect on clean audio** | Accepted on 3.8 (no 1007). Language lock, fill and cost were identical with it off. Not shown removable (see details). |
@@ -43,7 +43,7 @@ The harness `--debug` transcripts (`*.debug.json`) and the run logs stay local a
 section reported that a barge-in wedged the session, 3 of 3 twice. That was a
 **probe bug**. google-genai 2.8.0 `AsyncSession.receive()` ends its iterator
 after every `turn_complete`. The probe iterated it once, and on 3.8 the barge's
-`interrupted` and `turn_complete` arrive on ONE message, so the probe stopped
+`interrupted` message is followed in the same millisecond by `turn_complete`, so the probe stopped
 reading right there. Everything it recorded as "lost" after that point (the barge
 transcript, the reply to the late tool response, the follow-up turn) was simply
 never read. The production adapter re-enters `receive()` per turn, so it never
@@ -60,7 +60,10 @@ re-entering `receive()` per turn. The setup mirrors deploy for the parts under t
 `scripts/spikes/data/r3ham/dakii/`):
 1. The utterance produces an `update_form_fields` call A. The probe does not answer it.
 2. 0.3 s later the user speaks again (a corrected value).
-3. The server sends `interrupted` and `turn_complete` on one message within about 0.1 s.
+3. Within about 0.1 s the server sends an `interrupted` message, then (same
+   millisecond) the usage and `turn_complete`. The probe emits usage before
+   `interrupted` for a single message, so the recorded order `interrupted`,
+   `usage`, `turn_complete` shows they are separate messages.
 4. No `tool_call_cancellation` arrives.
 5. When the barge audio ends, it is transcribed and the model issues a NEW
    `update_form_fields` call B with the corrected value. Call A is still open.

@@ -1,15 +1,16 @@
 """Barge-in while a BLOCKING tool call is pending (bd polyglot-pdf-dakii).
 
 On gemini-3.8-live every declaration is behavior=BLOCKING. When the user presses
-push-to-talk while a call is still unanswered, the server sends `interrupted`
-and `turn_complete` on ONE message, sends no tool_call_cancellation, and then --
+push-to-talk while a call is still unanswered, the server sends an `interrupted`
+message followed in the same millisecond by `turn_complete`, sends no
+tool_call_cancellation, and then --
 once the barge audio ends -- transcribes it and issues a NEW call for the
 corrected value (Vertex, 2026-11-18: scripts/spikes/data/r3ham/dakii/).
 
 google-genai 2.8.0 `AsyncSession.receive()` ENDS its iterator after every
 `turn_complete`. A reader that iterates receive() once therefore goes deaf at
-the barge's interrupt -- that is exactly what made the r3ham.4 probe report a
-"wedged session" 3 of 3 times. The production adapter re-enters receive() per
+the turn_complete that follows the barge's interrupt -- that is exactly what
+made the r3ham.4 probe report a "wedged session" 3 of 3 times. The production adapter re-enters receive() per
 turn; these tests pin that, with a fake session whose receive() reproduces the
 SDK's per-turn iterator shape, so a loop that stops re-entering goes red.
 
@@ -91,16 +92,23 @@ class _Ctx:
         return False
 
 
-def _barge_turns():
-    """The measured 3.8 sequence: call A pending -> barge (interrupted +
-    turn_complete together, no cancellation) -> NEW call B with the corrected
-    value -> the next turn's confirm_field."""
+def _barge_turns(shape="split"):
+    """The measured 3.8 sequence: call A pending -> barge (interrupted, then
+    turn_complete; no cancellation) -> NEW call B with the corrected value ->
+    the next turn's confirm_field.
+
+    shape="split" is the measured wire shape (an interrupted message, then a
+    separate turn_complete message in the same millisecond); "bundled" puts
+    both flags on one message, which the loop must survive too."""
+    if shape == "split":
+        barge = [_sc_msg(interrupted=True), _sc_msg(turn_complete=True)]
+    else:
+        barge = [_sc_msg(interrupted=True, turn_complete=True)]
     return [
         [
             _tool_call_msg("fc-A", "update_form_fields",
                            {"field_id": "foreign_tax_id_number", "value": "AAA"}),
-            _sc_msg(interrupted=True, turn_complete=True),
-        ],
+        ] + barge,
         [
             _tool_call_msg("fc-B", "update_form_fields",
                            {"field_id": "foreign_tax_id_number", "value": "BBB"}),
@@ -149,9 +157,10 @@ async def _run(turns, tool_delay=0.0):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("shape", ["split", "bundled"])
 @pytest.mark.parametrize("tool_delay", [0.0, 0.05])
-async def test_session_keeps_serving_turns_after_barge_during_pending_call(tool_delay):
-    calls, responses, interrupts = await _run(_barge_turns(), tool_delay)
+async def test_session_keeps_serving_turns_after_barge_during_pending_call(tool_delay, shape):
+    calls, responses, interrupts = await _run(_barge_turns(shape), tool_delay)
 
     # The barge's interrupt is forwarded once (the client flushes playback).
     assert interrupts == [True]
@@ -166,9 +175,10 @@ async def test_session_keeps_serving_turns_after_barge_during_pending_call(tool_
 
 
 @pytest.mark.asyncio
-async def test_last_write_is_the_corrected_value():
+@pytest.mark.parametrize("shape", ["split", "bundled"])
+async def test_last_write_is_the_corrected_value(shape):
     """Field-state consistency: the client applies writes in dispatch order, so
     the value the model reads back (the corrected one) is the last one written."""
-    calls, _responses, _ = await _run(_barge_turns())
+    calls, _responses, _ = await _run(_barge_turns(shape))
     writes = [a.get("value") for n, a in calls if n == "update_form_fields"]
     assert writes[-1] == "BBB"

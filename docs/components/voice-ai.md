@@ -178,8 +178,9 @@ transcript, so the thinking indicator would otherwise stay set until its
 max-duration timer, bd polyglot-pdf-wpw.5), and `continue`s -- skipping the rest of
 that event so no stale audio/tool-calls are processed. The `continue` stays inside
 the `while True` re-entry of `session.receive()` -- that iterator ends after EVERY
-`turn_complete`, and on 3.8 a barge's `interrupted` and `turn_complete` arrive on
-one message, so a reader that iterated it once would go deaf at the barge. On 3.8
+`turn_complete`, and on 3.8 a barge's `interrupted` message is followed in the same
+millisecond by `turn_complete`, so a reader that iterated it once would go deaf at
+the barge. On 3.8
 a barge during a pending BLOCKING call sends no `tool_call_cancellation`: the
 pending call still gets its response when its callback returns, and the model
 then issues a NEW call for the barge utterance (bd polyglot-pdf-dakii; pinned by

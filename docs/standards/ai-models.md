@@ -43,7 +43,8 @@ location (endpoint-verified 2026-10-21).
 >   restoring the wait-for-result-then-speak contract every tool here is written
 >   for. A push-to-talk barge-in while a call is still unanswered gets NO
 >   `tool_call_cancellation`: the call stays open and still takes its response,
->   `interrupted` and `turn_complete` arrive on one message, and the model then
+>   an `interrupted` message is followed in the same millisecond by
+>   `turn_complete`, and the model then
 >   issues a new call for the barge and answers the next turn. The adapter
 >   recovers because it re-enters `receive()` per turn (the SDK's iterator ends
 >   at every `turn_complete`) -- bd `polyglot-pdf-dakii`,
