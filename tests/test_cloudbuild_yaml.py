@@ -2171,3 +2171,213 @@ def test_every_cloud_run_deploy_carries_a_max_instances_ceiling(steps):
     assert len(deploys) >= 2, [s.get("id") for s in deploys]
     missing = [s.get("id") for s in deploys if "--max-instances=" not in script_of(s)]
     assert missing == [], "Cloud Run deploy without a --max-instances ceiling: %s" % missing
+
+
+# --- bd polyglot-pdf-mm3e0: cloud-sdk:slim has no python3 on PATH -----------------------
+#
+# The cloud-sdk:slim image has no python3 on PATH, so a bare
+# `python3 scripts/x.py` in a cloud-sdk step exits 127 -- which made the
+# backend reachability gate fail every backend deploy AFTER the revision was
+# live. The only interpreter in that image is the one gcloud bundles, found via
+# `gcloud info` python_location. The rule, over the WHOLE build: a step that is
+# not on a python:* image never invokes a bare python, and runs every .py
+# script through that resolved interpreter.
+
+_SDK_PY_ASSIGN = (
+    "SDK_PY=\"$(gcloud info --format='value(basic.python_location)')\"")
+_BARE_PYTHON = re.compile(
+    r"(?:^|[\s;&|(`])(?:python3?(?:\.\d+)?|py)(?=\s|$)")
+_PY_SCRIPT_RUN = re.compile(r"(\S+)\s+(scripts/\S+\.py)\b")
+
+
+def _image_ships_python(step: dict) -> bool:
+    return step.get("name", "").split("/")[-1].startswith("python:")
+
+
+def _code_lines(script: str) -> list[str]:
+    return [
+        _strip_shell_comment(line) for line in script.splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+
+
+def _sdk_python_steps(steps) -> list[dict]:
+    """Every non-python-image step that runs a repo .py script -- DISCOVERED."""
+    return [
+        s for s in steps
+        if not _image_ships_python(s)
+        and any(_PY_SCRIPT_RUN.search(ln) for ln in _code_lines(script_of(s)))
+    ]
+
+
+def test_no_step_off_a_python_image_invokes_a_bare_python(steps):
+    """Mutation: put back `python3 scripts/verify_service_reachable.py` in any
+    cloud-sdk step -> red, naming it."""
+    offenders = []
+    for step in steps:
+        if _image_ships_python(step):
+            continue
+        for line in _code_lines(script_of(step)):
+            if _BARE_PYTHON.search(line):
+                offenders.append((step["id"], line.strip()))
+    assert offenders == [], (
+        "bare python invoked on an image with no python on PATH "
+        "(cloud-sdk:slim ships none -- use gcloud's bundled interpreter): "
+        f"{offenders}"
+    )
+
+
+def test_every_py_script_off_a_python_image_runs_on_gclouds_interpreter(steps):
+    """The positive half: each .py run in such a step goes through "$$SDK_PY",
+    resolved from gcloud in the same step, with the $ escaped so Cloud Build
+    does not blank it."""
+    found = _sdk_python_steps(steps)
+    ids = [s["id"] for s in found]
+    # Non-vacuous: the fatal backend gate is the one that broke deploys.
+    assert "backend-reachability-gate" in ids, ids
+    for step in found:
+        body = script_of(step)
+        assert _SDK_PY_ASSIGN in body, (
+            f"{step['id']} runs a .py script but never resolves SDK_PY from "
+            "gcloud info"
+        )
+        assert not re.search(r"(?<!\$)\$\{?SDK_PY\b", body), (
+            f"{step['id']} has a BARE $SDK_PY -- Cloud Build blanks it"
+        )
+        for line in _code_lines(body):
+            m = _PY_SCRIPT_RUN.search(line)
+            if m:
+                assert m.group(1) == '"$$SDK_PY"', (
+                    f"{step['id']} runs {m.group(2)} with {m.group(1)}, not "
+                    '"$$SDK_PY"'
+                )
+
+
+# The substitutions each step needs to get past its own target guard in a stub
+# run. The test below asserts the keys equal the DISCOVERED set, so a new
+# python-running cloud-sdk step fails until it is exercised here too.
+_SDK_PY_STEP_SUBS = {
+    "backend-reachability-gate": {"_TARGET": "backend-staging",
+                                  "_CHANNEL": "staging"},
+    "editor-reachability-warn": {"_TARGET": "editor", "_CHANNEL": "demo"},
+    "admin-console-reachability-warn": {"_TARGET": "admin-console",
+                                        "_CHANNEL": "demo"},
+}
+
+
+def test_the_stub_run_table_covers_every_sdk_python_step(steps):
+    assert sorted(_SDK_PY_STEP_SUBS) == sorted(
+        s["id"] for s in _sdk_python_steps(steps))
+
+
+def _write_exe(path, body: str) -> None:
+    path.write_text("#!/bin/bash\n" + body, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _run_sdk_python_step(tmp_path, step, subs, *, python_location_ok,
+                         check_exit=0):
+    """Run the step's real script with a booby-trapped `python3`/`python`
+    first on PATH (records and exits 127, as the image has none), and a fake
+    `gcloud` whose `info` reports a recording stand-in for the bundled
+    interpreter -- or an empty location when python_location_ok is False. The
+    stand-in exits check_exit, i.e. what the reachability check reported."""
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover
+        pytest.skip("bash not on PATH")
+    rendered = script_of(step)
+    for key, val in subs.items():
+        rendered = rendered.replace("${%s}" % key, val)
+    rendered = rendered.replace("$$", "$")
+
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "sdk").mkdir()
+    posix = subprocess.run(
+        [bash, "-c", "pwd"], capture_output=True, text=True, cwd=str(tmp_path)
+    ).stdout.strip()
+    assert posix, "could not resolve tmp_path to a bash-visible POSIX path"
+
+    for bare in ("python3", "python"):
+        _write_exe(tmp_path / "bin" / bare,
+                   f'echo "$0 $*" >> "{posix}/bare_python_called"\nexit 127\n')
+    _write_exe(tmp_path / "sdk" / "python3",
+               f'echo "$*" > "{posix}/sdk_python_argv"\nexit {check_exit}\n')
+    location = f"{posix}/sdk/python3" if python_location_ok else ""
+    _write_exe(tmp_path / "bin" / "gcloud",
+               'if [ "$1" = "info" ]; then\n'
+               f"  echo '{location}'; exit 0\n"
+               "fi\n"
+               "exit 0\n")
+
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f'cd "{REPO_ROOT.as_posix()}"\n'
+        f'export PATH="{posix}/bin:$PATH"\n'
+        'export PROJECT_ID="test-project"\n'
+        + rendered,
+        encoding="utf-8", newline="\n",
+    )
+    result = subprocess.run(
+        [bash, str(driver)], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", cwd=str(REPO_ROOT), timeout=60,
+    )
+    return (result, tmp_path / "bare_python_called",
+            tmp_path / "sdk_python_argv")
+
+
+@pytest.mark.parametrize("step_id", sorted(_SDK_PY_STEP_SUBS))
+def test_sdk_python_step_runs_its_script_on_gclouds_interpreter(
+        tmp_path, by_id, step_id):
+    """Mutations: bare `python3` back in the step -> the trap fires; drop the
+    gcloud-info lookup -> the stand-in interpreter is never called."""
+    result, bare, sdk = _run_sdk_python_step(
+        tmp_path, by_id[step_id], _SDK_PY_STEP_SUBS[step_id],
+        python_location_ok=True)
+    assert not bare.exists(), (
+        f"{step_id} invoked a bare python: {bare.read_text(encoding='utf-8')}")
+    assert result.returncode == 0, (
+        f"{step_id} failed:\nstdout: {result.stdout}\nstderr: {result.stderr}")
+    assert sdk.exists(), (
+        f"{step_id} never ran gcloud's interpreter:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}")
+    assert "scripts/verify_service_reachable.py" in sdk.read_text(
+        encoding="utf-8")
+
+
+@pytest.mark.parametrize("step_id", sorted(_SDK_PY_STEP_SUBS))
+def test_sdk_python_step_with_no_interpreter_fails_by_severity(
+        tmp_path, by_id, step_id):
+    """No python_location: the FATAL gate must fail the build (a silent pass
+    would ship an unchecked deploy); a WARN step must say so and exit 0."""
+    result, bare, _ = _run_sdk_python_step(
+        tmp_path, by_id[step_id], _SDK_PY_STEP_SUBS[step_id],
+        python_location_ok=False)
+    assert not bare.exists()
+    if "--severity fatal" in script_of(by_id[step_id]):
+        assert result.returncode != 0, (
+            f"{step_id} passed with no interpreter:\n{result.stdout}")
+    else:
+        assert result.returncode == 0, (
+            f"{step_id} failed the build in warn mode:\n{result.stderr}")
+        assert "WARN: reachability check did not complete" in result.stdout
+
+
+@pytest.mark.parametrize("step_id", sorted(_SDK_PY_STEP_SUBS))
+def test_sdk_python_step_honours_a_failed_check_by_severity(
+        tmp_path, by_id, step_id):
+    """The check RAN and reported the service unreachable: the FATAL gate must
+    fail the build; a WARN step must say so and exit 0. Mutation: append
+    `|| true` to the fatal gate -> red."""
+    result, bare, sdk = _run_sdk_python_step(
+        tmp_path, by_id[step_id], _SDK_PY_STEP_SUBS[step_id],
+        python_location_ok=True, check_exit=1)
+    assert not bare.exists()
+    assert sdk.exists()
+    if "--severity fatal" in script_of(by_id[step_id]):
+        assert result.returncode != 0, (
+            f"{step_id} swallowed a failed reachability check:\n{result.stdout}")
+    else:
+        assert result.returncode == 0, (
+            f"{step_id} failed the build in warn mode:\n{result.stderr}")
+        assert ("WARN: reachability check did not complete (exit 1)"
+                in result.stdout)

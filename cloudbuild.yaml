@@ -394,8 +394,11 @@ steps:
     # cloud-sdk:slim, NOT python:3.12 -- scripts/verify_service_reachable.py
     # has no third-party dependency (stdlib only), but its default
     # gcloud_runner shells out to the `gcloud` BINARY, which python:3.12 does
-    # not ship. cloud-sdk:slim bundles its own python3 for gcloud's internal
-    # use, which is enough to run this stdlib-only module.
+    # not ship. cloud-sdk:slim has NO python3 on PATH (bd polyglot-pdf-mm3e0):
+    # the only interpreter in the image is the one gcloud bundles for itself,
+    # so the step asks gcloud where it is (`gcloud info` python_location) and
+    # runs this stdlib-only module with it. Every cloud-sdk step that runs a
+    # .py script does the same; tests/test_cloudbuild_yaml.py pins the set.
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
     args:
@@ -414,7 +417,12 @@ steps:
         # polyglot-pdf-pidtg). scripts/verify_service_reachable.py is the ONE
         # port of this check (bd polyglot-pdf-ywxoh, 4.2) -- bash and the
         # build both call it now instead of each carrying their own copy.
-        python3 scripts/verify_service_reachable.py \
+        SDK_PY="$(gcloud info --format='value(basic.python_location)')"
+        if [ -z "$$SDK_PY" ] || [ ! -x "$$SDK_PY" ]; then
+          echo "ABORT: gcloud reported no runnable python_location ('$$SDK_PY')"
+          exit 1
+        fi
+        "$$SDK_PY" scripts/verify_service_reachable.py \
           "$$SERVICE" us-central1 "$PROJECT_ID" --severity fatal
 
 
@@ -601,8 +609,10 @@ steps:
       - |
         set -euo pipefail
         if [ "${_TARGET}" != "editor" ]; then echo "skip (target ${_TARGET})"; exit 0; fi
-        python3 scripts/verify_service_reachable.py \
-          polyglot-backend us-central1 "$PROJECT_ID" --severity warn || true
+        SDK_PY="$(gcloud info --format='value(basic.python_location)')" || SDK_PY=""
+        "$$SDK_PY" scripts/verify_service_reachable.py \
+          polyglot-backend us-central1 "$PROJECT_ID" --severity warn \
+          || echo "WARN: reachability check did not complete (exit $$?)"
 
   # --------------------------------------------------------------------
   # form-kits -- the status-complete kit upload plus the validated
@@ -995,8 +1005,10 @@ steps:
           admin-console-candidate|admin-console) ;;
           *) echo "skip (target ${_TARGET})"; exit 0 ;;
         esac
-        python3 scripts/verify_service_reachable.py \
-          polyglot-admin us-central1 "$PROJECT_ID" --severity warn || true
+        SDK_PY="$(gcloud info --format='value(basic.python_location)')" || SDK_PY=""
+        "$$SDK_PY" scripts/verify_service_reachable.py \
+          polyglot-admin us-central1 "$PROJECT_ID" --severity warn \
+          || echo "WARN: reachability check did not complete (exit $$?)"
   - id: unimplemented-targets
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
