@@ -12,8 +12,8 @@
  * without moving these.
  */
 
-export const VAD_WEB_VERSION = '0.0.31'
-export const ORT_WEB_VERSION = '1.31.1'
+export const VAD_WEB_VERSION = '0.0.28'
+export const ORT_WEB_VERSION = '1.23.0'
 
 export const VAD_ASSET_BASE =
 	`https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@${VAD_WEB_VERSION}/dist/`

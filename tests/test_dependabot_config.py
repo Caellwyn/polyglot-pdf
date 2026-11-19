@@ -388,6 +388,9 @@ NPM_HELD_FOR_UPGRADE = {
     "react-router-dom": "polyglot-pdf-vxssq",
     "jsdom": "polyglot-pdf-50zcc",
     "@testing-library/jest-dom": "polyglot-pdf-50zcc",
+    # vad-web 0.0.31 (via vad-react 0.0.37) throws on destroy-before-start,
+    # which push-to-talk always hits (bd polyglot-pdf-hhlce).
+    "@ricky0123/vad-react": "polyglot-pdf-lpk9k",
 }
 
 

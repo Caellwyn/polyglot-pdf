@@ -41,7 +41,7 @@
 		"deploy:demo": "npm run build:schema:demo && firebase deploy --only hosting:app --project polyglot-demo-aa709"
 	},
 	"dependencies": {
-		"@ricky0123/vad-react": "^0.0.37",
+		"@ricky0123/vad-react": "^0.0.34",
 		"chart.js": "^4.6.1",
 		"chartjs-plugin-annotation": "^3.1.0",
 		"firebase": "^12.7.0",

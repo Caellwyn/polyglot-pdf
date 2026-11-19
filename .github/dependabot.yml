@@ -147,6 +147,7 @@ updates:
           - "react-router-dom"
           - "jsdom"
           - "@testing-library/jest-dom"
+          - "@ricky0123/vad-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -166,6 +167,7 @@ updates:
       - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
       - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
       - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
+      - dependency-name: "@ricky0123/vad-react"          # bd polyglot-pdf-lpk9k
   - package-ecosystem: "npm"
     directory: "/schema-editor"
     schedule:
@@ -199,6 +201,7 @@ updates:
           - "react-router-dom"
           - "jsdom"
           - "@testing-library/jest-dom"
+          - "@ricky0123/vad-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -218,6 +221,7 @@ updates:
       - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
       - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
       - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
+      - dependency-name: "@ricky0123/vad-react"          # bd polyglot-pdf-lpk9k
   - package-ecosystem: "npm"
     directory: "/admin-console"
     schedule:
@@ -251,6 +255,7 @@ updates:
           - "react-router-dom"
           - "jsdom"
           - "@testing-library/jest-dom"
+          - "@ricky0123/vad-react"
     ignore:
       - dependency-name: "typescript"
       - dependency-name: "@types/node"
@@ -270,6 +275,7 @@ updates:
       - dependency-name: "react-router-dom"              # bd polyglot-pdf-vxssq
       - dependency-name: "jsdom"                         # bd polyglot-pdf-50zcc
       - dependency-name: "@testing-library/jest-dom"     # bd polyglot-pdf-50zcc
+      - dependency-name: "@ricky0123/vad-react"          # bd polyglot-pdf-lpk9k
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
