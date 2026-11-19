@@ -58,27 +58,9 @@ SOFTWARE.
 import { useRef, useEffect } from 'react'
 import * as VAD from "@ricky0123/vad-react"
 import { MIC_AUDIO_CONSTRAINTS } from "../shared/audioConstraints"
-
-/**
- * Get VAD asset base URL (uses CDN for reliability)
- * CDN works for both dev and production (no CORS issues)
- */
-function getVADAssetBase(): string {
-	// Use CDN for both dev and production (reliable, no CORS issues)
-	return 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/'
-}
-
-/**
- * Get ONNX Runtime WASM base URL (uses CDN for reliability)
- * CDN works for both dev and production (no CORS issues)
- */
-function getORTAssetBase(): string {
-	// Use CDN for both dev and production (reliable, no CORS issues)
-	return 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
-}
-
-const VAD_ASSET_BASE = getVADAssetBase()
-const ORT_ASSET_BASE = getORTAssetBase()
+// Runtime assets come from the CDN (dev and production alike); their
+// versions must match the bundled JS -- see vadAssetVersions.ts.
+import { VAD_ASSET_BASE, ORT_ASSET_BASE } from "./vadAssetVersions"
 
 /**
  * Default VAD configuration values
