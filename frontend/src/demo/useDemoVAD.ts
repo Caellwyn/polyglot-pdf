@@ -137,7 +137,8 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Don't start automatically - wait for user to click "Connect"
 		startOnLoad: false,
 
-		// Serve model + worklet assets from self-hosted location (faster, more reliable)
+		// Model + worklet and ORT WASM come from the jsdelivr CDN, pinned to the
+		// locked package versions (vadAssetVersions.ts).
 		baseAssetPath: VAD_ASSET_BASE,
 		onnxWASMBasePath: ORT_ASSET_BASE,
 
@@ -177,9 +178,6 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Timing parameters
 		minSpeechMs: sensitivity.minSpeechMs ?? DEFAULT_VAD_CONFIG.minSpeechMs,
 		redemptionMs: sensitivity.redemptionMs ?? DEFAULT_VAD_CONFIG.redemptionMs,
-
-		// Model files - use default CDN (library will handle this automatically)
-		// The library uses jsdelivr CDN by default for model files
 
 		// Callbacks
 		onSpeechStart: () => {
