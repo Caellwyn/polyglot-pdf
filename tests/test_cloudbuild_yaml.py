@@ -2186,7 +2186,7 @@ def test_every_cloud_run_deploy_carries_a_max_instances_ceiling(steps):
 _SDK_PY_ASSIGN = (
     "SDK_PY=\"$(gcloud info --format='value(basic.python_location)')\"")
 _BARE_PYTHON = re.compile(
-    r"(?:^|[\s;&|(`])(?:python3?(?:\.\d+)?|py)(?=\s|$)")
+    r"(?:^|[\s;&|(`\"'/])(?:python3?(?:\.\d+)?|py)(?=[\s;&|<>\"')]|$)")
 _PY_SCRIPT_RUN = re.compile(r"(\S+)\s+(scripts/\S+\.py)\b")
 
 
