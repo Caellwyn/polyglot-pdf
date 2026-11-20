@@ -1290,6 +1290,11 @@ def sim_env(tmp_path, monkeypatch):
     monkeypatch.setattr(mfsc, "synth_cached", synth)
     monkeypatch.setattr(mfsc, "_make_tts",
                         lambda kind, project=None: mfsc.TTSMouth(kind, synth))
+    # The --tts chirp3 pre-flight calls _chirp3_synth_uncached directly, not
+    # through _make_tts. Stub it too, or the probe reaches the real Cloud TTS
+    # API (it needs credentials CI does not have).
+    monkeypatch.setattr(mfsc, "_chirp3_synth_uncached",
+                        lambda text, voice=None, project=None: b"\x00\x00" * 640)
 
     def make_stt_fn(project=None):
         hub.stt_project = project
