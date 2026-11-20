@@ -1,0 +1,639 @@
+{
+  "persona_id": "i90v2_elena_nospell_v1",
+  "form": "i90-v2",
+  "description": "Elena Torres, a Philippine-born lawful permanent resident replacing a lost green card (I-90). She answers only what she is asked, in short natural sentences, and does NOT spell her names unless the interviewer asks her to.",
+  "behavior": {
+    "spells_unprompted": false,
+    "volunteers_extra_info": false
+  },
+  "facts": {
+    "a_number": {
+      "value": "087654321",
+      "label": "A-Number",
+      "keywords": [
+        "a-number",
+        "alien registration number",
+        "a number"
+      ],
+      "answer": "My A-Number is 0 8 7 6 5 4 3 2 1.",
+      "spoken": "0 8 7 6 5 4 3 2 1",
+      "spellable": false
+    },
+    "uscis_account": {
+      "value": "944731258602",
+      "label": "USCIS online account number",
+      "keywords": [
+        "uscis online account",
+        "online account number",
+        "uscis account"
+      ],
+      "answer": "My USCIS online account number is 9 4 4 7 3 1 2 5 8 6 0 2.",
+      "spoken": "9 4 4 7 3 1 2 5 8 6 0 2",
+      "spellable": false
+    },
+    "family_name": {
+      "value": "Torres",
+      "label": "Last name",
+      "keywords": [
+        "family name",
+        "last name",
+        "surname"
+      ],
+      "answer": "My last name is Torres.",
+      "spoken": "Torres",
+      "spellable": true,
+      "spell": "T - O - R - R - E - S"
+    },
+    "given_name": {
+      "value": "Elena",
+      "label": "First name",
+      "keywords": [
+        "given name",
+        "first name"
+      ],
+      "answer": "My first name is Elena.",
+      "spoken": "Elena",
+      "spellable": true,
+      "spell": "E - L - E - N - A"
+    },
+    "middle_name": {
+      "value": "Marisol",
+      "label": "Middle name",
+      "keywords": [
+        "middle name"
+      ],
+      "answer": "My middle name is Marisol.",
+      "spoken": "Marisol",
+      "spellable": true,
+      "spell": "M - A - R - I - S - O - L"
+    },
+    "name_changed": {
+      "value": "no",
+      "label": "Name legally changed",
+      "keywords": [
+        "name legally changed",
+        "name changed",
+        "changed your name"
+      ],
+      "answer": "No, my name has not legally changed since my card was issued.",
+      "spoken": "no",
+      "spellable": false
+    },
+    "mail_in_care_of": {
+      "value": "",
+      "label": "Mailing in care of",
+      "keywords": [
+        "in care of",
+        "care of"
+      ],
+      "answer": "No one else needs to be listed for my mail.",
+      "spoken": "no one else needs to be listed for my mail",
+      "spellable": false
+    },
+    "mail_street": {
+      "value": "2140 Elmwood Drive",
+      "label": "Mailing street",
+      "keywords": [
+        "mailing street",
+        "mailing street address"
+      ],
+      "answer": "My street address is 2140 Elmwood Drive.",
+      "spoken": "2140 Elmwood Drive",
+      "spellable": false
+    },
+    "mail_unit_type": {
+      "value": "",
+      "label": "Mailing unit type",
+      "keywords": [
+        "mailing unit type",
+        "mailing apartment suite or floor"
+      ],
+      "answer": "I do not have an apartment, suite, or floor.",
+      "spoken": "I do not have an apartment, suite, or floor",
+      "spellable": false
+    },
+    "mail_unit_number": {
+      "value": "",
+      "label": "Mailing unit number",
+      "keywords": [
+        "mailing unit number",
+        "mailing apartment number"
+      ],
+      "answer": "There is no unit number.",
+      "spoken": "there is no unit number",
+      "spellable": false
+    },
+    "mail_city": {
+      "value": "Portland",
+      "label": "Mailing city",
+      "keywords": [
+        "mailing city",
+        "mailing town"
+      ],
+      "answer": "The city is Portland.",
+      "spoken": "Portland",
+      "spellable": false
+    },
+    "mail_state": {
+      "value": "OR",
+      "label": "Mailing state",
+      "keywords": [
+        "mailing state"
+      ],
+      "answer": "The state is Oregon.",
+      "spoken": "Oregon",
+      "spellable": false
+    },
+    "mail_zip": {
+      "value": "97203",
+      "label": "Mailing ZIP code",
+      "keywords": [
+        "mailing zip code",
+        "mailing zip"
+      ],
+      "answer": "The ZIP code is 9 7 2 0 3.",
+      "spoken": "9 7 2 0 3",
+      "spellable": false
+    },
+    "mail_province": {
+      "value": "",
+      "label": "Mailing province",
+      "keywords": [
+        "mailing province"
+      ],
+      "answer": "There is no province, that's not applicable.",
+      "spoken": "there is no province, that's not applicable",
+      "spellable": false
+    },
+    "mail_postal_code": {
+      "value": "",
+      "label": "Mailing postal code",
+      "keywords": [
+        "mailing postal code"
+      ],
+      "answer": "There is no postal code, that's not applicable.",
+      "spoken": "there is no postal code, that's not applicable",
+      "spellable": false
+    },
+    "mail_country": {
+      "value": "United States",
+      "label": "Mailing country",
+      "keywords": [
+        "mailing country"
+      ],
+      "answer": "The country is the United States.",
+      "spoken": "the United States",
+      "spellable": false
+    },
+    "phys_street": {
+      "value": "2140 Elmwood Drive",
+      "label": "Physical street",
+      "keywords": [
+        "physical street",
+        "physical street address",
+        "physical address"
+      ],
+      "answer": "My physical address is the same as my mailing address, 2140 Elmwood Drive.",
+      "spoken": "2140 Elmwood Drive",
+      "spellable": false
+    },
+    "phys_unit_number": {
+      "value": "",
+      "label": "Physical unit number",
+      "keywords": [
+        "physical unit number",
+        "physical apartment number"
+      ],
+      "answer": "There is no unit number.",
+      "spoken": "there is no unit number",
+      "spellable": false
+    },
+    "phys_city": {
+      "value": "Portland",
+      "label": "Physical city",
+      "keywords": [
+        "physical city",
+        "physical town"
+      ],
+      "answer": "The city is Portland.",
+      "spoken": "Portland",
+      "spellable": false
+    },
+    "phys_state": {
+      "value": "OR",
+      "label": "Physical state",
+      "keywords": [
+        "physical state"
+      ],
+      "answer": "The state is Oregon.",
+      "spoken": "Oregon",
+      "spellable": false
+    },
+    "phys_zip": {
+      "value": "97203",
+      "label": "Physical ZIP code",
+      "keywords": [
+        "physical zip code",
+        "physical zip"
+      ],
+      "answer": "The ZIP code is 9 7 2 0 3.",
+      "spoken": "9 7 2 0 3",
+      "spellable": false
+    },
+    "phys_province": {
+      "value": "",
+      "label": "Physical province",
+      "keywords": [
+        "physical province"
+      ],
+      "answer": "There is no province, that's not applicable.",
+      "spoken": "there is no province, that's not applicable",
+      "spellable": false
+    },
+    "phys_postal_code": {
+      "value": "",
+      "label": "Physical postal code",
+      "keywords": [
+        "physical postal code"
+      ],
+      "answer": "There is no postal code, that's not applicable.",
+      "spoken": "there is no postal code, that's not applicable",
+      "spellable": false
+    },
+    "phys_country": {
+      "value": "United States",
+      "label": "Physical country",
+      "keywords": [
+        "physical country"
+      ],
+      "answer": "The country is the United States.",
+      "spoken": "the United States",
+      "spellable": false
+    },
+    "phys_unit_type": {
+      "value": "",
+      "label": "Physical unit type",
+      "keywords": [
+        "physical unit type",
+        "physical apartment suite or floor"
+      ],
+      "answer": "I do not have an apartment, suite, or floor.",
+      "spoken": "I do not have an apartment, suite, or floor",
+      "spellable": false
+    },
+    "sex": {
+      "value": "female",
+      "label": "Sex",
+      "keywords": [
+        "sex",
+        "gender"
+      ],
+      "answer": "Female.",
+      "spoken": "female",
+      "spellable": false
+    },
+    "date_of_birth": {
+      "value": "06/03/1985",
+      "label": "Date of birth",
+      "keywords": [
+        "date of birth",
+        "birth date",
+        "birthday"
+      ],
+      "answer": "I was born on June 3rd, 1985.",
+      "spoken": "June 3rd, 1985",
+      "spellable": false
+    },
+    "city_of_birth": {
+      "value": "Cebu City",
+      "label": "City of birth",
+      "keywords": [
+        "city of birth",
+        "town of birth",
+        "town or village of birth"
+      ],
+      "answer": "I was born in Cebu City.",
+      "spoken": "Cebu City",
+      "spellable": false
+    },
+    "country_of_birth": {
+      "value": "Philippines",
+      "label": "Country of birth",
+      "keywords": [
+        "country of birth",
+        "country you were born"
+      ],
+      "answer": "I was born in the Philippines.",
+      "spoken": "the Philippines",
+      "spellable": false
+    },
+    "mother_given_name": {
+      "value": "Corazon",
+      "label": "Mother's first name",
+      "keywords": [
+        "mother's given name",
+        "mother's first name"
+      ],
+      "answer": "My mother's first name is Corazon.",
+      "spoken": "Corazon",
+      "spellable": true,
+      "spell": "C - O - R - A - Z - O - N"
+    },
+    "father_given_name": {
+      "value": "Ramon",
+      "label": "Father's first name",
+      "keywords": [
+        "father's given name",
+        "father's first name"
+      ],
+      "answer": "My father's first name is Ramon.",
+      "spoken": "Ramon",
+      "spellable": true,
+      "spell": "R - A - M - O - N"
+    },
+    "class_of_admission": {
+      "value": "IR1",
+      "label": "Class of admission",
+      "keywords": [
+        "class of admission"
+      ],
+      "answer": "My class of admission is I R 1.",
+      "spoken": "I R 1",
+      "spellable": false
+    },
+    "date_of_admission": {
+      "value": "08/15/2012",
+      "label": "Date of admission",
+      "keywords": [
+        "date of admission",
+        "date you were admitted",
+        "when were you admitted"
+      ],
+      "answer": "I was admitted on August 15th, 2012.",
+      "spoken": "August 15th, 2012",
+      "spellable": false
+    },
+    "ssn": {
+      "value": "123456789",
+      "label": "Social Security Number",
+      "keywords": [
+        "social security",
+        "ssn"
+      ],
+      "answer": "My Social Security Number is 1 2 3 4 5 6 7 8 9.",
+      "spoken": "1 2 3 4 5 6 7 8 9",
+      "spellable": false
+    },
+    "status": {
+      "value": "lawful_permanent_resident",
+      "label": "Status",
+      "keywords": [
+        "my status is",
+        "type of status"
+      ],
+      "answer": "I am a lawful permanent resident.",
+      "spoken": "a lawful permanent resident",
+      "spellable": false
+    },
+    "reason_section_a": {
+      "value": "lost_stolen_destroyed",
+      "label": "Reason for application",
+      "keywords": [
+        "reason for application",
+        "reason",
+        "why are you applying"
+      ],
+      "answer": "My previous card has been lost, stolen, or destroyed.",
+      "spoken": "lost, stolen, or destroyed",
+      "spellable": false
+    },
+    "p3_location_applied": {
+      "value": "U.S. Embassy in Manila, Philippines",
+      "label": "Where applied for visa",
+      "keywords": [
+        "where you applied",
+        "location applied"
+      ],
+      "answer": "I applied at the U.S. Embassy in Manila, Philippines.",
+      "spoken": "the U.S. Embassy in Manila, Philippines",
+      "spellable": false
+    },
+    "p3_location_issued": {
+      "value": "U.S. Embassy in Manila, Philippines",
+      "label": "Where visa issued",
+      "keywords": [
+        "visa was issued",
+        "location issued"
+      ],
+      "answer": "My immigrant visa was issued at the U.S. Embassy in Manila, Philippines.",
+      "spoken": "the U.S. Embassy in Manila, Philippines",
+      "spellable": false
+    },
+    "p3_destination": {
+      "value": "Portland, Oregon",
+      "label": "Destination in the U.S.",
+      "keywords": [
+        "destination"
+      ],
+      "answer": "My destination in the United States was Portland, Oregon.",
+      "spoken": "Portland, Oregon",
+      "spellable": false
+    },
+    "p3_poe_city_state": {
+      "value": "Portland, Oregon",
+      "label": "Port of entry",
+      "keywords": [
+        "port of entry"
+      ],
+      "answer": "I was admitted at Portland, Oregon.",
+      "spoken": "Portland, Oregon",
+      "spellable": false
+    },
+    "p3_removal_proceedings": {
+      "value": "no",
+      "label": "Removal proceedings",
+      "keywords": [
+        "removal proceedings",
+        "deportation",
+        "exclusion"
+      ],
+      "answer": "No, I have never been in exclusion, deportation, or removal proceedings.",
+      "spoken": "no",
+      "spellable": false
+    },
+    "p3_abandoned_status": {
+      "value": "no",
+      "label": "Abandoned status",
+      "keywords": [
+        "abandoned",
+        "abandonment",
+        "form i-407"
+      ],
+      "answer": "No, I have never abandoned my permanent resident status.",
+      "spoken": "no",
+      "spellable": false
+    },
+    "ethnicity": {
+      "value": "not_hispanic_or_latino",
+      "label": "Ethnicity",
+      "keywords": [
+        "ethnicity",
+        "hispanic"
+      ],
+      "answer": "Not Hispanic or Latino.",
+      "spoken": "not Hispanic or Latino",
+      "spellable": false
+    },
+    "race": {
+      "value": "asian",
+      "label": "Race",
+      "keywords": [
+        "race"
+      ],
+      "answer": "Asian.",
+      "spoken": "Asian",
+      "spellable": false
+    },
+    "height_feet": {
+      "value": "5",
+      "label": "Height feet",
+      "keywords": [
+        "height in feet",
+        "feet"
+      ],
+      "answer": "5 feet.",
+      "spoken": "5 feet",
+      "spellable": false
+    },
+    "height_inches": {
+      "value": "4",
+      "label": "Height inches",
+      "keywords": [
+        "height in inches",
+        "inches"
+      ],
+      "answer": "4 inches.",
+      "spoken": "4 inches",
+      "spellable": false
+    },
+    "weight_digit_1": {
+      "value": "1",
+      "label": "Weight first digit",
+      "keywords": [
+        "first digit of your weight",
+        "first digit"
+      ],
+      "answer": "The first digit of my weight is 1.",
+      "spoken": "1",
+      "spellable": false
+    },
+    "weight_digit_2": {
+      "value": "2",
+      "label": "Weight second digit",
+      "keywords": [
+        "second digit of your weight",
+        "second digit"
+      ],
+      "answer": "The second digit of my weight is 2.",
+      "spoken": "2",
+      "spellable": false
+    },
+    "weight_digit_3": {
+      "value": "8",
+      "label": "Weight third digit",
+      "keywords": [
+        "third digit of your weight",
+        "third digit"
+      ],
+      "answer": "The third digit of my weight is 8.",
+      "spoken": "8",
+      "spellable": false
+    },
+    "eye_color": {
+      "value": "brown",
+      "label": "Eye color",
+      "keywords": [
+        "eye color"
+      ],
+      "answer": "Brown.",
+      "spoken": "brown",
+      "spellable": false
+    },
+    "hair_color": {
+      "value": "black",
+      "label": "Hair color",
+      "keywords": [
+        "hair color"
+      ],
+      "answer": "Black.",
+      "spoken": "black",
+      "spellable": false
+    },
+    "accommodation_requested": {
+      "value": "no",
+      "label": "Accommodation requested",
+      "keywords": [
+        "accommodation"
+      ],
+      "answer": "No, I am not requesting any accommodation.",
+      "spoken": "no",
+      "spellable": false
+    },
+    "applicant_reads_english": {
+      "value": "reads_english",
+      "label": "Reads English",
+      "keywords": [
+        "read and understand english",
+        "read english",
+        "interpreter"
+      ],
+      "answer": "I can read and understand English myself.",
+      "spoken": "I can read and understand English myself",
+      "spellable": false
+    },
+    "applicant_used_preparer": {
+      "value": "",
+      "label": "Used a preparer",
+      "keywords": [
+        "preparer"
+      ],
+      "answer": "No, I filled out this application myself without a preparer.",
+      "spoken": "no, I filled it out myself",
+      "spellable": false
+    },
+    "applicant_daytime_phone": {
+      "value": "503-555-0184",
+      "label": "Daytime phone",
+      "keywords": [
+        "daytime phone",
+        "daytime telephone"
+      ],
+      "answer": "My daytime phone number is 5 0 3, 5 5 5, 0 1 8 4.",
+      "spoken": "5 0 3, 5 5 5, 0 1 8 4",
+      "spellable": false
+    },
+    "applicant_mobile_phone": {
+      "value": "503-555-0297",
+      "label": "Mobile phone",
+      "keywords": [
+        "mobile phone",
+        "mobile telephone",
+        "cell phone"
+      ],
+      "answer": "My mobile phone number is 5 0 3, 5 5 5, 0 2 9 7.",
+      "spoken": "5 0 3, 5 5 5, 0 2 9 7",
+      "spellable": false
+    },
+    "applicant_email": {
+      "value": "elena.torres85@gmail.com",
+      "label": "Email address",
+      "keywords": [
+        "email address",
+        "email"
+      ],
+      "answer": "My email address is elena dot torres 85 at gmail dot com.",
+      "spoken": "elena dot torres 85 at gmail dot com",
+      "spellable": false
+    }
+  }
+}

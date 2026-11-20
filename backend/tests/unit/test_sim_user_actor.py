@@ -515,3 +515,245 @@ class TestHaikuApiOnly:
         src = Path(actor.__file__).read_text(encoding="utf-8")
         assert "AnthropicVertex" not in src
         assert not hasattr(actor, "HaikuVertexActor")
+
+
+# =========================================================================
+# Per-form personas (bd polyglot-pdf-ya4vi.1 / ya4vi.2). Nothing below names
+# a kit field id or reads form-kits/ (scar #10): ids come from the persona
+# JSON and from the harness's own tables.
+# =========================================================================
+_PERSONAS_DIR = _REPO_ROOT / "scripts" / "spikes" / "sim_user" / "personas"
+# (persona file, the strict key its true values are pinned to)
+PINNED_PERSONAS = [
+    ("w7_ana_nospell.json", "W7_EXPECTED"),
+    ("w7_ana_selfcorrect.json", "W7_EXPECTED"),
+    ("i90v2_elena_nospell.json", "I90V2_EXPECTED"),
+]
+SLIP_PERSONA = "w7_ana_selfcorrect.json"
+
+
+def _load(name):
+    return actor.load_persona(_PERSONAS_DIR / name)
+
+
+def _expected_allowed(exp):
+    allowed = exp if isinstance(exp, (list, tuple)) else [exp]
+    return {harness._canon_value(a) for a in allowed}
+
+
+@pytest.mark.parametrize("fname,table", PINNED_PERSONAS)
+class TestPersonaPinnedToStrictKey:
+    def test_keys_equal_the_strict_key(self, fname, table):
+        persona = _load(fname)
+        assert set(persona.facts) == set(getattr(harness, table))
+
+    def test_every_true_value_satisfies_the_key(self, fname, table):
+        persona = _load(fname)
+        key = getattr(harness, table)
+        bad = [fid for fid, f in persona.facts.items()
+               if harness._canon_value(f["value"])
+               not in _expected_allowed(key[fid])]
+        assert bad == []
+
+    def test_form_matches_a_registered_schema(self, fname, table):
+        persona = _load(fname)
+        assert persona.form in harness.SCHEMAS
+        assert harness.SCHEMAS[persona.form]["expected"] is getattr(
+            harness, table)
+
+    def test_stub_routes_each_question_to_its_own_fact(self, fname, table):
+        # the offline interviewers ask "What is your <keywords[0]>?"; the stub
+        # must map that back to the SAME fact (no keyword collisions)
+        persona = _load(fname)
+        stub = actor.StubActor(persona)
+        wrong = [fid for fid, f in persona.facts.items()
+                 if stub._best_keyword_field(
+                     "What is your %s?" % f["keywords"][0]) != fid]
+        assert wrong == []
+
+
+class TestI90V2Persona:
+    def test_questions_and_persona_cover_the_same_fields_in_order(self):
+        persona = _load("i90v2_elena_nospell.json")
+        assert list(persona.facts) == [
+            q["field_id"] for q in harness.I90V2_QUESTIONS]
+
+    def test_identity_and_behavior(self):
+        persona = _load("i90v2_elena_nospell.json")
+        assert persona.persona_id == "i90v2_elena_nospell_v1"
+        assert persona.form == "i90-v2"
+        assert persona.behavior["spells_unprompted"] is False
+
+    def test_declined_fields_are_empty_in_both_tables(self):
+        persona = _load("i90v2_elena_nospell.json")
+        declined = {fid for fid, e in harness.I90V2_EXPECTED.items()
+                    if e == ""}
+        assert declined
+        assert {fid for fid, f in persona.facts.items()
+                if f["value"] == ""} == declined
+
+    def test_same_as_mailing_stays_a_natural_answer(self):
+        # bd r3ham.10 measures how the model handles this phrasing: it must
+        # not be reworded into a bare value
+        persona = _load("i90v2_elena_nospell.json")
+        same = [f for f in persona.facts.values()
+                if "same as my mailing address" in f["answer"]]
+        assert len(same) == 1
+        assert same[0]["value"] in same[0]["answer"]
+
+    def test_spell_strings_spell_the_value(self):
+        persona = _load("i90v2_elena_nospell.json")
+        spellable = [f for f in persona.facts.values() if f["spellable"]]
+        assert spellable
+        for f in spellable:
+            assert f["spell"].replace(" - ", "").lower() == f["value"].lower()
+
+    def test_default_persona_is_per_schema(self):
+        for form in actor.DEFAULT_PERSONA_FILES:
+            assert actor.load_default_persona(form).form == form
+        assert actor.load_default_persona().persona_id == "w7_ana_nospell_v1"
+        assert actor.load_default_persona("i90-v2").persona_id == \
+            "i90v2_elena_nospell_v1"
+        with pytest.raises(ValueError):
+            actor.load_default_persona("i90")
+
+    def test_sim_schemas_have_a_default_persona_and_a_strict_key(self):
+        # the set of schemas --user sim accepts == the set with a default
+        # persona, and each has a non-empty strict key
+        assert set(harness.SIM_SCHEMAS) == set(actor.DEFAULT_PERSONA_FILES)
+        for form in harness.SIM_SCHEMAS:
+            assert harness.SCHEMAS[form]["expected"]
+
+
+# ----------------------------------------------------------------- slips
+class TestSlipFacts:
+    def test_every_fact_of_the_selfcorrect_persona_has_a_slip(self):
+        persona = _load(SLIP_PERSONA)
+        assert persona.persona_id == "w7_ana_selfcorrect_v1"
+        assert [fid for fid, f in persona.facts.items()
+                if "slip" not in f] == []
+
+    def test_selfcorrect_true_facts_equal_the_nospell_persona(self):
+        slip, plain = _load(SLIP_PERSONA), _load("w7_ana_nospell.json")
+        assert list(slip.facts) == list(plain.facts)
+        for fid, f in slip.facts.items():
+            assert {k: v for k, v in f.items() if k != "slip"} == \
+                plain.facts[fid]
+
+    def test_no_slip_satisfies_the_strict_key(self):
+        # a field left holding its slip must score INCORRECT
+        persona = _load(SLIP_PERSONA)
+        holds = [fid for fid, f in persona.facts.items()
+                 if harness._canon_value(f["slip"]["value"])
+                 in _expected_allowed(harness.W7_EXPECTED[fid])]
+        assert holds == []
+
+    def test_a_slip_differs_from_the_truth_in_every_spoken_string(self):
+        persona = _load(SLIP_PERSONA)
+        for f in persona.facts.values():
+            for k in ("value", "answer", "spoken"):
+                assert f["slip"][k] != f[k]
+
+    @pytest.mark.parametrize("mutate,why", [
+        (lambda f: f.__setitem__("slip", "x"), "not an object"),
+        (lambda f: f["slip"].pop("spoken"), "missing key"),
+        (lambda f: f["slip"].__setitem__("extra", "x"), "extra key"),
+        (lambda f: f["slip"].__setitem__("answer", ""), "empty"),
+        (lambda f: f["slip"].__setitem__("value", 3), "not a string"),
+        (lambda f: f["slip"].__setitem__("answer", f["answer"]), "equals truth"),
+    ])
+    def test_load_rejects_a_malformed_slip(self, tmp_path, mutate, why):
+        raw = json.loads((_PERSONAS_DIR / SLIP_PERSONA).read_text(
+            encoding="utf-8"))
+        first = next(iter(raw["facts"]))
+        mutate(raw["facts"][first])
+        p = tmp_path / "bad_slip.json"
+        p.write_text(json.dumps(raw), encoding="utf-8")
+        with pytest.raises(ValueError):
+            actor.load_persona(p)
+
+    def test_stub_rejects_every_slip_readback_and_confirms_every_truth(self):
+        persona = _load(SLIP_PERSONA)
+        stub = actor.StubActor(persona)
+        for fid, f in persona.facts.items():
+            hist = [{"model_text": "q", "move": "answer", "field_key": fid}]
+            bad = run(stub.decide("I have %s. Is that correct?"
+                                  % f["slip"]["spoken"], hist))
+            assert (bad.move, bad.field_key) == ("reject_and_correct", fid), fid
+            good = run(stub.decide("I have %s. Is that correct?"
+                                   % f["spoken"], hist))
+            assert good.move == "confirm", fid
+
+
+class TestSlipRendering:
+    def test_first_answer_speaks_the_slip_then_the_truth(self):
+        persona = _load(SLIP_PERSONA)
+        for fid, f in persona.facts.items():
+            spoken = set()
+            first = actor.render("answer", fid, persona, random.Random(0),
+                                 slips_spoken=spoken)
+            assert first.slip is True
+            assert first.values_spoken == [f["slip"]["answer"]]
+            assert f["slip"]["answer"] in first.text
+            assert spoken == set()          # render never marks; the caller does
+            spoken.add(fid)
+            second = actor.render("answer", fid, persona, random.Random(0),
+                                  slips_spoken=spoken)
+            assert second.slip is False
+            assert second.values_spoken == [f["answer"]]
+
+    def test_spell_and_correct_always_speak_the_truth(self):
+        persona = _load(SLIP_PERSONA)
+        for fid, f in persona.facts.items():
+            for move in ("spell", "reject_and_correct"):
+                r = actor.render(move, fid, persona, random.Random(1),
+                                 slips_spoken=set())
+                assert r.slip is False
+                assert f["slip"]["answer"] not in r.text
+                assert all(v in (f["answer"], f["spoken"], f.get("spell"))
+                           for v in r.values_spoken)
+
+    def test_no_slip_set_means_no_slips(self):
+        persona = _load(SLIP_PERSONA)
+        for fid, f in persona.facts.items():
+            r = actor.render("answer", fid, persona, random.Random(0))
+            assert r.slip is False and r.values_spoken == [f["answer"]]
+
+    def test_a_persona_without_slips_never_slips(self):
+        plain = _load("w7_ana_nospell.json")
+        for fid in plain.facts:
+            r = actor.render("answer", fid, plain, random.Random(0),
+                             slips_spoken=set())
+            assert r.slip is False
+
+
+class TestActorNeverSeesTheSlip:
+    def _slip_answers(self, persona):
+        return [f["slip"]["answer"] for f in persona.facts.values()]
+
+    def test_prompt_fact_sheet_lists_only_true_spoken_values(self):
+        persona = _load(SLIP_PERSONA)
+        text = actor.build_system_prompt(persona)
+        for fid, f in persona.facts.items():
+            line = next(x for x in text.splitlines()
+                        if x.startswith("- %s | " % fid))
+            assert line.split(" | ")[2] == f["spoken"]
+        for s in self._slip_answers(persona):
+            assert s not in text
+
+    def test_prompt_tells_the_actor_to_judge_against_the_sheet_only(self):
+        slip = actor.build_system_prompt(_load(SLIP_PERSONA))
+        plain = actor.build_system_prompt(_load("w7_ana_nospell.json"))
+        needle = "Judge every read-back ONLY against the fact sheet"
+        assert needle in slip
+        assert needle not in plain         # the no-slip personas are unchanged
+
+    def test_request_carries_no_slip_text(self):
+        persona = _load(SLIP_PERSONA)
+        ha = actor.HaikuActor(persona, client=SimpleNamespace())
+        fid = next(iter(persona.facts))
+        hist = [{"model_text": "What is your first name?", "move": "answer",
+                 "field_key": fid}]
+        blob = json.dumps(ha.build_request("I have a read-back.", hist))
+        for s in self._slip_answers(persona):
+            assert s not in blob
