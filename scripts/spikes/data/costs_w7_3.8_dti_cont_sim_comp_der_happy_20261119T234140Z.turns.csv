@@ -1,0 +1,4 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,application_type,sim-answer,False,11662,11176,486,186,100,11948,0.011877,0.018653,1.141
+2,2,none,sim-confirm,True,11662,0,0,0,0,0,0.0,0.018653,1.156
+3,3,reason,sim-answer,True,13886,13086,800,328,2203,16417,0.040127,0.05878,1.25

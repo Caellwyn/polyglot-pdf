@@ -1,0 +1,12 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,application_type,sim-answer,False,11656,11160,496,144,102,11902,0.01173,0.019022,1.078
+2,2,none,sim-confirm,False,13921,13107,814,337,1395,15653,0.030529,0.049551,1.266
+3,3,reason,sim-answer,False,19204,15358,3846,209,150,19563,0.025797,0.075348,1.172
+4,4,none,sim-confirm,False,20000,15772,4228,200,188,20388,0.027669,0.103017,1.156
+5,5,name_1a_first,sim-answer,False,5972,5407,565,92,164,6228,0.008132,0.111149,0.797
+6,6,name_1a_first,sim-spell,False,12666,11032,1634,194,0,12860,0.014049,0.125198,
+7,7,none,sim-repeat_request,False,6480,5582,898,268,61,6809,0.008818,0.134017,1.188
+8,8,none,sim-acknowledge,False,13496,11508,1988,208,214,13918,0.018099,0.152116,1.25
+9,9,name_1a_middle,sim-answer,False,14475,11925,2550,183,0,14658,0.017417,0.169533,
+10,10,none,sim-acknowledge,False,15005,12381,2624,170,186,15361,0.020155,0.189688,1.219
+11,11,name_1a_last,sim-answer,False,7899,6328,1571,71,95,8065,0.010919,0.200606,0.766
