@@ -1238,6 +1238,7 @@ class FakeClientWebSocket:
         # (bd polyglot-pdf-tmu0f). None on every scripted run, so the scripted
         # path records nothing extra.
         self.gen_recorder: GenerationRecorder | None = None
+        self.spellback_locale = "en-US"
         # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
         # supplies the next field's FULL schema on next_field_hint_response, which
         # the backend renders into the confirm_field next_field_guidance. Mirrors the
@@ -1636,6 +1637,13 @@ class FakeClientWebSocket:
                "field_id": fid, "status": "delivered",
                "value_chars": value_chars}
         self.spellback_events.append(rec)
+        if self.gen_recorder is not None and value_chars:
+            # Simulated user (bd tmu0f): the clip text the real client would
+            # play, built by the backend's own builder.
+            from backend.services.spellback_tts import build_spellback_text
+            self.gen_recorder.on_spellback(
+                build_spellback_text(str(value), self.spellback_locale),
+                rec["ts"])
         payload = {"status": "delivered", "playback_ms": 0, "fetch_ms": 0}
         self._reply(lambda: self.service.handle_spellback_response(rid, payload))
 
@@ -2297,6 +2305,8 @@ class SimTiming:
     # An open generation with audio and no new audio/transcript for this long
     # (no tool pending) is closed by the recorder as reason "silence".
     silence_close_s: float = 5.0
+    # simulated playback time of a name_spellback clip, per spoken token
+    spellback_s_per_token: float = 0.45
     poll_s: float = 0.05
     usage_settle_s: float = 1.2        # trailing usage events after a response
     chunk_sleep_s: float = _CHUNK_MS / 1000.0
@@ -2334,7 +2344,8 @@ class GenerationRecorder:
 
     def __init__(self, audio_rate: int = SIM_MODEL_AUDIO_RATE,
                  quiet_window_s: float = 0.6, tool_resume_grace_s: float = 4.0,
-                 clock=time.monotonic, silence_close_s: float | None = None):
+                 clock=time.monotonic, silence_close_s: float | None = None,
+                 spellback_s_per_token: float = 0.45):
         self.audio_rate = audio_rate
         self._bytes_per_s = 2.0 * audio_rate
         self.quiet_window_s = quiet_window_s
@@ -2351,6 +2362,8 @@ class GenerationRecorder:
         self.silence_close_s = silence_close_s
         self.silence_closes = 0
         self.late_completions = 0
+        self.spellback_s_per_token = spellback_s_per_token
+        self.spellback_clips = 0
         self._last_event_at: float | None = None
 
     # -- intake ---------------------------------------------------------
@@ -2359,7 +2372,8 @@ class GenerationRecorder:
         if self._open is None:
             self._open = {"t_open": ts, "t_first_audio": None,
                           "t_last_audio": None, "pcm": bytearray(),
-                          "transcript": [], "tool_calls": []}
+                          "transcript": [], "tool_calls": [],
+                          "spellback_text": "", "spellback_end": None}
         return self._open
 
     def on_audio(self, data: bytes, ts: float | None = None) -> None:
@@ -2386,6 +2400,31 @@ class GenerationRecorder:
         ts = self.clock() if ts is None else ts
         self.pending_tools = max(0, self.pending_tools - 1)
         self._tool_resume_until = ts + self.tool_resume_grace_s
+
+    def on_spellback(self, text: str, ts: float | None = None) -> None:
+        """The client played a name_spellback clip (the model stays silent
+        while the user hears it). The simulated user must hear it too: the
+        clip text becomes heard content of the open generation (else the most
+        recent closed one), and its playback time (spellback_s_per_token per
+        spoken token) extends that generation's playback so the gate waits."""
+        ts = self.clock() if ts is None else ts
+        dur = len(text.split()) * self.spellback_s_per_token
+        self.spellback_clips += 1
+        if self._open is not None or not self.closed:
+            g = self._gen(ts)
+            clip_end = max(ts, g["spellback_end"] or 0.0) + dur
+            g["spellback_text"] = (g["spellback_text"] + " " + text).strip()
+            g["spellback_end"] = clip_end
+        else:
+            g = self.closed[-1]
+            clip_end = max(ts, g.get("spellback_end") or 0.0) + dur
+            g["spellback_text"] = (g.get("spellback_text", "") + " "
+                                   + text).strip()
+            g["spellback_end"] = clip_end
+            self.playback_end = max(self.playback_end, clip_end)
+            g["playback_end"] = self.playback_end
+        self.last_audio_at = max(self.last_audio_at or 0.0, clip_end)
+        self._last_event_at = clip_end
 
     def boundary(self, reason: str, ts: float | None = None) -> None:
         if reason not in SIM_CLOSING_REASONS:
@@ -2434,6 +2473,8 @@ class GenerationRecorder:
             start = max(end, g["t_first_audio"])
             end = max(start + len(g["pcm"]) / self._bytes_per_s,
                       g["t_last_audio"])
+        if g is not None and g["spellback_end"] is not None:
+            end = max(end, g["spellback_end"])
         return end
 
     def _close(self, reason: str, ts: float) -> None:
@@ -2444,6 +2485,8 @@ class GenerationRecorder:
         if g["t_first_audio"] is not None:
             start = max(self.playback_end, g["t_first_audio"])
             self.playback_end = max(start + audio_s, g["t_last_audio"])
+        if g["spellback_end"] is not None:
+            self.playback_end = max(self.playback_end, g["spellback_end"])
         if g["tool_calls"] and self.pending_tools == 0:
             # The model's continuation after its tool response belongs to
             # this generation, which just closed.
@@ -2454,7 +2497,10 @@ class GenerationRecorder:
             "t_last_audio": g["t_last_audio"], "t_close": ts,
             "audio_s": audio_s,
             "playback_end": (self.playback_end
-                             if g["t_first_audio"] is not None else None),
+                             if g["t_first_audio"] is not None
+                             or g["spellback_end"] is not None else None),
+            "spellback_text": g["spellback_text"],
+            "spellback_end": g["spellback_end"],
             "transcript": "".join(g["transcript"]).strip(),
             "tool_calls": list(g["tool_calls"]),
             "pending_tools_at_close": self.pending_tools,
@@ -2492,6 +2538,7 @@ class GenerationRecorder:
                 "playback_end_s": rel(g["playback_end"]),
                 "tool_calls": g["tool_calls"],
                 "pending_tools_at_close": g["pending_tools_at_close"],
+                "spellback_text": g.get("spellback_text", ""),
                 "late_completion_reason": g.get("late_completion_reason"),
                 "late_completion_delay_s": (
                     None if g.get("late_completion_delay_s") is None
@@ -2665,6 +2712,10 @@ def ears_text(gens: list, ears: str) -> str:
         parts = [(g.get("stt") or {}).get("text", "") for g in gens]
     else:
         parts = [g.get("transcript", "") for g in gens]
+    # the name_spellback clip is played by the client, not emitted as model
+    # audio, so neither the transcript nor the STT of model PCM contains it
+    parts = [" ".join(x for x in (p, g.get("spellback_text", "")) if x)
+             for p, g in zip(parts, gens)]
     return " ".join(p.strip() for p in parts if p and p.strip())
 
 
@@ -2982,6 +3033,7 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
         # the model never sent turn_complete, and completions that arrived
         # after such a close.
         "silence_closes": driver.rec.silence_closes,
+        "spellback_clips": driver.rec.spellback_clips,
         "late_completions": driver.rec.late_completions,
         "user_turns": len(driver.user_turns),
         "stalls": driver.stalls,
@@ -3692,7 +3744,8 @@ async def run(args) -> int:
             client.gen_recorder = GenerationRecorder(
                 quiet_window_s=sim_timing.quiet_window_s,
                 tool_resume_grace_s=sim_timing.tool_resume_grace_s,
-                silence_close_s=sim_timing.silence_close_s)
+                silence_close_s=sim_timing.silence_close_s,
+                spellback_s_per_token=sim_timing.spellback_s_per_token)
         if is_section_reset:
             client.set_active_section(
                 [q for q in plan
@@ -3735,6 +3788,9 @@ async def run(args) -> int:
         # model) are unchanged unless --spoken-language is passed.
         spoken_language = getattr(args, "spoken_language", None) or "English"
         service._spoken_language = spoken_language
+        if sim_mode:
+            from backend.services.spellback_tts import resolve_spellback_locale
+            client.spellback_locale = resolve_spellback_locale(spoken_language)
         await service.start_session(
             websocket=client, session_id=f"4loz-{stamp}",
             accept_connection=True, schema=arm_schema, current_values={},

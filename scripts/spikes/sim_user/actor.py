@@ -382,6 +382,12 @@ def _usage_dict(u: Any) -> dict:
             "cache_creation": g("cache_creation_input_tokens")}
 
 
+def _nonempty(text) -> str:
+    """The Claude API rejects empty / whitespace-only user content (400). A
+    turn with no model speech (e.g. a silent tool turn) is '(silence)'."""
+    return text if isinstance(text, str) and text.strip() else "(silence)"
+
+
 class HaikuActor:
     """Claude Haiku 5.5 actor with strict JSON output, via the Claude API.
 
@@ -410,10 +416,11 @@ class HaikuActor:
     def build_request(self, model_text: str, history: list) -> dict:
         msgs: list = []
         for h in history or []:
-            msgs.append({"role": "user", "content": h["model_text"]})
+            msgs.append({"role": "user",
+                         "content": _nonempty(h["model_text"])})
             msgs.append({"role": "assistant", "content": json.dumps(
                 {"move": h["move"], "field_key": h["field_key"]})})
-        msgs.append({"role": "user", "content": model_text or "(silence)"})
+        msgs.append({"role": "user", "content": _nonempty(model_text)})
         return {
             "model": HAIKU_MODEL,
             "max_tokens": self.max_tokens,

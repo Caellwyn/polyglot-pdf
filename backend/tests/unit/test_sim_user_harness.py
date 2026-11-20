@@ -667,6 +667,105 @@ class TestSilenceClose:
         assert session.rec.late_completions == 1
 
 
+class TestSpellbackClip:
+    """The client plays a name_spellback clip and the model stays silent; the
+    simulated user has to hear that clip."""
+
+    @staticmethod
+    def _handle(client):
+        async def go():      # _reply schedules on the running loop
+            client._handle_spellback({"request_id": "r1"})
+        asyncio.run(go())
+
+    def _client(self, value="Ana"):
+        client = mfsc.FakeClientWebSocket(
+            synthetic_schema(), [{"field_id": FIDS[0]}])
+        client.service = SimpleNamespace(
+            handle_spellback_response=lambda rid, payload: None)
+        client.state[FIDS[0]] = {"value": value, "confirmed": False}
+        client.gen_recorder = mfsc.GenerationRecorder(
+            spellback_s_per_token=0.5)
+        return client
+
+    def test_handler_feeds_the_backend_clip_text_to_the_open_generation(self):
+        from backend.services.spellback_tts import build_spellback_text
+        client = self._client("Ana")
+        rec = client.gen_recorder
+        rec.tool_start("name_spellback", 10.0)
+        self._handle(client)
+        rec.boundary("turn_complete", 10.2)
+        g = rec.closed[0]
+        assert g["spellback_text"] == build_spellback_text("Ana", "en-US")
+        assert "A, N, A" in g["spellback_text"]
+        assert rec.spellback_clips == 1
+        assert g["audio_s"] == 0.0 and g["transcript"] == ""
+
+    def test_scripted_client_without_recorder_is_unaffected(self):
+        client = self._client()
+        client.gen_recorder = None
+        self._handle(client)
+        assert client.spellback_events[0]["status"] == "delivered"
+
+    def test_clip_text_is_heard_in_both_ears_modes(self):
+        gens = [{"transcript": "", "stt": {"text": ""},
+                 "spellback_text": "You said A, N, A. Is that correct?"},
+                {"transcript": "ok", "stt": {"text": "okay"}}]
+        for ears, want in (("transcript", "You said A, N, A. Is that correct? ok"),
+                           ("stt", "You said A, N, A. Is that correct? okay")):
+            assert mfsc.ears_text(gens, ears) == want
+
+    def test_clip_playback_holds_the_gate(self):
+        rec = mfsc.GenerationRecorder(
+            quiet_window_s=0.0, spellback_s_per_token=0.5, clock=lambda: 0.0)
+        rec.tool_start("name_spellback", 10.0)
+        rec.on_spellback("one two three four", 10.0)     # 4 tokens -> 2.0 s
+        rec.tool_end("name_spellback", 10.1)
+        rec.boundary("turn_complete", 10.2)
+        assert rec.expected_playback_end() == pytest.approx(12.0)
+        assert rec.gate_state(11.0)["playback_ended"] is False
+        assert rec.gate_state(12.1)["playback_ended"] is True
+        assert rec.public_generation(rec.closed[0])["spellback_text"]
+
+    def test_open_generation_playback_includes_the_clip(self):
+        rec = mfsc.GenerationRecorder(spellback_s_per_token=0.5,
+                                      clock=lambda: 0.0)
+        rec.on_spellback("a b", 10.0)
+        assert rec.expected_playback_end() == pytest.approx(11.0)
+
+    def test_clip_after_the_generation_closed_attaches_to_it(self):
+        rec = mfsc.GenerationRecorder(spellback_s_per_token=0.5,
+                                      clock=lambda: 0.0)
+        rec.on_audio(b"\x00\x00" * 480, ts=10.0)
+        rec.boundary("turn_complete", 10.1)
+        rec.on_spellback("a b c", 10.5)
+        assert rec.n_closed == 1
+        assert rec.closed[0]["spellback_text"] == "a b c"
+        assert rec.playback_end == pytest.approx(12.0)
+
+    def test_loop_hears_the_clip_and_waits_for_it(self):
+        # one model turn that only plays a clip: no transcript, no audio
+        timing = _timing(spellback_s_per_token=0.1)
+        session = FakeSession(timing=timing)
+        spy = SpyActor()
+        driver = make_driver(session, actor=spy, timing=timing,
+                             max_user_turns=1)
+        clip = "You said A, N, A. Is that correct?"      # 8 tokens -> 0.8 s
+
+        async def go():
+            session.rec.tool_start("name_spellback")
+            session.rec.on_spellback(clip)
+            session.rec.tool_end("name_spellback")
+            session.rec.boundary("turn_complete")
+            await driver.run()
+        asyncio.run(go())
+        assert clip in spy.seen[0]
+        assert driver.rec.spellback_clips == 1
+        t = driver.user_turns[0]
+        assert t["ears_text"] == clip
+        assert t["gate_wait_s"] >= 0.6
+        assert driver.gate_violations == 0
+
+
 class TestStallStreaks:
     def test_a_received_generation_resets_the_response_streak(self):
         session = FakeSession()
@@ -1097,6 +1196,7 @@ class TestRunLevelEndToEnd:
             assert "late_completion_reason" in g
         sim = doc["summary"]
         assert sim["silence_closes"] == 0 and sim["late_completions"] == 0
+        assert sim["spellback_clips"] == 0
 
     def test_tool_callbacks_are_visible_to_the_gate(self, sim_env):
         run_args(parse(sim_env))

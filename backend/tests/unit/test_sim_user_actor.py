@@ -332,6 +332,29 @@ class TestHaikuActor:
         assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
         assert json.loads(msgs[1]["content"]) == {"move": "answer", "field_key": k}
 
+    def test_empty_model_text_never_reaches_the_api(self, persona):
+        # A turn where the model said nothing (a silent tool turn) used to
+        # put an empty user message in history: the Claude API answers 400
+        # "user messages must have non-empty content" for every later request.
+        k = _name_key(persona)
+        a = actor.HaikuActor(persona, client=FakeClient("{}"))
+        hist = [{"model_text": "", "move": "answer", "field_key": k},
+                {"model_text": "   ", "move": "acknowledge",
+                 "field_key": "none"},
+                {"model_text": None, "move": "acknowledge",
+                 "field_key": "none"},
+                {"model_text": "real", "move": "answer", "field_key": k}]
+        for current in ("", "   ", None, "now"):
+            msgs = a.build_request(current, hist)["messages"]
+            assert msgs
+            for m in msgs:
+                assert isinstance(m["content"], str) and m["content"].strip()
+        msgs = a.build_request("now", hist)["messages"]
+        assert msgs[0]["content"] == "(silence)"
+        assert msgs[2]["content"] == "(silence)"
+        assert msgs[4]["content"] == "(silence)"
+        assert msgs[6]["content"] == "real"
+
     def test_system_prompt_has_sheet_and_rules(self, persona):
         s = actor.build_system_prompt(persona)
         for fid, f in persona.facts.items():
