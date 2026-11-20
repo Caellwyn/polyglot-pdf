@@ -261,12 +261,51 @@ class TestLongClipPieces:
             stt.billed_seconds_for(2 * RATE * self.LIMIT, RATE)
             + stt.billed_seconds_for(2 * RATE * 1, RATE))
 
-    def test_confidence_is_the_duration_weighted_mean(self):
+    def test_confidence_is_the_minimum_over_pieces_like_a_single_request(self):
         secs = self.LIMIT + self.LIMIT // 5             # 55 s + 11 s
         c = _PieceClient([("a", 0.9), ("b", 0.4)])
         out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
-        want = (0.9 * self.LIMIT + 0.4 * (self.LIMIT // 5)) / secs
-        assert out["confidence"] == pytest.approx(want, abs=1e-3)
+        assert out["confidence"] == pytest.approx(0.4)
+        # the same two confidences in one short request: min as well
+        one = stt.recognize(_PieceClient([("a", 0.4)]), _FakeSpeech,
+                            _pcm(1.0), RATE)
+        assert one["confidence"] == pytest.approx(0.4)
+
+    def test_a_piece_without_results_does_not_pull_confidence_to_zero(self):
+        class Silent(_PieceClient):
+            def recognize(self, config, audio):
+                self.calls += 1
+                self.sizes.append(len(audio.content))
+                if self.calls == 1:
+                    return SimpleNamespace(results=[])
+                alt = SimpleNamespace(transcript="b", confidence=0.8)
+                return SimpleNamespace(
+                    results=[SimpleNamespace(alternatives=[alt])])
+        out = stt.recognize_pcm(Silent([]), _pcm(self.LIMIT + 5), RATE,
+                                speech=_FakeSpeech)
+        assert out["confidence"] == pytest.approx(0.8)
+        none = stt.recognize_pcm(
+            type("C", (), {"recognize": lambda s, config, audio:
+                           SimpleNamespace(results=[])})(),
+            _pcm(self.LIMIT + 5), RATE, speech=_FakeSpeech)
+        assert none["confidence"] == 0.0
+
+    def test_a_low_confidence_piece_still_flags_the_split_clip(self):
+        # a corrupted piece of a long clip must trip the same guard it trips
+        # in a single request (reviewer repro: 0.95 / 0.40)
+        text = "please say your reason for applying today now"
+        single = stt.score_generation(
+            text, {"text": text, "confidence": 0.40, "seconds": 50.0,
+                   "billed_seconds": 60, "n_results": 1})
+        c = _PieceClient([(text, 0.95), (text, 0.40)])
+        split = stt.recognize_pcm(c, _pcm(self.LIMIT + 11), RATE,
+                                  speech=_FakeSpeech)
+        scored = stt.score_generation(text, split)
+        assert split["confidence"] == pytest.approx(0.40)
+        assert scored["verdict"] == single["verdict"]
+        assert scored["needs_hand_check"] == single["needs_hand_check"]
+        # and that really is the low-confidence path, not a pass
+        assert scored["verdict"] == "LOW_CONFIDENCE" or scored["needs_hand_check"]
 
     def test_a_failing_piece_is_an_stt_error_and_keeps_earlier_billing(self):
         c = _PieceClient([("a", 0.9), RuntimeError("quota")])

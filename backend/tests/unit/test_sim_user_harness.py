@@ -32,6 +32,7 @@ import measure_form_session_costs as mfsc  # noqa: E402
 from sim_user import actor as sim_actor  # noqa: E402
 
 PERSONA = sim_actor.load_default_persona()
+_REAL_MAKE_TTS = mfsc._make_tts
 FIDS = list(PERSONA.facts)
 
 # Short enough that a 22-field session runs in seconds, long enough that the
@@ -1288,7 +1289,7 @@ def sim_env(tmp_path, monkeypatch):
         return b"\x00\x00" * 640
     monkeypatch.setattr(mfsc, "synth_cached", synth)
     monkeypatch.setattr(mfsc, "_make_tts",
-                        lambda kind: mfsc.TTSMouth(kind, synth))
+                        lambda kind, project=None: mfsc.TTSMouth(kind, synth))
 
     def make_stt_fn(project=None):
         hub.stt_project = project
@@ -1561,6 +1562,93 @@ class TestRunLevelExitCodes:
         assert doc["summary"]["gate_violations"] == 0
         for t in doc["user_turns"]:
             assert "overlap_audio_s" in t and "overlapped" in t
+
+
+class TestChirp3Project:
+    """Chirp3 is billed to the same resolved quota project as STT and is
+    probed before any Gemini session opens."""
+
+    def _chirp3_env(self, sim_env, monkeypatch, fail=None):
+        calls = []
+        monkeypatch.delenv("GOOGLE_CLOUD_QUOTA_PROJECT", raising=False)
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "vertex-proj")
+        monkeypatch.setattr(mfsc, "CHIRP3_CACHE", sim_env.tmp / "chirp3")
+        monkeypatch.setattr(mfsc, "_make_tts", _REAL_MAKE_TTS)
+
+        def fake(text, voice=mfsc.CHIRP3_VOICE, project=None):
+            calls.append({"text": text, "project": project,
+                          "adapters": len(sim_env.hub.adapters)})
+            sim_env.hub.last_text = text
+            if fail:
+                raise RuntimeError(fail)
+            return b"\x00\x00" * 640
+        monkeypatch.setattr(mfsc, "_chirp3_synth_uncached", fake)
+        return calls
+
+    def test_project_is_passed_and_the_probe_runs_before_any_session(
+            self, sim_env, monkeypatch):
+        calls = self._chirp3_env(sim_env, monkeypatch)
+        run_args(parse(sim_env, "--tts", "chirp3", "--max-user-turns", "1"))
+        assert calls and calls[0]["text"] == "Test."
+        assert calls[0]["adapters"] == 0          # probe: no session yet
+        assert all(c["project"] == "vertex-proj" for c in calls)
+        assert len(calls) > 1                     # the run itself spoke too
+        assert any(c["adapters"] == 1 for c in calls[1:])
+
+    def test_probe_failure_raises_before_any_adapter(self, sim_env, monkeypatch):
+        calls = self._chirp3_env(sim_env, monkeypatch, fail="403 tts quota")
+        with pytest.raises(SystemExit) as ei:
+            run_args(parse(sim_env, "--tts", "chirp3"))
+        assert "Chirp3" in str(ei.value) and "403 tts quota" in str(ei.value)
+        assert sim_env.hub.adapters == []
+        assert len(calls) == 1
+
+    def test_gtts_runs_no_tts_probe(self, sim_env, monkeypatch):
+        calls = self._chirp3_env(sim_env, monkeypatch)
+        monkeypatch.setattr(mfsc, "_make_tts",
+                            lambda kind, project=None: mfsc.TTSMouth(
+                                kind, lambda t: b"\x00\x00" * 640))
+        run_args(parse(sim_env, "--max-user-turns", "1"))
+        assert calls == []
+
+    def test_empty_probe_audio_is_a_failure(self, monkeypatch):
+        monkeypatch.setattr(mfsc, "_chirp3_synth_uncached",
+                            lambda *a, **k: b"")
+        with pytest.raises(SystemExit):
+            mfsc.probe_tts("chirp3", "p")
+        mfsc.probe_tts("gtts", "p")               # no probe, no error
+
+    def test_explicit_project_binds_the_tts_client(self, monkeypatch):
+        import google.auth
+        from google.cloud import texttospeech
+        seen = []
+
+        class Creds:
+            def with_quota_project(self, p):
+                seen.append(p)
+                return "creds-" + p
+        monkeypatch.setattr(google.auth, "default",
+                            lambda scopes=None: (Creds(), None))
+        monkeypatch.setattr(texttospeech, "TextToSpeechClient",
+                            lambda credentials=None: ("client", credentials))
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "other-proj")
+        monkeypatch.delenv("GOOGLE_CLOUD_QUOTA_PROJECT", raising=False)
+        assert mfsc._make_tts_client("explicit-proj") == (
+            "client", "creds-explicit-proj")
+        assert seen == ["explicit-proj"]
+
+    def test_synth_passes_the_project_to_the_client_factory(self, monkeypatch):
+        got = []
+
+        class Client:
+            def synthesize_speech(self, **kw):
+                return SimpleNamespace(audio_content=b"\x01\x00\x02\x00")
+        monkeypatch.setattr(mfsc, "_make_tts_client",
+                            lambda project=None: got.append(project) or Client())
+        monkeypatch.setattr(mfsc, "_TTS_CLIENT", {})
+        assert mfsc._chirp3_synth_uncached("hi", project="p1") == (
+            b"\x01\x00\x02\x00")
+        assert got == ["p1"]
 
 
 class TestChirp3CacheIgnored:

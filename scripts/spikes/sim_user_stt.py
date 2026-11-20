@@ -231,11 +231,11 @@ def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
                       seconds: float, piece_bytes: int) -> dict:
     """A clip over the sync limit: consecutive <= MAX_SYNC_SECONDS pieces,
     each recognized with the same config. Texts are joined in order with a
-    space, confidence is the duration-weighted mean over pieces that
-    returned a result, and billing is the sum of each piece's own 15 s
+    space, confidence is the MINIMUM over pieces that returned a result
+    (as the single-request path reports it), and billing is the sum of each piece's own 15 s
     rounding. A failing piece makes the whole clip STT_ERROR (pieces already
     recognized stay billed)."""
-    texts, weights, confs = [], [], []
+    texts, confs = [], []
     n_results = billed = 0
     pieces = [pcm[i:i + piece_bytes] for i in range(0, len(pcm), piece_bytes)]
     # A tail under MIN_SECONDS is not worth its own request (the API would
@@ -256,11 +256,12 @@ def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
         if rec["text"]:
             texts.append(rec["text"])
         if rec["n_results"]:
-            weights.append(len(piece) // 2)
             confs.append(rec["confidence"])
         n_results += rec["n_results"]
-    conf = (sum(w * c for w, c in zip(weights, confs)) / sum(weights)
-            if weights else 0.0)
+    # MIN over the pieces that returned a result, exactly like the single
+    # request (`recognize`): low confidence is a corruption signal for
+    # score_generation, and a mean would mask one bad piece of a long clip.
+    conf = min(confs) if confs else 0.0
     return {"text": " ".join(texts), "confidence": round(conf, 3),
             "n_results": n_results, "seconds": seconds,
             "billed_seconds": billed,

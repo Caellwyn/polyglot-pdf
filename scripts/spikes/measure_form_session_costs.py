@@ -2606,11 +2606,12 @@ def _strip_wav_header(data: bytes) -> bytes:
 _TTS_CLIENT = {}
 
 
-def _make_tts_client():
+def _make_tts_client(project: str | None = None):
     """Cloud TTS client with the quota project bound, mirroring
-    sim_user_stt.make_speech_client (lazy import)."""
+    sim_user_stt.make_speech_client (lazy import). `project` (the one
+    resolve_quota_project() found) wins over the environment."""
     from google.cloud import texttospeech
-    project = (os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
+    project = (project or os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
                or os.environ.get("GOOGLE_CLOUD_PROJECT"))
     if project:
         import google.auth
@@ -2621,7 +2622,24 @@ def _make_tts_client():
     return texttospeech.TextToSpeechClient()
 
 
-def synth_chirp3_cached(text: str, voice: str = CHIRP3_VOICE) -> bytes:
+def _chirp3_synth_uncached(text: str, voice: str = CHIRP3_VOICE,
+                          project: str | None = None) -> bytes:
+    """One Chirp3-HD request (no cache), billed to `project`."""
+    from google.cloud import texttospeech
+    if project not in _TTS_CLIENT:
+        _TTS_CLIENT[project] = _make_tts_client(project)
+    resp = _TTS_CLIENT[project].synthesize_speech(
+        input=texttospeech.SynthesisInput(text=text),
+        voice=texttospeech.VoiceSelectionParams(
+            language_code="en-US", name=voice),
+        audio_config=texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+            sample_rate_hertz=_AUDIO_RATE))
+    return _strip_wav_header(resp.audio_content)
+
+
+def synth_chirp3_cached(text: str, voice: str = CHIRP3_VOICE,
+                        project: str | None = None) -> bytes:
     """Chirp3-HD -> mono PCM16 @ 16 kHz (LINEAR16 requested at 16000 Hz),
     disk-cached like synth_cached so reruns are network-free."""
     CHIRP3_CACHE.mkdir(parents=True, exist_ok=True)
@@ -2629,17 +2647,7 @@ def synth_chirp3_cached(text: str, voice: str = CHIRP3_VOICE) -> bytes:
     cached = CHIRP3_CACHE / f"{key}.pcm"
     if cached.exists():
         return cached.read_bytes()
-    from google.cloud import texttospeech
-    if "client" not in _TTS_CLIENT:
-        _TTS_CLIENT["client"] = _make_tts_client()
-    resp = _TTS_CLIENT["client"].synthesize_speech(
-        input=texttospeech.SynthesisInput(text=text),
-        voice=texttospeech.VoiceSelectionParams(
-            language_code="en-US", name=voice),
-        audio_config=texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
-            sample_rate_hertz=_AUDIO_RATE))
-    pcm = _strip_wav_header(resp.audio_content)
+    pcm = _chirp3_synth_uncached(text, voice, project)
     cached.write_bytes(pcm)
     return pcm
 
@@ -2665,10 +2673,28 @@ class TTSMouth:
         return round(self.chars / 1_000_000 * TTS_USD_PER_MCHAR[self.kind], 6)
 
 
-def _make_tts(kind: str) -> TTSMouth:
+def _make_tts(kind: str, project: str | None = None) -> TTSMouth:
     if kind == "chirp3":
-        return TTSMouth("chirp3", synth_chirp3_cached)
+        return TTSMouth(
+            "chirp3", lambda text: synth_chirp3_cached(text, project=project))
     return TTSMouth("gtts", synth_cached)
+
+
+def probe_tts(kind: str, project: str | None) -> None:
+    """Pre-flight for --tts chirp3: one real (uncached) tiny request before
+    any Gemini session opens, so a missing quota project, revoked credential
+    or disabled API aborts a run that could not speak anyway. gtts needs no
+    probe."""
+    if kind != "chirp3":
+        return
+    try:
+        pcm = _chirp3_synth_uncached("Test.", CHIRP3_VOICE, project)
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            "Cloud TTS (Chirp3) pre-flight failed (the simulated user could "
+            "not speak): %s" % str(exc)[:300])
+    if not pcm:
+        raise SystemExit("Cloud TTS (Chirp3) pre-flight returned no audio.")
 
 
 def _make_stt_fn(project: str | None = None):
@@ -3471,6 +3497,7 @@ async def run(args) -> int:
     sim_persona = None
     sim_actor = None
     sim_stt_fn = None
+    sim_project = None
     kit_hash = None
     if sim_mode:
         sim_persona = (_sim_actor.load_persona(args.persona)
@@ -3481,8 +3508,12 @@ async def run(args) -> int:
         # STT is needed for the divergence log in BOTH ears modes; prove it
         # works (quota project, credentials, API enabled) before spending a
         # Gemini session.
-        sim_stt_fn = _make_stt_fn(resolve_quota_project())
+        sim_project = resolve_quota_project()
+        sim_stt_fn = _make_stt_fn(sim_project)
         probe_stt(sim_stt_fn)
+        # Same for the mouth: Chirp3 is a paid Google API with the same
+        # quota-project requirement as STT.
+        probe_tts(getattr(args, "tts", "gtts"), sim_project)
 
     schema = load_schema(args.schema)
     if sim_mode:
@@ -4480,7 +4511,7 @@ async def run(args) -> int:
         if sim_mode:
             # ---- simulated user (bd polyglot-pdf-tmu0f) replaces the
             # per-question scripted loop below (which iterates nothing).
-            sim_tts = _make_tts(getattr(args, "tts", "gtts"))
+            sim_tts = _make_tts(getattr(args, "tts", "gtts"), sim_project)
 
             async def _sim_inject(pcm: bytes) -> float:
                 # The same activity_start / 40 ms chunks / activity_end path
