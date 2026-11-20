@@ -223,6 +223,46 @@ def _city_fact(persona):
                 if "97477" in f["spoken"])
 
 
+class TestSpelledCorrections:
+    def _spellable(self, persona):
+        return [fid for fid, f in persona.facts.items() if f["spellable"]]
+
+    def _plain(self, persona):
+        return [fid for fid, f in persona.facts.items() if not f["spellable"]]
+
+    def test_correcting_a_spellable_fact_spells_it(self, persona):
+        for fid in self._spellable(persona):
+            f = persona.facts[fid]
+            for seed in range(12):
+                r = actor.render("reject_and_correct", fid, persona,
+                                 random.Random(seed))
+                assert f["spell"] in r.text, (fid, r.text)
+                assert r.values_spoken == [f["spell"]]
+                assert r.move == "reject_and_correct"
+                assert r.text.startswith(("No,", "Sorry, no"))
+
+    def test_non_spellable_facts_keep_the_answer_based_correction(self, persona):
+        for fid in self._plain(persona):
+            f = persona.facts[fid]
+            r = actor.render("reject_and_correct", fid, persona,
+                             random.Random(0))
+            assert f["answer"] in r.text
+            assert r.values_spoken == [f["answer"]]
+
+    def test_spelled_corrections_are_on_the_sheet(self, persona):
+        allowed = set()
+        for f in persona.facts.values():
+            allowed.update({f["answer"], f["spoken"]})
+            if f.get("spell"):
+                allowed.add(f["spell"])
+        for fid in persona.facts:
+            for seed in range(6):
+                r = actor.render("reject_and_correct", fid, persona,
+                                 random.Random(seed))
+                assert all(v in allowed for v in r.values_spoken)
+                assert all(v in r.text for v in r.values_spoken)
+
+
 class TestStubReadbackEquivalence:
     def _decide(self, persona, text):
         fid = _city_fact(persona)

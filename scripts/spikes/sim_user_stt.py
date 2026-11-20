@@ -188,6 +188,11 @@ def billed_seconds_for(n_bytes: int, rate_hz: int) -> int:
     return -(-samples // per) * STT_BILLING_INCREMENT_S
 
 
+# Cloud STT sync recognize rejects audio over 1 minute (400 "Sync input too
+# long"); longer clips are recognized in consecutive pieces of at most this.
+MAX_SYNC_SECONDS = 55
+
+
 def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict:
     """STT of raw 16-bit mono PCM (no WAV header). Same shape as `recognize`.
 
@@ -207,6 +212,10 @@ def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict
     if speech is None:
         from google.cloud import speech as speech_mod
         speech = speech_mod
+    piece_bytes = 2 * rate_hz * MAX_SYNC_SECONDS
+    if len(pcm) > piece_bytes:
+        return _recognize_pieces(client, speech, pcm, rate_hz, seconds,
+                                 piece_bytes)
     try:
         rec = recognize(client, speech, pcm, rate_hz)
     except Exception as exc:  # noqa: BLE001
@@ -216,6 +225,39 @@ def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict
     rec["seconds"] = seconds
     rec["billed_seconds"] = billed_seconds_for(len(pcm), rate_hz)
     return rec
+
+
+def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
+                      seconds: float, piece_bytes: int) -> dict:
+    """A clip over the sync limit: consecutive <= MAX_SYNC_SECONDS pieces,
+    each recognized with the same config. Texts are joined in order with a
+    space, confidence is the duration-weighted mean over pieces that
+    returned a result, and billing is the sum of each piece's own 15 s
+    rounding. A failing piece makes the whole clip STT_ERROR (pieces already
+    recognized stay billed)."""
+    texts, weights, confs = [], [], []
+    n_results = billed = 0
+    for start in range(0, len(pcm), piece_bytes):
+        piece = pcm[start:start + piece_bytes]
+        try:
+            rec = recognize(client, speech, piece, rate_hz)
+        except Exception as exc:  # noqa: BLE001
+            return {"text": "", "confidence": 0.0, "n_results": 0,
+                    "seconds": seconds, "billed_seconds": billed,
+                    "verdict": "STT_ERROR", "error": str(exc)[:200]}
+        billed += billed_seconds_for(len(piece), rate_hz)
+        if rec["text"]:
+            texts.append(rec["text"])
+        if rec["n_results"]:
+            weights.append(len(piece) // 2)
+            confs.append(rec["confidence"])
+        n_results += rec["n_results"]
+    conf = (sum(w * c for w, c in zip(weights, confs)) / sum(weights)
+            if weights else 0.0)
+    return {"text": " ".join(texts), "confidence": round(conf, 3),
+            "n_results": n_results, "seconds": seconds,
+            "billed_seconds": billed,
+            "pieces": -(-len(pcm) // piece_bytes)}
 
 
 def decide_verdict(letters_stt: str, letters_txt: str, letters_near: str,

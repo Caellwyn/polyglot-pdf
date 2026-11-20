@@ -165,6 +165,11 @@ _TEMPLATES = {
 # Spelling a non-spellable fact degrades to the spoken value, so a bad
 # (but schema-valid) decision still cannot produce an off-sheet string.
 _SPOKEN_TEMPLATES = ["It is {spoken}.", "That is {spoken}."]
+# Correcting a SPELLABLE fact (a name the read-back got wrong) spells it: the
+# TTS voice says "Ana" and "Anna" alike, so only the letters carry the fix.
+_SPELLED_CORRECTION = ["No, that's not right. It's spelled {spell}.",
+                       "No, that is wrong. Letter by letter: {spell}.",
+                       "Sorry, no. It is spelled {spell}."]
 
 
 def render(move: str, field_key: str, persona: Persona,
@@ -184,6 +189,10 @@ def render(move: str, field_key: str, persona: Persona,
             tpl = rng.choice(_SPOKEN_TEMPLATES)
             return Rendered(tpl.format(spoken=f["spoken"]), move, field_key,
                             [f["spoken"]])
+        if move == "reject_and_correct" and f.get("spellable"):
+            tpl = rng.choice(_SPELLED_CORRECTION)
+            return Rendered(tpl.format(spell=f["spell"]), move, field_key,
+                            [f["spell"]])
         tpl = rng.choice(_TEMPLATES[move])
         return Rendered(tpl.format(answer=f["answer"]), move, field_key,
                         [f["answer"]])

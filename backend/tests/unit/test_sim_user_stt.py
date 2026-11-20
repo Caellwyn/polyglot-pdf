@@ -205,6 +205,84 @@ class TestLetters:
 
 
 # --------------------------------------------------------------------------
+# long clips: sync STT only takes ~1 minute
+# --------------------------------------------------------------------------
+class _PieceClient:
+    """Fake client: answers each request with the next canned reply and
+    records the audio length it was given."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.sizes = []
+        self.calls = 0
+
+    def recognize(self, config, audio):
+        self.sizes.append(len(audio.content))
+        i = self.calls
+        self.calls += 1
+        r = self.replies[i]
+        if isinstance(r, Exception):
+            raise r
+        text, conf = r
+        alt = SimpleNamespace(transcript=text, confidence=conf)
+        return SimpleNamespace(results=[SimpleNamespace(alternatives=[alt])])
+
+
+class TestLongClipPieces:
+    LIMIT = stt.MAX_SYNC_SECONDS
+
+    def test_short_clip_is_one_request(self):
+        c = _PieceClient([("hello", 0.9)])
+        out = stt.recognize_pcm(c, _pcm(self.LIMIT), RATE, speech=_FakeSpeech)
+        assert c.calls == 1
+        assert "pieces" not in out
+        assert out["text"] == "hello"
+
+    def test_long_clip_is_split_in_order_and_joined(self):
+        secs = 2 * self.LIMIT + 10                      # 120 s -> 3 pieces
+        c = _PieceClient([("first part", 0.9), ("second part", 0.6),
+                          ("third part", 0.9)])
+        out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
+        assert c.calls == 3
+        assert c.sizes == [2 * RATE * self.LIMIT] * 2 + [2 * RATE * 10]
+        assert sum(c.sizes) == len(_pcm(secs))
+        assert out["text"] == "first part second part third part"
+        assert out["pieces"] == 3
+        assert out["n_results"] == 3
+        assert out["seconds"] == pytest.approx(secs)
+        assert "verdict" not in out
+
+    def test_billing_is_the_sum_of_each_pieces_own_rounding(self):
+        secs = self.LIMIT + 1                           # 55 s + 1 s
+        c = _PieceClient([("a", 0.9), ("b", 0.9)])
+        out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
+        assert out["billed_seconds"] == 60 + 15         # not 60 for 56 s
+        assert out["billed_seconds"] == (
+            stt.billed_seconds_for(2 * RATE * self.LIMIT, RATE)
+            + stt.billed_seconds_for(2 * RATE * 1, RATE))
+
+    def test_confidence_is_the_duration_weighted_mean(self):
+        secs = self.LIMIT + self.LIMIT // 5             # 55 s + 11 s
+        c = _PieceClient([("a", 0.9), ("b", 0.4)])
+        out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
+        want = (0.9 * self.LIMIT + 0.4 * (self.LIMIT // 5)) / secs
+        assert out["confidence"] == pytest.approx(want, abs=1e-3)
+
+    def test_a_failing_piece_is_an_stt_error_and_keeps_earlier_billing(self):
+        c = _PieceClient([("a", 0.9), RuntimeError("quota")])
+        out = stt.recognize_pcm(c, _pcm(self.LIMIT + 5), RATE,
+                                speech=_FakeSpeech)
+        assert out["verdict"] == "STT_ERROR"
+        assert "quota" in out["error"]
+        assert out["billed_seconds"] == 60
+
+    def test_piece_boundaries_fall_on_whole_samples(self):
+        c = _PieceClient([("a", 0.9), ("b", 0.9)])
+        stt.recognize_pcm(c, _pcm(self.LIMIT + 2), RATE, speech=_FakeSpeech)
+        assert all(n % 2 == 0 for n in c.sizes)
+
+
+# --------------------------------------------------------------------------
 # recognize_pcm / billing
 # --------------------------------------------------------------------------
 class TestRecognizePcm:
