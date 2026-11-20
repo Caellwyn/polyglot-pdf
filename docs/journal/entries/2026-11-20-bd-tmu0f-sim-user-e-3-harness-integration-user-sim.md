@@ -63,7 +63,12 @@ attach to the deployed staging service.
 - **STT fixes (`sim_user_stt.py`):**
   - an optional explicit quota project;
   - clips over 55 s are split for sync recognition, with a short tail folded
-    into the previous piece.
+    into the previous piece;
+  - a split clip's confidence is the minimum over its pieces, the same as a
+    single request, so one corrupted piece still triggers the
+    low-confidence check.
+- **Chirp3 TTS** uses the same resolved quota project and gets a pre-flight
+  call before any Gemini session opens.
 - **Five live bring-up runs** are committed with an index
   (`scripts/spikes/data/sim_user/RUNS.md`). The last one, on the near-final
   harness, completed W-7 on `gemini-3.8-live`:
