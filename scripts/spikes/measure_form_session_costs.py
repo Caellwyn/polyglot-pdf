@@ -3171,6 +3171,9 @@ class SimDriver:
                 text = ears_text(gens, self.ears)
                 decision = await self.actor.decide(text, self.history)
                 self._note_decision(turn_no, decision)
+                decision, referee = _sim_actor.referee(
+                    decision, text, self.history, self.persona,
+                    self.slips_spoken)
                 rendered, render_error = self._render(decision)
                 pcm = await asyncio.to_thread(self.tts.synth, rendered.text)
                 opened, waited = await self.wait_gate()
@@ -3193,6 +3196,7 @@ class SimDriver:
                 "move": rendered.move, "field_key": rendered.field_key,
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
                 "slip": bool(rendered.slip),
+                "referee": referee,
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
                 "heard_silence_closed": any(
@@ -3267,6 +3271,17 @@ def count_corrections(driver: "SimDriver", fill_accuracy: dict) -> dict:
     }
 
 
+def count_referee_overrides(driver: "SimDriver") -> dict:
+    """How often the deterministic referee overrode the actor's verdict on a
+    read-back (sim_user.actor.referee), per direction, over injected turns."""
+    out = {"reject_to_confirm": 0, "confirm_to_reject": 0}
+    for t in driver.user_turns:
+        label = t.get("referee")
+        if label in out:
+            out[label] += 1
+    return out
+
+
 def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
                       headline: dict, kit_hash: str,
                       divergence: dict) -> dict:
@@ -3292,6 +3307,7 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
                                  for k in ("matched", "total", "accuracy")},
         "off_sheet_values": count_off_sheet(persona, driver.user_turns),
         "corrections": count_corrections(driver, fill_accuracy),
+        "referee_overrides": count_referee_overrides(driver),
         "gate_violations": driver.gate_violations,
         "gate_timeouts": driver.gate_timeouts,
         # model-defect metrics: generations the recorder had to close because

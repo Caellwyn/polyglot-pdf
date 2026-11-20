@@ -13,6 +13,8 @@ Pieces:
     spoken text); the FIRST `answer` for such a field speaks the slip, so the
     interviewer's read-back is wrong and the actor must reject-and-correct.
     The slip is fact-sheet text too, so it is never an off-sheet value.
+  - referee: a deterministic exact-match check that overrides the actor's
+    verdict on a read-back that plainly says the true value (or the slip).
   - StubActor: deterministic offline backend (and the fallback).
   - HaikuActor: Claude Haiku 5.5 via the Claude API (anthropic SDK,
     ANTHROPIC_API_KEY), strict JSON output. Deliberately NOT Vertex: Vertex
@@ -29,7 +31,7 @@ import os
 import random
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -348,6 +350,85 @@ def _asks_to_spell(text: str) -> bool:
         _SPELLED_RUN.search(text) and _READBACK.search(text))
 
 
+def last_answered(history: list, facts: dict) -> Optional[str]:
+    """The field of the most recent field move in `history` (the field a
+    bare read-back is most likely about), or None."""
+    for h in reversed(history or []):
+        if h.get("move") in FIELD_MOVES and h.get("field_key") in facts:
+            return h["field_key"]
+    return None
+
+
+# A value this short, or one of these generic words, is too common to
+# override on: "no" or "yes" turns up in read-backs about anything.
+_MIN_REFEREE_CHARS = 3
+_GENERIC_VALUES = frozenset({"yes", "no", "none", "not", "na", "nope",
+                             "yeah"})
+
+
+def refereeable(value) -> bool:
+    """True when `value` is distinctive enough for the referee to act on."""
+    joined = "".join(_tokens(str(value)))
+    return len(joined) >= _MIN_REFEREE_CHARS and joined not in _GENERIC_VALUES
+
+
+def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
+    """Any candidate value appears in the text as a whole-token run. strict
+    skips the values too generic to act on; the non-strict form is the
+    conservative 'is the OTHER value there at all' guard."""
+    for c in cands:
+        if c is None:
+            continue
+        ct = _tokens(str(c))
+        if not ct or (strict and not refereeable(c)):
+            continue
+        if _contains_seq(text_tokens, ct):
+            return True
+    return False
+
+
+def referee(decision: Decision, model_text: str, history: list,
+            persona: Persona, slips_spoken: Optional[set] = None
+            ) -> tuple[Decision, Optional[str]]:
+    """Deterministic check on the actor's verdict about a read-back.
+
+    The actor model judges read-backs, and it can judge them wrong both ways:
+    rejecting a read-back that says the fact exactly (a 34-turn loop on a
+    correct "C, O, R, A, Z, O, N") or confirming one that says the slip (a
+    wrong middle name accepted). Only an EXACT token match overrides it:
+      - reject_and_correct, and the read-back holds the true value and not the
+        slip -> confirm ("reject_to_confirm");
+      - confirm, and the read-back holds the spoken slip and not the true
+        value -> reject_and_correct on that field ("confirm_to_reject").
+    Anything else -- no read-back, a paraphrase, a date said in words, both
+    values present -- is left to the actor. Returns (decision, label), where
+    label is None when nothing changed."""
+    if decision.move not in ("confirm", "reject_and_correct"):
+        return decision, None
+    if not _READBACK.search(model_text or ""):
+        return decision, None
+    facts = persona.facts
+    fid = (decision.field_key if decision.move == "reject_and_correct"
+           else last_answered(history, facts))
+    if fid not in facts:
+        return decision, None
+    f = facts[fid]
+    tt = _tokens(model_text)
+    true_c = [f.get("spoken"), f.get("value"), f.get("spell")]
+    slip_c: list = []
+    if "slip" in f and slips_spoken is not None and fid in slips_spoken:
+        slip_c = [f["slip"].get("spoken"), f["slip"].get("value")]
+    if (decision.move == "reject_and_correct" and _hits(tt, true_c, True)
+            and not _hits(tt, slip_c, False)):
+        return (replace(decision, move="confirm", field_key=NONE_KEY),
+                "reject_to_confirm")
+    if (decision.move == "confirm" and _hits(tt, slip_c, True)
+            and not _hits(tt, true_c, False)):
+        return (replace(decision, move="reject_and_correct", field_key=fid),
+                "confirm_to_reject")
+    return decision, None
+
+
 # --------------------------------------------------------------------------
 # StubActor
 # --------------------------------------------------------------------------
@@ -368,10 +449,7 @@ class StubActor:
         return best
 
     def _last_answered(self, history: list) -> Optional[str]:
-        for h in reversed(history or []):
-            if h.get("move") in FIELD_MOVES and h.get("field_key") in self.persona.facts:
-                return h["field_key"]
-        return None
+        return last_answered(history, self.persona.facts)
 
     def _value_in_text(self, fid: str, text: str) -> bool:
         f = self.persona.facts[fid]
