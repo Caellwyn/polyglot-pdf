@@ -2269,7 +2269,9 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 SIM_MODEL_AUDIO_RATE = 24_000          # Live model output: 16-bit mono PCM
 # A generation boundary opens the turn gate only for these reasons; a
 # session_close edge closes a generation but is not a finished model turn.
-SIM_GATE_REASONS = frozenset({"turn_complete", "interrupted"})
+# "silence" is the recorder's own close of a generation the model never
+# completed (see GenerationRecorder.maybe_silence_close).
+SIM_GATE_REASONS = frozenset({"turn_complete", "interrupted", "silence"})
 SIM_CLOSING_REASONS = frozenset({"turn_complete", "interrupted", "session_close"})
 SIM_DEFAULT_MAX_USER_TURNS = 150
 SIM_MAX_CONSECUTIVE_FALLBACKS = 5
@@ -2292,6 +2294,9 @@ class SimTiming:
     tool_resume_grace_s: float = 4.0   # after a tool returns, wait for the model
     gate_timeout_s: float = 40.0       # the gate never opened -> a stall
     response_timeout_s: float = 40.0   # no model generation after the user turn
+    # An open generation with audio and no new audio/transcript for this long
+    # (no tool pending) is closed by the recorder as reason "silence".
+    silence_close_s: float = 5.0
     poll_s: float = 0.05
     usage_settle_s: float = 1.2        # trailing usage events after a response
     chunk_sleep_s: float = _CHUNK_MS / 1000.0
@@ -2329,7 +2334,7 @@ class GenerationRecorder:
 
     def __init__(self, audio_rate: int = SIM_MODEL_AUDIO_RATE,
                  quiet_window_s: float = 0.6, tool_resume_grace_s: float = 4.0,
-                 clock=time.monotonic):
+                 clock=time.monotonic, silence_close_s: float | None = None):
         self.audio_rate = audio_rate
         self._bytes_per_s = 2.0 * audio_rate
         self.quiet_window_s = quiet_window_s
@@ -2343,9 +2348,14 @@ class GenerationRecorder:
         self.last_audio_at: float | None = None
         self.playback_end = 0.0
         self.empty_boundaries = 0
+        self.silence_close_s = silence_close_s
+        self.silence_closes = 0
+        self.late_completions = 0
+        self._last_event_at: float | None = None
 
     # -- intake ---------------------------------------------------------
     def _gen(self, ts: float) -> dict:
+        self._last_event_at = ts
         if self._open is None:
             self._open = {"t_open": ts, "t_first_audio": None,
                           "t_last_audio": None, "pcm": bytearray(),
@@ -2381,12 +2391,53 @@ class GenerationRecorder:
         if reason not in SIM_CLOSING_REASONS:
             return
         ts = self.clock() if ts is None else ts
-        g = self._open
-        if g is None:
+        if self._open is None:
+            last = self.closed[-1] if self.closed else None
+            if (last is not None and last["reason"] == "silence"
+                    and reason in SIM_GATE_REASONS
+                    and "late_completion_reason" not in last):
+                # The model's own completion edge, arriving after the
+                # recorder already closed this generation for silence: a
+                # late completion of THAT generation, not a new one.
+                last["late_completion_reason"] = reason
+                last["late_completion_delay_s"] = ts - last["t_close"]
+                self.late_completions += 1
+                return
             # generation_complete and turn_complete both fire the edge; the
             # second finds nothing open.
             self.empty_boundaries += 1
             return
+        self._close(reason, ts)
+
+    def maybe_silence_close(self, now: float | None = None) -> bool:
+        """Close the open generation for silence: it holds audio, no tool is
+        pending (grace elapsed) and nothing arrived for silence_close_s. This
+        is what a person does when the model never sends turn_complete -- they
+        just talk. Counted in silence_closes (a model-defect metric)."""
+        now = self.clock() if now is None else now
+        g = self._open
+        if (self.silence_close_s is None or g is None
+                or g["t_first_audio"] is None or self.pending_tools
+                or now < self._tool_resume_until
+                or self._last_event_at is None
+                or now - self._last_event_at < self.silence_close_s):
+            return False
+        self._close("silence", now)
+        self.silence_closes += 1
+        return True
+
+    def expected_playback_end(self) -> float:
+        """Playback end including audio of a generation still open."""
+        end = self.playback_end
+        g = self._open
+        if g is not None and g["t_first_audio"] is not None:
+            start = max(end, g["t_first_audio"])
+            end = max(start + len(g["pcm"]) / self._bytes_per_s,
+                      g["t_last_audio"])
+        return end
+
+    def _close(self, reason: str, ts: float) -> None:
+        g = self._open
         self._open = None
         pcm = bytes(g["pcm"])
         audio_s = len(pcm) / self._bytes_per_s
@@ -2441,6 +2492,10 @@ class GenerationRecorder:
                 "playback_end_s": rel(g["playback_end"]),
                 "tool_calls": g["tool_calls"],
                 "pending_tools_at_close": g["pending_tools_at_close"],
+                "late_completion_reason": g.get("late_completion_reason"),
+                "late_completion_delay_s": (
+                    None if g.get("late_completion_delay_s") is None
+                    else round(g["late_completion_delay_s"], 3)),
                 "transcript": g["transcript"]}
 
 
@@ -2680,6 +2735,7 @@ class SimDriver:
         self.generation_records: list[dict] = []
         self._consec_fallbacks = 0
         self._consec_stalls = 0
+        self._consec_gate_timeouts = 0
         self._stt_sem = asyncio.Semaphore(8)
         self.expected_spellings = [
             f["spell"] for f in persona.facts.values()
@@ -2694,19 +2750,30 @@ class SimDriver:
                 return False
         return True
 
-    async def _poll(self, pred, timeout: float) -> bool:
+    async def _poll(self, pred, timeout: float, since=None) -> bool:
+        """Poll `pred` until true or the deadline. Each poll first lets the
+        recorder close a generation the model never completed (silence).
+        The deadline is `timeout` after the later of the poll start and
+        `since()` (re-read every poll), so legitimate activity -- audio still
+        playing, audio still arriving -- pushes it out instead of timing out."""
         t0 = self.clock()
         while True:
+            self.rec.maybe_silence_close(self.clock())
             if pred():
                 return True
-            if self.clock() - t0 >= timeout:
+            ref = t0 if since is None else max(t0, since())
+            if self.clock() - ref >= timeout:
                 return bool(pred())
             await asyncio.sleep(self.timing.poll_s)
 
     async def wait_gate(self) -> tuple[bool, float]:
         t0 = self.clock()
-        opened = await self._poll(lambda: self.rec.gate_state()["open"],
-                                  self.timing.gate_timeout_s)
+        # gate_timeout_s runs from when playback is expected to have ended
+        # (recomputed as playback extends), not from when waiting began: an
+        # 88 s recital is not a stall.
+        opened = await self._poll(
+            lambda: self.rec.gate_state()["open"], self.timing.gate_timeout_s,
+            since=self.rec.expected_playback_end)
         return opened, self.clock() - t0
 
     # -- STT ------------------------------------------------------------
@@ -2785,30 +2852,35 @@ class SimDriver:
         cursor = 0
         prev_turn = None
         while True:
-            got = await self._poll(lambda: rec.n_closed > cursor,
-                                   timing.response_timeout_s)
+            got = await self._poll(
+                lambda: rec.n_closed > cursor, timing.response_timeout_s,
+                since=lambda: rec._last_event_at or 0.0)
+            # _consec_stalls counts consecutive RESPONSE stalls (no model
+            # generation after waiting); any received generation resets it,
+            # whether or not a user turn preceded. Gate timeouts have their
+            # own streak (_consec_gate_timeouts), reset only when the user
+            # actually speaks.
+            if got:
+                self._consec_stalls = 0
+            else:
+                self.stalls += 1
+                self._consec_stalls += 1
             if prev_turn is not None:
-                if got:
-                    self._consec_stalls = 0
-                else:
-                    self.stalls += 1
-                    self._consec_stalls += 1
                 prev_turn["response_stalled"] = not got
                 if timing.usage_settle_s:
                     await asyncio.sleep(timing.usage_settle_s)
                 if self.on_turn_done is not None:
                     await self.on_turn_done(prev_turn)
                 prev_turn = None
-            elif not got:
-                self.stalls += 1
-                self._consec_stalls += 1
             if self.all_done():
                 self.stop_reason = "complete"
                 return
             if len(self.user_turns) >= self.max_user_turns:
                 self.stop_reason = "max_user_turns"
                 return
-            if self._consec_stalls >= timing.max_consecutive_stalls:
+            if (self._consec_stalls >= timing.max_consecutive_stalls
+                    or self._consec_gate_timeouts
+                    >= timing.max_consecutive_stalls):
                 self.stop_reason = "stalls"
                 return
             if self.maintenance is not None:
@@ -2835,8 +2907,9 @@ class SimDriver:
             if not opened:
                 self.gate_timeouts += 1
                 self.stalls += 1
-                self._consec_stalls += 1
+                self._consec_gate_timeouts += 1
                 continue
+            self._consec_gate_timeouts = 0
             now = self.clock()
             gate = rec.gate_state(now)
             if not gate["open"]:
@@ -2848,6 +2921,8 @@ class SimDriver:
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
+                "heard_silence_closed": any(
+                    g["reason"] == "silence" for g in gens),
                 "gate_open_at_start": bool(gate["open"]), "gate_state": gate,
                 "gate_wait_s": round(waited, 3), "redecides": redecides,
                 "fallback_used": bool(decision.fallback_used),
@@ -2903,6 +2978,11 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
         "off_sheet_values": count_off_sheet(persona, driver.user_turns),
         "gate_violations": driver.gate_violations,
         "gate_timeouts": driver.gate_timeouts,
+        # model-defect metrics: generations the recorder had to close because
+        # the model never sent turn_complete, and completions that arrived
+        # after such a close.
+        "silence_closes": driver.rec.silence_closes,
+        "late_completions": driver.rec.late_completions,
         "user_turns": len(driver.user_turns),
         "stalls": driver.stalls,
         "render_errors": driver.render_errors,
@@ -3611,7 +3691,8 @@ async def run(args) -> int:
         if sim_mode:
             client.gen_recorder = GenerationRecorder(
                 quiet_window_s=sim_timing.quiet_window_s,
-                tool_resume_grace_s=sim_timing.tool_resume_grace_s)
+                tool_resume_grace_s=sim_timing.tool_resume_grace_s,
+                silence_close_s=sim_timing.silence_close_s)
         if is_section_reset:
             client.set_active_section(
                 [q for q in plan

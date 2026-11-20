@@ -40,8 +40,9 @@ FAST = mfsc.SimTiming(
     quiet_window_s=0.03, tool_resume_grace_s=0.05, gate_timeout_s=3.0,
     response_timeout_s=3.0, poll_s=0.01, usage_settle_s=0.0,
     chunk_sleep_s=0.0, max_redecide=3, max_consecutive_stalls=3,
-    max_consecutive_fallbacks=5)
+    max_consecutive_fallbacks=5, silence_close_s=None)
 FLOW_AUDIO_S = 0.1
+SILENCE = mfsc.SimTiming(**{**FAST.__dict__, "silence_close_s": 0.15})
 
 
 # ---------------------------------------------------------------------------
@@ -103,10 +104,18 @@ class FakeSession:
     """Driver-level fake: the model writes straight into a recorder and a
     state dict. `inject` records when the user started speaking."""
 
-    def __init__(self, audio_s=FLOW_AUDIO_S, timing=FAST, tts_kind="gtts"):
+    def __init__(self, audio_s=FLOW_AUDIO_S, timing=FAST, tts_kind="gtts",
+                 withhold=(), late_s=None, drip_s=0.0):
         self.rec = mfsc.GenerationRecorder(
             quiet_window_s=timing.quiet_window_s,
-            tool_resume_grace_s=timing.tool_resume_grace_s)
+            tool_resume_grace_s=timing.tool_resume_grace_s,
+            silence_close_s=timing.silence_close_s)
+        # response indices (0 = greeting) whose turn_complete is withheld;
+        # late_s sends it that many seconds later; drip_s spreads the audio.
+        self.withhold = set(withhold)
+        self.late_s = late_s
+        self.drip_s = drip_s
+        self.n_emitted = 0
         self.state = {}
         self.client = SimpleNamespace(state=self.state)
         self.model = ModelScript()
@@ -134,7 +143,22 @@ class FakeSession:
         say = out["say"]
         rec.on_transcript(say[:4])
         rec.on_transcript(say[4:])
-        rec.on_audio(b"\x00\x00" * int(24000 * self.audio_s))
+        idx = self.n_emitted
+        self.n_emitted += 1
+        if self.drip_s:
+            part = int(24000 * self.audio_s) // 5
+            for _ in range(5):
+                rec.on_audio(b"\x00\x00" * part)
+                await asyncio.sleep(self.drip_s / 5)
+        else:
+            rec.on_audio(b"\x00\x00" * int(24000 * self.audio_s))
+        if idx in self.withhold:
+            if self.late_s is not None:
+                async def late():
+                    await asyncio.sleep(self.late_s)
+                    rec.boundary("turn_complete")
+                self.tasks.append(asyncio.ensure_future(late()))
+            return
         rec.boundary("turn_complete")
 
     async def greet(self):
@@ -507,6 +531,199 @@ class TestFallbackFailFast:
 
 
 # ---------------------------------------------------------------------------
+# Long playback, withheld completion, stall streaks
+# ---------------------------------------------------------------------------
+def _timing(**kw):
+    return mfsc.SimTiming(**{**FAST.__dict__, **kw})
+
+
+class TestLongPlaybackIsNotAStall:
+    def test_gate_timeout_runs_from_expected_playback_end(self):
+        # 1.2 s of audio arrives at once; the gate timeout is 0.3 s. Waiting
+        # for playback longer than the timeout must not count as a stall.
+        timing = _timing(gate_timeout_s=0.3)
+        session = FakeSession(audio_s=1.2, timing=timing)
+        driver = make_driver(session, timing=timing, max_user_turns=2)
+        run_driver(session, driver)
+        assert len(driver.user_turns) == 2
+        assert driver.gate_timeouts == 0
+        assert driver.stalls == 0
+        assert driver.gate_violations == 0
+        assert all(t["gate_wait_s"] >= 1.0 for t in driver.user_turns)
+
+    def test_response_timeout_extends_while_audio_is_still_arriving(self):
+        timing = _timing(response_timeout_s=0.2)
+        session = FakeSession(audio_s=0.1, timing=timing, drip_s=0.6)
+        driver = make_driver(session, timing=timing, max_user_turns=2)
+        run_driver(session, driver)
+        assert driver.stalls == 0
+        assert [t["response_stalled"] for t in driver.user_turns] == [False] * 2
+
+    def test_expected_playback_end_counts_the_open_generation(self):
+        rec = mfsc.GenerationRecorder(clock=lambda: 0.0)
+        rec.on_audio(b"\x00\x00" * 48000, ts=10.0)     # 2.0 s, still open
+        assert rec.expected_playback_end() == pytest.approx(12.0)
+        rec.boundary("turn_complete", 10.1)
+        assert rec.expected_playback_end() == pytest.approx(12.0)
+
+
+def _silence_rec(**kw):
+    kw.setdefault("silence_close_s", 5.0)
+    return mfsc.GenerationRecorder(quiet_window_s=1.0, tool_resume_grace_s=2.0,
+                                   clock=lambda: 0.0, **kw)
+
+
+class TestSilenceClose:
+    def _open_audio(self, rec, ts=10.0):
+        rec.on_audio(b"\x00\x00" * 4800, ts=ts)
+
+    def test_closes_with_reason_silence_and_opens_the_gate(self):
+        rec = _silence_rec()
+        self._open_audio(rec)
+        assert rec.maybe_silence_close(14.9) is False
+        assert rec.maybe_silence_close(15.1) is True
+        assert rec.closed[0]["reason"] == "silence"
+        assert rec.silence_closes == 1
+        assert rec.gate_state(30.0)["open"] is True
+
+    def test_each_blocking_condition_prevents_the_close(self):
+        # transcript only: no audio yet
+        rec = _silence_rec()
+        rec.on_transcript("hi", 10.0)
+        assert rec.maybe_silence_close(30.0) is False
+        # tool pending
+        rec = _silence_rec()
+        self._open_audio(rec)
+        rec.tool_start("t", 11.0)
+        assert rec.maybe_silence_close(30.0) is False
+        # inside the post-tool grace window
+        rec.tool_end("t", 29.0)
+        assert rec.maybe_silence_close(30.0) is False
+        assert rec.maybe_silence_close(31.5) is True
+        # disabled
+        rec = _silence_rec(silence_close_s=None)
+        self._open_audio(rec)
+        assert rec.maybe_silence_close(99.0) is False
+        # nothing open
+        assert _silence_rec().maybe_silence_close(99.0) is False
+
+    def test_recent_transcript_keeps_the_generation_open(self):
+        rec = _silence_rec()
+        self._open_audio(rec)
+        rec.on_transcript("still talking", 14.0)
+        assert rec.maybe_silence_close(15.5) is False
+        assert rec.maybe_silence_close(19.5) is True
+
+    def test_late_completion_is_recorded_not_a_phantom_generation(self):
+        rec = _silence_rec()
+        self._open_audio(rec)
+        rec.maybe_silence_close(16.0)
+        rec.boundary("turn_complete", 18.0)
+        assert rec.n_closed == 1
+        g = rec.closed[0]
+        assert g["late_completion_reason"] == "turn_complete"
+        assert g["late_completion_delay_s"] == pytest.approx(2.0)
+        assert rec.late_completions == 1 and rec.empty_boundaries == 0
+        rec.boundary("turn_complete", 18.1)    # a duplicate edge
+        assert rec.late_completions == 1 and rec.empty_boundaries == 1
+        pub = rec.public_generation(g)
+        assert pub["late_completion_reason"] == "turn_complete"
+
+    def test_boundary_after_new_audio_closes_the_new_generation(self):
+        rec = _silence_rec()
+        self._open_audio(rec)
+        rec.maybe_silence_close(16.0)
+        rec.on_audio(b"\x00\x00" * 480, ts=17.0)    # the model spoke again
+        rec.boundary("turn_complete", 17.5)
+        assert rec.n_closed == 2
+        assert rec.closed[1]["reason"] == "turn_complete"
+        assert "late_completion_reason" not in rec.closed[0]
+        assert rec.late_completions == 0
+
+    def test_loop_withheld_completion_is_a_normal_turn(self):
+        session = FakeSession(timing=SILENCE, withhold={1})
+        driver = make_driver(session, timing=SILENCE, max_user_turns=3)
+        run_driver(session, driver)
+        assert [g["reason"] for g in session.rec.closed][:3] == [
+            "turn_complete", "silence", "turn_complete"]
+        assert session.rec.silence_closes == 1
+        assert len(driver.user_turns) == 3
+        assert driver.stalls == 0 and driver.gate_timeouts == 0
+        assert all(t["response_stalled"] is False for t in driver.user_turns)
+        assert any(t["heard_silence_closed"] for t in driver.user_turns)
+        assert driver.gate_violations == 0
+
+    def test_loop_late_completion_makes_no_extra_generation(self):
+        # silence close at ~0.1 s, the late edge at 0.2 s, the user (held by
+        # the 0.3 s quiet window) speaks after that
+        timing = _timing(silence_close_s=0.1, quiet_window_s=0.3)
+        session = FakeSession(timing=timing, withhold={1}, late_s=0.2)
+        driver = make_driver(session, timing=timing, max_user_turns=3)
+        run_driver(session, driver)
+        assert session.rec.n_closed == 4      # greeting + one per user turn
+        late = [g for g in session.rec.closed if g["reason"] == "silence"]
+        assert len(late) == 1
+        assert late[0]["late_completion_reason"] == "turn_complete"
+        assert session.rec.late_completions == 1
+
+
+class TestStallStreaks:
+    def test_a_received_generation_resets_the_response_streak(self):
+        session = FakeSession()
+        driver = make_driver(session, max_user_turns=0)
+        driver._consec_stalls = 2
+        run_driver(session, driver, finalize=False)
+        # no user turn was ever taken, so only the "got a generation, no
+        # previous turn" branch can have reset it
+        assert driver.user_turns == []
+        assert driver._consec_stalls == 0
+
+    def _flaky_gate(self, session, closed_for_s):
+        """The poll-time gate stays shut for `closed_for_s` after its first
+        poll (None = forever)."""
+        real = session.rec.gate_state
+        t_first = {}
+
+        def gs(now=None):
+            st = real(now)
+            if now is None:
+                t0 = t_first.setdefault("t", time.monotonic())
+                if closed_for_s is None or time.monotonic() - t0 < closed_for_s:
+                    return dict(st, open=False)
+            return st
+        session.rec.gate_state = gs
+
+    def test_gate_timeouts_below_the_limit_recover_and_reset(self):
+        timing = _timing(gate_timeout_s=0.2)
+        session = FakeSession(timing=timing)
+        self._flaky_gate(session, 0.6)         # 2 timeouts, then open
+        driver = make_driver(session, timing=timing, max_user_turns=2)
+        run_driver(session, driver)
+        assert driver.gate_timeouts == 2
+        assert driver.stop_reason == "max_user_turns"
+        assert len(driver.user_turns) == 2
+        assert driver._consec_gate_timeouts == 0
+
+    def test_gate_timeouts_at_the_limit_stop_the_run(self):
+        timing = _timing(gate_timeout_s=0.1)
+        session = FakeSession(timing=timing)
+        self._flaky_gate(session, None)
+        driver = make_driver(session, timing=timing, max_user_turns=2)
+        run_driver(session, driver, finalize=False)
+        assert driver.stop_reason == "stalls"
+        assert driver.user_turns == []
+        assert driver.gate_timeouts == 3
+
+    def test_turn_records_carry_stall_flag_and_gate_wait(self):
+        session = FakeSession()
+        driver = make_driver(session, max_user_turns=3)
+        run_driver(session, driver)
+        for t in driver.public_user_turns():
+            assert t["response_stalled"] in (True, False)
+            assert isinstance(t["gate_wait_s"], float)
+
+
+# ---------------------------------------------------------------------------
 # Guards: fact sheet vs schema, flags
 # ---------------------------------------------------------------------------
 class TestGuards:
@@ -620,6 +837,8 @@ class Hub:
         self.model = ModelScript()
         self.stt_calls = 0
         self.pending_during_tool = []
+        self.withhold = set()      # response indices with no turn_complete
+        self.n_responses = 0
 
 
 class FakeAdapter:
@@ -720,7 +939,10 @@ class FakeService:
         ad._session_audio_input_tokens += 20
         ad._session_text_output_tokens += 10
         ad._session_audio_output_tokens += 10
-        ad._dev_flush_audio_dump("turn_complete")
+        idx = self.hub.n_responses
+        self.hub.n_responses += 1
+        if idx not in self.hub.withhold:
+            ad._dev_flush_audio_dump("turn_complete")
 
 
 @pytest.fixture
@@ -850,6 +1072,31 @@ class TestRunLevelEndToEnd:
         text = path.read_text(encoding="utf-8")
         assert '"pcm"' not in text
         assert not list(out.rglob("*.debug.json"))
+
+    def test_withheld_completion_is_closed_by_silence_and_reported(self, sim_env):
+        sim_env.hub.withhold = {5}
+        sim_env.monkeypatch.setattr(mfsc, "SIM_TIMING", SILENCE)
+        assert run_args(parse(sim_env)) == 0
+        summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
+        sim = summary["sim_user"]
+        assert sim["silence_closes"] == 1
+        assert sim["late_completions"] == 0
+        assert sim["stop_reason"] == "complete"
+        assert sim["filled_confirmed"] == len(FIDS)
+        assert sim["stalls"] == 0
+        doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+        assert [g["reason"] for g in doc["generations"]].count("silence") == 1
+
+    def test_user_turn_records_are_diagnosable(self, sim_env):
+        run_args(parse(sim_env))
+        doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+        for t in doc["user_turns"]:
+            assert t["response_stalled"] in (True, False)
+            assert isinstance(t["gate_wait_s"], float)
+        for g in doc["generations"]:
+            assert "late_completion_reason" in g
+        sim = doc["summary"]
+        assert sim["silence_closes"] == 0 and sim["late_completions"] == 0
 
     def test_tool_callbacks_are_visible_to_the_gate(self, sim_env):
         run_args(parse(sim_env))
