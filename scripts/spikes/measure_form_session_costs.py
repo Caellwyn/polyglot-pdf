@@ -2289,9 +2289,36 @@ CHIRP3_VOICE = "en-US-Chirp3-HD-Aoede"
 CHIRP3_CACHE = AUDIO_CACHE.parent / "audio_cache_chirp3"
 
 
+# The Vertex project every Live / text adapter in this harness binds to when
+# GOOGLE_CLOUD_PROJECT is unset; Cloud STT / TTS bill to the same project.
+VERTEX_PROJECT_DEFAULT = "polyglot-demo-aa709"
+SIM_STT_FIRST_K = 3             # this many opening STT calls all failing aborts
+SIM_MAX_STT_ERROR_RATE = 0.5
+
+
+def _vertex_project() -> str:
+    return os.getenv("GOOGLE_CLOUD_PROJECT", VERTEX_PROJECT_DEFAULT)
+
+
+def resolve_quota_project() -> str:
+    """The quota project Cloud STT needs (speech.googleapis.com answers 403
+    without one): GOOGLE_CLOUD_QUOTA_PROJECT, else the project the harness
+    already uses for Vertex. Fails fast when nothing resolves."""
+    project = os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT") or _vertex_project()
+    if not project:
+        raise SystemExit(
+            "cannot resolve a Google quota project for Cloud STT: set "
+            "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT.")
+    return project
+
+
 class SimAbort(Exception):
     """The simulated-user run cannot continue and must not look like a
     healthy run (e.g. the actor silently degraded to its stub)."""
+
+    def __init__(self, message: str, reason: str = "fallback_streak"):
+        super().__init__(message)
+        self.reason = reason
 
 
 @dataclass
@@ -2625,13 +2652,27 @@ def _make_tts(kind: str) -> TTSMouth:
     return TTSMouth("gtts", synth_cached)
 
 
-def _make_stt_fn():
-    """One Cloud STT request per call (v2 method, see sim_user_stt)."""
-    client = _sim_stt.make_speech_client()
+def _make_stt_fn(project: str | None = None):
+    """One Cloud STT request per call (v2 method, see sim_user_stt), billed
+    to `project` as the quota project."""
+    client = _sim_stt.make_speech_client(project)
 
     def _fn(pcm: bytes) -> dict:
         return _sim_stt.recognize_pcm(client, pcm, SIM_MODEL_AUDIO_RATE)
     return _fn
+
+
+def probe_stt(stt_fn) -> None:
+    """Pre-flight: one short synthetic clip through the real STT path before
+    any Gemini session is opened, so a missing quota project, a revoked
+    credential or a disabled API aborts a run that could not log divergence
+    anyway. Costs one 15 s billing increment."""
+    pcm = b"\x00\x00" * SIM_MODEL_AUDIO_RATE        # 1.0 s of silence
+    res = stt_fn(pcm)
+    if res.get("verdict") == "STT_ERROR" or res.get("error"):
+        raise SystemExit(
+            "Cloud STT pre-flight failed (divergence logging would be "
+            "empty): %s" % res.get("error", "unknown error"))
 
 
 def build_actor(kind: str, persona):
@@ -2787,6 +2828,10 @@ class SimDriver:
         self._consec_fallbacks = 0
         self._consec_stalls = 0
         self._consec_gate_timeouts = 0
+        self.stt_calls = 0
+        self.stt_errors = 0
+        self.stt_first_error: str | None = None
+        self._stt_finalizing = False
         self._stt_sem = asyncio.Semaphore(8)
         self.expected_spellings = [
             f["spell"] for f in persona.facts.values()
@@ -2846,17 +2891,47 @@ class SimDriver:
         todo = [g for g in gens if "stt" not in g]
         if todo:
             await asyncio.gather(*(one(g) for g in todo))
+            for g in todo:
+                v = g["stt"].get("verdict")
+                if v in ("NO_AUDIO", "TOO_SHORT"):
+                    continue       # never sent to Cloud STT
+                self.stt_calls += 1
+                if v == "STT_ERROR":
+                    self.stt_errors += 1
+                    if self.stt_first_error is None:
+                        self.stt_first_error = g["stt"].get("error")
+            if (self.stt_calls >= SIM_STT_FIRST_K
+                    and self.stt_errors == self.stt_calls
+                    and not self._stt_finalizing):
+                raise SimAbort(
+                    "Cloud STT failed on every one of its first %d calls "
+                    "(first error: %s)" % (self.stt_calls,
+                                           self.stt_first_error),
+                    reason="stt_failure")
+
+    def divergence_report(self) -> dict:
+        """Is the divergence log trustworthy? A run whose STT mostly failed
+        has an empty log and must not look healthy."""
+        rate = (round(self.stt_errors / self.stt_calls, 4)
+                if self.stt_calls else None)
+        return {"valid": bool(self.stt_calls
+                              and rate <= SIM_MAX_STT_ERROR_RATE),
+                "stt_calls": self.stt_calls, "stt_errors": self.stt_errors,
+                "stt_error_rate": rate,
+                "first_error": self.stt_first_error}
 
     async def finalize_divergence(self) -> list[dict]:
         """One STT pass per generation (reused when ears=stt), then the v2
         scorer. Returns the per-generation records written to the run file."""
+        self._stt_finalizing = True      # report, do not raise: the session is over
         await self._ensure_stt(self.rec.closed)
         out = []
         for g in self.rec.closed:
             score = _sim_stt.score_generation(
                 g["transcript"], g.get("stt"), self.expected_spellings)
             out.append({"persona_id": self.persona.persona_id,
-                        **self.rec.public_generation(g), "score": score})
+                        **self.rec.public_generation(g), "score": score,
+                        "stt_error": (g.get("stt") or {}).get("error")})
         self.generation_records = out
         return out
 
@@ -2896,7 +2971,7 @@ class SimDriver:
         except SimAbort as exc:
             self.aborted = True
             self.abort_message = str(exc)
-            self.stop_reason = "fallback_streak"
+            self.stop_reason = exc.reason
 
     async def _loop(self) -> None:
         rec, timing = self.rec, self.timing
@@ -3048,6 +3123,8 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
             "errors": driver.fallbacks},
         "generations": len(driver.rec.closed),
         "divergence": divergence,
+        "divergence_valid": driver.divergence_report()["valid"],
+        "stt": driver.divergence_report(),
         "tts": {"kind": tts.kind, "chars": tts.chars, "calls": tts.calls},
         "actor_usage": dict(driver.actor_usage),
         "cost": {
@@ -3353,6 +3430,7 @@ async def run(args) -> int:
     sim_mode = getattr(args, "user", "script") == "sim"
     sim_persona = None
     sim_actor = None
+    sim_stt_fn = None
     kit_hash = None
     if sim_mode:
         sim_persona = (_sim_actor.load_persona(args.persona)
@@ -3360,6 +3438,11 @@ async def run(args) -> int:
                        else _sim_actor.load_default_persona())
         validate_sim_args(args, sim_persona)
         sim_actor = build_actor(getattr(args, "actor", "haiku"), sim_persona)
+        # STT is needed for the divergence log in BOTH ears modes; prove it
+        # works (quota project, credentials, API enabled) before spending a
+        # Gemini session.
+        sim_stt_fn = _make_stt_fn(resolve_quota_project())
+        probe_stt(sim_stt_fn)
 
     schema = load_schema(args.schema)
     if sim_mode:
@@ -3591,7 +3674,7 @@ async def run(args) -> int:
         if args.vertex:
             adapter = LiveAIGemini(
                 model=model_name, vertexai=True,
-                project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                project=_vertex_project(),
                 location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
         else:
             adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
@@ -3628,7 +3711,7 @@ async def run(args) -> int:
             if args.vertex:
                 text_ai = TextAIGemini(
                     model="gemini-2.5-flash-lite", vertexai=True,
-                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    project=_vertex_project(),
                     location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
             else:
                 text_ai = TextAIGemini(api_key=os.getenv("GEMINI_API_KEY"),
@@ -3653,7 +3736,7 @@ async def run(args) -> int:
             if args.vertex:
                 text_ai_pro = TextAIGemini(
                     model=settings.VALIDATOR_PRO_MODEL, vertexai=True,
-                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    project=_vertex_project(),
                     location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
                     fallback_models=(),
                     thinking_budget=settings.VALIDATOR_PRO_THINKING_BUDGET)
@@ -4442,7 +4525,7 @@ async def run(args) -> int:
             sim_driver = SimDriver(
                 persona=sim_persona, actor=sim_actor,
                 recorder=client.gen_recorder, client=client, tts=sim_tts,
-                inject=_sim_inject, stt_fn=_make_stt_fn(),
+                inject=_sim_inject, stt_fn=sim_stt_fn,
                 ears=getattr(args, "ears", "transcript"),
                 max_user_turns=getattr(args, "max_user_turns",
                                        SIM_DEFAULT_MAX_USER_TURNS),
@@ -5043,6 +5126,10 @@ async def run(args) -> int:
               f"stalls={_ss['stalls']} total=${_ss['cost']['total_usd']}")
         if sim_driver.aborted:
             return 3
+        if not _ss["divergence_valid"]:
+            print("[sim-invalid] divergence log is not trustworthy: "
+                  f"{_ss['stt']}", flush=True)
+            return 4
     return 0
 
 

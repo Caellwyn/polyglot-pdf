@@ -212,10 +212,34 @@ def history_entry(model_text: str, decision: Decision) -> dict:
             "field_key": decision.field_key}
 
 
+_DIGIT_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3",
+                "four": "4", "five": "5", "six": "6", "seven": "7",
+                "eight": "8", "nine": "9"}
+
+
+def _digit_word_runs(toks: list) -> list:
+    """Runs of 2+ spoken digit words become digits ('nine seven four' ->
+    '9','7','4', merged by _tokens); a lone 'one' stays a word."""
+    out: list = []
+    i = 0
+    while i < len(toks):
+        j = i
+        while j < len(toks) and toks[j] in _DIGIT_WORDS:
+            j += 1
+        if j - i >= 2:
+            out.extend(_DIGIT_WORDS[t] for t in toks[i:j])
+            i = j
+        else:
+            out.append(toks[i])
+            i += 1
+    return out
+
+
 def _tokens(text: str) -> list:
     """Lowercase alnum tokens; runs of 2+ single-char tokens (spelled letters
-    or spoken digits) are merged into one token: 'A - N - A' -> 'ana'."""
-    toks = re.findall(r"[a-z0-9]+", (text or "").lower())
+    or spoken digits) are merged into one token: 'A - N - A' -> 'ana',
+    'nine seven four' -> '974'."""
+    toks = _digit_word_runs(re.findall(r"[a-z0-9]+", (text or "").lower()))
     out: list = []
     run: list = []
     for t in toks:
@@ -355,8 +379,11 @@ def build_system_prompt(persona: Persona) -> str:
     if not persona.behavior.get("spells_unprompted", False):
         lines.append("- Never spell unless the interviewer asks you to spell.")
     lines += [
-        "- Use confirm only when a read-back matches the fact exactly.",
-        "- Use reject_and_correct when a read-back does not match the fact.",
+        "- Use confirm when a read-back says the same value as the fact, even if "
+        "numbers are spoken as words or digit by digit, letters are spelled "
+        "out, a date is said in words, or punctuation or ordering words differ.",
+        "- Use reject_and_correct only when a value is actually different (a "
+        "wrong letter, digit, name, place or date) or missing.",
         "- Use repeat_request when the text is cut off or unintelligible.",
         "- Use acknowledge for disclaimers, greetings and transitions.",
         "- Reply with JSON only: {\"move\": ..., \"field_key\": ...}; use field_key \"none\" for moves that need no field.",

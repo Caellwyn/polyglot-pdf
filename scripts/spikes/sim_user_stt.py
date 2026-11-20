@@ -117,14 +117,15 @@ def containment(audio_text: str, track_text: str):
     return sum(1 for w in aw if w in tw) / len(aw)
 
 
-def make_speech_client():
+def make_speech_client(project=None):
     """Cloud STT client with the quota project bound (lazy import).
 
     Local ADC has no quota project, and speech.googleapis.com requires one
     (403 otherwise). Bind it explicitly to the same project Vertex bills to.
+    `project` (when given) wins over the environment.
     """
     from google.cloud import speech as speech_mod
-    project = (os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
+    project = (project or os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
                or os.environ.get("GOOGLE_CLOUD_PROJECT"))
     if project:
         import google.auth

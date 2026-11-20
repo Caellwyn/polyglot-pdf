@@ -218,6 +218,41 @@ class TestNonSpellingPersona:
 
 
 # --------------------------------------------------------------- StubActor
+def _city_fact(persona):
+    return next(fid for fid, f in persona.facts.items()
+                if "97477" in f["spoken"])
+
+
+class TestStubReadbackEquivalence:
+    def _decide(self, persona, text):
+        fid = _city_fact(persona)
+        hist = [{"model_text": "q", "move": "answer", "field_key": fid}]
+        return run(actor.StubActor(persona).decide(text, hist))
+
+    def test_digits_spoken_as_words_match_the_digit_value(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, nine seven four "
+            "seven seven. Is that correct?")
+        assert (d.move, d.field_key) == ("confirm", "none")
+
+    def test_a_different_spoken_digit_is_rejected(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, nine seven seven "
+            "four seven. Is that correct?")
+        assert d.move == "reject_and_correct"
+        assert d.field_key == _city_fact(persona)
+
+    def test_digits_as_digits_still_match(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, 97477. Is that "
+            "correct?")
+        assert d.move == "confirm"
+
+    def test_a_lone_digit_word_is_not_turned_into_a_digit(self, persona):
+        assert actor._tokens("one of the two") == ["one", "of", "the", "two"]
+        assert actor._tokens("nine seven four") == ["974"]
+
+
 class TestStubActor:
     def test_question_gets_answer_on_that_field(self, persona):
         stub = actor.StubActor(persona)
@@ -362,6 +397,16 @@ class TestHaikuActor:
         assert "Never spell unless" in s
         for m in actor.MOVES:
             assert m in s
+
+    def test_prompt_confirms_equivalent_readbacks_and_rejects_real_differences(self, persona):
+        s = actor.build_system_prompt(persona)
+        assert "says the same value" in s
+        for phrase in ("spoken as words", "digit by digit",
+                       "letters are spelled out", "said in words"):
+            assert phrase in s
+        assert "only when a value is actually different" in s
+        assert "wrong letter, digit, name, place or date" in s
+        assert "matches the fact exactly" not in s
 
     def test_valid_reply_parses(self, persona):
         k = _name_key(persona)

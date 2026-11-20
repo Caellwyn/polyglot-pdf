@@ -766,6 +766,93 @@ class TestSpellbackClip:
         assert driver.gate_violations == 0
 
 
+def _err_stt(pcm):
+    return {"text": "", "confidence": 0.0, "n_results": 0, "seconds": 1.0,
+            "billed_seconds": 0, "verdict": "STT_ERROR",
+            "error": "403 quota project required"}
+
+
+class TestSttHealth:
+    def test_quota_project_resolution(self, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_QUOTA_PROJECT", raising=False)
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        assert mfsc.resolve_quota_project() == mfsc.VERTEX_PROJECT_DEFAULT
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "vertex-proj")
+        assert mfsc.resolve_quota_project() == "vertex-proj"
+        monkeypatch.setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-proj")
+        assert mfsc.resolve_quota_project() == "quota-proj"
+
+    def test_unresolvable_quota_project_fails_fast(self, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_QUOTA_PROJECT", raising=False)
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "")
+        with pytest.raises(SystemExit) as ei:
+            mfsc.resolve_quota_project()
+        assert "quota project" in str(ei.value)
+
+    def test_preflight_probe(self):
+        mfsc.probe_stt(fake_stt)
+        with pytest.raises(SystemExit) as ei:
+            mfsc.probe_stt(_err_stt)
+        assert "403 quota project required" in str(ei.value)
+        with pytest.raises(SystemExit):
+            mfsc.probe_stt(lambda pcm: {"text": "", "error": "boom"})
+
+    def test_error_text_is_kept_in_every_generation_record(self):
+        session = FakeSession()
+        driver = make_driver(session, stt_fn=_err_stt, max_user_turns=2)
+        run_driver(session, driver)
+        recs = driver.generation_records
+        assert recs and all(
+            r["stt_error"] == "403 quota project required" for r in recs)
+        assert all(r["score"]["verdict"] == "STT_ERROR" for r in recs)
+
+    def test_systematic_failure_marks_the_divergence_invalid(self):
+        session = FakeSession()
+        driver = make_driver(session, stt_fn=_err_stt, max_user_turns=3)
+        run_driver(session, driver)
+        rep = driver.divergence_report()
+        assert rep["valid"] is False
+        assert rep["stt_error_rate"] == 1.0
+        assert rep["first_error"] == "403 quota project required"
+
+    def test_error_rate_threshold(self):
+        def pattern(bad_every):
+            n = {"i": 0}
+
+            def fn(pcm):
+                n["i"] += 1
+                return _err_stt(pcm) if n["i"] % bad_every == 0 else fake_stt(pcm)
+            return fn
+        for fn, valid in ((pattern(4), True), (pattern(1), False)):
+            session = FakeSession()
+            driver = make_driver(session, stt_fn=fn, max_user_turns=7)
+            run_driver(session, driver)
+            assert driver.stt_calls >= 6
+            assert driver.divergence_report()["valid"] is valid
+
+    def test_a_healthy_run_is_valid(self):
+        session = FakeSession()
+        driver = make_driver(session, max_user_turns=3)
+        run_driver(session, driver)
+        assert driver.divergence_report()["valid"] is True
+
+    def test_unsent_clips_are_not_counted_as_calls(self):
+        session = FakeSession(audio_s=0.0)       # no audio -> NO_AUDIO
+        driver = make_driver(session, max_user_turns=2)
+        run_driver(session, driver)
+        assert driver.stt_calls == 0
+        assert driver.divergence_report()["valid"] is False
+
+    def test_ears_stt_aborts_when_the_opening_calls_all_fail(self):
+        session = FakeSession()
+        driver = make_driver(session, stt_fn=_err_stt, ears="stt")
+        run_driver(session, driver, finalize=False)
+        assert driver.aborted is True
+        assert driver.stop_reason == "stt_failure"
+        assert "403 quota project required" in driver.abort_message
+        assert len(driver.user_turns) == mfsc.SIM_STT_FIRST_K - 1
+
+
 class TestStallStreaks:
     def test_a_received_generation_resets_the_response_streak(self):
         session = FakeSession()
@@ -935,6 +1022,8 @@ class Hub:
         self.audio_s = FLOW_AUDIO_S
         self.model = ModelScript()
         self.stt_calls = 0
+        self.stt_project = None
+        self.stt_fail_after_probe = False
         self.pending_during_tool = []
         self.withhold = set()      # response indices with no turn_complete
         self.n_responses = 0
@@ -1075,9 +1164,15 @@ def sim_env(tmp_path, monkeypatch):
     monkeypatch.setattr(mfsc, "_make_tts",
                         lambda kind: mfsc.TTSMouth(kind, synth))
 
-    def make_stt_fn():
+    def make_stt_fn(project=None):
+        hub.stt_project = project
+
         def fn(pcm):
             hub.stt_calls += 1
+            if hub.stt_fail_after_probe and hub.stt_calls > 1:
+                return {"text": "", "confidence": 0.0, "n_results": 0,
+                        "seconds": 1.0, "billed_seconds": 0,
+                        "verdict": "STT_ERROR", "error": "403 quota project"}
             return fake_stt(pcm)
         return fn
     monkeypatch.setattr(mfsc, "_make_stt_fn", make_stt_fn)
@@ -1213,7 +1308,8 @@ class TestRunLevelEndToEnd:
     def test_every_generation_gets_one_stt_call(self, sim_env):
         run_args(parse(sim_env))
         doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
-        assert sim_env.hub.stt_calls == len(doc["generations"])
+        # one pre-flight probe + one call per generation
+        assert sim_env.hub.stt_calls == len(doc["generations"]) + 1
 
     def test_the_model_audio_boundaries_are_what_the_adapter_flushes(self, sim_env):
         run_args(parse(sim_env))
@@ -1262,6 +1358,45 @@ class TestRunLevelEndToEnd:
             run_args(args)
         assert "ANTHROPIC_API_KEY" in str(ei.value)
         assert sim_env.hub.adapters == []
+
+
+class TestRunLevelSttHealth:
+    def test_stt_is_billed_to_the_resolved_quota_project(self, sim_env, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_QUOTA_PROJECT", raising=False)
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "vertex-proj")
+        run_args(parse(sim_env, "--max-user-turns", "1"))
+        assert sim_env.hub.stt_project == "vertex-proj"
+
+    def test_preflight_failure_aborts_before_any_session(self, sim_env):
+        sim_env.monkeypatch.setattr(
+            mfsc, "_make_stt_fn", lambda project=None: _err_stt)
+        with pytest.raises(SystemExit) as ei:
+            run_args(parse(sim_env))
+        assert "pre-flight" in str(ei.value)
+        assert "403 quota project required" in str(ei.value)
+        assert sim_env.hub.adapters == []
+
+    def test_healthy_run_reports_a_valid_divergence_log(self, sim_env):
+        assert run_args(parse(sim_env)) == 0
+        summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
+        sim = summary["sim_user"]
+        assert sim["divergence_valid"] is True
+        assert sim["stt"]["stt_errors"] == 0 and sim["stt"]["stt_calls"] > 0
+        assert sim["divergence"]["n_scored"] > 0
+
+    def test_run_with_failing_stt_exits_nonzero_and_says_why(self, sim_env, capsys):
+        sim_env.hub.stt_fail_after_probe = True
+        rc = run_args(parse(sim_env))
+        assert rc == 4
+        assert "[sim-invalid]" in capsys.readouterr().out
+        summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
+        sim = summary["sim_user"]
+        assert sim["divergence_valid"] is False
+        assert sim["stt"]["first_error"] == "403 quota project"
+        assert sim["divergence"]["n_scored"] == 0
+        doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+        assert all(g["stt_error"] == "403 quota project"
+                   for g in doc["generations"])
 
 
 class TestScriptedModeUnaffected:
