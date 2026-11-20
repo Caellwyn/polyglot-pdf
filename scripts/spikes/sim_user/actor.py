@@ -8,7 +8,11 @@ Each turn the actor gets what Gemini just said (text) and returns ONE move
 Pieces:
   - Persona / load_persona: the synthetic fact sheet (answer key).
   - move_schema / validate_decision: the strict structured-output contract.
-  - render: move -> spoken text, templates + fact strings only.
+  - render: move -> spoken text, templates + fact strings only. A fact may
+    carry an optional "slip" (a plausible wrong value with its own answer and
+    spoken text); the FIRST `answer` for such a field speaks the slip, so the
+    interviewer's read-back is wrong and the actor must reject-and-correct.
+    The slip is fact-sheet text too, so it is never an off-sheet value.
   - StubActor: deterministic offline backend (and the fallback).
   - HaikuActor: Claude Haiku 5.5 via the Claude API (anthropic SDK,
     ANTHROPIC_API_KEY), strict JSON output. Deliberately NOT Vertex: Vertex
@@ -97,12 +101,46 @@ def load_persona(path) -> Persona:
             raise ValueError("fact %s: spellable fact needs a 'spell' string" % fid)
         if not f["spellable"] and "spell" in f:
             raise ValueError("fact %s: 'spell' only allowed when spellable" % fid)
+        if "slip" in f:
+            _validate_slip(fid, f)
     return Persona(raw["persona_id"], raw["form"], raw["description"],
                    raw["behavior"], facts)
 
 
-def load_default_persona() -> Persona:
-    return load_persona(PERSONA_DIR / "w7_ana_nospell.json")
+SLIP_KEYS = frozenset({"value", "answer", "spoken"})
+
+
+def _validate_slip(fid: str, f: dict) -> None:
+    """A slip is {value, answer, spoken}: non-empty strings, each different
+    from the true fact's (a slip equal to the truth is no slip)."""
+    slip = f["slip"]
+    if not isinstance(slip, dict) or set(slip) != SLIP_KEYS:
+        raise ValueError("fact %s: slip must be an object with exactly the "
+                         "keys %s" % (fid, sorted(SLIP_KEYS)))
+    for k in sorted(SLIP_KEYS):
+        if not isinstance(slip[k], str) or not slip[k]:
+            raise ValueError("fact %s: slip.%s must be a non-empty string"
+                             % (fid, k))
+        if slip[k] == f[k]:
+            raise ValueError("fact %s: slip.%s equals the true fact's" % (fid, k))
+
+
+def has_slips(persona: Persona) -> bool:
+    return any("slip" in f for f in persona.facts.values())
+
+
+# The persona used when --persona is not given, per form (--schema).
+DEFAULT_PERSONA_FILES = {
+    "w7": "w7_ana_nospell.json",
+    "i90-v2": "i90v2_elena_nospell.json",
+}
+
+
+def load_default_persona(form: str = "w7") -> Persona:
+    if form not in DEFAULT_PERSONA_FILES:
+        raise ValueError("no default persona for form %r (have: %s)" % (
+            form, sorted(DEFAULT_PERSONA_FILES)))
+    return load_persona(PERSONA_DIR / DEFAULT_PERSONA_FILES[form])
 
 
 # --------------------------------------------------------------------------
@@ -146,6 +184,7 @@ class Rendered:
     move: str
     field_key: str
     values_spoken: list = field(default_factory=list)
+    slip: bool = False      # True: this `answer` spoke the fact's slip
 
 
 _TEMPLATES = {
@@ -173,7 +212,15 @@ _SPELLED_CORRECTION = ["No, that's not right. It's spelled {spell}.",
 
 
 def render(move: str, field_key: str, persona: Persona,
-           rng: random.Random) -> Rendered:
+           rng: random.Random, slips_spoken: Optional[set] = None) -> Rendered:
+    """Render one move to spoken text.
+
+    `slips_spoken` is the caller's set of field keys whose slip has already
+    been SPOKEN (the caller adds a key once the turn is really injected). When
+    it is given, the first `answer` for a field that carries a slip speaks the
+    slip and returns Rendered.slip=True; every later answer, and every spell /
+    reject_and_correct, speaks the TRUE value. None (the default) never slips.
+    """
     if move not in MOVES:
         raise ValueError("unknown move: %r" % (move,))
     facts = persona.facts
@@ -181,6 +228,11 @@ def render(move: str, field_key: str, persona: Persona,
         if field_key not in facts:
             raise ValueError("move %s needs a fact key, got %r" % (move, field_key))
         f = facts[field_key]
+        if (move == "answer" and "slip" in f and slips_spoken is not None
+                and field_key not in slips_spoken):
+            tpl = rng.choice(_TEMPLATES["answer"])
+            return Rendered(tpl.format(answer=f["slip"]["answer"]), move,
+                            field_key, [f["slip"]["answer"]], slip=True)
         if move == "spell":
             if f.get("spellable"):
                 tpl = rng.choice(_TEMPLATES["spell"])
@@ -392,6 +444,11 @@ def build_system_prompt(persona: Persona) -> str:
     if not persona.behavior.get("spells_unprompted", False):
         lines.append("- Never spell unless the interviewer asks you to spell "
                      "or reads a spelling back wrong.")
+    if has_slips(persona):
+        lines.append(
+            "- The interviewer can mishear you, so a read-back may be wrong "
+            "even on your first answer. Judge every read-back ONLY against "
+            "the fact sheet above, never against anything said earlier.")
     lines += [
         "- Use confirm when a read-back says the same value as the fact, even if "
         "numbers are spoken as words or digit by digit, letters are spelled "

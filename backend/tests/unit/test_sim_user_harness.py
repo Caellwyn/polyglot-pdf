@@ -49,11 +49,12 @@ SILENCE = mfsc.SimTiming(**{**FAST.__dict__, "silence_close_s": 0.15})
 # ---------------------------------------------------------------------------
 # synthetic schema + fakes
 # ---------------------------------------------------------------------------
-def synthetic_schema(drop=()):
+def synthetic_schema(drop=(), persona=None):
+    persona = persona or PERSONA
     return {"form_metadata": {},
             "fields": [{"id": fid, "name": f["label"], "type": "text",
                         "section_id": "s1", "validation": {"required": False}}
-                       for fid, f in PERSONA.facts.items() if fid not in drop]}
+                       for fid, f in persona.facts.items() if fid not in drop]}
 
 
 class ModelScript:
@@ -187,9 +188,10 @@ class FakeSession:
 
 
 def make_driver(session, *, actor=None, ears="transcript", stt_fn=None,
-                max_user_turns=500, timing=FAST):
+                max_user_turns=500, timing=FAST, persona=None):
+    persona = persona or PERSONA
     return mfsc.SimDriver(
-        persona=PERSONA, actor=actor or sim_actor.StubActor(PERSONA),
+        persona=persona, actor=actor or sim_actor.StubActor(persona),
         recorder=session.rec, client=session.client, tts=session.tts,
         inject=session.inject, stt_fn=stt_fn or fake_stt, ears=ears,
         max_user_turns=max_user_turns, timing=timing, rng=random.Random(0))
@@ -1053,7 +1055,8 @@ class TestGuards:
         assert mfsc.kit_sha256(p) == hashlib.sha256(b'{"fields": []}').hexdigest()
 
     @pytest.mark.parametrize("argv,needle", [
-        (["--schema", "i90"], "W-7 only"),
+        (["--schema", "i90"], "w7 or i90-v2 only"),
+        (["--schema", "demo"], "w7 or i90-v2 only"),
         (["--schema", "w7", "--arm", "dti"], "--continuous"),
         (["--schema", "w7", "--continuous"], "--arm dti"),
         (["--schema", "w7", "--arm", "dti", "--continuous",
@@ -1142,12 +1145,12 @@ class TestScoringHelpers:
 class Hub:
     """Shared state between the fake adapter, service and TTS in a run()."""
 
-    def __init__(self):
+    def __init__(self, model=None):
         self.last_text = ""
         self.adapters = []
         self.services = []
         self.audio_s = FLOW_AUDIO_S
-        self.model = ModelScript()
+        self.model = model or ModelScript()
         self.stt_calls = 0
         self.stt_project = None
         self.stt_fail_after_probe = False
@@ -1260,13 +1263,17 @@ class FakeService:
             ad._dev_flush_audio_dump("turn_complete")
 
 
-@pytest.fixture
-def sim_env(tmp_path, monkeypatch):
-    hub = Hub()
-    schema_path = tmp_path / "w7_schema.json"
-    schema_path.write_text(json.dumps(synthetic_schema()), encoding="utf-8")
-    monkeypatch.setitem(mfsc.SCHEMAS, "w7",
-                        {**mfsc.SCHEMAS["w7"], "path": schema_path})
+def build_sim_env(tmp_path, monkeypatch, persona=None, schema_key="w7",
+                  model=None):
+    """The run()-level fake environment for `--schema <schema_key>`; the
+    synthetic kit is built from `persona`'s own field ids (no real kit)."""
+    persona = persona or PERSONA
+    hub = Hub(model=model)
+    schema_path = tmp_path / ("%s_schema.json" % schema_key)
+    schema_path.write_text(json.dumps(synthetic_schema(persona=persona)),
+                           encoding="utf-8")
+    monkeypatch.setitem(mfsc.SCHEMAS, schema_key,
+                        {**mfsc.SCHEMAS[schema_key], "path": schema_path})
     monkeypatch.setattr(mfsc, "LiveAIGemini",
                         lambda *a, **k: FakeAdapter(*a, hub=hub, **k))
     monkeypatch.setattr(mfsc, "FormFillingService",
@@ -1309,11 +1316,16 @@ def sim_env(tmp_path, monkeypatch):
         return fn
     monkeypatch.setattr(mfsc, "_make_stt_fn", make_stt_fn)
     return SimpleNamespace(hub=hub, tmp=tmp_path, schema_path=schema_path,
-                           monkeypatch=monkeypatch)
+                           monkeypatch=monkeypatch, schema_key=schema_key)
+
+
+@pytest.fixture
+def sim_env(tmp_path, monkeypatch):
+    return build_sim_env(tmp_path, monkeypatch)
 
 
 def parse(env, *extra, user="sim"):
-    argv = ["--schema", "w7", "--arm", "dti", "--continuous",
+    argv = ["--schema", env.schema_key, "--arm", "dti", "--continuous",
             "--user", user, "--actor", "stub",
             "--out-dir", str(env.tmp / "out")] + list(extra)
     return mfsc.build_parser().parse_args(argv)
@@ -1682,3 +1694,287 @@ class TestScriptedModeUnaffected:
     def test_gitignore_still_ignores_debug_artifacts(self):
         lines = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").split()
         assert "*.debug.json" in lines
+
+
+# ===========================================================================
+# bd polyglot-pdf-ya4vi.1 (I-90 v2 persona) and ya4vi.2 (self-correcting
+# persona). Offline: stub actor, fake session, synthetic kit built from the
+# persona's own field ids. Nothing here reads form-kits/ (scar #10).
+# ===========================================================================
+import re as _re  # noqa: E402
+
+_PERSONAS = sim_actor.PERSONA_DIR
+I90V2_PERSONA_PATH = _PERSONAS / "i90v2_elena_nospell.json"
+SLIP_PERSONA_PATH = _PERSONAS / "w7_ana_selfcorrect.json"
+I90V2 = sim_actor.load_persona(I90V2_PERSONA_PATH)
+SLIP = sim_actor.load_persona(SLIP_PERSONA_PATH)
+
+
+def _heard(text, s):
+    """`s` appears in `text` not glued to a preceding letter ('male.' must not
+    match inside 'female.')."""
+    return bool(_re.search(r"(?<![a-z0-9])" + _re.escape(s.lower()),
+                           text.lower()))
+
+
+class SlipModelScript(ModelScript):
+    """ModelScript that also understands a fact's slip: it fills and reads
+    back whatever it heard (the slip or the truth), so a wrong first answer
+    produces a wrong read-back, exactly what the unhappy path needs."""
+
+    def _heard_kind(self, f, t):
+        s = f.get("slip")
+        if s and _heard(t, s["answer"]):
+            return "slip"
+        if _heard(t, f["answer"]) or (f.get("spell") and _heard(t, f["spell"])):
+            return "true"
+        return None
+
+    def respond(self, user_text):
+        if self.k >= len(self.fids):
+            return {"say": "All done."}
+        fid = self.fids[self.k]
+        f = self.persona.facts[fid]
+        t = (user_text or "").lower()
+        kind = self._heard_kind(f, t)
+
+        def fill_and_readback(kind):
+            src = f["slip"] if kind == "slip" else f
+            return {"say": "I have %s. Is that correct?" % src["spoken"],
+                    "fill": (fid, src["value"])}
+        if self.stage == "ask":
+            if kind:
+                self.stage = "readback"
+                return fill_and_readback(kind)
+            return {"say": self.question()}
+        if t.startswith(("yes", "correct")):
+            self.k += 1
+            self.stage = "ask"
+            tail = self.question() if self.k < len(self.fids) else "All done."
+            return {"say": "Thank you. " + tail, "confirm": fid}
+        if kind:
+            return fill_and_readback(kind)
+        return {"say": "Could you say that again?"}
+
+
+class ConfirmEverythingActor:
+    """The stub, except it never rejects a read-back (it says yes to a wrong
+    one): a field that was slipped stays holding the slip."""
+
+    def __init__(self, persona):
+        self.stub = sim_actor.StubActor(persona)
+
+    async def decide(self, model_text, history):
+        d = await self.stub.decide(model_text, history)
+        if d.move == "reject_and_correct":
+            d.move, d.field_key = "confirm", sim_actor.NONE_KEY
+        return d
+
+
+def _session_for(persona, script_cls=ModelScript):
+    session = FakeSession()
+    session.model = script_cls(persona)
+    return session
+
+
+def _accuracy(session, persona, table):
+    client = SimpleNamespace(state=session.state, schema_fields={})
+    plan = [{"field_id": fid} for fid in persona.facts]
+    return mfsc.score_fill_accuracy(client, plan, table)
+
+
+def _per_field_turns(driver, fid):
+    return [t for t in driver.user_turns if t["field_key"] == fid]
+
+
+class TestI90V2Sim:
+    def test_stub_session_confirms_every_fact_and_scores_strictly(self):
+        assert mfsc.I90V2_EXPECTED          # the strict key is not empty
+        session = _session_for(I90V2)
+        driver = make_driver(session, persona=I90V2)
+        run_driver(session, driver)
+        fids = list(I90V2.facts)
+        assert driver.stop_reason == "complete"
+        assert mfsc.count_filled_confirmed(session.state, fids) == len(fids)
+        assert mfsc.count_off_sheet(I90V2, driver.user_turns) == 0
+        assert driver.gate_violations == 0 and driver.fallbacks == []
+        acc = _accuracy(session, I90V2, mfsc.I90V2_EXPECTED)
+        assert (acc["matched"], acc["total"]) == (len(fids), len(fids))
+        assert {d["scored"] for d in acc["detail"]} <= {
+            "exact", "any-of", "expect-empty"}      # never lenient
+
+    def test_a_wrong_stored_value_scores_incorrect_against_the_key(self):
+        session = _session_for(I90V2)
+        driver = make_driver(session, persona=I90V2)
+        run_driver(session, driver)
+        fid = next(f for f, e in mfsc.I90V2_EXPECTED.items()
+                   if isinstance(e, str) and e)
+        session.state[fid]["value"] = "definitely wrong"
+        acc = _accuracy(session, I90V2, mfsc.I90V2_EXPECTED)
+        assert acc["matched"] == len(I90V2.facts) - 1
+
+    def test_persona_for_the_wrong_form_is_refused_both_ways(self):
+        for schema, persona in (("w7", I90V2), ("i90-v2", PERSONA)):
+            args = mfsc.build_parser().parse_args(
+                ["--user", "sim", "--schema", schema, "--arm", "dti",
+                 "--continuous"])
+            with pytest.raises(SystemExit):
+                mfsc.validate_sim_args(args, persona)
+
+    def test_validate_accepts_each_supported_schema_with_its_persona(self):
+        for schema in mfsc.SIM_SCHEMAS:
+            args = mfsc.build_parser().parse_args(
+                ["--user", "sim", "--schema", schema, "--arm", "dti",
+                 "--continuous"])
+            persona = mfsc.resolve_sim_persona(args)
+            assert persona.form == schema
+            mfsc.validate_sim_args(args, persona)
+
+    def test_resolve_refuses_an_unsupported_schema_before_any_lookup(self):
+        args = mfsc.build_parser().parse_args(
+            ["--user", "sim", "--schema", "i90"])
+        with pytest.raises(SystemExit) as ei:
+            mfsc.resolve_sim_persona(args)
+        assert "w7 or i90-v2" in str(ei.value)
+
+    def test_factsheet_guard_checks_the_loaded_kit(self):
+        mfsc.check_factsheet_against_schema(
+            I90V2, synthetic_schema(persona=I90V2))
+        drop = list(I90V2.facts)[5]
+        with pytest.raises(SystemExit) as ei:
+            mfsc.check_factsheet_against_schema(
+                I90V2, synthetic_schema(drop=(drop,), persona=I90V2))
+        assert drop in str(ei.value)
+
+    def test_run_level_default_persona_for_the_schema(self, tmp_path,
+                                                      monkeypatch):
+        env = build_sim_env(tmp_path, monkeypatch, persona=I90V2,
+                            schema_key="i90-v2", model=ModelScript(I90V2))
+        assert run_args(parse(env)) == 0          # no --persona: the default
+        summary, _ = read_one(env.tmp / "out", "*.summary.json")
+        sim = summary["sim_user"]
+        n = len(I90V2.facts)
+        assert sim["persona_id"] == I90V2.persona_id
+        assert sim["filled_confirmed"] == sim["fact_fields"] == n
+        assert sim["correct_vs_factsheet"] == {
+            "matched": n, "total": n, "accuracy": 1.0}
+        assert sim["off_sheet_values"] == 0
+        assert sim["stop_reason"] == "complete"
+        assert sim["corrections"]["slips_spoken"] == 0
+        assert sim["corrections"]["facts_with_slips"] == 0
+
+    def test_run_level_explicit_persona_path(self, tmp_path, monkeypatch):
+        env = build_sim_env(tmp_path, monkeypatch, persona=I90V2,
+                            schema_key="i90-v2", model=ModelScript(I90V2))
+        assert run_args(parse(env, "--persona", str(I90V2_PERSONA_PATH))) == 0
+
+
+class TestSelfCorrectSim:
+    def test_every_field_slipped_then_corrected_on_a_fake_session(self):
+        session = _session_for(SLIP, SlipModelScript)
+        driver = make_driver(session, persona=SLIP)
+        run_driver(session, driver)
+        fids = list(SLIP.facts)
+        n = len(fids)
+        assert driver.stop_reason == "complete"
+        assert mfsc.count_filled_confirmed(session.state, fids) == n
+        acc = _accuracy(session, SLIP, mfsc.W7_EXPECTED)
+        assert (acc["matched"], acc["total"]) == (n, n)
+        assert driver.slips_spoken == set(fids)
+        assert mfsc.count_off_sheet(SLIP, driver.user_turns) == 0
+        assert driver.fallbacks == [] and driver.gate_violations == 0
+        for fid in fids:
+            turns = _per_field_turns(driver, fid)
+            moves = [(t["move"], t["slip"]) for t in turns]
+            # slip first, then the correction, then (on the true read-back)
+            # the confirm, which carries no field key
+            assert moves[0] == ("answer", True), (fid, moves)
+            assert moves[1] == ("reject_and_correct", False), (fid, moves)
+            assert sum(1 for _, s in moves if s) == 1
+            assert turns[0]["values_spoken"] == [SLIP.facts[fid]["slip"]["answer"]]
+
+    def test_a_spoken_slip_is_never_off_sheet(self):
+        turns = [{"values_spoken": [f["slip"]["answer"], f["slip"]["spoken"]]}
+                 for f in SLIP.facts.values()]
+        assert mfsc.count_off_sheet(SLIP, turns) == 0
+        # ... and the slips are what makes that so: the persona without them
+        # would count every one as off-sheet
+        plain = sim_actor.load_persona(_PERSONAS / "w7_ana_nospell.json")
+        assert mfsc.count_off_sheet(plain, turns) > 0
+
+    def test_a_field_left_holding_its_slip_scores_incorrect(self):
+        session = _session_for(SLIP, SlipModelScript)
+        driver = make_driver(session, persona=SLIP,
+                             actor=ConfirmEverythingActor(SLIP))
+        run_driver(session, driver)
+        fids = list(SLIP.facts)
+        n = len(fids)
+        # filled and confirmed, so the benchmark-comparable number looks fine
+        assert mfsc.count_filled_confirmed(session.state, fids) == n
+        assert mfsc.count_off_sheet(SLIP, driver.user_turns) == 0
+        acc = _accuracy(session, SLIP, mfsc.W7_EXPECTED)
+        for fid in fids:
+            assert session.state[fid]["value"] == SLIP.facts[fid]["slip"]["value"]
+        assert acc["matched"] == 0
+        corr = mfsc.count_corrections(driver, acc)
+        assert corr["slips_spoken"] == n
+        assert corr["slips_corrected"] == 0
+        assert corr["fields_uncorrected"] == sorted(fids)
+        assert corr["reject_and_correct_turns"] == 0
+
+    def test_corrections_ledger_counts_spoken_and_corrected(self):
+        session = _session_for(SLIP, SlipModelScript)
+        driver = make_driver(session, persona=SLIP)
+        run_driver(session, driver)
+        acc = _accuracy(session, SLIP, mfsc.W7_EXPECTED)
+        n = len(SLIP.facts)
+        corr = mfsc.count_corrections(driver, acc)
+        assert corr == {"facts_with_slips": n, "slips_spoken": n,
+                        "slips_corrected": n, "fields_uncorrected": [],
+                        "reject_and_correct_turns": n}
+
+    def test_slip_is_marked_spoken_only_when_the_turn_is_injected(self):
+        # a stalled model never opens the gate: the render happened, the
+        # injection did not, so nothing counts as spoken
+        session = FakeSession(timing=_timing(gate_timeout_s=0.1))
+        session.model = SlipModelScript(SLIP)
+
+        async def go():
+            await session.greet()
+            session.rec.on_audio(b"\x00\x00" * 480)   # never closes
+            await driver.run()
+        driver = make_driver(session, persona=SLIP,
+                             timing=_timing(gate_timeout_s=0.1))
+        asyncio.run(go())
+        assert driver.user_turns == []
+        assert driver.slips_spoken == set()
+
+    def test_run_level_summary_reports_the_corrections(self, tmp_path,
+                                                       monkeypatch):
+        env = build_sim_env(tmp_path, monkeypatch, persona=SLIP,
+                            model=SlipModelScript(SLIP))
+        assert run_args(parse(env, "--persona", str(SLIP_PERSONA_PATH))) == 0
+        summary, _ = read_one(env.tmp / "out", "*.summary.json")
+        sim = summary["sim_user"]
+        n = len(SLIP.facts)
+        assert sim["persona_id"] == "w7_ana_selfcorrect_v1"
+        assert sim["filled_confirmed"] == n
+        assert sim["correct_vs_factsheet"] == {
+            "matched": n, "total": n, "accuracy": 1.0}
+        assert sim["off_sheet_values"] == 0
+        assert sim["stop_reason"] == "complete"
+        corr = sim["corrections"]
+        assert corr["slips_spoken"] == corr["slips_corrected"] == n
+        assert corr["fields_uncorrected"] == []
+        assert corr["reject_and_correct_turns"] >= n
+        doc, _ = read_one(env.tmp / "out" / "sim_user", "*.sim-user.json")
+        assert doc["summary"]["corrections"] == corr
+        assert sum(1 for t in doc["user_turns"] if t["slip"]) == n
+
+    def test_the_default_persona_reports_zero_corrections(self, sim_env):
+        run_args(parse(sim_env))
+        summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
+        corr = summary["sim_user"]["corrections"]
+        assert corr["slips_spoken"] == corr["slips_corrected"] == 0
+        assert corr["facts_with_slips"] == 0
+        assert corr["fields_uncorrected"] == []

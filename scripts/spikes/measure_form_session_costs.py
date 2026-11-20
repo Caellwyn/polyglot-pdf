@@ -47,7 +47,7 @@ Question scripts (--path):
   unhappy  4 turns/question: wrong value, rejection, corrected value,
            positive confirmation
 
-Simulated user (--user sim, W-7 only, bd polyglot-pdf-tmu0f; plan in
+Simulated user (--user sim, --schema w7 or i90-v2, bd polyglot-pdf-tmu0f; plan in
 docs/sprint_25_sim-user_plan.md): instead of the fixed script, a persona actor
 listens to what the model said (--ears transcript|stt), picks a move
 (--actor haiku|stub), and the harness renders + speaks it (--tts gtts|chirp3)
@@ -56,7 +56,7 @@ simulated playback ended, quiet window). Requires --arm dti --continuous.
 Writes the usual artifacts plus <out>/sim_user/<base>.sim-user.json (per-
 generation transcript + Cloud STT divergence, per-user-turn records) and a
 summary["sim_user"] block (filled_confirmed, correct_vs_factsheet,
-off_sheet_values, gate_violations, fallbacks, cost split). gate_violations
+off_sheet_values, corrections, gate_violations, fallbacks, cost split). gate_violations
 counts user turns that started with the gate shut OR overlapped model audio /
 a new model generation while the user's speech was being injected. Exit codes
 (sim): 0 complete, 3 actor fallback abort, 4 invalid STT divergence log,
@@ -957,10 +957,79 @@ I90V2_QUESTIONS = [
      "wrong": "My email address is elena dot torres 58 at gmail dot com."},
 ]
 
-# No accuracy grading for this run -- same rationale as W7_EXPECTED above:
-# this measures COST realism on a chosen persona/branch, not fill accuracy
-# against a canon answer key.
-I90V2_EXPECTED: dict = {}
+# STRICT answer key for the I-90 v2 plan (bd polyglot-pdf-ya4vi.1), same
+# encoding as W7_EXPECTED: option slugs for radio/select/checkbox_group fields
+# (guarded at startup by _assert_expected_canon_matches_schema), text compared
+# through _canon_value, a list means any-of, "" means the declined-optional end
+# state (blank, or an unchecked checkbox). Every I90V2_QUESTIONS field has a
+# key (pinned by the persona drift test in test_sim_user_actor.py). Read the
+# scripted run's accuracy against this as "did the answer land", not as coverage
+# of the form's branches (the persona is chosen for cost realism).
+_I90V2_US_COUNTRY = ["United States", "USA", "United States of America"]
+_I90V2_MANILA = ["U.S. Embassy in Manila, Philippines",
+                 "U.S. Embassy, Manila, Philippines",
+                 "US Embassy in Manila, Philippines",
+                 "U.S. Embassy Manila, Philippines",
+                 "Manila, Philippines"]
+I90V2_EXPECTED: dict = {
+    "a_number": "087654321",
+    "uscis_account": "944731258602",
+    "family_name": "Torres",
+    "given_name": "Elena",
+    "middle_name": "Marisol",
+    "name_changed": "no",
+    "mail_in_care_of": "",
+    "mail_street": "2140 Elmwood Drive",
+    "mail_unit_type": "",
+    "mail_unit_number": "",
+    "mail_city": "Portland",
+    "mail_state": "OR",
+    "mail_zip": "97203",
+    "mail_province": "",
+    "mail_postal_code": "",
+    "mail_country": _I90V2_US_COUNTRY,
+    "phys_street": "2140 Elmwood Drive",
+    "phys_unit_number": "",
+    "phys_city": "Portland",
+    "phys_state": "OR",
+    "phys_zip": "97203",
+    "phys_province": "",
+    "phys_postal_code": "",
+    "phys_country": _I90V2_US_COUNTRY,
+    "phys_unit_type": "",
+    "sex": "female",
+    "date_of_birth": "06/03/1985",
+    "city_of_birth": "Cebu City",
+    "country_of_birth": "Philippines",
+    "mother_given_name": "Corazon",
+    "father_given_name": "Ramon",
+    "class_of_admission": "IR1",
+    "date_of_admission": "08/15/2012",
+    "ssn": "123456789",
+    "status": "lawful_permanent_resident",
+    "reason_section_a": "lost_stolen_destroyed",
+    "p3_location_applied": _I90V2_MANILA,
+    "p3_location_issued": _I90V2_MANILA,
+    "p3_destination": "Portland, Oregon",
+    "p3_poe_city_state": ["Portland, Oregon", "Portland, OR"],
+    "p3_removal_proceedings": "no",
+    "p3_abandoned_status": "no",
+    "ethnicity": "not_hispanic_or_latino",
+    "race": "asian",
+    "height_feet": "5",
+    "height_inches": "4",
+    "weight_digit_1": "1",
+    "weight_digit_2": "2",
+    "weight_digit_3": "8",
+    "eye_color": "brown",
+    "hair_color": "black",
+    "accommodation_requested": "no",
+    "applicant_reads_english": "reads_english",
+    "applicant_used_preparer": "",
+    "applicant_daytime_phone": "503-555-0184",
+    "applicant_mobile_phone": "503-555-0297",
+    "applicant_email": "elena.torres85@gmail.com",
+}
 
 # The 37 fields NOT asked above, kept as a flat module-level list so a test can
 # mechanically assert asked (len(I90V2_QUESTIONS)) + excluded (len below) ==
@@ -2746,10 +2815,28 @@ def kit_sha256(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+# --user sim runs on these schemas; each needs a persona whose form equals the
+# schema name and a strict SCHEMAS[...]["expected"] table the persona's true
+# values are pinned to (a drift test per persona).
+SIM_SCHEMAS = ("w7", "i90-v2")
+
+
+def resolve_sim_persona(args):
+    """The persona for this run: --persona, else the schema's default. An
+    unsupported schema is refused here (before any default lookup)."""
+    if args.schema not in SIM_SCHEMAS:
+        raise SystemExit("--user sim supports --schema %s only for now."
+                         % " or ".join(SIM_SCHEMAS))
+    if getattr(args, "persona", None):
+        return _sim_actor.load_persona(args.persona)
+    return _sim_actor.load_default_persona(args.schema)
+
+
 def validate_sim_args(args, persona) -> None:
-    """--user sim is W-7 only and runs the continuous DTI shape."""
-    if args.schema != "w7":
-        raise SystemExit("--user sim is W-7 only for now: pass --schema w7.")
+    """--user sim needs a supported schema and runs the continuous DTI shape."""
+    if args.schema not in SIM_SCHEMAS:
+        raise SystemExit("--user sim supports --schema %s only for now."
+                         % " or ".join(SIM_SCHEMAS))
     if persona.form != args.schema:
         raise SystemExit(f"persona {persona.persona_id!r} is for form "
                          f"{persona.form!r}, not --schema {args.schema!r}.")
@@ -2782,6 +2869,9 @@ def sheet_strings(persona) -> set:
         out.add(f["spoken"])
         if f.get("spell"):
             out.add(f["spell"])
+        if "slip" in f:      # a slip is fact-sheet text: never off-sheet
+            out.add(f["slip"]["answer"])
+            out.add(f["slip"]["spoken"])
     return out
 
 
@@ -2869,6 +2959,10 @@ class SimDriver:
         self.stop_reason: str | None = None
         self.aborted = False
         self.abort_message: str | None = None
+        # Field keys whose slip has really been SPOKEN (added when the turn is
+        # injected, not when it is merely rendered: a re-decided or timed-out
+        # render never reached the model).
+        self.slips_spoken: set[str] = set()
         self.generation_records: list[dict] = []
         self._consec_fallbacks = 0
         self._consec_stalls = 0
@@ -3003,7 +3097,8 @@ class SimDriver:
     def _render(self, decision):
         try:
             return _sim_actor.render(decision.move, decision.field_key,
-                                     self.persona, self.rng), None
+                                     self.persona, self.rng,
+                                     slips_spoken=self.slips_spoken), None
         except ValueError as exc:
             self.render_errors += 1
             return (_sim_actor.render("acknowledge", _sim_actor.NONE_KEY,
@@ -3095,6 +3190,7 @@ class SimDriver:
                 "t_start_s": round(now - rec.t0, 3),
                 "move": rendered.move, "field_key": rendered.field_key,
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
+                "slip": bool(rendered.slip),
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
                 "heard_silence_closed": any(
@@ -3117,6 +3213,8 @@ class SimDriver:
                 "gate_violation": False,
             }
             self.user_turns.append(turn)
+            if rendered.slip:
+                self.slips_spoken.add(rendered.field_key)
             # The cursor is the view the decision was made on: generations
             # that closed after it (a redecide cap hit while the model kept
             # talking) are heard by the NEXT turn, not skipped.
@@ -3144,6 +3242,29 @@ class SimDriver:
                 for t in self.user_turns]
 
 
+def count_corrections(driver: "SimDriver", fill_accuracy: dict) -> dict:
+    """The unhappy-path ledger (personas whose facts carry slips).
+
+    slips_spoken: fields whose first answer spoke the wrong (slip) value.
+    slips_corrected: of those, fields that END holding the true value
+    (correct against the strict key, i.e. NOT still holding the slip).
+    fields_uncorrected: the rest. reject_and_correct_turns: how many times the
+    actor actually rejected a read-back. All zero for a persona with no slips."""
+    ok = {d["field_id"]: bool(d.get("ok"))
+          for d in (fill_accuracy.get("detail") or [])}
+    spoken = sorted(driver.slips_spoken)
+    corrected = [fid for fid in spoken if ok.get(fid)]
+    return {
+        "facts_with_slips": sum(1 for f in driver.persona.facts.values()
+                                if "slip" in f),
+        "slips_spoken": len(spoken),
+        "slips_corrected": len(corrected),
+        "fields_uncorrected": [fid for fid in spoken if fid not in corrected],
+        "reject_and_correct_turns": sum(
+            1 for t in driver.user_turns if t["move"] == "reject_and_correct"),
+    }
+
+
 def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
                       headline: dict, kit_hash: str,
                       divergence: dict) -> dict:
@@ -3168,6 +3289,7 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
         "correct_vs_factsheet": {k: fill_accuracy.get(k)
                                  for k in ("matched", "total", "accuracy")},
         "off_sheet_values": count_off_sheet(persona, driver.user_turns),
+        "corrections": count_corrections(driver, fill_accuracy),
         "gate_violations": driver.gate_violations,
         "gate_timeouts": driver.gate_timeouts,
         # model-defect metrics: generations the recorder had to close because
@@ -3500,9 +3622,7 @@ async def run(args) -> int:
     sim_project = None
     kit_hash = None
     if sim_mode:
-        sim_persona = (_sim_actor.load_persona(args.persona)
-                       if getattr(args, "persona", None)
-                       else _sim_actor.load_default_persona())
+        sim_persona = resolve_sim_persona(args)
         validate_sim_args(args, sim_persona)
         sim_actor = build_actor(getattr(args, "actor", "haiku"), sim_persona)
         # STT is needed for the divergence log in BOTH ears modes; prove it
@@ -5148,7 +5268,7 @@ async def run(args) -> int:
             headline=summary["headline"], kit_hash=kit_hash, divergence=_div)
         meta["sim_user"] = {k: summary["sim_user"][k] for k in (
             "persona_id", "kit_sha256", "filled_confirmed",
-            "off_sheet_values", "gate_violations", "user_turns", "stalls",
+            "off_sheet_values", "corrections", "gate_violations", "user_turns", "stalls",
             "stop_reason", "aborted")}
         sim_records_path = out_dir / "sim_user" / f"{base_name}.sim-user.json"
         write_sim_records(
@@ -5446,8 +5566,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="who plays the applicant (bd polyglot-pdf-tmu0f): "
                          "'script' (default; the fixed scripted answers) or "
                          "'sim' (a simulated user that listens to what the "
-                         "model said and answers it; W-7 only; requires "
-                         "--schema w7 --arm dti --continuous). Sim exit "
+                         "model said and answers it; --schema w7 or i90-v2 "
+                         "only; requires --arm dti --continuous). Sim exit "
                          "codes: 0 complete; 3 actor degraded to its stub "
                          "(5 consecutive fallbacks); 4 Cloud STT divergence "
                          "log invalid; 5 incomplete (stalls / max turns / "
@@ -5463,8 +5583,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "Claude Haiku 5.5 via the Claude API "
                          "(ANTHROPIC_API_KEY); stub = offline rules.")
     ap.add_argument("--persona", default=None,
-                    help="--user sim: persona JSON path (default: the W-7 "
-                         "non-spelling Ana Reyes persona)")
+                    help="--user sim: persona JSON path (default per schema: "
+                         "w7 = the non-spelling Ana Reyes persona, i90-v2 = "
+                         "the non-spelling Elena Torres persona; "
+                         "personas/w7_ana_selfcorrect.json is the unhappy "
+                         "path, every answer first slipped then corrected)")
     ap.add_argument("--tts", choices=["gtts", "chirp3"], default="gtts",
                     help="--user sim: the simulated user's mouth. gtts is "
                          "free; chirp3 is Cloud TTS Chirp3-HD, LINEAR16 at "
