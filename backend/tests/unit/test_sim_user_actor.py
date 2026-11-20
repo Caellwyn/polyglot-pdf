@@ -218,6 +218,81 @@ class TestNonSpellingPersona:
 
 
 # --------------------------------------------------------------- StubActor
+def _city_fact(persona):
+    return next(fid for fid, f in persona.facts.items()
+                if "97477" in f["spoken"])
+
+
+class TestSpelledCorrections:
+    def _spellable(self, persona):
+        return [fid for fid, f in persona.facts.items() if f["spellable"]]
+
+    def _plain(self, persona):
+        return [fid for fid, f in persona.facts.items() if not f["spellable"]]
+
+    def test_correcting_a_spellable_fact_spells_it(self, persona):
+        for fid in self._spellable(persona):
+            f = persona.facts[fid]
+            for seed in range(12):
+                r = actor.render("reject_and_correct", fid, persona,
+                                 random.Random(seed))
+                assert f["spell"] in r.text, (fid, r.text)
+                assert r.values_spoken == [f["spell"]]
+                assert r.move == "reject_and_correct"
+                assert r.text.startswith(("No,", "Sorry, no"))
+
+    def test_non_spellable_facts_keep_the_answer_based_correction(self, persona):
+        for fid in self._plain(persona):
+            f = persona.facts[fid]
+            r = actor.render("reject_and_correct", fid, persona,
+                             random.Random(0))
+            assert f["answer"] in r.text
+            assert r.values_spoken == [f["answer"]]
+
+    def test_spelled_corrections_are_on_the_sheet(self, persona):
+        allowed = set()
+        for f in persona.facts.values():
+            allowed.update({f["answer"], f["spoken"]})
+            if f.get("spell"):
+                allowed.add(f["spell"])
+        for fid in persona.facts:
+            for seed in range(6):
+                r = actor.render("reject_and_correct", fid, persona,
+                                 random.Random(seed))
+                assert all(v in allowed for v in r.values_spoken)
+                assert all(v in r.text for v in r.values_spoken)
+
+
+class TestStubReadbackEquivalence:
+    def _decide(self, persona, text):
+        fid = _city_fact(persona)
+        hist = [{"model_text": "q", "move": "answer", "field_key": fid}]
+        return run(actor.StubActor(persona).decide(text, hist))
+
+    def test_digits_spoken_as_words_match_the_digit_value(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, nine seven four "
+            "seven seven. Is that correct?")
+        assert (d.move, d.field_key) == ("confirm", "none")
+
+    def test_a_different_spoken_digit_is_rejected(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, nine seven seven "
+            "four seven. Is that correct?")
+        assert d.move == "reject_and_correct"
+        assert d.field_key == _city_fact(persona)
+
+    def test_digits_as_digits_still_match(self, persona):
+        d = self._decide(
+            persona, "Springfield, Oregon, United States, 97477. Is that "
+            "correct?")
+        assert d.move == "confirm"
+
+    def test_a_lone_digit_word_is_not_turned_into_a_digit(self, persona):
+        assert actor._tokens("one of the two") == ["one", "of", "the", "two"]
+        assert actor._tokens("nine seven four") == ["974"]
+
+
 class TestStubActor:
     def test_question_gets_answer_on_that_field(self, persona):
         stub = actor.StubActor(persona)
@@ -332,6 +407,29 @@ class TestHaikuActor:
         assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
         assert json.loads(msgs[1]["content"]) == {"move": "answer", "field_key": k}
 
+    def test_empty_model_text_never_reaches_the_api(self, persona):
+        # A turn where the model said nothing (a silent tool turn) used to
+        # put an empty user message in history: the Claude API answers 400
+        # "user messages must have non-empty content" for every later request.
+        k = _name_key(persona)
+        a = actor.HaikuActor(persona, client=FakeClient("{}"))
+        hist = [{"model_text": "", "move": "answer", "field_key": k},
+                {"model_text": "   ", "move": "acknowledge",
+                 "field_key": "none"},
+                {"model_text": None, "move": "acknowledge",
+                 "field_key": "none"},
+                {"model_text": "real", "move": "answer", "field_key": k}]
+        for current in ("", "   ", None, "now"):
+            msgs = a.build_request(current, hist)["messages"]
+            assert msgs
+            for m in msgs:
+                assert isinstance(m["content"], str) and m["content"].strip()
+        msgs = a.build_request("now", hist)["messages"]
+        assert msgs[0]["content"] == "(silence)"
+        assert msgs[2]["content"] == "(silence)"
+        assert msgs[4]["content"] == "(silence)"
+        assert msgs[6]["content"] == "real"
+
     def test_system_prompt_has_sheet_and_rules(self, persona):
         s = actor.build_system_prompt(persona)
         for fid, f in persona.facts.items():
@@ -339,6 +437,21 @@ class TestHaikuActor:
         assert "Never spell unless" in s
         for m in actor.MOVES:
             assert m in s
+
+    def test_prompt_confirms_equivalent_readbacks_and_rejects_real_differences(self, persona):
+        s = actor.build_system_prompt(persona)
+        assert "says the same value" in s
+        for phrase in ("spoken as words", "digit by digit",
+                       "letters are spelled out", "said in words"):
+            assert phrase in s
+        assert "only when a value is actually different" in s
+        assert "wrong letter, digit, name, place or date" in s
+        assert "matches the fact exactly" not in s
+
+    def test_prompt_allows_spelling_when_a_spelling_is_read_back_wrong(self, persona):
+        s = actor.build_system_prompt(persona)
+        assert ("Never spell unless the interviewer asks you to spell or "
+                "reads a spelling back wrong") in s
 
     def test_valid_reply_parses(self, persona):
         k = _name_key(persona)

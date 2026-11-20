@@ -1,0 +1,881 @@
+{
+  "persona_id": "w7_ana_nospell_v1",
+  "run_meta": {
+    "bead": "polyglot-pdf-tmu0f",
+    "base_name": "costs_w7_3.8_dti_cont_sim_comp_der_happy_20261120T000312Z",
+    "stamp": "20261120T000312Z",
+    "model": "gemini-3.8-live",
+    "tier": "3.8",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts": "gtts",
+    "schema": "w7",
+    "arm": "dti",
+    "rng_seed": 0,
+    "quiet_window_s": 0.6,
+    "text_ai_wired": true
+  },
+  "summary": {
+    "persona_id": "w7_ana_nospell_v1",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "user": "sim",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts_kind": "gtts",
+    "model": "gemini-3.8-live",
+    "max_user_turns": 150,
+    "filled_confirmed": 4,
+    "fact_fields": 22,
+    "correct_vs_factsheet": {
+      "matched": 5,
+      "total": 22,
+      "accuracy": 0.2273
+    },
+    "off_sheet_values": 0,
+    "gate_violations": 0,
+    "gate_timeouts": 0,
+    "silence_closes": 0,
+    "late_completions": 0,
+    "user_turns": 11,
+    "stalls": 0,
+    "render_errors": 0,
+    "stop_reason": "fallback_streak",
+    "aborted": true,
+    "abort_message": "actor fell back to the stub on 5 consecutive decisions (last error: BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCohUzmaKokMPmDFKvt'}). A broken API key or model id must not produce a fake Haiku run.",
+    "fallbacks": {
+      "count": 5,
+      "rate": 0.4167,
+      "errors": [
+        {
+          "turn": 8,
+          "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCkrXdn7PbkTGnoQaFc'}"
+        },
+        {
+          "turn": 9,
+          "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCmnHv2WJePyxNMraps'}"
+        },
+        {
+          "turn": 10,
+          "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCnCXgQZcFh2EvFcrXD'}"
+        },
+        {
+          "turn": 11,
+          "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCo3WVKDwxhq2oYQwgm'}"
+        },
+        {
+          "turn": 12,
+          "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCohUzmaKokMPmDFKvt'}"
+        }
+      ]
+    },
+    "generations": 12,
+    "divergence": {
+      "n_generations": 12,
+      "n_scored": 0,
+      "n_divergent": 0,
+      "divergence_rate": null,
+      "verdict_counts": {
+        "NO_AUDIO": 2,
+        "STT_ERROR": 10
+      },
+      "worst": [],
+      "stt_billed_seconds": 0,
+      "stt_cost_usd": 0.0
+    },
+    "tts": {
+      "kind": "gtts",
+      "chars": 326,
+      "calls": 11
+    },
+    "actor_usage": {
+      "input": 2350,
+      "output": 144,
+      "cache_read": 10020,
+      "cache_creation": 1670
+    },
+    "cost": {
+      "gemini_live_usd": 0.193314,
+      "sidecar_text_usd": 0,
+      "actor_usd": 0.000616,
+      "tts_usd": 0.0,
+      "stt_usd": 0.0,
+      "total_usd": 0.19393
+    }
+  },
+  "generations": [
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 0,
+      "reason": "turn_complete",
+      "t_first_audio_s": 3.906,
+      "t_close_s": 10.094,
+      "audio_s": 6.26,
+      "playback_end_s": 10.166,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Application Type. Are you applying for a new ITIN, or are you renewing an existing one?",
+      "score": {
+        "transcript": "Application Type. Are you applying for a new ITIN, or are you renewing an existing one?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 6.26,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 1,
+      "reason": "turn_complete",
+      "t_first_audio_s": 23.406,
+      "t_close_s": 27.172,
+      "audio_s": 3.81,
+      "playback_end_s": 27.216,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You are applying for a new ITIN. Is that correct?",
+      "score": {
+        "transcript": "You are applying for a new ITIN. Is that correct?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 3.81,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 2,
+      "reason": "turn_complete",
+      "t_first_audio_s": 32.891,
+      "t_close_s": 88.36,
+      "audio_s": 55.55,
+      "playback_end_s": 88.441,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your reason for applying? Please choose from the following options: a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h). b. Nonresident alien filing a U.S. federal tax return. c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return. d. Dependent of U.S. citizen or resident alien. e. Spouse of U.S. citizen or resident alien. f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h). g. Dependent or spouse of a nonresident alien holding a U.S. visa. h. Other.",
+      "score": {
+        "transcript": "What is your reason for applying? Please choose from the following options: a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h). b. Nonresident alien filing a U.S. federal tax return. c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return. d. Dependent of U.S. citizen or resident alien. e. Spouse of U.S. citizen or resident alien. f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h). g. Dependent or spouse of a nonresident alien holding a U.S. visa. h. Other.",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 55.55,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 3,
+      "reason": "turn_complete",
+      "t_first_audio_s": 96.5,
+      "t_close_s": 102.156,
+      "audio_s": 5.73,
+      "playback_end_s": 102.23,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+      "score": {
+        "transcript": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 5.73,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 4,
+      "reason": "turn_complete",
+      "t_first_audio_s": 107.344,
+      "t_close_s": 114.531,
+      "audio_s": 7.25,
+      "playback_end_s": 114.594,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal first name, spelled in Latin characters exactly as it appears on your passport or green card?",
+      "score": {
+        "transcript": "What is your legal first name, spelled in Latin characters exactly as it appears on your passport or green card?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 7.25,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 5,
+      "reason": "turn_complete",
+      "t_first_audio_s": 120.563,
+      "t_close_s": 126.828,
+      "audio_s": 6.3,
+      "playback_end_s": 126.863,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "To ensure it matches your official documents, could you please spell your first name for me, letter by letter?",
+      "score": {
+        "transcript": "To ensure it matches your official documents, could you please spell your first name for me, letter by letter?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 6.3,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 6,
+      "reason": "turn_complete",
+      "t_first_audio_s": null,
+      "t_close_s": 134.219,
+      "audio_s": 0.0,
+      "playback_end_s": null,
+      "tool_calls": [
+        "update_form_fields",
+        "name_spellback"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "",
+      "score": {
+        "transcript": "",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 0.0,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "NO_AUDIO"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 7,
+      "reason": "turn_complete",
+      "t_first_audio_s": 140.844,
+      "t_close_s": 142.922,
+      "audio_s": 2.16,
+      "playback_end_s": 143.004,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "...",
+      "score": {
+        "transcript": "...",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 2.16,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 8,
+      "reason": "turn_complete",
+      "t_first_audio_s": 147.297,
+      "t_close_s": 155.5,
+      "audio_s": 8.28,
+      "playback_end_s": 155.577,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal middle name, as it appears on your identifying documents? If you do not have a middle name, please say not applicable.",
+      "score": {
+        "transcript": "What is your legal middle name, as it appears on your identifying documents? If you do not have a middle name, please say not applicable.",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 8.28,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 9,
+      "reason": "turn_complete",
+      "t_first_audio_s": null,
+      "t_close_s": 161.141,
+      "audio_s": 0.0,
+      "playback_end_s": null,
+      "tool_calls": [
+        "update_form_fields",
+        "name_spellback"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "",
+      "score": {
+        "transcript": "",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 0.0,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "NO_AUDIO"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 10,
+      "reason": "turn_complete",
+      "t_first_audio_s": 165.485,
+      "t_close_s": 172.594,
+      "audio_s": 7.19,
+      "playback_end_s": 172.675,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal last name, spelled in Latin characters exactly as it appears on your passport or green card?",
+      "score": {
+        "transcript": "What is your legal last name, spelled in Latin characters exactly as it appears on your passport or green card?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 7.19,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 11,
+      "reason": "turn_complete",
+      "t_first_audio_s": 177.969,
+      "t_close_s": 181.453,
+      "audio_s": 3.55,
+      "playback_end_s": 181.519,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Could you please spell your last name for me, letter by letter?",
+      "score": {
+        "transcript": "Could you please spell your last name for me, letter by letter?",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 3.55,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "STT_ERROR"
+      }
+    }
+  ],
+  "user_turns": [
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 1,
+      "t_start_s": 18.953,
+      "move": "answer",
+      "field_key": "application_type",
+      "text": "Yes. I am applying for a new ITIN.",
+      "values_spoken": [
+        "I am applying for a new ITIN."
+      ],
+      "ears": "transcript",
+      "ears_text": "Application Type. Are you applying for a new ITIN, or are you renewing an existing one?",
+      "generations_heard": [
+        0
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 35,
+        "output": 20,
+        "cache_read": 0,
+        "cache_creation": 1670
+      },
+      "actor_cost_usd": 0.000222,
+      "actor_latency_s": 3.955,
+      "tts_chars": 34,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 2,
+      "t_start_s": 29.516,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right, thanks.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You are applying for a new ITIN. Is that correct?",
+      "generations_heard": [
+        1
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 78,
+        "output": 19,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 3.4e-05,
+      "actor_latency_s": 1.132,
+      "tts_chars": 26,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 3,
+      "t_start_s": 90.656,
+      "move": "answer",
+      "field_key": "reason",
+      "text": "I am a nonresident alien filing a U.S. federal tax return.",
+      "values_spoken": [
+        "I am a nonresident alien filing a U.S. federal tax return."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your reason for applying? Please choose from the following options: a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h). b. Nonresident alien filing a U.S. federal tax return. c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return. d. Dependent of U.S. citizen or resident alien. e. Spouse of U.S. citizen or resident alien. f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h). g. Dependent or spouse of a nonresident alien holding a U.S. visa. h. Other.",
+      "generations_heard": [
+        2
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 343,
+        "output": 19,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 6.1e-05,
+      "actor_latency_s": 1.11,
+      "tts_chars": 58,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 4,
+      "t_start_s": 104.719,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+      "generations_heard": [
+        3
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 395,
+        "output": 19,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 6.6e-05,
+      "actor_latency_s": 1.098,
+      "tts_chars": 19,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 5,
+      "t_start_s": 117.235,
+      "move": "answer",
+      "field_key": "name_1a_first",
+      "text": "Yes. My first name is Ana.",
+      "values_spoken": [
+        "My first name is Ana."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal first name, spelled in Latin characters exactly as it appears on your passport or green card?",
+      "generations_heard": [
+        4
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 451,
+        "output": 23,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 7.3e-05,
+      "actor_latency_s": 1.099,
+      "tts_chars": 26,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 6,
+      "t_start_s": 129.469,
+      "move": "spell",
+      "field_key": "name_1a_first",
+      "text": "Letter by letter: A - N - A.",
+      "values_spoken": [
+        "A - N - A"
+      ],
+      "ears": "transcript",
+      "ears_text": "To ensure it matches your official documents, could you please spell your first name for me, letter by letter?",
+      "generations_heard": [
+        5
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 508,
+        "output": 23,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 7.9e-05,
+      "actor_latency_s": 1.15,
+      "tts_chars": 28,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 7,
+      "t_start_s": 136.516,
+      "move": "repeat_request",
+      "field_key": "none",
+      "text": "Sorry, I didn't catch that. Can you repeat it?",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "",
+      "generations_heard": [
+        6
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 540,
+        "output": 21,
+        "cache_read": 1670,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 8.1e-05,
+      "actor_latency_s": 0.745,
+      "tts_chars": 46,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 8,
+      "t_start_s": 144.719,
+      "move": "acknowledge",
+      "field_key": "none",
+      "text": "Got it, thanks.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "...",
+      "generations_heard": [
+        7
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": true,
+      "decision_valid": false,
+      "decision_error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCkrXdn7PbkTGnoQaFc'}",
+      "render_error": null,
+      "actor_usage": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.0,
+      "actor_latency_s": 0.304,
+      "tts_chars": 15,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 9,
+      "t_start_s": 157.25,
+      "move": "answer",
+      "field_key": "name_1a_middle",
+      "text": "Okay, My middle name is Lucia.",
+      "values_spoken": [
+        "My middle name is Lucia."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal middle name, as it appears on your identifying documents? If you do not have a middle name, please say not applicable.",
+      "generations_heard": [
+        8
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": true,
+      "decision_valid": false,
+      "decision_error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCmnHv2WJePyxNMraps'}",
+      "render_error": null,
+      "actor_usage": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.0,
+      "actor_latency_s": 0.238,
+      "tts_chars": 30,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 10,
+      "t_start_s": 162.891,
+      "move": "acknowledge",
+      "field_key": "none",
+      "text": "Okay, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "",
+      "generations_heard": [
+        9
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": true,
+      "decision_valid": false,
+      "decision_error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCnCXgQZcFh2EvFcrXD'}",
+      "render_error": null,
+      "actor_usage": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.0,
+      "actor_latency_s": 0.246,
+      "tts_chars": 16,
+      "response_stalled": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 11,
+      "t_start_s": 174.438,
+      "move": "answer",
+      "field_key": "name_1a_last",
+      "text": "Sure. My last name is Reyes.",
+      "values_spoken": [
+        "My last name is Reyes."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal last name, spelled in Latin characters exactly as it appears on your passport or green card?",
+      "generations_heard": [
+        10
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": true,
+      "decision_valid": false,
+      "decision_error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'messages.12: user messages must have non-empty content'}, 'request_id': 'req_011ChDCo3WVKDwxhq2oYQwgm'}",
+      "render_error": null,
+      "actor_usage": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.0,
+      "actor_latency_s": 0.249,
+      "tts_chars": 28,
+      "response_stalled": false
+    }
+  ]
+}

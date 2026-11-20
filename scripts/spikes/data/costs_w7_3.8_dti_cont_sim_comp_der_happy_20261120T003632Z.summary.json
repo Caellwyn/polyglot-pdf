@@ -1,0 +1,267 @@
+{
+  "run": {
+    "model": "gemini-3.8-live",
+    "tier": "3.8",
+    "schema": "w7",
+    "arm": "dti",
+    "path": "happy",
+    "questions": 22,
+    "compression": true,
+    "trigger": 9503,
+    "window": 8003,
+    "continuous": true,
+    "started": "20261120T003632Z",
+    "events_mode": "none",
+    "reactivity": null,
+    "lang": "en",
+    "text_ai_wired": true
+  },
+  "headline": {
+    "all_in_usd": 2.107748,
+    "voice_usd": 2.107748,
+    "text_usd": 0,
+    "text_usd_by_caller": {},
+    "greeting_usd": 0.006583,
+    "voice_tokens": 1505736,
+    "wall_clock_s": 1280.0,
+    "steps": 109,
+    "fill_accuracy": {
+      "matched": 21,
+      "total": 22,
+      "accuracy": 0.9545
+    },
+    "fill_failure_modes": {
+      "missing": 0,
+      "format": 0,
+      "transcription": 1,
+      "wrong-field": 0,
+      "mismatch": 0,
+      "spurious": 0
+    },
+    "usd_per_correct_field": 0.1004
+  },
+  "validator": {
+    "windows_submitted": 0,
+    "boundaries": 0,
+    "calls": 0,
+    "window_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "verdict_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "pr": null,
+    "duplicate_steers": 0,
+    "steers": 0,
+    "steer_outcomes": {},
+    "steer_to_switch_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "fail_opens": 0,
+    "drains": {
+      "count": 0,
+      "delivered": 0,
+      "undelivered_retries": 0
+    },
+    "drain_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "usd": 0,
+    "latency_s": null,
+    "conflicts": 0,
+    "calls": 0
+  },
+  "secretary": {
+    "calls": 0,
+    "blocked_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "pending_detached": 0,
+    "recall_events": 0,
+    "tool_fired": 0,
+    "answers_correct": 0,
+    "answers_wrong": 0,
+    "cache_hit_rate": null,
+    "warnings": 0
+  },
+  "navigation": {
+    "attempts": 0,
+    "switched": 0,
+    "hit_target": 0,
+    "seam_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "skips": {
+    "requested": 0,
+    "recorded": 0
+  },
+  "latency": {
+    "turn_s": {
+      "n": 104,
+      "p50": 1.078,
+      "p90": 1.547,
+      "p95": 1.578,
+      "max": 2.172
+    }
+  },
+  "errors": {
+    "close_1011": 0,
+    "go_away_announced": 2,
+    "reconnects": 2,
+    "reconnect_downtime_s": {
+      "n": 2,
+      "p50": 3.063,
+      "p90": 3.078,
+      "p95": 3.078,
+      "max": 3.078
+    },
+    "stalled_turns": 0,
+    "tool_callback_exceptions": 0,
+    "dti_coercions": 0,
+    "unknown_field_rejections": 0,
+    "spurious_fills": [],
+    "validation_dropped": 0,
+    "secretary_delivers_dropped": 0,
+    "dropped_drains": 0,
+    "unpriced_model_calls": [],
+    "captured_errors": 0
+  },
+  "sim_user": {
+    "persona_id": "w7_ana_nospell_v1",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "user": "sim",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts_kind": "gtts",
+    "model": "gemini-3.8-live",
+    "max_user_turns": 150,
+    "filled_confirmed": 22,
+    "fact_fields": 22,
+    "correct_vs_factsheet": {
+      "matched": 21,
+      "total": 22,
+      "accuracy": 0.9545
+    },
+    "off_sheet_values": 0,
+    "gate_violations": 0,
+    "gate_timeouts": 0,
+    "silence_closes": 0,
+    "spellback_clips": 19,
+    "late_completions": 0,
+    "user_turns": 109,
+    "stalls": 0,
+    "render_errors": 0,
+    "stop_reason": "complete",
+    "aborted": false,
+    "abort_message": null,
+    "fallbacks": {
+      "count": 0,
+      "rate": 0.0,
+      "errors": []
+    },
+    "generations": 112,
+    "divergence": {
+      "n_generations": 112,
+      "n_scored": 42,
+      "n_divergent": 1,
+      "divergence_rate": 0.0238,
+      "verdict_counts": {
+        "ALIGNED": 41,
+        "NO_AUDIO": 5,
+        "PARTIAL": 1,
+        "STT_ERROR": 3,
+        "TOO_SHORT": 62
+      },
+      "worst": [
+        {
+          "verdict": "PARTIAL",
+          "divergence": 0.6364,
+          "transcript": "Your foreign tax I.D. number is two four nine eight one seven three six. Is that correct?",
+          "stt_text": "Your foreign tax ID number is 2, 498 1 736. Is that correct?"
+        },
+        {
+          "verdict": "ALIGNED",
+          "divergence": 0.5714,
+          "transcript": "The document number is one zero four seven two two eight five. Is that correct?",
+          "stt_text": "The document number is 10472285, is that correct?"
+        },
+        {
+          "verdict": "ALIGNED",
+          "divergence": 0.3846,
+          "transcript": "Your date of birth is March fourteenth, nineteen ninety. Is that correct?",
+          "stt_text": "Your date of birth is March 14th, 1990, is that correct?"
+        },
+        {
+          "verdict": "ALIGNED",
+          "divergence": 0.3333,
+          "transcript": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+          "stt_text": "You are a non-resident alien filing. A US federal tax return. Is that correct?"
+        },
+        {
+          "verdict": "ALIGNED",
+          "divergence": 0.3333,
+          "transcript": "What is your foreign tax I.D. number, if you have one?",
+          "stt_text": "What is your foreign tax ID number if you have 1?"
+        }
+      ],
+      "stt_billed_seconds": 675,
+      "stt_cost_usd": 0.27
+    },
+    "divergence_valid": true,
+    "stt": {
+      "valid": true,
+      "stt_calls": 45,
+      "stt_errors": 3,
+      "stt_error_rate": 0.0667,
+      "first_error": "400 Sync input too long. For audio longer than 1 min use LongRunningRecognize with a 'uri' parameter."
+    },
+    "tts": {
+      "kind": "gtts",
+      "chars": 3625,
+      "calls": 111
+    },
+    "actor_usage": {
+      "input": 284990,
+      "output": 2465,
+      "cache_read": 190520,
+      "cache_creation": 1732
+    },
+    "cost": {
+      "gemini_live_usd": 2.107748,
+      "sidecar_text_usd": 0,
+      "actor_usd": 0.031853,
+      "tts_usd": 0.0,
+      "stt_usd": 0.27,
+      "total_usd": 2.409601
+    }
+  }
+}

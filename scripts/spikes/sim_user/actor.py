@@ -165,6 +165,11 @@ _TEMPLATES = {
 # Spelling a non-spellable fact degrades to the spoken value, so a bad
 # (but schema-valid) decision still cannot produce an off-sheet string.
 _SPOKEN_TEMPLATES = ["It is {spoken}.", "That is {spoken}."]
+# Correcting a SPELLABLE fact (a name the read-back got wrong) spells it: the
+# TTS voice says "Ana" and "Anna" alike, so only the letters carry the fix.
+_SPELLED_CORRECTION = ["No, that's not right. It's spelled {spell}.",
+                       "No, that is wrong. Letter by letter: {spell}.",
+                       "Sorry, no. It is spelled {spell}."]
 
 
 def render(move: str, field_key: str, persona: Persona,
@@ -184,6 +189,14 @@ def render(move: str, field_key: str, persona: Persona,
             tpl = rng.choice(_SPOKEN_TEMPLATES)
             return Rendered(tpl.format(spoken=f["spoken"]), move, field_key,
                             [f["spoken"]])
+        if move == "reject_and_correct" and f.get("spellable"):
+            # Consistent with the non-spelling persona: spells_unprompted
+            # governs the FIRST answer only. A wrong read-back is itself the
+            # prompt to spell, and the TTS voice says "Ana" and "Anna" alike,
+            # so only the letters can carry the correction.
+            tpl = rng.choice(_SPELLED_CORRECTION)
+            return Rendered(tpl.format(spell=f["spell"]), move, field_key,
+                            [f["spell"]])
         tpl = rng.choice(_TEMPLATES[move])
         return Rendered(tpl.format(answer=f["answer"]), move, field_key,
                         [f["answer"]])
@@ -212,10 +225,34 @@ def history_entry(model_text: str, decision: Decision) -> dict:
             "field_key": decision.field_key}
 
 
+_DIGIT_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3",
+                "four": "4", "five": "5", "six": "6", "seven": "7",
+                "eight": "8", "nine": "9"}
+
+
+def _digit_word_runs(toks: list) -> list:
+    """Runs of 2+ spoken digit words become digits ('nine seven four' ->
+    '9','7','4', merged by _tokens); a lone 'one' stays a word."""
+    out: list = []
+    i = 0
+    while i < len(toks):
+        j = i
+        while j < len(toks) and toks[j] in _DIGIT_WORDS:
+            j += 1
+        if j - i >= 2:
+            out.extend(_DIGIT_WORDS[t] for t in toks[i:j])
+            i = j
+        else:
+            out.append(toks[i])
+            i += 1
+    return out
+
+
 def _tokens(text: str) -> list:
     """Lowercase alnum tokens; runs of 2+ single-char tokens (spelled letters
-    or spoken digits) are merged into one token: 'A - N - A' -> 'ana'."""
-    toks = re.findall(r"[a-z0-9]+", (text or "").lower())
+    or spoken digits) are merged into one token: 'A - N - A' -> 'ana',
+    'nine seven four' -> '974'."""
+    toks = _digit_word_runs(re.findall(r"[a-z0-9]+", (text or "").lower()))
     out: list = []
     run: list = []
     for t in toks:
@@ -353,10 +390,14 @@ def build_system_prompt(persona: Persona) -> str:
         "- Answer only what was asked; pick the single fact the interviewer is asking about.",
     ]
     if not persona.behavior.get("spells_unprompted", False):
-        lines.append("- Never spell unless the interviewer asks you to spell.")
+        lines.append("- Never spell unless the interviewer asks you to spell "
+                     "or reads a spelling back wrong.")
     lines += [
-        "- Use confirm only when a read-back matches the fact exactly.",
-        "- Use reject_and_correct when a read-back does not match the fact.",
+        "- Use confirm when a read-back says the same value as the fact, even if "
+        "numbers are spoken as words or digit by digit, letters are spelled "
+        "out, a date is said in words, or punctuation or ordering words differ.",
+        "- Use reject_and_correct only when a value is actually different (a "
+        "wrong letter, digit, name, place or date) or missing.",
         "- Use repeat_request when the text is cut off or unintelligible.",
         "- Use acknowledge for disclaimers, greetings and transitions.",
         "- Reply with JSON only: {\"move\": ..., \"field_key\": ...}; use field_key \"none\" for moves that need no field.",
@@ -380,6 +421,12 @@ def _usage_dict(u: Any) -> dict:
     return {"input": g("input_tokens"), "output": g("output_tokens"),
             "cache_read": g("cache_read_input_tokens"),
             "cache_creation": g("cache_creation_input_tokens")}
+
+
+def _nonempty(text) -> str:
+    """The Claude API rejects empty / whitespace-only user content (400). A
+    turn with no model speech (e.g. a silent tool turn) is '(silence)'."""
+    return text if isinstance(text, str) and text.strip() else "(silence)"
 
 
 class HaikuActor:
@@ -410,10 +457,11 @@ class HaikuActor:
     def build_request(self, model_text: str, history: list) -> dict:
         msgs: list = []
         for h in history or []:
-            msgs.append({"role": "user", "content": h["model_text"]})
+            msgs.append({"role": "user",
+                         "content": _nonempty(h["model_text"])})
             msgs.append({"role": "assistant", "content": json.dumps(
                 {"move": h["move"], "field_key": h["field_key"]})})
-        msgs.append({"role": "user", "content": model_text or "(silence)"})
+        msgs.append({"role": "user", "content": _nonempty(model_text)})
         return {
             "model": HAIKU_MODEL,
             "max_tokens": self.max_tokens,

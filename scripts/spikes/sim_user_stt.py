@@ -117,14 +117,15 @@ def containment(audio_text: str, track_text: str):
     return sum(1 for w in aw if w in tw) / len(aw)
 
 
-def make_speech_client():
+def make_speech_client(project=None):
     """Cloud STT client with the quota project bound (lazy import).
 
     Local ADC has no quota project, and speech.googleapis.com requires one
     (403 otherwise). Bind it explicitly to the same project Vertex bills to.
+    `project` (when given) wins over the environment.
     """
     from google.cloud import speech as speech_mod
-    project = (os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
+    project = (project or os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
                or os.environ.get("GOOGLE_CLOUD_PROJECT"))
     if project:
         import google.auth
@@ -187,6 +188,11 @@ def billed_seconds_for(n_bytes: int, rate_hz: int) -> int:
     return -(-samples // per) * STT_BILLING_INCREMENT_S
 
 
+# Cloud STT sync recognize rejects audio over 1 minute (400 "Sync input too
+# long"); longer clips are recognized in consecutive pieces of at most this.
+MAX_SYNC_SECONDS = 55
+
+
 def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict:
     """STT of raw 16-bit mono PCM (no WAV header). Same shape as `recognize`.
 
@@ -206,6 +212,10 @@ def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict
     if speech is None:
         from google.cloud import speech as speech_mod
         speech = speech_mod
+    piece_bytes = 2 * rate_hz * MAX_SYNC_SECONDS
+    if len(pcm) > piece_bytes:
+        return _recognize_pieces(client, speech, pcm, rate_hz, seconds,
+                                 piece_bytes)
     try:
         rec = recognize(client, speech, pcm, rate_hz)
     except Exception as exc:  # noqa: BLE001
@@ -215,6 +225,47 @@ def recognize_pcm(client, pcm: bytes, rate_hz: int = 24000, speech=None) -> dict
     rec["seconds"] = seconds
     rec["billed_seconds"] = billed_seconds_for(len(pcm), rate_hz)
     return rec
+
+
+def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
+                      seconds: float, piece_bytes: int) -> dict:
+    """A clip over the sync limit: consecutive <= MAX_SYNC_SECONDS pieces,
+    each recognized with the same config. Texts are joined in order with a
+    space, confidence is the MINIMUM over pieces that returned a result
+    (as the single-request path reports it), and billing is the sum of each piece's own 15 s
+    rounding. A failing piece makes the whole clip STT_ERROR (pieces already
+    recognized stay billed)."""
+    texts, confs = [], []
+    n_results = billed = 0
+    pieces = [pcm[i:i + piece_bytes] for i in range(0, len(pcm), piece_bytes)]
+    # A tail under MIN_SECONDS is not worth its own request (the API would
+    # get a clip too short to hold speech); fold it into the previous piece,
+    # which stays well under the sync limit.
+    min_bytes = int(MIN_SECONDS * rate_hz) * 2
+    if len(pieces) > 1 and len(pieces[-1]) < min_bytes:
+        tail = pieces.pop()
+        pieces[-1] += tail
+    for piece in pieces:
+        try:
+            rec = recognize(client, speech, piece, rate_hz)
+        except Exception as exc:  # noqa: BLE001
+            return {"text": "", "confidence": 0.0, "n_results": 0,
+                    "seconds": seconds, "billed_seconds": billed,
+                    "verdict": "STT_ERROR", "error": str(exc)[:200]}
+        billed += billed_seconds_for(len(piece), rate_hz)
+        if rec["text"]:
+            texts.append(rec["text"])
+        if rec["n_results"]:
+            confs.append(rec["confidence"])
+        n_results += rec["n_results"]
+    # MIN over the pieces that returned a result, exactly like the single
+    # request (`recognize`): low confidence is a corruption signal for
+    # score_generation, and a mean would mask one bad piece of a long clip.
+    conf = min(confs) if confs else 0.0
+    return {"text": " ".join(texts), "confidence": round(conf, 3),
+            "n_results": n_results, "seconds": seconds,
+            "billed_seconds": billed,
+            "pieces": len(pieces)}
 
 
 def decide_verdict(letters_stt: str, letters_txt: str, letters_near: str,

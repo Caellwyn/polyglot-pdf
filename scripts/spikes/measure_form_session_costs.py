@@ -47,6 +47,21 @@ Question scripts (--path):
   unhappy  4 turns/question: wrong value, rejection, corrected value,
            positive confirmation
 
+Simulated user (--user sim, W-7 only, bd polyglot-pdf-tmu0f; plan in
+docs/sprint_25_sim-user_plan.md): instead of the fixed script, a persona actor
+listens to what the model said (--ears transcript|stt), picks a move
+(--actor haiku|stub), and the harness renders + speaks it (--tts gtts|chirp3)
+only once the turn gate opens (turn_complete/interrupted, no pending tool,
+simulated playback ended, quiet window). Requires --arm dti --continuous.
+Writes the usual artifacts plus <out>/sim_user/<base>.sim-user.json (per-
+generation transcript + Cloud STT divergence, per-user-turn records) and a
+summary["sim_user"] block (filled_confirmed, correct_vs_factsheet,
+off_sheet_values, gate_violations, fallbacks, cost split). gate_violations
+counts user turns that started with the gate shut OR overlapped model audio /
+a new model generation while the user's speech was being injected. Exit codes
+(sim): 0 complete, 3 actor fallback abort, 4 invalid STT divergence log,
+5 incomplete (stop_reason != complete).
+
 Audio is gTTS-synthesized once and cached as PCM16@16k under
 scripts/spikes/fixtures/audio_cache/ (committed; reruns are network-free).
 --synth-only builds the cache and exits without touching the live endpoint.
@@ -66,9 +81,11 @@ import hashlib
 import io
 import json
 import os
+import random
 import re
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,6 +121,8 @@ if _SPIKES_DIR not in sys.path:
 import full_form_script as _ffs  # noqa: E402  (stdlib-only sibling module)
 import scenario_events as _se  # noqa: E402  (stdlib-only sibling module)
 from turn_audio_audit import TurnAudioAudit  # noqa: E402  (stdlib-only sibling module)
+import sim_user_stt as _sim_stt  # noqa: E402  (stdlib-only; Cloud STT imported lazily)
+from sim_user import actor as _sim_actor  # noqa: E402  (anthropic imported lazily)
 
 # --model tiers. "3.8" is the production standard tier (backend/config.py). "2.5"
 # is the retired native-audio baseline, pinned to its explicit ids here because
@@ -1219,6 +1238,11 @@ class FakeClientWebSocket:
         # Per-turn output-audio audit (bd polyglot-pdf-r3ham.1): silent turns,
         # silent-after-tool, missing completion, runaway audio.
         self.audit = TurnAudioAudit()
+        # Per-generation PCM / transcript / tool capture for the simulated user
+        # (bd polyglot-pdf-tmu0f). None on every scripted run, so the scripted
+        # path records nothing extra.
+        self.gen_recorder: GenerationRecorder | None = None
+        self.spellback_locale = "en-US"
         # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
         # supplies the next field's FULL schema on next_field_hint_response, which
         # the backend renders into the confirm_field next_field_guidance. Mirrors the
@@ -1246,6 +1270,8 @@ class FakeClientWebSocket:
         if self.first_audio_at is None:
             self.first_audio_at = _now
         self.audit.audio(len(_data), _now)
+        if self.gen_recorder is not None:
+            self.gen_recorder.on_audio(_data, _now)
 
     @staticmethod
     def _same_field_value(a, b) -> bool:
@@ -1384,6 +1410,8 @@ class FakeClientWebSocket:
             if text:
                 _now = time.monotonic()
                 self.audit.transcript(str(text), _now)
+                if self.gen_recorder is not None:
+                    self.gen_recorder.on_transcript(str(text), _now)
                 self.transcript_chunks.append(
                     {"ts": _now, "text": str(text)})
         # section_switched / status messages need no reply
@@ -1613,6 +1641,13 @@ class FakeClientWebSocket:
                "field_id": fid, "status": "delivered",
                "value_chars": value_chars}
         self.spellback_events.append(rec)
+        if self.gen_recorder is not None and value_chars:
+            # Simulated user (bd tmu0f): the clip text the real client would
+            # play, built by the backend's own builder.
+            from backend.services.spellback_tts import build_spellback_text
+            self.gen_recorder.on_spellback(
+                build_spellback_text(str(value), self.spellback_locale),
+                rec["ts"])
         payload = {"status": "delivered", "playback_ms": 0, "fetch_ms": 0}
         self._reply(lambda: self.service.handle_spellback_response(rid, payload))
 
@@ -2226,6 +2261,965 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
     }
 
 
+# ---------------------------------------------------------- simulated user
+#
+# --user sim (bd polyglot-pdf-tmu0f, epic polyglot-pdf-ya4vi; design in
+# docs/sprint_25_sim-user_plan.md). A simulated applicant LISTENS to what the
+# Live model actually said and answers it, instead of replaying a fixed script.
+#
+#   GenerationRecorder  per-generation capture of the model's emitted PCM,
+#                       output transcript and tool calls, sliced at the
+#                       adapter's _dev_flush_audio_dump boundary; also the
+#                       turn gate's state.
+#   SimDriver           the loop: wait for the gate, take the "ears" text,
+#                       actor.decide -> render -> TTS -> inject; scoring inputs.
+#   build_sim_summary   the per-run sim block (never mixes the two scores).
+#
+# Everything here is offline-importable: Cloud STT, Cloud TTS and anthropic
+# are imported lazily by their factories.
+
+SIM_MODEL_AUDIO_RATE = 24_000          # Live model output: 16-bit mono PCM
+# A generation boundary opens the turn gate only for these reasons; a
+# session_close edge closes a generation but is not a finished model turn.
+# "silence" is the recorder's own close of a generation the model never
+# completed (see GenerationRecorder.maybe_silence_close).
+SIM_GATE_REASONS = frozenset({"turn_complete", "interrupted", "silence"})
+SIM_CLOSING_REASONS = frozenset({"turn_complete", "interrupted", "session_close"})
+SIM_DEFAULT_MAX_USER_TURNS = 150
+SIM_MAX_CONSECUTIVE_FALLBACKS = 5
+SIM_MAX_CONSECUTIVE_STALLS = 3
+TTS_USD_PER_MCHAR = {"gtts": 0.0, "chirp3": 30.0}
+CHIRP3_VOICE = "en-US-Chirp3-HD-Aoede"
+CHIRP3_CACHE = AUDIO_CACHE.parent / "audio_cache_chirp3"
+
+
+# The Vertex project every Live / text adapter in this harness binds to when
+# GOOGLE_CLOUD_PROJECT is unset; Cloud STT / TTS bill to the same project.
+VERTEX_PROJECT_DEFAULT = "polyglot-demo-aa709"
+SIM_STT_FIRST_K = 3             # this many opening STT calls all failing aborts
+SIM_MAX_STT_ERROR_RATE = 0.5
+
+
+def _vertex_project() -> str:
+    return os.getenv("GOOGLE_CLOUD_PROJECT", VERTEX_PROJECT_DEFAULT)
+
+
+def resolve_quota_project() -> str:
+    """The quota project Cloud STT needs (speech.googleapis.com answers 403
+    without one): GOOGLE_CLOUD_QUOTA_PROJECT, else the project the harness
+    already uses for Vertex. Fails fast when nothing resolves."""
+    project = os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT") or _vertex_project()
+    if not project:
+        raise SystemExit(
+            "cannot resolve a Google quota project for Cloud STT: set "
+            "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT.")
+    return project
+
+
+class SimAbort(Exception):
+    """The simulated-user run cannot continue and must not look like a
+    healthy run (e.g. the actor silently degraded to its stub)."""
+
+    def __init__(self, message: str, reason: str = "fallback_streak"):
+        super().__init__(message)
+        self.reason = reason
+
+
+@dataclass
+class SimTiming:
+    """Turn-gate and loop timing. Module-level instance SIM_TIMING is what the
+    driver reads, so offline tests shrink it without touching live defaults."""
+    quiet_window_s: float = 0.6        # no new model audio for this long
+    tool_resume_grace_s: float = 4.0   # after a tool returns, wait for the model
+    gate_timeout_s: float = 40.0       # the gate never opened -> a stall
+    response_timeout_s: float = 40.0   # no model generation after the user turn
+    # An open generation with audio and no new audio/transcript for this long
+    # (no tool pending) is closed by the recorder as reason "silence".
+    silence_close_s: float = 5.0
+    # simulated playback time of a name_spellback clip, per spoken token
+    spellback_s_per_token: float = 0.45
+    poll_s: float = 0.05
+    usage_settle_s: float = 1.2        # trailing usage events after a response
+    chunk_sleep_s: float = _CHUNK_MS / 1000.0
+    max_redecide: int = 3
+    max_consecutive_stalls: int = SIM_MAX_CONSECUTIVE_STALLS
+    max_consecutive_fallbacks: int = SIM_MAX_CONSECUTIVE_FALLBACKS
+
+
+SIM_TIMING = SimTiming()
+
+
+class GenerationRecorder:
+    """Per-generation capture + the turn gate.
+
+    A GENERATION is everything the model emits between two boundary edges
+    (the adapter's _dev_flush_audio_dump reasons). Events: on_audio (model
+    PCM, 24 kHz 16-bit mono), on_transcript (output transcript chunk),
+    tool_start / tool_end (tool callback in flight), boundary(reason).
+    A boundary of turn_complete / interrupted / session_close closes the open
+    generation (if it holds anything) into `closed`; other reasons
+    ("buffer_cap") are housekeeping and ignored.
+
+    gate_state(now) is the single definition of "the user may speak": ALL of
+      closed_ok         no open generation, and the latest closed generation
+                        ended in turn_complete or interrupted
+      no_pending_tool   no tool callback in flight, and the post-tool grace
+                        window (the model resuming after a tool response)
+                        has elapsed
+      playback_ended    simulated playback of the emitted audio is over: each
+                        generation's playback starts at max(first audio,
+                        end of the previous playback) and lasts its audio
+                        duration; it cannot end before the last chunk arrived
+      quiet             no model audio for quiet_window_s
+    """
+
+    def __init__(self, audio_rate: int = SIM_MODEL_AUDIO_RATE,
+                 quiet_window_s: float = 0.6, tool_resume_grace_s: float = 4.0,
+                 clock=time.monotonic, silence_close_s: float | None = None,
+                 spellback_s_per_token: float = 0.45):
+        self.audio_rate = audio_rate
+        self._bytes_per_s = 2.0 * audio_rate
+        self.quiet_window_s = quiet_window_s
+        self.tool_resume_grace_s = tool_resume_grace_s
+        self.clock = clock
+        self.t0 = clock()
+        self.closed: list[dict] = []
+        self._open: dict | None = None
+        self.pending_tools = 0
+        self._tool_resume_until = 0.0
+        self.last_audio_at: float | None = None
+        self.playback_end = 0.0
+        self.empty_boundaries = 0
+        self.silence_close_s = silence_close_s
+        self.silence_closes = 0
+        self.late_completions = 0
+        self.spellback_s_per_token = spellback_s_per_token
+        self.spellback_clips = 0
+        self._last_event_at: float | None = None
+        # (ts, nbytes) of every model audio chunk and ts of every generation
+        # opened: what overlap() reads to see whether the model talked while
+        # the user was speaking.
+        self._audio_log: list[tuple[float, int]] = []
+        self._open_log: list[float] = []
+
+    # -- intake ---------------------------------------------------------
+    def _gen(self, ts: float) -> dict:
+        self._last_event_at = ts
+        if self._open is None:
+            self._open_log.append(ts)
+            self._open = {"t_open": ts, "t_first_audio": None,
+                          "t_last_audio": None, "pcm": bytearray(),
+                          "transcript": [], "tool_calls": [],
+                          "spellback_text": "", "spellback_end": None}
+        return self._open
+
+    def on_audio(self, data: bytes, ts: float | None = None) -> None:
+        ts = self.clock() if ts is None else ts
+        g = self._gen(ts)
+        if g["t_first_audio"] is None:
+            g["t_first_audio"] = ts
+        g["t_last_audio"] = ts
+        g["pcm"].extend(data)
+        self.last_audio_at = ts
+        self._audio_log.append((ts, len(data)))
+
+    def on_transcript(self, text: str, ts: float | None = None) -> None:
+        if not text:
+            return
+        ts = self.clock() if ts is None else ts
+        self._gen(ts)["transcript"].append(text)
+
+    def tool_start(self, name: str, ts: float | None = None) -> None:
+        ts = self.clock() if ts is None else ts
+        self._gen(ts)["tool_calls"].append(name)
+        self.pending_tools += 1
+
+    def tool_end(self, name: str, ts: float | None = None) -> None:
+        ts = self.clock() if ts is None else ts
+        self.pending_tools = max(0, self.pending_tools - 1)
+        self._tool_resume_until = ts + self.tool_resume_grace_s
+
+    def on_spellback(self, text: str, ts: float | None = None) -> None:
+        """The client played a name_spellback clip (the model stays silent
+        while the user hears it). The simulated user must hear it too: the
+        clip text becomes heard content of the open generation (else the most
+        recent closed one), and its playback time (spellback_s_per_token per
+        spoken token) extends that generation's playback so the gate waits."""
+        ts = self.clock() if ts is None else ts
+        dur = len(text.split()) * self.spellback_s_per_token
+        self.spellback_clips += 1
+        if self._open is not None or not self.closed:
+            g = self._gen(ts)
+            clip_end = max(ts, g["spellback_end"] or 0.0) + dur
+            g["spellback_text"] = (g["spellback_text"] + " " + text).strip()
+            g["spellback_end"] = clip_end
+        else:
+            g = self.closed[-1]
+            clip_end = max(ts, g.get("spellback_end") or 0.0) + dur
+            g["spellback_text"] = (g.get("spellback_text", "") + " "
+                                   + text).strip()
+            g["spellback_end"] = clip_end
+            self.playback_end = max(self.playback_end, clip_end)
+            g["playback_end"] = self.playback_end
+        self.last_audio_at = max(self.last_audio_at or 0.0, clip_end)
+        self._last_event_at = clip_end
+
+    def boundary(self, reason: str, ts: float | None = None) -> None:
+        if reason not in SIM_CLOSING_REASONS:
+            return
+        ts = self.clock() if ts is None else ts
+        if self._open is None:
+            last = self.closed[-1] if self.closed else None
+            if (last is not None and last["reason"] == "silence"
+                    and reason in SIM_GATE_REASONS
+                    and "late_completion_reason" not in last):
+                # The model's own completion edge, arriving after the
+                # recorder already closed this generation for silence: a
+                # late completion of THAT generation, not a new one.
+                last["late_completion_reason"] = reason
+                last["late_completion_delay_s"] = ts - last["t_close"]
+                self.late_completions += 1
+                return
+            # generation_complete and turn_complete both fire the edge; the
+            # second finds nothing open.
+            self.empty_boundaries += 1
+            return
+        self._close(reason, ts)
+
+    def maybe_silence_close(self, now: float | None = None) -> bool:
+        """Close the open generation for silence: it holds audio, no tool is
+        pending (grace elapsed) and nothing arrived for silence_close_s. This
+        is what a person does when the model never sends turn_complete -- they
+        just talk. Counted in silence_closes (a model-defect metric)."""
+        now = self.clock() if now is None else now
+        g = self._open
+        if (self.silence_close_s is None or g is None
+                or g["t_first_audio"] is None or self.pending_tools
+                or now < self._tool_resume_until
+                or self._last_event_at is None
+                or now - self._last_event_at < self.silence_close_s):
+            return False
+        self._close("silence", now)
+        self.silence_closes += 1
+        return True
+
+    def expected_playback_end(self) -> float:
+        """Playback end including audio of a generation still open."""
+        end = self.playback_end
+        g = self._open
+        if g is not None and g["t_first_audio"] is not None:
+            start = max(end, g["t_first_audio"])
+            end = max(start + len(g["pcm"]) / self._bytes_per_s,
+                      g["t_last_audio"])
+        if g is not None and g["spellback_end"] is not None:
+            end = max(end, g["spellback_end"])
+        return end
+
+    def _close(self, reason: str, ts: float) -> None:
+        g = self._open
+        self._open = None
+        pcm = bytes(g["pcm"])
+        audio_s = len(pcm) / self._bytes_per_s
+        if g["t_first_audio"] is not None:
+            start = max(self.playback_end, g["t_first_audio"])
+            self.playback_end = max(start + audio_s, g["t_last_audio"])
+        if g["spellback_end"] is not None:
+            self.playback_end = max(self.playback_end, g["spellback_end"])
+        if g["tool_calls"] and self.pending_tools == 0:
+            # The model's continuation after its tool response belongs to
+            # this generation, which just closed.
+            self._tool_resume_until = 0.0
+        self.closed.append({
+            "index": len(self.closed), "reason": reason,
+            "t_open": g["t_open"], "t_first_audio": g["t_first_audio"],
+            "t_last_audio": g["t_last_audio"], "t_close": ts,
+            "audio_s": audio_s,
+            "playback_end": (self.playback_end
+                             if g["t_first_audio"] is not None
+                             or g["spellback_end"] is not None else None),
+            "spellback_text": g["spellback_text"],
+            "spellback_end": g["spellback_end"],
+            "transcript": "".join(g["transcript"]).strip(),
+            "tool_calls": list(g["tool_calls"]),
+            "pending_tools_at_close": self.pending_tools,
+            "pcm": pcm,
+        })
+
+    # -- gate -----------------------------------------------------------
+    @property
+    def n_closed(self) -> int:
+        return len(self.closed)
+
+    def gate_state(self, now: float | None = None) -> dict:
+        now = self.clock() if now is None else now
+        closed_ok = (self._open is None and bool(self.closed)
+                     and self.closed[-1]["reason"] in SIM_GATE_REASONS)
+        no_pending_tool = (self.pending_tools == 0
+                           and now >= self._tool_resume_until)
+        playback_ended = now >= self.playback_end
+        quiet = (self.last_audio_at is None
+                 or now - self.last_audio_at >= self.quiet_window_s)
+        return {"open": bool(closed_ok and no_pending_tool
+                             and playback_ended and quiet),
+                "closed_ok": closed_ok, "no_pending_tool": no_pending_tool,
+                "playback_ended": playback_ended, "quiet": quiet}
+
+    def overlap(self, t0: float, t1: float) -> tuple[float, int]:
+        """(seconds of model audio that ARRIVED, generations that OPENED) in
+        [t0, t1] -- the model talking while the user was speaking."""
+        audio_s = sum(n for ts, n in self._audio_log
+                      if t0 <= ts <= t1) / self._bytes_per_s
+        opened = sum(1 for ts in self._open_log if t0 <= ts <= t1)
+        return audio_s, opened
+
+    def public_generation(self, g: dict) -> dict:
+        """The JSON-safe view of a closed generation: no PCM, times relative
+        to the recorder start."""
+        def rel(x):
+            return None if x is None else round(x - self.t0, 3)
+        return {"index": g["index"], "reason": g["reason"],
+                "t_first_audio_s": rel(g["t_first_audio"]),
+                "t_close_s": rel(g["t_close"]),
+                "audio_s": round(g["audio_s"], 3),
+                "playback_end_s": rel(g["playback_end"]),
+                "tool_calls": g["tool_calls"],
+                "pending_tools_at_close": g["pending_tools_at_close"],
+                "spellback_text": g.get("spellback_text", ""),
+                "late_completion_reason": g.get("late_completion_reason"),
+                "late_completion_delay_s": (
+                    None if g.get("late_completion_delay_s") is None
+                    else round(g["late_completion_delay_s"], 3)),
+                "transcript": g["transcript"]}
+
+
+# -- TTS mouth -----------------------------------------------------------
+
+def _strip_wav_header(data: bytes) -> bytes:
+    """Cloud TTS LINEAR16 comes back as a WAV container; the harness wants raw
+    PCM. Raw input (no RIFF header) is returned unchanged."""
+    if data[:4] != b"RIFF":
+        return data
+    idx = data.find(b"data")
+    return data if idx < 0 else data[idx + 8:]
+
+
+_TTS_CLIENT = {}
+
+
+def _make_tts_client(project: str | None = None):
+    """Cloud TTS client with the quota project bound, mirroring
+    sim_user_stt.make_speech_client (lazy import). `project` (the one
+    resolve_quota_project() found) wins over the environment."""
+    from google.cloud import texttospeech
+    project = (project or os.environ.get("GOOGLE_CLOUD_QUOTA_PROJECT")
+               or os.environ.get("GOOGLE_CLOUD_PROJECT"))
+    if project:
+        import google.auth
+        creds, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        creds = creds.with_quota_project(project)
+        return texttospeech.TextToSpeechClient(credentials=creds)
+    return texttospeech.TextToSpeechClient()
+
+
+def _chirp3_synth_uncached(text: str, voice: str = CHIRP3_VOICE,
+                          project: str | None = None) -> bytes:
+    """One Chirp3-HD request (no cache), billed to `project`."""
+    from google.cloud import texttospeech
+    if project not in _TTS_CLIENT:
+        _TTS_CLIENT[project] = _make_tts_client(project)
+    resp = _TTS_CLIENT[project].synthesize_speech(
+        input=texttospeech.SynthesisInput(text=text),
+        voice=texttospeech.VoiceSelectionParams(
+            language_code="en-US", name=voice),
+        audio_config=texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+            sample_rate_hertz=_AUDIO_RATE))
+    return _strip_wav_header(resp.audio_content)
+
+
+def synth_chirp3_cached(text: str, voice: str = CHIRP3_VOICE,
+                        project: str | None = None) -> bytes:
+    """Chirp3-HD -> mono PCM16 @ 16 kHz (LINEAR16 requested at 16000 Hz),
+    disk-cached like synth_cached so reruns are network-free."""
+    CHIRP3_CACHE.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha1(f"{voice}|{text}".encode("utf-8")).hexdigest()[:16]
+    cached = CHIRP3_CACHE / f"{key}.pcm"
+    if cached.exists():
+        return cached.read_bytes()
+    pcm = _chirp3_synth_uncached(text, voice, project)
+    cached.write_bytes(pcm)
+    return pcm
+
+
+class TTSMouth:
+    """The simulated user's mouth: text -> 16 kHz PCM, counting characters
+    requested (every request is billed as if uncached so a cached rerun does
+    not understate a fresh run's cost)."""
+
+    def __init__(self, kind: str, synth_fn):
+        self.kind = kind
+        self._synth = synth_fn
+        self.chars = 0
+        self.calls = 0
+
+    def synth(self, text: str) -> bytes:
+        self.chars += len(text)
+        self.calls += 1
+        return self._synth(text)
+
+    @property
+    def cost_usd(self) -> float:
+        return round(self.chars / 1_000_000 * TTS_USD_PER_MCHAR[self.kind], 6)
+
+
+def _make_tts(kind: str, project: str | None = None) -> TTSMouth:
+    if kind == "chirp3":
+        return TTSMouth(
+            "chirp3", lambda text: synth_chirp3_cached(text, project=project))
+    return TTSMouth("gtts", synth_cached)
+
+
+def probe_tts(kind: str, project: str | None) -> None:
+    """Pre-flight for --tts chirp3: one real (uncached) tiny request before
+    any Gemini session opens, so a missing quota project, revoked credential
+    or disabled API aborts a run that could not speak anyway. gtts needs no
+    probe."""
+    if kind != "chirp3":
+        return
+    try:
+        pcm = _chirp3_synth_uncached("Test.", CHIRP3_VOICE, project)
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            "Cloud TTS (Chirp3) pre-flight failed (the simulated user could "
+            "not speak): %s" % str(exc)[:300])
+    if not pcm:
+        raise SystemExit("Cloud TTS (Chirp3) pre-flight returned no audio.")
+
+
+def _make_stt_fn(project: str | None = None):
+    """One Cloud STT request per call (v2 method, see sim_user_stt), billed
+    to `project` as the quota project."""
+    client = _sim_stt.make_speech_client(project)
+
+    def _fn(pcm: bytes) -> dict:
+        return _sim_stt.recognize_pcm(client, pcm, SIM_MODEL_AUDIO_RATE)
+    return _fn
+
+
+def probe_stt(stt_fn) -> None:
+    """Pre-flight: one short synthetic clip through the real STT path before
+    any Gemini session is opened, so a missing quota project, a revoked
+    credential or a disabled API aborts a run that could not log divergence
+    anyway. Costs one 15 s billing increment."""
+    pcm = b"\x00\x00" * SIM_MODEL_AUDIO_RATE        # 1.0 s of silence
+    res = stt_fn(pcm)
+    if res.get("verdict") == "STT_ERROR" or res.get("error"):
+        raise SystemExit(
+            "Cloud STT pre-flight failed (divergence logging would be "
+            "empty): %s" % res.get("error", "unknown error"))
+
+
+def build_actor(kind: str, persona):
+    if kind == "stub":
+        return _sim_actor.StubActor(persona)
+    try:
+        return _sim_actor.HaikuActor(persona)
+    except RuntimeError as exc:
+        raise SystemExit(f"--actor haiku unavailable: {exc}")
+
+
+# -- run-level guards ------------------------------------------------------
+
+def check_factsheet_against_schema(persona, schema: dict) -> None:
+    """Fail fast if the fact sheet names a field the loaded kit does not have
+    (kits are not in git: a renamed field must abort the run, not mis-score)."""
+    ids = {f["id"] for f in schema.get("fields", [])}
+    missing = sorted(set(persona.facts) - ids)
+    if missing:
+        raise SystemExit(
+            f"persona {persona.persona_id!r} fact keys not in the loaded "
+            f"schema (kit drift?): {missing}")
+
+
+def kit_sha256(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def validate_sim_args(args, persona) -> None:
+    """--user sim is W-7 only and runs the continuous DTI shape."""
+    if args.schema != "w7":
+        raise SystemExit("--user sim is W-7 only for now: pass --schema w7.")
+    if persona.form != args.schema:
+        raise SystemExit(f"persona {persona.persona_id!r} is for form "
+                         f"{persona.form!r}, not --schema {args.schema!r}.")
+    if not getattr(args, "continuous", False) or args.arm != "dti":
+        raise SystemExit("--user sim requires --arm dti --continuous.")
+    if (getattr(args, "events", "none") != "none"
+            or getattr(args, "reactivity", None)):
+        raise SystemExit("--user sim does not support --events / --reactivity.")
+    if int(getattr(args, "max_user_turns", SIM_DEFAULT_MAX_USER_TURNS)) < 1:
+        raise SystemExit("--max-user-turns must be >= 1.")
+
+
+# -- scoring helpers -------------------------------------------------------
+
+def count_filled_confirmed(state: dict, fact_fids) -> int:
+    """Persona fact fields that are both filled (a value was written; an
+    explicit '' counts, it is the declined-optional end state) and confirmed."""
+    n = 0
+    for fid in fact_fids:
+        e = state.get(fid) or {}
+        if e.get("value") is not None and e.get("confirmed"):
+            n += 1
+    return n
+
+
+def sheet_strings(persona) -> set:
+    out = set()
+    for f in persona.facts.values():
+        out.add(f["answer"])
+        out.add(f["spoken"])
+        if f.get("spell"):
+            out.add(f["spell"])
+    return out
+
+
+def count_off_sheet(persona, user_turns: list) -> int:
+    """Rendered values whose text is not exactly a fact-sheet string. Zero by
+    construction (render() only emits fact strings); computed, not assumed."""
+    allowed = sheet_strings(persona)
+    return sum(1 for t in user_turns for v in t.get("values_spoken", [])
+               if v not in allowed)
+
+
+def ears_text(gens: list, ears: str) -> str:
+    if ears == "stt":
+        parts = [(g.get("stt") or {}).get("text", "") for g in gens]
+    else:
+        parts = [g.get("transcript", "") for g in gens]
+    # the name_spellback clip is played by the client, not emitted as model
+    # audio, so neither the transcript nor the STT of model PCM contains it
+    parts = [" ".join(x for x in (p, g.get("spellback_text", "")) if x)
+             for p, g in zip(parts, gens)]
+    return " ".join(p.strip() for p in parts if p and p.strip())
+
+
+def _row_from_delta(i: int, d: dict, rates: dict) -> dict:
+    ti, ai = d["_session_text_input_tokens"], d["_session_audio_input_tokens"]
+    to, ao = d["_session_text_output_tokens"], d["_session_audio_output_tokens"]
+    return {
+        "question number": i,
+        "audio in tokens": ai,
+        "audio in token cost": round(ai * rates["audio_input"], 6),
+        "audio out tokens": ao,
+        "audio out token cost": round(ao * rates["audio_output"], 6),
+        "text in tokens": ti,
+        "text in token cost": round(ti * rates["text_input"], 6),
+        "text out tokens": to,
+        "text out token cost": round(to * rates["text_output"], 6),
+        "total tokens": ti + ai + to + ao,
+        "total cost": round(ti * rates["text_input"] + ai * rates["audio_input"]
+                            + to * rates["text_output"]
+                            + ao * rates["audio_output"], 6),
+    }
+
+
+class SimDriver:
+    """The simulated-user loop (see section header).
+
+    Injected seams (all offline-testable): `recorder` (turn gate + captured
+    generations), `client` (needs `.state`), `actor` (decide(text, history)),
+    `tts` (TTSMouth-like: synth(text) -> 16 kHz PCM), `inject` (async
+    pcm -> t_end; the activity_start / chunks / activity_end path),
+    `stt_fn` (pcm -> recognize_pcm-shaped dict), `on_turn_done` and
+    `maintenance` (async hooks).
+    """
+
+    def __init__(self, *, persona, actor, recorder, client, tts, inject,
+                 stt_fn, ears: str = "transcript",
+                 max_user_turns: int = SIM_DEFAULT_MAX_USER_TURNS,
+                 timing: SimTiming | None = None, rng=None,
+                 on_turn_done=None, maintenance=None, clock=time.monotonic):
+        self.persona = persona
+        self.actor = actor
+        self.rec = recorder
+        self.client = client
+        self.tts = tts
+        self.inject = inject
+        self.stt_fn = stt_fn
+        self.ears = ears
+        self.max_user_turns = max_user_turns
+        self.timing = timing or SIM_TIMING
+        self.rng = rng or random.Random(0)
+        self.on_turn_done = on_turn_done
+        self.maintenance = maintenance
+        self.clock = clock
+        self.history: list = []
+        self.user_turns: list[dict] = []
+        self.gate_violations = 0
+        self.gate_timeouts = 0
+        self.stalls = 0
+        self.render_errors = 0
+        self.fallbacks: list[dict] = []
+        self.decisions = 0
+        self.actor_cost_usd = 0.0
+        self.actor_usage = {"input": 0, "output": 0,
+                            "cache_read": 0, "cache_creation": 0}
+        self.stop_reason: str | None = None
+        self.aborted = False
+        self.abort_message: str | None = None
+        self.generation_records: list[dict] = []
+        self._consec_fallbacks = 0
+        self._consec_stalls = 0
+        self._consec_gate_timeouts = 0
+        self.stt_calls = 0
+        self.stt_errors = 0
+        self.stt_first_error: str | None = None
+        self._stt_finalizing = False
+        self._stt_sem = asyncio.Semaphore(8)
+        self.expected_spellings = [
+            f["spell"] for f in persona.facts.values()
+            if f.get("spellable") and f.get("spell")]
+
+    # -- state ----------------------------------------------------------
+    def all_done(self) -> bool:
+        state = self.client.state
+        for fid in self.persona.facts:
+            e = state.get(fid) or {}
+            if e.get("value") is None or not e.get("confirmed"):
+                return False
+        return True
+
+    async def _poll(self, pred, timeout: float, since=None) -> bool:
+        """Poll `pred` until true or the deadline. Each poll first lets the
+        recorder close a generation the model never completed (silence).
+        The deadline is `timeout` after the later of the poll start and
+        `since()` (re-read every poll), so legitimate activity -- audio still
+        playing, audio still arriving -- pushes it out instead of timing out."""
+        t0 = self.clock()
+        while True:
+            self.rec.maybe_silence_close(self.clock())
+            if pred():
+                return True
+            ref = t0 if since is None else max(t0, since())
+            if self.clock() - ref >= timeout:
+                return bool(pred())
+            await asyncio.sleep(self.timing.poll_s)
+
+    async def wait_gate(self) -> tuple[bool, float]:
+        t0 = self.clock()
+        # gate_timeout_s runs from when playback is expected to have ended
+        # (recomputed as playback extends), not from when waiting began: an
+        # 88 s recital is not a stall.
+        opened = await self._poll(
+            lambda: self.rec.gate_state()["open"], self.timing.gate_timeout_s,
+            since=self.rec.expected_playback_end)
+        return opened, self.clock() - t0
+
+    # -- STT ------------------------------------------------------------
+    async def _ensure_stt(self, gens: list) -> None:
+        async def one(g):
+            if not g["pcm"]:
+                g["stt"] = {"text": "", "confidence": 0.0, "n_results": 0,
+                            "seconds": 0.0, "billed_seconds": 0,
+                            "verdict": "NO_AUDIO"}
+                return
+            async with self._stt_sem:
+                try:
+                    g["stt"] = await asyncio.to_thread(self.stt_fn, g["pcm"])
+                except Exception as exc:  # noqa: BLE001
+                    g["stt"] = {"text": "", "confidence": 0.0, "n_results": 0,
+                                "seconds": 0.0, "billed_seconds": 0,
+                                "verdict": "STT_ERROR",
+                                "error": str(exc)[:200]}
+        todo = [g for g in gens if "stt" not in g]
+        if todo:
+            await asyncio.gather(*(one(g) for g in todo))
+            for g in todo:
+                v = g["stt"].get("verdict")
+                if v in ("NO_AUDIO", "TOO_SHORT"):
+                    continue       # never sent to Cloud STT
+                self.stt_calls += 1
+                if v == "STT_ERROR":
+                    self.stt_errors += 1
+                    if self.stt_first_error is None:
+                        self.stt_first_error = g["stt"].get("error")
+            if (self.stt_calls >= SIM_STT_FIRST_K
+                    and self.stt_errors == self.stt_calls
+                    and not self._stt_finalizing):
+                raise SimAbort(
+                    "Cloud STT failed on every one of its first %d calls "
+                    "(first error: %s)" % (self.stt_calls,
+                                           self.stt_first_error),
+                    reason="stt_failure")
+
+    def divergence_report(self) -> dict:
+        """Is the divergence log trustworthy? A run whose STT mostly failed
+        has an empty log and must not look healthy."""
+        rate = (round(self.stt_errors / self.stt_calls, 4)
+                if self.stt_calls else None)
+        return {"valid": bool(self.stt_calls
+                              and rate <= SIM_MAX_STT_ERROR_RATE),
+                "stt_calls": self.stt_calls, "stt_errors": self.stt_errors,
+                "stt_error_rate": rate,
+                "first_error": self.stt_first_error}
+
+    async def finalize_divergence(self) -> list[dict]:
+        """One STT pass per generation (reused when ears=stt), then the v2
+        scorer. Returns the per-generation records written to the run file."""
+        self._stt_finalizing = True      # report, do not raise: the session is over
+        await self._ensure_stt(self.rec.closed)
+        out = []
+        for g in self.rec.closed:
+            score = _sim_stt.score_generation(
+                g["transcript"], g.get("stt"), self.expected_spellings)
+            out.append({"persona_id": self.persona.persona_id,
+                        **self.rec.public_generation(g), "score": score,
+                        "stt_error": (g.get("stt") or {}).get("error")})
+        self.generation_records = out
+        return out
+
+    # -- decisions --------------------------------------------------------
+    def _note_decision(self, turn_no: int, decision) -> None:
+        self.decisions += 1
+        self.actor_cost_usd += _sim_actor.estimate_cost_usd(decision.usage)
+        for k in self.actor_usage:
+            self.actor_usage[k] += int(decision.usage.get(k, 0) or 0)
+        if decision.fallback_used:
+            raw = decision.raw if isinstance(decision.raw, dict) else {}
+            err = raw.get("error")
+            self.fallbacks.append({"turn": turn_no, "error": err})
+            self._consec_fallbacks += 1
+            if self._consec_fallbacks >= self.timing.max_consecutive_fallbacks:
+                raise SimAbort(
+                    f"actor fell back to the stub on "
+                    f"{self._consec_fallbacks} consecutive decisions (last "
+                    f"error: {err}). A broken API key or model id must not "
+                    f"produce a fake Haiku run.")
+        else:
+            self._consec_fallbacks = 0
+
+    def _render(self, decision):
+        try:
+            return _sim_actor.render(decision.move, decision.field_key,
+                                     self.persona, self.rng), None
+        except ValueError as exc:
+            self.render_errors += 1
+            return (_sim_actor.render("acknowledge", _sim_actor.NONE_KEY,
+                                      self.persona, self.rng), str(exc))
+
+    # -- the loop ---------------------------------------------------------
+    async def run(self) -> None:
+        try:
+            await self._loop()
+        except SimAbort as exc:
+            self.aborted = True
+            self.abort_message = str(exc)
+            self.stop_reason = exc.reason
+
+    async def _loop(self) -> None:
+        rec, timing = self.rec, self.timing
+        # Two marks into rec.closed: `cursor` = what has been HEARD (ears and
+        # history start there, so a generation closed after the decision's
+        # view is still heard next turn); `watermark` = generations closed
+        # when the user's last injection ENDED -- the model's reply to that
+        # turn is a generation closing after it. 0 before any injection, so
+        # the first wait is for the greeting.
+        cursor = 0
+        watermark = 0
+        prev_turn = None
+        while True:
+            got = await self._poll(
+                lambda: rec.n_closed > watermark, timing.response_timeout_s,
+                since=lambda: rec._last_event_at or 0.0)
+            # _consec_stalls counts consecutive RESPONSE stalls (no model
+            # generation after waiting); any received generation resets it,
+            # whether or not a user turn preceded. Gate timeouts have their
+            # own streak (_consec_gate_timeouts), reset only when the user
+            # actually speaks.
+            if got:
+                self._consec_stalls = 0
+            else:
+                self.stalls += 1
+                self._consec_stalls += 1
+            if prev_turn is not None:
+                prev_turn["response_stalled"] = not got
+                if timing.usage_settle_s:
+                    await asyncio.sleep(timing.usage_settle_s)
+                if self.on_turn_done is not None:
+                    await self.on_turn_done(prev_turn)
+                prev_turn = None
+            if self.all_done():
+                self.stop_reason = "complete"
+                return
+            if len(self.user_turns) >= self.max_user_turns:
+                self.stop_reason = "max_user_turns"
+                return
+            if (self._consec_stalls >= timing.max_consecutive_stalls
+                    or self._consec_gate_timeouts
+                    >= timing.max_consecutive_stalls):
+                self.stop_reason = "stalls"
+                return
+            if self.maintenance is not None:
+                await self.maintenance(len(self.user_turns) + 1)
+            turn_no = len(self.user_turns) + 1
+            redecides = 0
+            opened = False
+            while True:
+                n_seen = rec.n_closed
+                gens = rec.closed[cursor:n_seen]
+                if self.ears == "stt":
+                    await self._ensure_stt(gens)
+                text = ears_text(gens, self.ears)
+                decision = await self.actor.decide(text, self.history)
+                self._note_decision(turn_no, decision)
+                rendered, render_error = self._render(decision)
+                pcm = await asyncio.to_thread(self.tts.synth, rendered.text)
+                opened, waited = await self.wait_gate()
+                if not opened:
+                    break
+                if rec.n_closed == n_seen or redecides >= timing.max_redecide:
+                    break
+                redecides += 1
+            if not opened:
+                self.gate_timeouts += 1
+                self.stalls += 1
+                self._consec_gate_timeouts += 1
+                continue
+            self._consec_gate_timeouts = 0
+            now = self.clock()
+            gate = rec.gate_state(now)
+            turn = {
+                "persona_id": self.persona.persona_id, "turn": turn_no,
+                "t_start_s": round(now - rec.t0, 3),
+                "move": rendered.move, "field_key": rendered.field_key,
+                "text": rendered.text, "values_spoken": rendered.values_spoken,
+                "ears": self.ears, "ears_text": text,
+                "generations_heard": [g["index"] for g in gens],
+                "heard_silence_closed": any(
+                    g["reason"] == "silence" for g in gens),
+                "gate_open_at_start": bool(gate["open"]), "gate_state": gate,
+                "gate_wait_s": round(waited, 3), "redecides": redecides,
+                "fallback_used": bool(decision.fallback_used),
+                "decision_valid": bool(decision.valid),
+                "decision_error": (decision.raw.get("error")
+                                   if decision.fallback_used
+                                   and isinstance(decision.raw, dict) else None),
+                "render_error": render_error,
+                "actor_usage": dict(decision.usage),
+                "actor_cost_usd": round(
+                    _sim_actor.estimate_cost_usd(decision.usage), 6),
+                "actor_latency_s": round(decision.latency_s, 3),
+                "tts_chars": len(rendered.text),
+                "response_stalled": None,
+                "overlap_audio_s": 0.0, "overlapped": False,
+                "gate_violation": False,
+            }
+            self.user_turns.append(turn)
+            # The cursor is the view the decision was made on: generations
+            # that closed after it (a redecide cap hit while the model kept
+            # talking) are heard by the NEXT turn, not skipped.
+            cursor = n_seen
+            turn["_t_end"] = await self.inject(pcm)
+            watermark = rec.n_closed
+            # A violation is the real thing: the gate was shut when the user
+            # started, or the model emitted audio / opened a generation
+            # while the user's speech was being injected.
+            ov_s, ov_gens = rec.overlap(now, turn["_t_end"])
+            turn["overlap_audio_s"] = round(ov_s, 3)
+            turn["overlapped"] = bool(ov_s > 0 or ov_gens)
+            turn["gate_violation"] = bool(
+                not gate["open"] or turn["overlapped"])
+            if turn["gate_violation"]:
+                self.gate_violations += 1
+            self.history.append(_sim_actor.history_entry(text, decision))
+            prev_turn = turn
+            print(f"[u{turn_no:03d}] {rendered.move} {rendered.field_key}"
+                  f"{' (FALLBACK)' if decision.fallback_used else ''}",
+                  flush=True)
+
+    def public_user_turns(self) -> list[dict]:
+        return [{k: v for k, v in t.items() if not k.startswith("_")}
+                for t in self.user_turns]
+
+
+def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
+                      headline: dict, kit_hash: str,
+                      divergence: dict) -> dict:
+    """The per-run sim block. The two scores are never mixed:
+    filled_confirmed (comparable with the scripted benchmark) and
+    correct_vs_factsheet (the strict scorer)."""
+    persona = driver.persona
+    fids = list(persona.facts)
+    fb = len(driver.fallbacks)
+    tts = driver.tts
+    actor_usd = round(driver.actor_cost_usd, 6)
+    gemini_usd = headline.get("voice_usd", 0.0)
+    sidecar_usd = headline.get("text_usd", 0.0)
+    stt_usd = divergence.get("stt_cost_usd", 0.0)
+    total = round(gemini_usd + sidecar_usd + actor_usd + tts.cost_usd + stt_usd, 6)
+    return {
+        "persona_id": persona.persona_id,
+        "kit_sha256": kit_hash,
+        **args_view,
+        "filled_confirmed": count_filled_confirmed(driver.client.state, fids),
+        "fact_fields": len(fids),
+        "correct_vs_factsheet": {k: fill_accuracy.get(k)
+                                 for k in ("matched", "total", "accuracy")},
+        "off_sheet_values": count_off_sheet(persona, driver.user_turns),
+        "gate_violations": driver.gate_violations,
+        "gate_timeouts": driver.gate_timeouts,
+        # model-defect metrics: generations the recorder had to close because
+        # the model never sent turn_complete, and completions that arrived
+        # after such a close.
+        "silence_closes": driver.rec.silence_closes,
+        "spellback_clips": driver.rec.spellback_clips,
+        "late_completions": driver.rec.late_completions,
+        "user_turns": len(driver.user_turns),
+        "stalls": driver.stalls,
+        "render_errors": driver.render_errors,
+        "stop_reason": driver.stop_reason,
+        "aborted": driver.aborted,
+        "abort_message": driver.abort_message,
+        "fallbacks": {
+            "count": fb,
+            "rate": (round(fb / driver.decisions, 4)
+                     if driver.decisions else None),
+            "errors": driver.fallbacks},
+        "generations": len(driver.rec.closed),
+        "divergence": divergence,
+        "divergence_valid": driver.divergence_report()["valid"],
+        "stt": driver.divergence_report(),
+        "tts": {"kind": tts.kind, "chars": tts.chars, "calls": tts.calls},
+        "actor_usage": dict(driver.actor_usage),
+        "cost": {
+            "gemini_live_usd": gemini_usd,
+            "sidecar_text_usd": sidecar_usd,
+            "actor_usd": actor_usd,
+            "tts_usd": tts.cost_usd,
+            "stt_usd": stt_usd,
+            "total_usd": total,
+        },
+    }
+
+
+def write_sim_records(path: Path, *, run_meta: dict, summary: dict,
+                      driver: SimDriver) -> None:
+    """The committed per-run record: meta, summary, one record per model
+    generation and per user turn, every record carrying its persona id. No
+    PCM (the generation views come from public_generation)."""
+    doc = {
+        "persona_id": driver.persona.persona_id,
+        "run_meta": run_meta,
+        "summary": summary,
+        "generations": driver.generation_records,
+        "user_turns": driver.public_user_turns(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, indent=2, default=str), encoding="utf-8")
+
+
 # ------------------------------------------------------------------- driver
 
 def _make_settings(arm: str, trigger: int, window: int, compression: bool = False,
@@ -2496,7 +3490,35 @@ async def run(args) -> int:
         print("--events / --reactivity are only defined for --schema i90-full.")
         return 1
 
+    # Simulated user (bd polyglot-pdf-tmu0f): validate EVERYTHING that can be
+    # checked before any live spend -- persona, flags, actor credentials, and
+    # (after the schema loads) the fact sheet against the kit.
+    sim_mode = getattr(args, "user", "script") == "sim"
+    sim_persona = None
+    sim_actor = None
+    sim_stt_fn = None
+    sim_project = None
+    kit_hash = None
+    if sim_mode:
+        sim_persona = (_sim_actor.load_persona(args.persona)
+                       if getattr(args, "persona", None)
+                       else _sim_actor.load_default_persona())
+        validate_sim_args(args, sim_persona)
+        sim_actor = build_actor(getattr(args, "actor", "haiku"), sim_persona)
+        # STT is needed for the divergence log in BOTH ears modes; prove it
+        # works (quota project, credentials, API enabled) before spending a
+        # Gemini session.
+        sim_project = resolve_quota_project()
+        sim_stt_fn = _make_stt_fn(sim_project)
+        probe_stt(sim_stt_fn)
+        # Same for the mouth: Chirp3 is a paid Google API with the same
+        # quota-project requirement as STT.
+        probe_tts(getattr(args, "tts", "gtts"), sim_project)
+
     schema = load_schema(args.schema)
+    if sim_mode:
+        check_factsheet_against_schema(sim_persona, schema)
+        kit_hash = kit_sha256(SCHEMAS[args.schema]["path"])
     # Drift guard (bd jnjj.7): abort BEFORE spending live-Gemini money if the
     # expected-canon table no longer matches the kit's option vocabulary.
     _assert_expected_canon_matches_schema(
@@ -2508,6 +3530,11 @@ async def run(args) -> int:
     # bd jnjj.24). An explicit --questions N still caps the run.
     _all_questions = SCHEMAS[args.schema]["questions"]
     plan = _all_questions if args.questions is None else _all_questions[: args.questions]
+    if sim_mode:
+        # The persona's fact sheet IS the plan: every fact field is asked and
+        # scored. Plan-shaped so score_fill_accuracy / the continuous
+        # handshake consume it unchanged; --questions does not apply.
+        plan = [{"field_id": fid} for fid in sim_persona.facts]
 
     # Scenario events (bd polyglot-pdf-eh1h): weave the event script into the
     # plan. `steps` is what the driver walks; `plan` stays the QUESTION list
@@ -2564,12 +3591,19 @@ async def run(args) -> int:
         p = q.get("plant") or {}
         if p.get("correct_say"):
             utterances.add(p["correct_say"])
-    for u in sorted(utterances):
-        synth_cached(u, lang=getattr(args, "lang", "en"))
-    print(f"audio cache ready: {len(utterances)} utterances "
-          f"({AUDIO_CACHE})")
-    if args.synth_only:
-        return 0
+    if sim_mode:
+        # The simulated user synthesizes what it renders, when it renders it.
+        if args.synth_only:
+            print("--synth-only does nothing for --user sim (utterances are "
+                  "synthesized on demand and cached).")
+            return 0
+    else:
+        for u in sorted(utterances):
+            synth_cached(u, lang=getattr(args, "lang", "en"))
+        print(f"audio cache ready: {len(utterances)} utterances "
+              f"({AUDIO_CACHE})")
+        if args.synth_only:
+            return 0
 
     # Per-service id (2.5 had different ids on Vertex vs AI Studio). Pricing
     # resolves by family, so rates follow the resolved id.
@@ -2607,7 +3641,8 @@ async def run(args) -> int:
     _comp_tag = ("_comp" if args.compression and args.arm != "sliding-window" else "") + \
                 ("_der" if getattr(args, "derive_compression", False) else "")
     _cont_tag = "_cont" if getattr(args, "continuous", False) else ""
-    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_cont_tag}{_comp_tag}_{args.path}_{stamp}"
+    _user_tag = "_sim" if sim_mode else ""
+    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_cont_tag}{_user_tag}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
         "bead": "polyglot-pdf-4loz", "model": model_name, "tier": args.model,
         "schema": args.schema,
@@ -2701,12 +3736,16 @@ async def run(args) -> int:
                             "plant" if s.get("plant") else
                             "question")) for s in steps]
     t_run_start = time.monotonic()
+    sim_driver: SimDriver | None = None
+    sim_tts: TTSMouth | None = None
+    if sim_mode:
+        meta["user"] = "sim"
 
     try:
         if args.vertex:
             adapter = LiveAIGemini(
                 model=model_name, vertexai=True,
-                project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                project=_vertex_project(),
                 location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
         else:
             adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
@@ -2743,7 +3782,7 @@ async def run(args) -> int:
             if args.vertex:
                 text_ai = TextAIGemini(
                     model="gemini-2.5-flash-lite", vertexai=True,
-                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    project=_vertex_project(),
                     location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
             else:
                 text_ai = TextAIGemini(api_key=os.getenv("GEMINI_API_KEY"),
@@ -2768,7 +3807,7 @@ async def run(args) -> int:
             if args.vertex:
                 text_ai_pro = TextAIGemini(
                     model=settings.VALIDATOR_PRO_MODEL, vertexai=True,
-                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    project=_vertex_project(),
                     location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
                     fallback_models=(),
                     thinking_budget=settings.VALIDATOR_PRO_THINKING_BUDGET)
@@ -2854,6 +3893,13 @@ async def run(args) -> int:
 
         client = FakeClientWebSocket(schema, plan, dti_mode=(args.arm == "dti"))
         client.service = service
+        sim_timing = SIM_TIMING
+        if sim_mode:
+            client.gen_recorder = GenerationRecorder(
+                quiet_window_s=sim_timing.quiet_window_s,
+                tool_resume_grace_s=sim_timing.tool_resume_grace_s,
+                silence_close_s=sim_timing.silence_close_s,
+                spellback_s_per_token=sim_timing.spellback_s_per_token)
         if is_section_reset:
             client.set_active_section(
                 [q for q in plan
@@ -2896,6 +3942,9 @@ async def run(args) -> int:
         # model) are unchanged unless --spoken-language is passed.
         spoken_language = getattr(args, "spoken_language", None) or "English"
         service._spoken_language = spoken_language
+        if sim_mode:
+            from backend.services.spellback_tts import resolve_spellback_locale
+            client.spellback_locale = resolve_spellback_locale(spoken_language)
         await service.start_session(
             websocket=client, session_id=f"4loz-{stamp}",
             accept_connection=True, schema=arm_schema, current_values={},
@@ -2908,14 +3957,18 @@ async def run(args) -> int:
             # bd jnjj.39: in --debug, request the model's OUTPUT transcript so the
             # FakeClient can capture what it SAID per turn. Off by default -- normal
             # runs neither request nor pay for transcription.
-            send_transcript=(DEBUG or AUDIT_TRANSCRIPTS))
+            send_transcript=(DEBUG or AUDIT_TRANSCRIPTS or sim_mode))
 
         # The validation seam is now the CLIENT's own machinery (W2/W3 landed,
         # bd polyglot-pdf-0cyu): client.maybe_emit_validate_windows() /
         # client._drain_findings() mirror webFormConnection.ts directly. Only
         # armed when the sidecar is wired AND we run the continuous full form
-        # (same gating the old seam used).
-        validator_armed = bool(use_text_ai and continuous)
+        # (same gating the old seam used). NOT armed for --user sim: the
+        # validator steer path replies with scripted utterances (check_steers)
+        # and a simulated user answers what the model actually asks instead.
+        validator_armed = bool(use_text_ai and continuous and not sim_mode)
+        if sim_mode:
+            meta["sim_validator_armed"] = False
 
         # Tap tool calls AFTER start_session wired the real chain. The tap wraps the
         # REAL callback; it must be RE-INSTALLED after every switch_to_section, which
@@ -2932,6 +3985,8 @@ async def run(args) -> int:
                 tool_log.append((current_q["n"], tool_name))
                 _ts = time.monotonic()
                 client.audit.tool_call(tool_name, _ts)
+                if client.gen_recorder is not None:
+                    client.gen_recorder.tool_start(tool_name, _ts)
                 try:
                     resp = await orig_tool_cb(tool_name, arguments)
                     if tool_name in ("ask_secretary", "switch_to_field",
@@ -2968,6 +4023,9 @@ async def run(args) -> int:
                                         "tool": tool_name, "args": _jsonable(arguments),
                                         "response": {"_exception": type(_e).__name__}})
                     raise
+                finally:
+                    if client.gen_recorder is not None:
+                        client.gen_recorder.tool_end(tool_name, time.monotonic())
 
             adapter._on_tool_call = _tool_tap
 
@@ -3001,10 +4059,19 @@ async def run(args) -> int:
         _orig_flush = getattr(adapter, "_dev_flush_audio_dump", None)
         if _orig_flush is not None:
             def _flush_then_audit(reason):
-                client.audit.boundary(reason, time.monotonic())
+                _bts = time.monotonic()
+                client.audit.boundary(reason, _bts)
+                # The sim recorder closes the generation here: it holds the
+                # captured PCM/transcript/tool calls since the previous edge.
+                if client.gen_recorder is not None:
+                    client.gen_recorder.boundary(reason, _bts)
                 return _orig_flush(reason)
 
             adapter._dev_flush_audio_dump = _flush_then_audit
+        elif sim_mode:
+            raise SystemExit(
+                "--user sim needs the adapter's _dev_flush_audio_dump "
+                "generation boundary; this adapter does not define it.")
 
         for _ in range(150):
             if getattr(adapter, "_session_ready", False):
@@ -3440,7 +4507,111 @@ async def run(args) -> int:
         _tool_silent_run = 0  # derailment guard state (bd polyglot-pdf-2nikx)
         _confirm_stagnant_run = 0
         _last_confirmed_count = 0
-        for i, q in enumerate(steps, 1):
+
+        if sim_mode:
+            # ---- simulated user (bd polyglot-pdf-tmu0f) replaces the
+            # per-question scripted loop below (which iterates nothing).
+            sim_tts = _make_tts(getattr(args, "tts", "gtts"), sim_project)
+
+            async def _sim_inject(pcm: bytes) -> float:
+                # The same activity_start / 40 ms chunks / activity_end path
+                # as speak(); the SimDriver owns the waiting.
+                client.first_audio_at = None
+                current_q["n"] = len(sim_driver.user_turns)
+                await service.send_activity_start()
+                for chunk in _pcm_chunks(pcm):
+                    await service.stream_audio(chunk)
+                    await asyncio.sleep(sim_timing.chunk_sleep_s)
+                t_end = time.monotonic()
+                client.audit.user_turn_end(t_end)
+                await service.send_activity_end()
+                return t_end
+
+            async def _sim_turn_done(turn: dict) -> None:
+                n = turn["turn"]
+                d = tracker.delta_and_advance()
+                rows.append(_row_from_delta(n, d, rates))
+                _td = turn_tracker.delta_and_advance()
+                _tc = _price_delta(_td, rates)
+                _cum_cost["v"] += _tc["total_cost"]
+                t_end = turn["_t_end"]
+                meta["turns"].append({
+                    "q": n, "label": f"sim-{turn['move']}",
+                    "stalled": bool(turn["response_stalled"]),
+                    "field_id": turn["field_key"],
+                    "text_in": _td["_session_text_input_tokens"],
+                    "audio_in": _td["_session_audio_input_tokens"],
+                    "text_out": _td["_session_text_output_tokens"],
+                    "audio_out": _td["_session_audio_output_tokens"],
+                    "total_tokens": _td["_session_total_tokens"],
+                    "cost_usd": round(_tc["total_cost"], 6),
+                    "cumulative_cost_usd": round(_cum_cost["v"], 6),
+                    "prompt_tokens": (usage_dumps[-1].get("prompt")
+                                      if usage_dumps else None),
+                    "latency_s": (round(client.first_audio_at - t_end, 3)
+                                  if client.first_audio_at
+                                  and client.first_audio_at > t_end else None)})
+                meta["per_question_tools"][str(n)] = [
+                    t for (qq, t) in tool_log if qq == n]
+
+            async def _sim_maintenance(turn_no: int) -> None:
+                # Continuous-session GoAway / dead-session reconnect, the same
+                # production-faithful rebuild the scripted loop does (bd c5t,
+                # ctu8): remaining unconfirmed fields, next field first.
+                if not (client.go_away_pending
+                        or not getattr(adapter, "_session_ready", False)
+                        or not adapter.is_session_active()):
+                    return
+                was_announced = client.go_away_pending
+                client.go_away_pending = False
+                _t0 = time.monotonic()
+                await _drain_before_reconnect()
+                remaining = [client.schema_fields[p["field_id"]] for p in plan
+                             if not client.state.get(p["field_id"], {}).get("confirmed")]
+                if not remaining:
+                    return
+                sub = {"form_metadata": schema.get("form_metadata", {}),
+                       "fields": remaining}
+                cont_schema = jit_handshake_schema(
+                    sub, "continuous", "Full Form (continuous)")
+                await service.switch_to_section(
+                    cont_schema, {},
+                    {"section_id": "continuous", "section_number": 1,
+                     "total_sections": 1,
+                     "section_label": "Full Form (continuous)",
+                     "previous_spoken_names": []},
+                    initial_field_hint=client.next_hint())
+                meta["session_count"] += 1
+                for _ in range(150):
+                    if getattr(adapter, "_session_ready", False):
+                        break
+                    await asyncio.sleep(0.1)
+                meta.setdefault("continuous_reconnects", []).append(
+                    {"before_q": turn_no, "announced": was_announced,
+                     "downtime_s": round(time.monotonic() - _t0, 3)})
+                print(f"    [reconnect] continuous session restarted before "
+                      f"user turn {turn_no} "
+                      f"(go_away={'yes' if was_announced else 'no'})")
+
+            sim_driver = SimDriver(
+                persona=sim_persona, actor=sim_actor,
+                recorder=client.gen_recorder, client=client, tts=sim_tts,
+                inject=_sim_inject, stt_fn=sim_stt_fn,
+                ears=getattr(args, "ears", "transcript"),
+                max_user_turns=getattr(args, "max_user_turns",
+                                       SIM_DEFAULT_MAX_USER_TURNS),
+                timing=sim_timing, rng=random.Random(0),
+                on_turn_done=_sim_turn_done, maintenance=_sim_maintenance)
+            await sim_driver.run()
+            if sim_driver.aborted:
+                print(f"[sim-abort] {sim_driver.abort_message}", flush=True)
+            print(f"[sim] stop={sim_driver.stop_reason} "
+                  f"user_turns={len(sim_driver.user_turns)} "
+                  f"stalls={sim_driver.stalls} "
+                  f"gate_violations={sim_driver.gate_violations}", flush=True)
+            await sim_driver.finalize_divergence()
+
+        for i, q in enumerate([] if sim_mode else steps, 1):
             current_q["n"] = i
             is_event = "event" in q
             fid = q.get("field_id") if not is_event else None
@@ -3949,7 +5120,7 @@ async def run(args) -> int:
                                for aa in (SCHEMAS[args.schema].get("auto_apply") or [])]
     meta["turn_audio_audit"] = client.audit.finalize(time.monotonic())
     meta["turn_audio_audit"]["transcripts_requested"] = bool(
-        DEBUG or AUDIT_TRANSCRIPTS)
+        DEBUG or AUDIT_TRANSCRIPTS or sim_mode)
     meta["turn_audio_audit_turns"] = client.audit.turns
     meta["turn_audio_audit_exchanges"] = client.audit.exchanges
     _taa = meta["turn_audio_audit"]
@@ -3964,6 +5135,34 @@ async def run(args) -> int:
         json.dumps(meta, indent=2, default=str), encoding="utf-8")
     summary = build_summary(meta, rows, log_sink, client, planted_groups,
                             {q["field_id"] for q in plan})
+    sim_records_path = None
+    if sim_mode:
+        _div = _sim_stt.summarize_run(
+            [g["score"] for g in sim_driver.generation_records])
+        summary["sim_user"] = build_sim_summary(
+            driver=sim_driver,
+            args_view={"user": "sim", "ears": args.ears, "actor": args.actor,
+                       "tts_kind": args.tts, "model": model_name,
+                       "max_user_turns": args.max_user_turns},
+            fill_accuracy=meta["fill_accuracy"],
+            headline=summary["headline"], kit_hash=kit_hash, divergence=_div)
+        meta["sim_user"] = {k: summary["sim_user"][k] for k in (
+            "persona_id", "kit_sha256", "filled_confirmed",
+            "off_sheet_values", "gate_violations", "user_turns", "stalls",
+            "stop_reason", "aborted")}
+        sim_records_path = out_dir / "sim_user" / f"{base_name}.sim-user.json"
+        write_sim_records(
+            sim_records_path,
+            run_meta={"bead": "polyglot-pdf-tmu0f", "base_name": base_name,
+                      "stamp": stamp, "model": model_name, "tier": args.model,
+                      "kit_sha256": kit_hash, "ears": args.ears,
+                      "actor": args.actor, "tts": args.tts,
+                      "schema": args.schema, "arm": args.arm,
+                      "rng_seed": 0, "quiet_window_s": sim_timing.quiet_window_s,
+                      "text_ai_wired": use_text_ai},
+            summary=summary["sim_user"], driver=sim_driver)
+        (out_dir / f"{base_name}.meta.json").write_text(
+            json.dumps(meta, indent=2, default=str), encoding="utf-8")
     (out_dir / f"{base_name}.summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {csv_path}")
@@ -3985,6 +5184,28 @@ async def run(args) -> int:
                               meta["per_question_tools"])
         print(f"wrote {out_dir / (base_name + '.debug.json')}  "
               f"(LOCAL-ONLY -- contains transcripts/field values)")
+    if sim_mode:
+        _ss = summary["sim_user"]
+        print(f"wrote {sim_records_path}")
+        print(f"sim-user: filled_confirmed={_ss['filled_confirmed']}/"
+              f"{_ss['fact_fields']} correct_vs_factsheet="
+              f"{_ss['correct_vs_factsheet']['matched']}/"
+              f"{_ss['correct_vs_factsheet']['total']} "
+              f"off_sheet_values={_ss['off_sheet_values']} "
+              f"gate_violations={_ss['gate_violations']} "
+              f"fallbacks={_ss['fallbacks']['count']} "
+              f"stalls={_ss['stalls']} total=${_ss['cost']['total_usd']}")
+        if sim_driver.aborted:
+            return 3
+        if not _ss["divergence_valid"]:
+            print("[sim-invalid] divergence log is not trustworthy: "
+                  f"{_ss['stt']}", flush=True)
+            return 4
+        if _ss["stop_reason"] != "complete":
+            print(f"[sim-incomplete] stop_reason={_ss['stop_reason']} "
+                  f"filled_confirmed={_ss['filled_confirmed']}/"
+                  f"{_ss['fact_fields']}", flush=True)
+            return 5
     return 0
 
 
@@ -4052,7 +5273,7 @@ def _write_debug_artifact(path, q_windows, tool_io, transcript_chunks,
     path.write_text(json.dumps(artifact, indent=2, default=str), encoding="utf-8")
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=sorted(MODELS), default="3.8",
@@ -4221,6 +5442,41 @@ def main() -> int:
                          "default: production does not request output "
                          "transcription, so leaving it off keeps the deploy-"
                          "faithful config.")
+    ap.add_argument("--user", choices=["script", "sim"], default="script",
+                    help="who plays the applicant (bd polyglot-pdf-tmu0f): "
+                         "'script' (default; the fixed scripted answers) or "
+                         "'sim' (a simulated user that listens to what the "
+                         "model said and answers it; W-7 only; requires "
+                         "--schema w7 --arm dti --continuous). Sim exit "
+                         "codes: 0 complete; 3 actor degraded to its stub "
+                         "(5 consecutive fallbacks); 4 Cloud STT divergence "
+                         "log invalid; 5 incomplete (stalls / max turns / "
+                         "STT abort) -- artifacts are written in every case.")
+    ap.add_argument("--ears", choices=["transcript", "stt"],
+                    default="transcript",
+                    help="--user sim: what the simulated user hears -- the "
+                         "model's output transcript (default) or Cloud STT of "
+                         "its emitted audio. STT of every generation is run "
+                         "and scored either way (divergence log).")
+    ap.add_argument("--actor", choices=["haiku", "stub"], default="haiku",
+                    help="--user sim: the move-choosing backend. haiku = "
+                         "Claude Haiku 5.5 via the Claude API "
+                         "(ANTHROPIC_API_KEY); stub = offline rules.")
+    ap.add_argument("--persona", default=None,
+                    help="--user sim: persona JSON path (default: the W-7 "
+                         "non-spelling Ana Reyes persona)")
+    ap.add_argument("--tts", choices=["gtts", "chirp3"], default="gtts",
+                    help="--user sim: the simulated user's mouth. gtts is "
+                         "free; chirp3 is Cloud TTS Chirp3-HD, LINEAR16 at "
+                         "16 kHz ($30 per 1M characters).")
+    ap.add_argument("--max-user-turns", type=int,
+                    default=SIM_DEFAULT_MAX_USER_TURNS, dest="max_user_turns",
+                    help="--user sim: stop after this many user turns")
+    return ap
+
+
+def main() -> int:
+    ap = build_parser()
     return asyncio.run(run(ap.parse_args()))
 
 
