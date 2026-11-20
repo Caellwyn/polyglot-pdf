@@ -2054,3 +2054,65 @@ class TestRefereeInTheLoop:
             if t["referee"]:
                 assert t["move"] == "reject_and_correct"
                 assert t["field_key"] in SLIP.facts
+
+
+class TestGttsRetry:
+    """A transient gTTS refusal must not kill a live session (bd ya4vi.5)."""
+
+    @staticmethod
+    def _flaky(failures):
+        from gtts.tts import gTTSError
+
+        calls = []
+
+        class Flaky:
+            def __init__(self, text, lang):
+                calls.append((text, lang))
+
+            def write_to_fp(self, fp):
+                if len(calls) <= failures:
+                    raise gTTSError("Failed to connect. Probable cause: Unknown")
+                fp.write(b"mp3-bytes")
+
+        return Flaky, calls
+
+    def test_recovers_after_transient_failures(self):
+        n_fail = len(mfsc._GTTS_RETRY_DELAYS_S)
+        cls, calls = self._flaky(n_fail)
+        slept = []
+        buf = mfsc._gtts_mp3(cls, "hello", "en", sleep=slept.append)
+        assert buf.read() == b"mp3-bytes"
+        assert len(calls) == n_fail + 1
+        assert slept == list(mfsc._GTTS_RETRY_DELAYS_S)
+
+    def test_raises_after_every_attempt_fails(self):
+        from gtts.tts import gTTSError
+
+        cls, calls = self._flaky(99)
+        slept = []
+        with pytest.raises(gTTSError):
+            mfsc._gtts_mp3(cls, "hello", "en", sleep=slept.append)
+        assert len(calls) == len(mfsc._GTTS_RETRY_DELAYS_S) + 1
+        assert slept == list(mfsc._GTTS_RETRY_DELAYS_S)
+
+    def test_first_try_success_does_not_sleep(self):
+        cls, calls = self._flaky(0)
+        slept = []
+        assert mfsc._gtts_mp3(cls, "hi", "es", sleep=slept.append).read() \
+            == b"mp3-bytes"
+        assert calls == [("hi", "es")] and slept == []
+
+    def test_synth_cached_goes_through_the_retry(self, tmp_path, monkeypatch):
+        seen = []
+        real = mfsc._gtts_mp3
+
+        def spy(cls, text, lang, sleep=time.sleep):
+            seen.append((text, lang))
+            raise RuntimeError("stop after the spy")
+
+        monkeypatch.setattr(mfsc, "AUDIO_CACHE", tmp_path)
+        monkeypatch.setattr(mfsc, "_gtts_mp3", spy)
+        with pytest.raises(RuntimeError, match="spy"):
+            mfsc.synth_cached("uncached phrase", "zh")
+        assert seen == [("uncached phrase", "zh-CN")]
+        assert real is not spy

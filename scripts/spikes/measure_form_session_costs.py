@@ -1085,6 +1085,36 @@ TURNS_CSV_COLUMNS = [
 
 # ---------------------------------------------------------------- audio cache
 
+# Backoff (seconds) between gTTS attempts. The free gTTS endpoint refuses a
+# connection now and then; one refusal must not kill a whole live session.
+_GTTS_RETRY_DELAYS_S = (2.0, 5.0, 15.0, 30.0)
+
+
+def _gtts_mp3(gtts_cls, text: str, gtts_lang: str,
+              sleep=time.sleep) -> io.BytesIO:
+    """Synthesize `text` with gTTS into an MP3 buffer, retrying transient
+    failures with _GTTS_RETRY_DELAYS_S backoff; raises the last error once
+    every attempt has failed."""
+    from gtts.tts import gTTSError
+
+    attempts = len(_GTTS_RETRY_DELAYS_S) + 1
+    for attempt in range(attempts):
+        buf = io.BytesIO()
+        try:
+            gtts_cls(text, lang=gtts_lang).write_to_fp(buf)
+        except gTTSError as exc:
+            if attempt == attempts - 1:
+                raise
+            delay = _GTTS_RETRY_DELAYS_S[attempt]
+            print(f"    [tts] gTTS failed ({exc}); retry "
+                  f"{attempt + 1}/{attempts - 1} in {delay:.0f}s", flush=True)
+            sleep(delay)
+            continue
+        buf.seek(0)
+        return buf
+    raise AssertionError("unreachable")
+
+
 def synth_cached(text: str, lang: str = "en") -> bytes:
     """gTTS -> mono PCM16 @ 16 kHz, disk-cached so committed runs are repeatable.
 
@@ -1104,9 +1134,7 @@ def synth_cached(text: str, lang: str = "en") -> bytes:
     # Harness --lang values are full_form_script phrase keys; a few differ from
     # gTTS's code ("zh" -> "zh-CN"). Cache key stays on the harness lang.
     gtts_lang = {"zh": "zh-CN"}.get(lang, lang)
-    buf = io.BytesIO()
-    gTTS(text, lang=gtts_lang).write_to_fp(buf)
-    buf.seek(0)
+    buf = _gtts_mp3(gTTS, text, gtts_lang)
     y, sr = sf.read(buf, dtype="float32")
     if y.ndim > 1:
         y = y.mean(axis=1)
