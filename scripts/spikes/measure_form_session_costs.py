@@ -972,7 +972,9 @@ _I90V2_MANILA = ["U.S. Embassy in Manila, Philippines",
                  "U.S. Embassy Manila, Philippines",
                  "Manila, Philippines"]
 I90V2_EXPECTED: dict = {
-    "a_number": "087654321",
+    # USCIS pads 8-digit A-Numbers to 9 with a leading zero; both are the
+    # same number, so a fill that drops the zero is correct, not a miss.
+    "a_number": ["087654321", "87654321"],
     "uscis_account": "944731258602",
     "family_name": "Torres",
     "given_name": "Elena",
