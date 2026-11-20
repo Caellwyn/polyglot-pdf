@@ -222,3 +222,7 @@ tmpfile
 # run then refused. The cache is machine/run-local and reproducible from
 # .firebaserc + a deploy; it belongs in neither git nor a deploy artifact.
 .firebase/
+
+# Chirp3-HD TTS cache of the simulated user's utterances (bd polyglot-pdf-tmu0f);
+# reproducible from the persona, unlike the committed gTTS audio_cache/.
+scripts/spikes/fixtures/audio_cache_chirp3/

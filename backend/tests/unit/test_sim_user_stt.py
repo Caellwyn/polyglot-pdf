@@ -276,6 +276,30 @@ class TestLongClipPieces:
         assert "quota" in out["error"]
         assert out["billed_seconds"] == 60
 
+    def test_a_tail_under_the_minimum_is_folded_into_the_previous_piece(self):
+        c = _PieceClient([("a", 0.9), ("b", 0.9)])
+        secs = self.LIMIT + 0.4                      # tail 0.4 s < MIN_SECONDS
+        out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
+        assert c.calls == 1
+        assert c.sizes == [len(_pcm(secs))]
+        assert out["pieces"] == 1
+        assert out["billed_seconds"] == 60
+
+    def test_a_tail_at_the_minimum_stays_its_own_piece(self):
+        c = _PieceClient([("a", 0.9), ("b", 0.9)])
+        secs = self.LIMIT + stt.MIN_SECONDS
+        out = stt.recognize_pcm(c, _pcm(secs), RATE, speech=_FakeSpeech)
+        assert c.calls == 2 and out["pieces"] == 2
+        assert min(c.sizes) >= int(stt.MIN_SECONDS * RATE) * 2
+
+    def test_no_piece_is_ever_under_the_minimum(self):
+        for extra in (0.1, 0.5, 0.59, 0.6, 3.0):
+            c = _PieceClient([("a", 0.9)] * 4)
+            stt.recognize_pcm(c, _pcm(2 * self.LIMIT + extra), RATE,
+                              speech=_FakeSpeech)
+            assert min(c.sizes) >= int(stt.MIN_SECONDS * RATE) * 2, extra
+            assert max(c.sizes) <= 2 * RATE * 60
+
     def test_piece_boundaries_fall_on_whole_samples(self):
         c = _PieceClient([("a", 0.9), ("b", 0.9)])
         stt.recognize_pcm(c, _pcm(self.LIMIT + 2), RATE, speech=_FakeSpeech)

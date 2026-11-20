@@ -56,7 +56,11 @@ simulated playback ended, quiet window). Requires --arm dti --continuous.
 Writes the usual artifacts plus <out>/sim_user/<base>.sim-user.json (per-
 generation transcript + Cloud STT divergence, per-user-turn records) and a
 summary["sim_user"] block (filled_confirmed, correct_vs_factsheet,
-off_sheet_values, gate_violations, fallbacks, cost split).
+off_sheet_values, gate_violations, fallbacks, cost split). gate_violations
+counts user turns that started with the gate shut OR overlapped model audio /
+a new model generation while the user's speech was being injected. Exit codes
+(sim): 0 complete, 3 actor fallback abort, 4 invalid STT divergence log,
+5 incomplete (stop_reason != complete).
 
 Audio is gTTS-synthesized once and cached as PCM16@16k under
 scripts/spikes/fixtures/audio_cache/ (committed; reruns are network-free).
@@ -2392,11 +2396,17 @@ class GenerationRecorder:
         self.spellback_s_per_token = spellback_s_per_token
         self.spellback_clips = 0
         self._last_event_at: float | None = None
+        # (ts, nbytes) of every model audio chunk and ts of every generation
+        # opened: what overlap() reads to see whether the model talked while
+        # the user was speaking.
+        self._audio_log: list[tuple[float, int]] = []
+        self._open_log: list[float] = []
 
     # -- intake ---------------------------------------------------------
     def _gen(self, ts: float) -> dict:
         self._last_event_at = ts
         if self._open is None:
+            self._open_log.append(ts)
             self._open = {"t_open": ts, "t_first_audio": None,
                           "t_last_audio": None, "pcm": bytearray(),
                           "transcript": [], "tool_calls": [],
@@ -2411,6 +2421,7 @@ class GenerationRecorder:
         g["t_last_audio"] = ts
         g["pcm"].extend(data)
         self.last_audio_at = ts
+        self._audio_log.append((ts, len(data)))
 
     def on_transcript(self, text: str, ts: float | None = None) -> None:
         if not text:
@@ -2552,6 +2563,14 @@ class GenerationRecorder:
                              and playback_ended and quiet),
                 "closed_ok": closed_ok, "no_pending_tool": no_pending_tool,
                 "playback_ended": playback_ended, "quiet": quiet}
+
+    def overlap(self, t0: float, t1: float) -> tuple[float, int]:
+        """(seconds of model audio that ARRIVED, generations that OPENED) in
+        [t0, t1] -- the model talking while the user was speaking."""
+        audio_s = sum(n for ts, n in self._audio_log
+                      if t0 <= ts <= t1) / self._bytes_per_s
+        opened = sum(1 for ts in self._open_log if t0 <= ts <= t1)
+        return audio_s, opened
 
     def public_generation(self, g: dict) -> dict:
         """The JSON-safe view of a closed generation: no PCM, times relative
@@ -3038,8 +3057,6 @@ class SimDriver:
             self._consec_gate_timeouts = 0
             now = self.clock()
             gate = rec.gate_state(now)
-            if not gate["open"]:
-                self.gate_violations += 1
             turn = {
                 "persona_id": self.persona.persona_id, "turn": turn_no,
                 "t_start_s": round(now - rec.t0, 3),
@@ -3063,10 +3080,25 @@ class SimDriver:
                 "actor_latency_s": round(decision.latency_s, 3),
                 "tts_chars": len(rendered.text),
                 "response_stalled": None,
+                "overlap_audio_s": 0.0, "overlapped": False,
+                "gate_violation": False,
             }
             self.user_turns.append(turn)
-            cursor = rec.n_closed
+            # The cursor is the view the decision was made on: generations
+            # that closed after it (a redecide cap hit while the model kept
+            # talking) are heard by the NEXT turn, not skipped.
+            cursor = n_seen
             turn["_t_end"] = await self.inject(pcm)
+            # A violation is the real thing: the gate was shut when the user
+            # started, or the model emitted audio / opened a generation
+            # while the user's speech was being injected.
+            ov_s, ov_gens = rec.overlap(now, turn["_t_end"])
+            turn["overlap_audio_s"] = round(ov_s, 3)
+            turn["overlapped"] = bool(ov_s > 0 or ov_gens)
+            turn["gate_violation"] = bool(
+                not gate["open"] or turn["overlapped"])
+            if turn["gate_violation"]:
+                self.gate_violations += 1
             self.history.append(_sim_actor.history_entry(text, decision))
             prev_turn = turn
             print(f"[u{turn_no:03d}] {rendered.move} {rendered.field_key}"
@@ -5130,6 +5162,11 @@ async def run(args) -> int:
             print("[sim-invalid] divergence log is not trustworthy: "
                   f"{_ss['stt']}", flush=True)
             return 4
+        if _ss["stop_reason"] != "complete":
+            print(f"[sim-incomplete] stop_reason={_ss['stop_reason']} "
+                  f"filled_confirmed={_ss['filled_confirmed']}/"
+                  f"{_ss['fact_fields']}", flush=True)
+            return 5
     return 0
 
 
@@ -5371,7 +5408,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "'script' (default; the fixed scripted answers) or "
                          "'sim' (a simulated user that listens to what the "
                          "model said and answers it; W-7 only; requires "
-                         "--schema w7 --arm dti --continuous)")
+                         "--schema w7 --arm dti --continuous). Sim exit "
+                         "codes: 0 complete; 3 actor degraded to its stub "
+                         "(5 consecutive fallbacks); 4 Cloud STT divergence "
+                         "log invalid; 5 incomplete (stalls / max turns / "
+                         "STT abort) -- artifacts are written in every case.")
     ap.add_argument("--ears", choices=["transcript", "stt"],
                     default="transcript",
                     help="--user sim: what the simulated user hears -- the "

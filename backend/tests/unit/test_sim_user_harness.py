@@ -105,7 +105,7 @@ class FakeSession:
     state dict. `inject` records when the user started speaking."""
 
     def __init__(self, audio_s=FLOW_AUDIO_S, timing=FAST, tts_kind="gtts",
-                 withhold=(), late_s=None, drip_s=0.0):
+                 withhold=(), late_s=None, drip_s=0.0, talk_over=False):
         self.rec = mfsc.GenerationRecorder(
             quiet_window_s=timing.quiet_window_s,
             tool_resume_grace_s=timing.tool_resume_grace_s,
@@ -115,6 +115,7 @@ class FakeSession:
         self.withhold = set(withhold)
         self.late_s = late_s
         self.drip_s = drip_s
+        self.talk_over = talk_over      # model audio arrives mid-injection
         self.n_emitted = 0
         self.state = {}
         self.client = SimpleNamespace(state=self.state)
@@ -167,6 +168,10 @@ class FakeSession:
     async def inject(self, pcm):
         self.inject_starts.append(time.monotonic())
         await asyncio.sleep(0.005)
+        if self.talk_over:
+            self.rec.on_audio(b"\x00\x00" * 480)
+            self.rec.boundary("turn_complete")
+            await asyncio.sleep(0.005)
         t_end = time.monotonic()
         self.tasks.append(asyncio.ensure_future(
             self._emit(self.model.respond(self.last_text))))
@@ -853,6 +858,86 @@ class TestSttHealth:
         assert len(driver.user_turns) == mfsc.SIM_STT_FIRST_K - 1
 
 
+class TestGateViolationMeasuresOverlap:
+    """gate_violations is a measurement: did the model talk while the user
+    was speaking (or was the gate shut when the user started)?"""
+
+    def test_model_audio_during_the_users_speech_is_a_violation(self):
+        session = FakeSession(talk_over=True)
+        driver = make_driver(session, max_user_turns=2)
+        run_driver(session, driver)
+        assert len(driver.user_turns) == 2
+        # the gate was open at the start of every turn ...
+        assert all(t["gate_open_at_start"] for t in driver.user_turns)
+        # ... yet the model talked over the user, and that is what counts
+        assert driver.gate_violations == 2
+        for t in driver.public_user_turns():
+            assert t["overlapped"] is True
+            assert t["overlap_audio_s"] > 0
+            assert t["gate_violation"] is True
+
+    def test_clean_turns_are_not_violations(self):
+        session = FakeSession()
+        driver = make_driver(session, max_user_turns=3)
+        run_driver(session, driver)
+        assert driver.gate_violations == 0
+        for t in driver.public_user_turns():
+            assert t["overlapped"] is False
+            assert t["overlap_audio_s"] == 0.0
+            assert t["gate_violation"] is False
+
+    def test_gate_shut_at_start_still_counts(self):
+        session = FakeSession()
+        driver = make_driver(session, max_user_turns=1)
+        real = session.rec.gate_state
+
+        def flaky(now=None):
+            st = real(now)
+            return dict(st, open=False) if now is not None else st
+        session.rec.gate_state = flaky
+        run_driver(session, driver)
+        assert driver.gate_violations == 1
+        assert driver.user_turns[0]["overlapped"] is False
+
+    def test_recorder_overlap_window(self):
+        rec = mfsc.GenerationRecorder(clock=lambda: 0.0)
+        rec.on_audio(b"\x00\x00" * 24000, ts=10.0)       # 1.0 s, opens a gen
+        rec.boundary("turn_complete", 10.1)
+        rec.on_audio(b"\x00\x00" * 12000, ts=20.0)       # 0.5 s, opens a gen
+        assert rec.overlap(9.0, 9.9) == (0.0, 0)
+        assert rec.overlap(9.0, 10.0) == (pytest.approx(1.0), 1)
+        assert rec.overlap(15.0, 25.0) == (pytest.approx(0.5), 1)
+        assert rec.overlap(10.5, 19.9) == (0.0, 0)
+
+
+class TestStaleViewAfterRedecideCap:
+    def test_generations_closed_after_the_decision_view_are_heard_next(self):
+        timing = _timing(max_redecide=0)
+        session = FakeSession(timing=timing)
+        spy = SpyActor()
+        state = {"n": 0}
+
+        class Interrupting:
+            """On the first decision the model speaks again while the actor
+            is still deciding, so a generation closes after the view."""
+            async def decide(self, model_text, history):
+                state["n"] += 1
+                if state["n"] == 1:
+                    await session._emit({"say": "extra unheard words"})
+                return await spy.decide(model_text, history)
+
+        driver = make_driver(session, actor=Interrupting(), timing=timing,
+                             max_user_turns=2)
+        run_driver(session, driver)
+        heard = [i for t in driver.user_turns for i in t["generations_heard"]]
+        extra = next(g["index"] for g in session.rec.closed
+                     if "extra unheard words" in g["transcript"])
+        assert extra in heard                       # not skipped
+        assert extra not in driver.user_turns[0]["generations_heard"]
+        assert "extra unheard words" in spy.seen[1]  # fed the next turn's ears
+        assert "extra unheard words" not in spy.seen[0]
+
+
 class TestStallStreaks:
     def test_a_received_generation_resets_the_response_streak(self):
         session = FakeSession()
@@ -1397,6 +1482,53 @@ class TestRunLevelSttHealth:
         doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
         assert all(g["stt_error"] == "403 quota project"
                    for g in doc["generations"])
+
+
+class TestRunLevelExitCodes:
+    def test_incomplete_run_exits_5_with_a_clear_line(self, sim_env, capsys):
+        rc = run_args(parse(sim_env, "--max-user-turns", "2"))
+        assert rc == 5
+        out = capsys.readouterr().out
+        assert "[sim-incomplete] stop_reason=max_user_turns" in out
+        assert "filled_confirmed=" in out
+        summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
+        assert summary["sim_user"]["stop_reason"] == "max_user_turns"
+        # artifacts are still written
+        read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+
+    def test_complete_run_exits_0(self, sim_env):
+        assert run_args(parse(sim_env)) == 0
+
+    def test_invalid_stt_outranks_incomplete(self, sim_env):
+        sim_env.hub.stt_fail_after_probe = True
+        assert run_args(parse(sim_env, "--max-user-turns", "2")) == 4
+
+    def test_actor_abort_outranks_incomplete(self, sim_env):
+        sim_env.monkeypatch.setattr(
+            mfsc, "build_actor",
+            lambda kind, persona: FlakyActor([True], error="401"))
+        assert run_args(parse(sim_env)) == 3
+
+    def test_exit_codes_are_documented(self):
+        helptext = mfsc.build_parser().format_help()
+        for code in ("3 actor", "4 Cloud STT", "5 incomplete"):
+            assert code in " ".join(helptext.split())
+
+    def test_gate_violations_in_the_summary_is_the_overlap_measure(self, sim_env):
+        run_args(parse(sim_env, "--max-user-turns", "2"))
+        doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+        assert doc["summary"]["gate_violations"] == 0
+        for t in doc["user_turns"]:
+            assert "overlap_audio_s" in t and "overlapped" in t
+
+
+class TestChirp3CacheIgnored:
+    def test_chirp3_cache_is_ignored_and_the_gtts_cache_is_not(self):
+        lines = [ln.strip() for ln in (_REPO_ROOT / ".gitignore").read_text(
+            encoding="utf-8").splitlines()]
+        assert "scripts/spikes/fixtures/audio_cache_chirp3/" in lines
+        assert not any(ln.rstrip("/").endswith("fixtures/audio_cache")
+                       for ln in lines)
 
 
 class TestScriptedModeUnaffected:

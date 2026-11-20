@@ -190,6 +190,10 @@ def render(move: str, field_key: str, persona: Persona,
             return Rendered(tpl.format(spoken=f["spoken"]), move, field_key,
                             [f["spoken"]])
         if move == "reject_and_correct" and f.get("spellable"):
+            # Consistent with the non-spelling persona: spells_unprompted
+            # governs the FIRST answer only. A wrong read-back is itself the
+            # prompt to spell, and the TTS voice says "Ana" and "Anna" alike,
+            # so only the letters can carry the correction.
             tpl = rng.choice(_SPELLED_CORRECTION)
             return Rendered(tpl.format(spell=f["spell"]), move, field_key,
                             [f["spell"]])
@@ -386,7 +390,8 @@ def build_system_prompt(persona: Persona) -> str:
         "- Answer only what was asked; pick the single fact the interviewer is asking about.",
     ]
     if not persona.behavior.get("spells_unprompted", False):
-        lines.append("- Never spell unless the interviewer asks you to spell.")
+        lines.append("- Never spell unless the interviewer asks you to spell "
+                     "or reads a spelling back wrong.")
     lines += [
         "- Use confirm when a read-back says the same value as the fact, even if "
         "numbers are spoken as words or digit by digit, letters are spelled "

@@ -448,6 +448,11 @@ class TestHaikuActor:
         assert "wrong letter, digit, name, place or date" in s
         assert "matches the fact exactly" not in s
 
+    def test_prompt_allows_spelling_when_a_spelling_is_read_back_wrong(self, persona):
+        s = actor.build_system_prompt(persona)
+        assert ("Never spell unless the interviewer asks you to spell or "
+                "reads a spelling back wrong") in s
+
     def test_valid_reply_parses(self, persona):
         k = _name_key(persona)
         fc = FakeClient(json.dumps({"move": "spell", "field_key": k}))

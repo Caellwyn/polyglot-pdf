@@ -237,8 +237,15 @@ def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
     recognized stay billed)."""
     texts, weights, confs = [], [], []
     n_results = billed = 0
-    for start in range(0, len(pcm), piece_bytes):
-        piece = pcm[start:start + piece_bytes]
+    pieces = [pcm[i:i + piece_bytes] for i in range(0, len(pcm), piece_bytes)]
+    # A tail under MIN_SECONDS is not worth its own request (the API would
+    # get a clip too short to hold speech); fold it into the previous piece,
+    # which stays well under the sync limit.
+    min_bytes = int(MIN_SECONDS * rate_hz) * 2
+    if len(pieces) > 1 and len(pieces[-1]) < min_bytes:
+        tail = pieces.pop()
+        pieces[-1] += tail
+    for piece in pieces:
         try:
             rec = recognize(client, speech, piece, rate_hz)
         except Exception as exc:  # noqa: BLE001
@@ -257,7 +264,7 @@ def _recognize_pieces(client, speech, pcm: bytes, rate_hz: int,
     return {"text": " ".join(texts), "confidence": round(conf, 3),
             "n_results": n_results, "seconds": seconds,
             "billed_seconds": billed,
-            "pieces": -(-len(pcm) // piece_bytes)}
+            "pieces": len(pieces)}
 
 
 def decide_verdict(letters_stt: str, letters_txt: str, letters_near: str,
