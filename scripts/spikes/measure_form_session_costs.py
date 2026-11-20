@@ -3254,8 +3254,10 @@ def count_corrections(driver: "SimDriver", fill_accuracy: dict) -> dict:
     slips_spoken: fields whose first answer spoke the wrong (slip) value.
     slips_corrected: of those, fields that END holding the true value
     (correct against the strict key, i.e. NOT still holding the slip).
-    fields_uncorrected: the rest. reject_and_correct_turns: how many times the
-    actor actually rejected a read-back. All zero for a persona with no slips."""
+    fields_uncorrected: the rest. reject_and_correct_turns: how many injected
+    turns rejected a read-back -- the move AFTER the referee, so it counts
+    referee-made rejects and leaves out actor rejects the referee flipped
+    (see referee_overrides). All zero for a persona with no slips."""
     ok = {d["field_id"]: bool(d.get("ok"))
           for d in (fill_accuracy.get("detail") or [])}
     spoken = sorted(driver.slips_spoken)
