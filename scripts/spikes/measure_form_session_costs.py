@@ -2994,11 +2994,18 @@ class SimDriver:
 
     async def _loop(self) -> None:
         rec, timing = self.rec, self.timing
+        # Two marks into rec.closed: `cursor` = what has been HEARD (ears and
+        # history start there, so a generation closed after the decision's
+        # view is still heard next turn); `watermark` = generations closed
+        # when the user's last injection ENDED -- the model's reply to that
+        # turn is a generation closing after it. 0 before any injection, so
+        # the first wait is for the greeting.
         cursor = 0
+        watermark = 0
         prev_turn = None
         while True:
             got = await self._poll(
-                lambda: rec.n_closed > cursor, timing.response_timeout_s,
+                lambda: rec.n_closed > watermark, timing.response_timeout_s,
                 since=lambda: rec._last_event_at or 0.0)
             # _consec_stalls counts consecutive RESPONSE stalls (no model
             # generation after waiting); any received generation resets it,
@@ -3089,6 +3096,7 @@ class SimDriver:
             # talking) are heard by the NEXT turn, not skipped.
             cursor = n_seen
             turn["_t_end"] = await self.inject(pcm)
+            watermark = rec.n_closed
             # A violation is the real thing: the gate was shut when the user
             # started, or the model emitted audio / opened a generation
             # while the user's speech was being injected.

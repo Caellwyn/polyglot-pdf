@@ -105,7 +105,8 @@ class FakeSession:
     state dict. `inject` records when the user started speaking."""
 
     def __init__(self, audio_s=FLOW_AUDIO_S, timing=FAST, tts_kind="gtts",
-                 withhold=(), late_s=None, drip_s=0.0, talk_over=False):
+                 withhold=(), late_s=None, drip_s=0.0, talk_over=False,
+                 reply_delay=0.0):
         self.rec = mfsc.GenerationRecorder(
             quiet_window_s=timing.quiet_window_s,
             tool_resume_grace_s=timing.tool_resume_grace_s,
@@ -116,6 +117,7 @@ class FakeSession:
         self.late_s = late_s
         self.drip_s = drip_s
         self.talk_over = talk_over      # model audio arrives mid-injection
+        self.reply_delay = reply_delay  # model thinks before replying
         self.n_emitted = 0
         self.state = {}
         self.client = SimpleNamespace(state=self.state)
@@ -173,8 +175,13 @@ class FakeSession:
             self.rec.boundary("turn_complete")
             await asyncio.sleep(0.005)
         t_end = time.monotonic()
-        self.tasks.append(asyncio.ensure_future(
-            self._emit(self.model.respond(self.last_text))))
+        out = self.model.respond(self.last_text)
+
+        async def reply():
+            if self.reply_delay:
+                await asyncio.sleep(self.reply_delay)
+            await self._emit(out)
+        self.tasks.append(asyncio.ensure_future(reply()))
         return t_end
 
 
@@ -871,6 +878,8 @@ class TestGateViolationMeasuresOverlap:
         assert all(t["gate_open_at_start"] for t in driver.user_turns)
         # ... yet the model talked over the user, and that is what counts
         assert driver.gate_violations == 2
+        # every user turn was answered (the model replied after talking over)
+        assert all(t["response_stalled"] is False for t in driver.user_turns)
         for t in driver.public_user_turns():
             assert t["overlapped"] is True
             assert t["overlap_audio_s"] > 0
@@ -913,7 +922,9 @@ class TestGateViolationMeasuresOverlap:
 class TestStaleViewAfterRedecideCap:
     def test_generations_closed_after_the_decision_view_are_heard_next(self):
         timing = _timing(max_redecide=0)
-        session = FakeSession(timing=timing)
+        # the reply to the user's turn takes 0.4 s: a loop that took the
+        # stale generation for "the reply" would speak again before it
+        session = FakeSession(timing=timing, reply_delay=0.4)
         spy = SpyActor()
         state = {"n": 0}
 
@@ -936,6 +947,36 @@ class TestStaleViewAfterRedecideCap:
         assert extra not in driver.user_turns[0]["generations_heard"]
         assert "extra unheard words" in spy.seen[1]  # fed the next turn's ears
         assert "extra unheard words" not in spy.seen[0]
+
+    def test_next_turn_waits_for_a_reply_closed_after_the_injection(self):
+        timing = _timing(max_redecide=0, response_timeout_s=5.0)
+        session = FakeSession(timing=timing, reply_delay=0.4)
+        state = {"n": 0}
+
+        class Interrupting:
+            def __init__(self):
+                self.stub = sim_actor.StubActor(PERSONA)
+
+            async def decide(self, model_text, history):
+                state["n"] += 1
+                if state["n"] == 1:
+                    await session._emit({"say": "extra unheard words"})
+                return await self.stub.decide(model_text, history)
+
+        driver = make_driver(session, actor=Interrupting(), timing=timing,
+                             max_user_turns=2)
+        run_driver(session, driver)
+        t1, t2 = driver.user_turns[0], driver.user_turns[1]
+        replies = [g for g in session.rec.closed
+                   if g["t_close"] > t1["_t_end"]]
+        assert replies, "the model never answered turn 1"
+        first_reply_close_s = replies[0]["t_close"] - session.rec.t0
+        assert t2["t_start_s"] >= first_reply_close_s - 0.002
+        # and the stale generation is still heard, with the real reply
+        stale = next(g["index"] for g in session.rec.closed
+                     if "extra unheard words" in g["transcript"])
+        assert stale in t2["generations_heard"]
+        assert replies[0]["index"] in t2["generations_heard"]
 
 
 class TestStallStreaks:
