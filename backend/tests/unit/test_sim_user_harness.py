@@ -2134,3 +2134,60 @@ class TestGttsRetry:
         with pytest.raises(RuntimeError, match="spy"):
             mfsc.synth_cached("uncached phrase", "zh")
         assert seen == [("uncached phrase", "zh-CN")]
+
+
+class TestSynthOffTheEventLoop:
+    """A gTTS cache miss can sleep up to 52 s in retries; inside a live
+    session that must not run on the event loop (bd polyglot-pdf-qgw48)."""
+
+    def test_synth_off_loop_runs_in_a_worker_thread(self, monkeypatch):
+        import threading
+
+        seen = []
+
+        def fake_synth(text, lang="en"):
+            seen.append((threading.current_thread(), text, lang))
+            return b"pcm"
+
+        monkeypatch.setattr(mfsc, "synth_cached", fake_synth)
+        out = asyncio.run(mfsc.synth_off_loop("hello", lang="es"))
+        assert out == b"pcm"
+        assert len(seen) == 1
+        thread, text, lang = seen[0]
+        assert (text, lang) == ("hello", "es")
+        assert thread is not threading.main_thread()
+
+    def test_no_async_function_calls_synth_directly(self):
+        """The complete set: no synth_cached / _gtts_mp3 CALL sits lexically
+        inside an async def. Async code passes synth_cached by reference to
+        a thread (synth_off_loop, SimDriver's to_thread) instead."""
+        import ast
+
+        src = Path(mfsc.__file__).read_text(encoding="utf-8")
+        offenders = []
+
+        def walk(node, in_async):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.AsyncFunctionDef):
+                    walk(child, True)
+                elif isinstance(child, (ast.FunctionDef, ast.Lambda)):
+                    walk(child, False)
+                else:
+                    if in_async and isinstance(child, ast.Call):
+                        f = child.func
+                        name = (f.id if isinstance(f, ast.Name)
+                                else getattr(f, "attr", None))
+                        if name in ("synth_cached", "_gtts_mp3"):
+                            offenders.append(child.lineno)
+                    walk(child, in_async)
+
+        walk(ast.parse(src), False)
+        assert offenders == [], (
+            "synth_cached called on the event loop at lines %s; use "
+            "await synth_off_loop(...)" % offenders)
+
+    def test_async_callers_use_synth_off_loop(self):
+        """Pins the two known async call sites to the helper, so the AST
+        guard above is not satisfied by deleting them."""
+        src = Path(mfsc.__file__).read_text(encoding="utf-8")
+        assert src.count("await synth_off_loop(") == 2

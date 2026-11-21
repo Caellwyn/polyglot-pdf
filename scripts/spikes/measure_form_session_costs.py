@@ -1147,6 +1147,14 @@ def synth_cached(text: str, lang: str = "en") -> bytes:
     return pcm
 
 
+async def synth_off_loop(text: str, lang: str = "en") -> bytes:
+    """synth_cached, run in a worker thread. A cache miss calls gTTS, whose
+    retry backoff sleeps up to 52 s in all; on the event loop that would
+    freeze a live session's receive loop and keepalive (bd
+    polyglot-pdf-qgw48). Every async caller goes through here."""
+    return await asyncio.to_thread(synth_cached, text, lang)
+
+
 def _pcm_chunks(pcm: bytes) -> list[bytes]:
     n = int(_AUDIO_RATE * (_CHUNK_MS / 1000.0)) * 2
     return [pcm[i:i + n] for i in range(0, len(pcm), n)]
@@ -3767,7 +3775,7 @@ async def run(args) -> int:
             return 0
     else:
         for u in sorted(utterances):
-            synth_cached(u, lang=getattr(args, "lang", "en"))
+            await synth_off_loop(u, lang=getattr(args, "lang", "en"))
         print(f"audio cache ready: {len(utterances)} utterances "
               f"({AUDIO_CACHE})")
         if args.synth_only:
@@ -4289,7 +4297,7 @@ async def run(args) -> int:
 
         async def speak(text: str, label: str):
             nonlocal last_total
-            pcm = synth_cached(text, lang=getattr(args, "lang", "en"))
+            pcm = await synth_off_loop(text, lang=getattr(args, "lang", "en"))
             client.first_audio_at = None
             await service.send_activity_start()
             for chunk in _pcm_chunks(pcm):
