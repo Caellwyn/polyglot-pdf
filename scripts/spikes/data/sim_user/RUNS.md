@@ -20,3 +20,26 @@ All runs: `gemini-3.8-live` on Vertex, `--arm dti --continuous --compression
 Later harness commits (077e22ca9, da367dc39) changed how `gate_violations`
 is measured and how the loop waits for a reply. They were reviewed offline and
 not re-run live here.
+
+# 3.8 benchmark re-run with the sim user (bd polyglot-pdf-15j9v)
+
+Files: `bench/`. Findings: `scripts/spikes/sim_user_findings.md`. Same
+config as above, plus `--persona` for the self-correcting group. Harness
+commits are from PR #938 (`fix/sim-referee`) and PR #936.
+
+| Run (UTC stamp) | Group | Harness commit | Result | Status |
+|---|---|---|---|---|
+| 20261120T180145Z | W-7 happy | d03e11a08 (pre-referee) | complete, 22/22 correct, $1.03 live | benchmark |
+| 20261120T181950Z | W-7 happy | d03e11a08 (pre-referee) | complete, 22/22 correct, $1.10 live | benchmark |
+| 20261120T183218Z | W-7 happy | d03e11a08 (pre-referee) | complete, 22/22 correct, $1.04 live | benchmark |
+| 20261120T193947Z | W-7 self-correcting pilot | 468101acf (pre-referee) | complete, 21/22: the actor confirmed the slip "Lucy" | discarded |
+| 20261120T200124Z | I-90 v2 pilot | 468101acf (pre-referee) | turn cap at 54/57 confirmed (51/57 correct): the actor rejected a correct CORAZON 20 times | discarded |
+| 20261120T210813Z | W-7 self-correcting | 5eb79f3ef (referee) | complete, 22/22, 22 slips corrected, $1.58 live | benchmark |
+| 20261120T225207Z | W-7 self-correcting | 07a2cb8d8 (+ gTTS retry) | complete, 22/22, 22 slips corrected, $1.72 live | benchmark |
+| 20261120T231321Z | W-7 self-correcting | 07a2cb8d8 (+ gTTS retry) | complete, 22/22, 20 slips spoken and corrected, $1.39 live | benchmark |
+| 20261120T213916Z | I-90 v2 | 5eb79f3ef (referee) | complete, 55/57 correct, $3.51 | benchmark |
+| 20261120T221527Z | I-90 v2 | 5eb79f3ef (referee) | complete, 57/57 correct, $3.28 | benchmark |
+| 20261120T232745Z | I-90 v2 | 07a2cb8d8 (+ gTTS retry) | complete, 54/57 correct, $3.87; turn 46 holds the one wrong referee override (fixed in 588645521) | benchmark, flagged |
+
+Two more self-correcting W-7 runs (21:23Z, 21:28Z) crashed on a transient
+gTTS refusal before writing any file; the retry in 07a2cb8d8 fixed that.
