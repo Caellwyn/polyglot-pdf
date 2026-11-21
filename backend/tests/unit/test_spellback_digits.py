@@ -349,7 +349,14 @@ class TestNoSessionVoiceContract:
         # (Opus cross-surface review, r3ham.26).
         assert "one character at a time, in order" in msg
         assert "say every letter, if it has any, as that letter's name" in msg
-        assert "replaces the rule against reading a value back yourself" in msg
+        assert "replaces the rules against reading a value back yourself" in msg
+        # ...and the base SI's DELIVERY ban on spelling aloud, which the
+        # letters clause would otherwise contradict (Opus round 2).
+        assert "and against spelling a word out letter by letter aloud" in msg
+        assert ("Never spell a word out letter by letter aloud"
+                in Settings().DTI_SYSTEM_INSTRUCTION), (
+            "the DELIVERY ban this variant lifts was reworded -- re-check that "
+            "the override still names it")
 
     @pytest.mark.asyncio
     async def test_a_mixed_letter_digit_value_takes_the_digit_gate(self):

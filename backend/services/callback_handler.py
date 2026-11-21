@@ -1407,17 +1407,20 @@ class CallbackHandler:
                 # ENGLISH, so there is none; the model -- which speaks the
                 # session language -- reads it back instead. The value may
                 # also carry letters (a passport number, an email), so the
-                # instruction covers EVERY character, and it lifts the
-                # declaration's never-speak-it-yourself rule for this one
-                # value only, so the two instructions do not contradict.
+                # instruction covers EVERY character, and it lifts BOTH rules
+                # that would otherwise forbid this for this one value only --
+                # the declaration's never-read-it-back-yourself rule and the
+                # base SI DELIVERY block's never-spell-aloud rule -- so the
+                # instructions in the model's context do not contradict.
                 response = {
                     "success": False,
                     "status": "read_back_yourself",
                     "message": (
                         "No audio clip is available in the session language "
                         "for this value, so YOU read it back now -- for this "
-                        "one value, that replaces the rule against reading a "
-                        "value back yourself. Read the STORED value (the one "
+                        "one value, that replaces the rules against reading a "
+                        "value back yourself and against spelling a word out "
+                        "letter by letter aloud. Read the STORED value (the one "
                         "update_form_fields returned), never your memory of "
                         "what was said, one character at a time, in order: "
                         "say every digit separately as the SESSION LANGUAGE's "
