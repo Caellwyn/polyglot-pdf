@@ -3,7 +3,7 @@
 **Headline: $2.66 mitigated vs. $18.74 naive -- a 7.1x cost reduction.**
 
 > **2026-11-20:** the voice model is now `gemini-3.8-live`, on the investor demo too
-> since its 2026-11-19 redeploy. The figures below are the 2.5 record. Read the dated update at the end before quoting any number.
+> since its 2026-11-20 (UTC) redeploy at commit 0c41754c1 (Cloud Build 019f3587, SUCCESS). The figures below are the 2.5 record. Read the dated update at the end before quoting any number.
 
 ## What this shows
 
@@ -82,7 +82,7 @@ Cost = tokens x rate, summed cumulatively across all 113 questions.
 
 ## 2026-11-18 update: repricing for gemini-3.8-live
 
-The curves above are from a **gemini-2.5 native audio** run, the July 2026 production model, and stay as the measured record. The voice model is now `gemini-3.8-live`, on the investor demo too since its 2026-11-19 redeploy. 3.8 list prices are $0.75 per 1M tokens for text input (2.5: $0.50) and $4.50 for text output (2.5: $2.00). Audio rates are unchanged.
+The curves above are from a **gemini-2.5 native audio** run, the July 2026 production model, and stay as the measured record. The voice model is now `gemini-3.8-live`, on the investor demo too since its 2026-11-20 (UTC) redeploy at commit 0c41754c1 (Cloud Build 019f3587, SUCCESS). 3.8 list prices are $0.75 per 1M tokens for text input (2.5: $0.50) and $4.50 for text output (2.5: $2.00). Audio rates are unchanged.
 
 **The same conversation repriced at 3.8 rates:**
 

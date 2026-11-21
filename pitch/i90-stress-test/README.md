@@ -5,7 +5,7 @@ Source of record for the numbers below is the epic `polyglot-pdf-00pt` run
 artifacts; this folder is a copy for pitch compilation.
 
 > **2026-11-20:** the voice model is now `gemini-3.8-live`, on the investor demo too
-> since its 2026-11-19 redeploy. The figures below are the 2.5 record. Read the 3.8
+> since its 2026-11-20 (UTC) redeploy at commit 0c41754c1 (Cloud Build 019f3587, SUCCESS). The figures below are the 2.5 record. Read the 3.8
 > section at the end before quoting any number.
 
 ## What's here
@@ -60,12 +60,12 @@ checked when the user declined it (bd cx23).
 
 ## gemini-3.8-live figures (measured 2026-11-18 to 2026-11-20)
 
-The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The voice model is now `gemini-3.8-live`, and the investor demo has served it since its 2026-11-19 redeploy. 2.5 retires on Vertex on 2026-12-13.
+The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The voice model is now `gemini-3.8-live`, and the investor demo has served it since its 2026-11-20 (UTC) redeploy at commit 0c41754c1 (Cloud Build 019f3587, SUCCESS). 2.5 retires on Vertex on 2026-12-13.
 
 Epic `polyglot-pdf-r3ham` and bd `polyglot-pdf-15j9v` re-measured on 3.8. What the pitch can say today:
 
 - **A full I-90 on 3.8 costs about $3.55 and completes.** Measured with a simulated applicant who listens, answers and corrects, n=3: **$3.55 per I-90 ($3.28-3.87)**. All 57 fields were filled and confirmed in every run, and 54-57 of 57 matched the answer sheet exactly. That is about $0.06 per correct field. Two of the five misses were formatting only ("the Philippines" for "Philippines"). Source: `scripts/spikes/sim_user_findings.md`.
-  - **This is the current 57-question I-90 kit (`i-90_v2`), not the 113-question form of the 2.5 stress test above.** So do not set $3.55 against $2.44, the flat $0.021 per question, or the earlier "about $3.2 on 3.8" extrapolation (which was built from the 113-question figures). The closest 2.5 reference on the current kit is **$2.06 per I-90** (bd `polyglot-pdf-2nikx`, 2026-08-28, fixed-script user, 48/57 correct). That is still not like-for-like: the user model differs, and three months of code changes sit between the runs.
+  - **This is the current 57-question I-90 kit (`i-90_v2`), not the 113-question form of the 2.5 stress test above.** So do not set $3.55 against $2.44, the flat $0.021 per question, or the earlier "about $3.2 on 3.8" extrapolation (which was built from the 113-question figures). The closest 2.5 reference on the current kit is **$2.06 per I-90** (bd `polyglot-pdf-2nikx`, 2026-08-28, fixed-script user). That is still not like-for-like: the user model differs, three months of code changes sit between the runs, and its accuracy was scored by an older, lenient scorer, so do not compare accuracy figures.
   - An earlier fixed-script user never let a 3.8 I-90 finish. That user always said yes and never answered a spelling request, so the failures were mostly the script's, not the model's. With a responsive user, the "same as mailing address" question (bd `polyglot-pdf-r3ham.10`) costs 3-8 extra turns but no longer derails the session.
   - The ~16 minutes and $2.44 above are 2.5 numbers. Do not quote a 3.8 I-90 duration from these runs: the simulated user's own thinking and speech time inflate the wall clock.
 - **Per form, with the same simulated applicant (3.8, n=3 each):**
@@ -88,7 +88,7 @@ Epic `polyglot-pdf-r3ham` and bd `polyglot-pdf-15j9v` re-measured on 3.8. What t
   - The responsive applicant costs more per W-7 than the fixed script ($1.06 vs $0.905), because fuller answers and answered spelling requests add audio. Quote the simulated-applicant figures as the realistic ones, and the fixed-script table only for the 3.8-vs-2.5 comparison.
 - **Open accuracy defects to know about before a demo** (both filed):
   - Once in 45 spelling read-backs, the model spoke an internal instruction aloud (bd `polyglot-pdf-r3ham.23`).
-  - In 3 of 237 fields, the model stored a different value than the user said, and it was confirmed (bd `polyglot-pdf-r3ham.24`). One was a phone number whose spoken read-back and on-screen transcript disagreed.
+  - In 3 of the 171 I-90 fields, the model stored a different value than the user said, and it was confirmed (bd `polyglot-pdf-r3ham.24`). One was a phone number whose spoken read-back and on-screen transcript disagreed.
   - Both are I-90-only so far, and the reviewing professional sees the draft before filing.
 - **Context compression fires on 3.8, about twice as often as on 2.5** (12-16 trims per W-7 vs 6), because 3.8's longer speech fills the window faster. That is what kept 2.5's cost linear in form length. On 3.8, with the simulated applicant, the 57-question I-90 costs about 3.4x the 22-field W-7, for 2.6x the fields, and audio-in is a larger share of it (~50% vs ~42%). Why it grows faster than the field count is not decomposed yet.
 - **Multilingual still holds on 3.8.** A 14-question W-7 slice in Spanish, Chinese, Hindi, Russian and Arabic was spoken in the right language on every question, with 13-14 of 14 fields correct (`scripts/spikes/3p8_quirk_retest_findings.md`).

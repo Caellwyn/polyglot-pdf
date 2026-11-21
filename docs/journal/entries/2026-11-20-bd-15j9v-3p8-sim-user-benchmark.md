@@ -29,7 +29,7 @@ Findings: `scripts/spikes/sim_user_findings.md`. Raw data:
 `scripts/spikes/data/sim_user/bench/`, indexed in `RUNS.md`. Spend was about
 $32.80 against a $35 cap.
 
-- **Every run completed the form.** All 237 fields were filled and
+- **Every run completed the form.** All 303 fields were filled and
   confirmed. Strict accuracy was 22/22 on every W-7 and 54-57/57 on the I-90.
 - **Cost per form:**
   - W-7 happy: $1.055 (+17% over the fixed script; a responsive user answers

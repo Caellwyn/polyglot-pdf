@@ -54,7 +54,7 @@ below.
 | W-7 self-correcting (every fact slipped once) | **$1.565** ($1.394-1.719) | 22, 22, 22 of 22 | $0.071 | 1.20 s / 1.47 s (n=207) | 63-79 | 3 of 3 |
 | I-90 v2 | **$3.554** ($3.275-3.873) | 55, 57, 54 of 57 | $0.064 | 1.16 s / 1.34 s (n=391) | 124-145 | 3 of 3 (3 each) |
 
-**Every one of the 9 runs completed the form.** That is 237 of 237 fields
+**Every one of the 9 runs completed the form.** That is 303 of 303 fields
 filled and confirmed, with no turn-cap stop and no derailment.
 
 ### Compared with the scripted 3.8 benchmark (2026-11-18)
@@ -83,9 +83,10 @@ filled and confirmed, with no turn-cap stop and no derailment.
 - **I-90 now completes on 3.8.** This is the first measured full run of the
   current 57-question kit (`i-90_v2`) on 3.8.
   - The closest 2.5 reference on the same kit is $2.06 per form (bd `2nikx`,
-    2026-08-28, fixed-script user, 48/57). That comparison is not
-    like-for-like: the user model differs, and three months of code changes
-    sit between the runs.
+    2026-08-28, fixed-script user). That comparison is not like-for-like:
+    the user model differs, three months of code changes sit between the
+    runs, and its 48/57 accuracy came from the older lenient scorer, which
+    is not comparable with the strict scores here.
   - The pitch material's "about $3.2-3.5 on 3.8" was extrapolated from the
     older 113-question I-90 (2.5, $2.44-2.66). That is a different form, so
     this measurement neither confirms nor replaces it.
@@ -117,13 +118,13 @@ is an upper bound (see `3p8_deployed_telemetry_findings.md`).
 
 ### Measurement overhead (excluded from the product figures above)
 
-| Group | Actor (Haiku 5.5) | Cloud STT | Total per run |
-|---|---|---|---|
-| W-7 happy | ~$0.02 | ~$0.35 | $0.367 |
-| W-7 self-correcting | ~$0.02 | ~$0.46 | $0.479 |
-| I-90 v2 | ~$0.05 | ~$0.98 | $1.031 |
+| Group | Actor (Haiku 5.5) | Cloud STT | gTTS | Total per run |
+|---|---|---|---|---|
+| W-7 happy | ~$0.009 | ~$0.36 | $0 | $0.367 |
+| W-7 self-correcting | ~$0.017 | ~$0.46 | $0 | $0.479 |
+| I-90 v2 | ~$0.053 | ~$0.98 | $0 | $1.031 |
 
-STT is 95% of the overhead. Billed at 15-second blocks, it is the cost of
+STT is 95% or more of the overhead. gTTS is the free endpoint and costs nothing. Billed at 15-second blocks, it is the cost of
 checking every model generation's audio against its transcript.
 
 ## Latency and wall clock
@@ -140,9 +141,10 @@ checking every model generation's audio against its transcript.
 
 ## Session stability
 
-- **GoAway arrives on every session past about 10 minutes.** There was 1-2
-  per W-7 past that length and 3 per I-90.
-- **Each GoAway reconnect was clean.** Downtime was 3.1-3.4 s, and every run
+- **GoAway arrives about every 10 minutes of continuous session.** There
+  were 15 in all: 0-2 per W-7 and 3 per I-90. W-7 happy run 1 ran 1072 s
+  with none, because its 5 unannounced drops kept restarting the session.
+- **Each GoAway reconnect was clean.** Downtime was 3.1-5.3 s, and every run
   completed after up to 3 GoAway reconnects.
 - **There were 8 unannounced drops.** Two runs had extra reconnects after an
   abnormal close (code 1006) or a transport error: 5 in W-7 happy run 1 and 3
@@ -150,6 +152,10 @@ checking every model generation's audio against its transcript.
   refused connections, so a local network cause is likely. Both runs
   recovered and completed.
 - **There were 0 close-1011 errors.**
+- **The turn gate timed out twice in each of the two runs with drops** (W-7
+  happy run 1 and I-90 run 3): the sim user waited for a reply that the
+  dropped session never sent, then moved on. There were no gate timeouts in
+  the other 7 runs, and no gate violations in any.
 
 ## Verdicts on the open 3.8 beads that came from the scripted runs
 
@@ -157,7 +163,7 @@ checking every model generation's audio against its transcript.
 |---|---|---|
 | `r3ham.9` | name with no spelling: re-asks for the spelling forever (2/22 W-7) | **Harness artifact.** Every run asked for 2-5 spellings and moved on once the user spelled. The script never spelled when asked. |
 | `r3ham.10` | "same as mailing, <address>" written as an empty physical street; one field behind; I-90 desync | **Real model behavior, no longer a desync.** In all 3 I-90 runs the model said the physical street is "left blank because it is the same as your mailing address". The kit's question says "only if it is different from your mailing address", so leaving it blank follows the kit's own wording. The strict key expects the address copied. The user insisted, and the field ended correct in all 3 runs, at a cost of 3-8 extra turns. Whether blank is acceptable is a kit-wording and answer-key question for the maintainer, not a model bug. |
-| `r3ham.11` | degraded session after a GoAway reconnect | **Not reproduced.** 12 GoAway reconnects across 9 runs, every session completed, no silent or degraded stretch after reconnecting. |
+| `r3ham.11` | degraded session after a GoAway reconnect | **Not reproduced.** 23 reconnects (15 after a GoAway) across 9 runs, every session completed, no silent or degraded stretch after reconnecting. |
 | `r3ham.13` | silent turn after get_form_status + confirm_field | **Not reproduced.** Of about 790 model generations, 21 had no audio, and all 21 are the designed silence while the `name_spellback` clip plays. There were 0 unexpected silent turns. |
 | `r3ham.15` | spelled-name VALUE wrong (JOSE -> JOSHUA ...) | **Not seen in these personas.** Every spelled name was stored correctly at the end. The user hears the clip and corrects a wrong spelling. |
 | `r3ham.16` | I-90 tool-silent at the first Part 3 question | **Not reproduced** in 3 I-90 runs. |
@@ -175,7 +181,7 @@ up; closing a bead is its own decision.
     caught it.
   - A real user would hear it.
 - **`r3ham.24`: wrong stored values confirmed.** 3 substantive wrong values
-  in 237 fields, all on I-90:
+  in the 171 I-90 fields (303 fields across all 9 runs), all on I-90:
   - **Mobile phone.** The user said "...0297". The model stored 0197. On the
     third read-back its transcript said 0297 while its AUDIO said 0184 (the
     daytime number). The actor hears the transcript, so it confirmed.

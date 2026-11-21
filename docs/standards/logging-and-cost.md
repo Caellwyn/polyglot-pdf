@@ -147,7 +147,7 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > | W-7, every answer wrong once then corrected | ~44% | ~44% | ~8% | ~3% | ~1% | $1.39-1.72 | ~$0.071 |
 > | I-90 v2 (57 fields), happy path | ~40% | **~50%** | ~7% | ~2% | ~1% | $3.28-3.87 | ~$0.064 |
 >
-> All 9 runs completed the form (237 of 237 fields filled and confirmed). The
+> All 9 runs completed the form (303 of 303 fields filled and confirmed). The
 > product cost above excludes the measurement overhead of the simulated user
 > (its actor model and the STT audio check, ~$0.37-1.03 per run).
 >

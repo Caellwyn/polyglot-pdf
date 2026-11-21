@@ -33,7 +33,7 @@ commits are from PR #938 (`fix/sim-referee`) and PR #936.
 | 20261120T181950Z | W-7 happy | d03e11a08 (pre-referee) | complete, 22/22 correct, $1.10 live | benchmark |
 | 20261120T183218Z | W-7 happy | d03e11a08 (pre-referee) | complete, 22/22 correct, $1.04 live | benchmark |
 | 20261120T193947Z | W-7 self-correcting pilot | 468101acf (pre-referee) | complete, 21/22: the actor confirmed the slip "Lucy" | discarded |
-| 20261120T200124Z | I-90 v2 pilot | 468101acf (pre-referee) | turn cap at 54/57: the actor rejected a correct CORAZON 20 times | discarded |
+| 20261120T200124Z | I-90 v2 pilot | 468101acf (pre-referee) | turn cap at 54/57 confirmed (51/57 correct): the actor rejected a correct CORAZON 20 times | discarded |
 | 20261120T210813Z | W-7 self-correcting | 5eb79f3ef (referee) | complete, 22/22, 22 slips corrected, $1.58 live | benchmark |
 | 20261120T225207Z | W-7 self-correcting | 07a2cb8d8 (+ gTTS retry) | complete, 22/22, 22 slips corrected, $1.72 live | benchmark |
 | 20261120T231321Z | W-7 self-correcting | 07a2cb8d8 (+ gTTS retry) | complete, 22/22, 20 slips spoken and corrected, $1.39 live | benchmark |
