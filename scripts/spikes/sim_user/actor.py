@@ -391,37 +391,70 @@ def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
 # the next word ("...zip code?The ZIP is"). Spelled letters ("L, U, C, Y.")
 # stay inside one sentence.
 _SENTENCE_END = re.compile(r"(?<=[.?!])\s+|(?<=\?)(?=\S)")
-_WORDISH = re.compile(r"[A-Za-z0-9]")
+_WORD = re.compile(r"[A-Za-z0-9]+")
+# Words that carry no value: "Can you confirm THAT IS right?" is one cue, and
+# "Could you confirm that?" closes a read-back rather than opening one.
+_CUE_FILLER = frozenset({"that", "this", "it", "is", "all", "everything",
+                         "above", "for", "me", "please", "now"})
+
+
+def _has_content(s: str) -> bool:
+    """True when `s` holds a word that is not cue filler."""
+    return any(w.lower() not in _CUE_FILLER for w in _WORD.findall(s))
+
+
+def _cue_spans(sent: str) -> list:
+    """The read-back cues in one sentence, as (start, end) spans; matches with
+    no content between them are ONE cue ("did i get that" + "right?", "just
+    to confirm" + ", is that correct", "can you confirm" + "that is" +
+    "right?")."""
+    spans: list = []
+    for m in _READBACK.finditer(sent):
+        if spans and not _has_content(sent[spans[-1][1]:m.start()]):
+            spans[-1] = (spans[-1][0], m.end())
+        else:
+            spans.append((m.start(), m.end()))
+    return spans
 
 
 def readback_units(text: str) -> int:
     """How many read-backs `text` holds (0 = no read-back cue at all).
 
-    The text is split into sentences. A cue sentence CLOSES a read-back when
-    it ends with "?" or nothing word-like follows its last cue ("...97203,
-    is that correct"). Otherwise it OPENS one ("Just to confirm, your ZIP is
-    97203."), and that read-back runs on to the next closing cue sentence,
-    so "To confirm, X. And Y. Is that correct?" is ONE read-back. An opening
-    read-back that never closes still counts as one.
+    Each cue is classified by where it sits in its sentence:
+      - a TAG closes a read-back: content precedes it ("Your ZIP is
+        97203, is that correct"), no content follows it ("Did I get that
+        right?"), or it is the sentence's last cue and the sentence is a
+        question ("Could you confirm that the ZIP is 97203?");
+      - otherwise it is an OPENER ("To confirm, your ZIP is 97203."), which
+        starts a read-back that runs on to the next tag, so "To confirm, X.
+        And Y. Is that correct?" is ONE read-back. An opener that arrives while
+        another is still open, and an opener that never closes, each count.
 
     The referee acts only on a window with exactly one read-back. A heard
     window can hold two ("...97203. Is that correct? ... The ZIP is 90210.
     Is that correct?"), and from text alone it is not decidable which value
     the user's answer is about, so two or more leave the call to the actor.
     Abstaining only loses an override; guessing the boundary wrong
-    manufactures one."""
+    manufactures one. Residual: a second read-back phrased with a cue not
+    in _READBACK ("does that look good?") is invisible to the count."""
     units, open_ = 0, False
     for sent in _SENTENCE_END.split(text or ""):
-        cues = list(_READBACK.finditer(sent))
-        if not cues:
-            continue
-        closes = (sent.rstrip().endswith("?")
-                  or not _WORDISH.search(sent[cues[-1].end():]))
-        if closes:
-            units += 1
-            open_ = False
-        elif not open_:
-            open_ = True
+        spans = _cue_spans(sent)
+        is_question = sent.rstrip().endswith("?")
+        prev_end = 0
+        for k, (a, b) in enumerate(spans):
+            nxt = spans[k + 1][0] if k + 1 < len(spans) else len(sent)
+            before = bool(_has_content(sent[prev_end:a]))
+            after = bool(_has_content(sent[b:nxt]))
+            last = k + 1 == len(spans)
+            if before or not after or (last and is_question):
+                units += 1
+                open_ = False
+            else:
+                if open_:
+                    units += 1
+                open_ = True
+            prev_end = b
     return units + (1 if open_ else 0)
 
 

@@ -951,6 +951,25 @@ class TestRefereeReadbackUnits:
         d, label = self._r2c(text)
         assert (d.move, label) == ("reject_and_correct", None)
 
+    @pytest.mark.parametrize("text", [
+        # two openers, neither closed
+        "To confirm, your ZIP is nine seven two zero three. Let me confirm, "
+        "your ZIP is nine zero two one zero.",
+        # two openers, one closing tag
+        "Let me confirm: ZIP nine seven two zero three. Just to confirm: ZIP "
+        "nine zero two one zero. Is that correct?",
+        # two tags inside one sentence
+        "Your ZIP is nine seven two zero three, is that correct, and the "
+        "physical ZIP is nine zero two one zero, is that correct?",
+        # two tags, no punctuation at all
+        "your ZIP is nine seven two zero three is that correct and the "
+        "physical ZIP is nine zero two one zero is that correct",
+    ])
+    def test_two_read_backs_in_one_run_still_abstain(self, text):
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
     def test_two_read_backs_also_block_a_slip_reject(self):
         text = ("The ZIP is nine seven four seven seven. Is that correct? "
                 "I have updated it. The ZIP is nine seven two zero three now. "
