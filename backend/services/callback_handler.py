@@ -1367,15 +1367,15 @@ class CallbackHandler:
                 # bd 44ywm: the clip carries the WHOLE verification question
                 # ("You said J, O, S, E. Is that correct?" in the session
                 # language), so the model's job now is to WAIT, not to ask.
+                # A bare status, NO prose: this is the one response whose
+                # right action is silence, and given a sentence to say,
+                # gemini-3.8-live read it aloud (bd polyglot-pdf-r3ham.23).
+                # The stay-silent rule lives in DTI_SPELLBACK_SI_ADDENDUM.
                 response = {
                     "success": True,
                     "status": "delivered",
-                    "message": (
-                        "The user has ALREADY heard the stored spelling and "
-                        "been asked whether it is correct. Do NOT ask again, "
-                        "do NOT repeat or spell the value, and do NOT speak "
-                        "now -- stay silent and listen for their yes or no."
-                    ),
+                    "user_has_been_asked": True,
+                    "awaiting": "user_yes_or_no",
                 }
             elif status == "interrupted":
                 response = {
