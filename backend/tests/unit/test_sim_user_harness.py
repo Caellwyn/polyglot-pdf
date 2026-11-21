@@ -2104,7 +2104,6 @@ class TestGttsRetry:
 
     def test_synth_cached_goes_through_the_retry(self, tmp_path, monkeypatch):
         seen = []
-        real = mfsc._gtts_mp3
 
         def spy(cls, text, lang, sleep=time.sleep):
             seen.append((text, lang))
@@ -2115,4 +2114,3 @@ class TestGttsRetry:
         with pytest.raises(RuntimeError, match="spy"):
             mfsc.synth_cached("uncached phrase", "zh")
         assert seen == [("uncached phrase", "zh-CN")]
-        assert real is not spy

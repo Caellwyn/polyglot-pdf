@@ -388,14 +388,19 @@ def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
 
 
 def last_readback(text: str) -> str:
-    """The last read-back in `text`: the last question-mark-ended segment that
-    holds a read-back cue, or "" when there is none. One heard window can hold
-    two read-backs ("...97203. Is that correct? ... The ZIP is 90210. Is that
-    correct?"); the user answers the LAST one, so only it is evidence."""
-    for seg in reversed(re.split(r"(?<=\?)", text or "")):
-        if _READBACK.search(seg):
-            return seg
-    return ""
+    """The last read-back in `text`: everything after the second-to-last
+    read-back cue (the whole text when it holds one cue), or "" when it
+    holds none. One heard window can hold two read-backs ("...97203. Is that
+    correct? ... The ZIP is 90210. Is that correct?"), and the user answers
+    the LAST one, so an earlier read-back must not count as evidence. Cutting
+    at the previous CUE, not at a question mark, keeps a read-back whose
+    value and cue straddle one ("Your ZIP is 97203? Is that right?").
+    Residual: two cue-first read-backs ("Did I get that right? ZIP 97203.
+    Did I get that right? ZIP 90210.") leave both values in the window."""
+    cues = list(_READBACK.finditer(text or ""))
+    if not cues:
+        return ""
+    return text[cues[-2].end():] if len(cues) > 1 else text
 
 
 def referee(decision: Decision, model_text: str, history: list,

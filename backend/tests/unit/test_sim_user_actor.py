@@ -876,13 +876,26 @@ class TestRefereeLastReadback:
                                  self._SLIP, {"z"})
         assert label == "confirm_to_reject"
 
-    def test_last_readback_skips_a_trailing_next_question(self):
-        text = "The ZIP is 97203. Is that correct? What is your city?"
-        assert actor.last_readback(text) == "The ZIP is 97203. Is that correct?"
+    @pytest.mark.parametrize("text", [
+        "Your ZIP is nine seven two zero three? Is that right?",
+        "Is it nine seven two zero three? Please confirm.",
+        "Did I get that right? Your ZIP is nine seven two zero three.",
+        "To confirm, your ZIP code is nine seven two zero three. Is that correct?",
+        "The ZIP is nine seven two zero three. Is that correct? What is your city?",
+        "<no speech>{pause} You said nine seven two zero three. Is that correct?",
+    ])
+    def test_one_read_back_is_judged_whatever_its_shape(self, text):
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert label == "reject_to_confirm"
 
-    def test_last_readback_keeps_a_cue_led_read_back_whole(self):
-        text = "To confirm, your ZIP code is nine seven two zero three?"
+    def test_last_readback_is_the_whole_text_for_one_cue(self):
+        text = "Your ZIP is 97203? Is that right?"
         assert actor.last_readback(text) == text
+
+    def test_last_readback_cuts_after_the_previous_cue(self):
+        text = "ZIP 97203. Is that correct? Sorry, ZIP 90210. Is that correct?"
+        assert actor.last_readback(text) == "? Sorry, ZIP 90210. Is that correct?"
 
     def test_last_readback_is_empty_without_a_cue(self):
         assert actor.last_readback("What is your ZIP code?") == ""
