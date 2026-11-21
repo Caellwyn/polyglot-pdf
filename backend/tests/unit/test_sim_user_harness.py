@@ -2191,3 +2191,145 @@ class TestSynthOffTheEventLoop:
         guard above is not satisfied by deleting them."""
         src = Path(mfsc.__file__).read_text(encoding="utf-8")
         assert src.count("await synth_off_loop(") == 2
+
+
+def _judgeable(persona):
+    return [fid for fid, f in persona.facts.items()
+            if sim_actor.refereeable(f["spoken"])]
+
+
+class ExtraTokenModelScript(ModelScript):
+    """First fill of every judgeable field stores the true value plus an
+    extra word and reads that back ("Ana Lucia" for "Ana"): the read-back
+    CONTAINS the true value but the stored value is wrong. The re-fill after
+    the user's correction is right."""
+
+    def __init__(self, persona=PERSONA):
+        super().__init__(persona)
+        self.wronged = set()
+        self.fixed = set()
+        self.judgeable = set(_judgeable(persona))
+
+    def fix_on_reject(self, user_text):
+        """Any non-yes reply to the wrong read-back is taken as the
+        correction (the base script only understands an answer said in
+        full, not one spelled letter by letter)."""
+        if self.stage != "readback" or self.k >= len(self.fids):
+            return None
+        fid = self.fids[self.k]
+        if fid not in self.wronged or fid in self.fixed:
+            return None
+        if (user_text or "").lower().startswith(("yes", "correct")):
+            return None
+        self.fixed.add(fid)
+        f = self.persona.facts[fid]
+        return {"say": "I have %s. Is that correct?" % f["spoken"],
+                "fill": (fid, f["value"])}
+
+    def respond(self, user_text):
+        fixed = self.fix_on_reject(user_text)
+        if fixed:
+            return fixed
+        out = super().respond(user_text)
+        fill = out.get("fill")
+        if fill and fill[0] in self.judgeable and fill[0] not in self.wronged:
+            fid = fill[0]
+            self.wronged.add(fid)
+            f = self.persona.facts[fid]
+            out["fill"] = (fid, f["value"] + " Zebulon")
+            out["say"] = self.wrong_readback(f)
+        return out
+
+    def wrong_readback(self, f):
+        return "I have %s Zebulon. Is that correct?" % f["spoken"]
+
+
+class CrossFieldModelScript(ExtraTokenModelScript):
+    """The wrong first fill is a different value, read back in a summary
+    whose OTHER clause says the true value -- the persona fact sheets repeat
+    values across fields (birth country = citizenship country)."""
+
+    def respond(self, user_text):
+        fixed = self.fix_on_reject(user_text)
+        if fixed:
+            return fixed
+        out = ModelScript.respond(self, user_text)
+        fill = out.get("fill")
+        if fill and fill[0] in self.judgeable and fill[0] not in self.wronged:
+            fid = fill[0]
+            self.wronged.add(fid)
+            f = self.persona.facts[fid]
+            out["fill"] = (fid, "Zebulon")
+            out["say"] = ("Your other answer was %s, and this one is "
+                          "Zebulon. Is that correct?" % f["spoken"])
+        return out
+
+
+class TestRefereeStoredValueGate:
+    """bd polyglot-pdf-ya4vi.4: the referee turns a reject into a confirm only
+    when the STORED value is also right, not merely present in the read-back."""
+
+    @pytest.mark.parametrize("script_cls",
+                             [ExtraTokenModelScript, CrossFieldModelScript])
+    def test_wrong_stored_value_keeps_the_reject(self, script_cls):
+        session = _session_for(PERSONA, script_cls)
+        driver = make_driver(session, actor=RejectEverythingActor(PERSONA))
+        run_driver(session, driver)
+        judgeable = _judgeable(PERSONA)
+        assert driver.stop_reason == "complete"
+        # every judgeable field was wronged once, and every one ends right
+        assert session.model.wronged == set(judgeable)
+        assert session.model.fixed == set(judgeable)
+        acc = _accuracy(session, PERSONA, mfsc.W7_EXPECTED)
+        wrong = [d["field_id"] for d in acc["detail"] if not d["ok"]]
+        assert not set(wrong) & set(judgeable), wrong
+        vetoed = [t for t in driver.user_turns
+                  if t["referee_veto"] == "stored_value_wrong"]
+        assert sorted(t["actor_field_key"] for t in vetoed) == sorted(judgeable)
+        for t in vetoed:
+            assert t["move"] == "reject_and_correct"
+            assert t["referee"] is None
+
+    def test_right_stored_value_still_overrides(self):
+        session = _session_for(PERSONA)
+        driver = make_driver(session, actor=RejectEverythingActor(PERSONA))
+        run_driver(session, driver)
+        assert not any(t["referee_veto"] for t in driver.user_turns)
+        assert mfsc.count_referee_overrides(driver)["reject_to_confirm"] == len(
+            _judgeable(PERSONA))
+
+
+class TestActorVerdictIsRecorded:
+    """bd polyglot-pdf-my0xl: the committed per-turn record keeps the actor's
+    own verdict, so an override can be audited from the data."""
+
+    def test_overridden_reject_keeps_the_rejected_field(self):
+        session = _session_for(PERSONA)
+        driver = make_driver(session, actor=RejectEverythingActor(PERSONA))
+        run_driver(session, driver)
+        turns = driver.public_user_turns()
+        over = [t for t in turns if t["referee"] == "reject_to_confirm"]
+        assert over
+        for t in over:
+            assert t["move"] == "confirm"
+            assert t["field_key"] == sim_actor.NONE_KEY
+            assert t["actor_move"] == "reject_and_correct"
+            assert t["actor_field_key"] in PERSONA.facts
+        assert sorted(t["actor_field_key"] for t in over) == sorted(
+            _judgeable(PERSONA))
+
+    def test_unchanged_turns_record_the_same_verdict(self):
+        session = _session_for(PERSONA)
+        driver = make_driver(session)
+        run_driver(session, driver)
+        for t in driver.public_user_turns():
+            assert (t["actor_move"], t["actor_field_key"]) == (
+                t["move"], t["field_key"])
+
+    def test_meta_projection_carries_referee_overrides(self):
+        summary = {k: ("v-" + k) for k in mfsc.META_SIM_USER_KEYS}
+        summary["extra_key_not_projected"] = 1
+        meta = mfsc.project_sim_meta(summary)
+        assert meta["referee_overrides"] == "v-referee_overrides"
+        assert meta["corrections"] == "v-corrections"
+        assert "extra_key_not_projected" not in meta

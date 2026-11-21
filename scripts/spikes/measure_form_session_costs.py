@@ -3015,6 +3015,17 @@ class SimDriver:
             if f.get("spellable") and f.get("spell")]
 
     # -- state ----------------------------------------------------------
+    def _stored_is_true(self, fid) -> bool:
+        """The field's stored client value canonically equals the persona's
+        true value (_canon_value, the strict scorer's comparison)."""
+        f = self.persona.facts.get(fid)
+        if f is None:
+            return False
+        stored = (self.client.state.get(fid) or {}).get("value")
+        if stored is None:
+            return False
+        return _canon_value(stored) == _canon_value(f.get("value"))
+
     def all_done(self) -> bool:
         state = self.client.state
         for fid in self.persona.facts:
@@ -3207,9 +3218,21 @@ class SimDriver:
                 text = ears_text(gens, self.ears)
                 decision = await self.actor.decide(text, self.history)
                 self._note_decision(turn_no, decision)
+                actor_decision = decision
                 decision, referee = _sim_actor.referee(
                     decision, text, self.history, self.persona,
                     self.slips_spoken)
+                referee_veto = None
+                if (referee == "reject_to_confirm"
+                        and not self._stored_is_true(
+                            actor_decision.field_key)):
+                    # The read-back holds the true value, but so might a
+                    # wrong one: extra tokens ("Ana Lucia" for "Ana") or
+                    # another field's identical value in a summary. Confirm
+                    # only when the value that would be confirmed is right
+                    # (bd polyglot-pdf-ya4vi.4); otherwise the reject stands.
+                    decision, referee = actor_decision, None
+                    referee_veto = "stored_value_wrong"
                 rendered, render_error = self._render(decision)
                 pcm = await asyncio.to_thread(self.tts.synth, rendered.text)
                 opened, waited = await self.wait_gate()
@@ -3232,7 +3255,12 @@ class SimDriver:
                 "move": rendered.move, "field_key": rendered.field_key,
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
                 "slip": bool(rendered.slip),
-                "referee": referee,
+                "referee": referee, "referee_veto": referee_veto,
+                # The actor's own verdict, before the referee: on an override
+                # this is the only record of which field the actor rejected
+                # (bd polyglot-pdf-my0xl).
+                "actor_move": actor_decision.move,
+                "actor_field_key": actor_decision.field_key,
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
                 "heard_silence_closed": any(
@@ -3318,6 +3346,20 @@ def count_referee_overrides(driver: "SimDriver") -> dict:
         if label in out:
             out[label] += 1
     return out
+
+
+# The sim_user keys copied into meta.json. referee_overrides rides along with
+# corrections: the referee shapes the reject count, so a reader of one needs
+# the other (bd polyglot-pdf-my0xl).
+META_SIM_USER_KEYS = (
+    "persona_id", "kit_sha256", "filled_confirmed", "off_sheet_values",
+    "corrections", "referee_overrides", "gate_violations", "user_turns",
+    "stalls", "stop_reason", "aborted")
+
+
+def project_sim_meta(sim_summary: dict) -> dict:
+    """The meta.json projection of build_sim_summary's result."""
+    return {k: sim_summary[k] for k in META_SIM_USER_KEYS}
 
 
 def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
@@ -5322,10 +5364,7 @@ async def run(args) -> int:
                        "max_user_turns": args.max_user_turns},
             fill_accuracy=meta["fill_accuracy"],
             headline=summary["headline"], kit_hash=kit_hash, divergence=_div)
-        meta["sim_user"] = {k: summary["sim_user"][k] for k in (
-            "persona_id", "kit_sha256", "filled_confirmed",
-            "off_sheet_values", "corrections", "gate_violations", "user_turns", "stalls",
-            "stop_reason", "aborted")}
+        meta["sim_user"] = project_sim_meta(summary["sim_user"])
         sim_records_path = out_dir / "sim_user" / f"{base_name}.sim-user.json"
         write_sim_records(
             sim_records_path,
