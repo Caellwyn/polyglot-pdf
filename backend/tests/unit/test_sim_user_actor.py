@@ -876,26 +876,90 @@ class TestRefereeLastReadback:
                                  self._SLIP, {"z"})
         assert label == "confirm_to_reject"
 
+    # One phrase per branch of actor._READBACK (sub-alternatives expanded);
+    # test_cue_phrases_cover_every_readback_branch pins the coverage.
+    CUE_PHRASES = [
+        "Is that correct?", "Is that right?", "Is that accurate?",
+        "Is this correct?", "Is this right?",
+        "Did I get that right?", "Did I get it right?", "Did I get this right?",
+        "Did I have that right?", "Did I hear that right?", "Did I hear it right?",
+        "Did I hear this correctly?",
+        "Do I have that right?", "Have I got that right?",
+        "Did I catch that right?", "Please confirm.", "Please confirm, is that correct?",
+        "Can you confirm that is right?", "Could you confirm that?",
+        "To confirm, is that correct?", "Let me confirm, is that right?",
+        "Just to confirm, is that correct?", "Can you confirm?",
+        "Is that what you said?", "Am I right?", "Correct?", "Right?",
+    ]
+
+    @staticmethod
+    def _branches(pattern):
+        body = pattern[1:-1] if pattern.startswith("(") else pattern
+        out, depth, cur = [], 0, ""
+        for ch in body:
+            depth += (ch == "(") - (ch == ")")
+            if ch == "|" and depth == 0:
+                out.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        return out + [cur]
+
+    def test_cue_phrases_cover_every_readback_branch(self):
+        import re as _re
+        for br in self._branches(actor._READBACK.pattern):
+            assert any(_re.search(br, ph, _re.I) for ph in self.CUE_PHRASES), br
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_value_then_cue_is_one_read_back(self, cue):
+        text = "Your ZIP is nine seven two zero three. " + cue
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert label == "reject_to_confirm", actor.last_readback(text)
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_cue_then_value_is_one_read_back(self, cue):
+        text = cue + " Your ZIP is nine seven two zero three."
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert label == "reject_to_confirm", actor.last_readback(text)
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_an_earlier_read_back_is_not_evidence(self, cue):
+        text = ("Your ZIP is nine seven two zero three. " + cue +
+                " What is your physical zip code? The physical zip code is "
+                "nine zero two one zero. " + cue)
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert (d.move, label) == ("reject_and_correct", None),             actor.last_readback(text)
+
     @pytest.mark.parametrize("text", [
         "Your ZIP is nine seven two zero three? Is that right?",
         "Is it nine seven two zero three? Please confirm.",
-        "Did I get that right? Your ZIP is nine seven two zero three.",
         "To confirm, your ZIP code is nine seven two zero three. Is that correct?",
         "The ZIP is nine seven two zero three. Is that correct? What is your city?",
         "<no speech>{pause} You said nine seven two zero three. Is that correct?",
+        "The ZIP is nine seven two zero three, is that correct",
     ])
     def test_one_read_back_is_judged_whatever_its_shape(self, text):
         d, label = actor.referee(_dec("reject_and_correct", "z"), text,
                                  _ref_hist("z"), self._ZIP, set())
         assert label == "reject_to_confirm"
 
-    def test_last_readback_is_the_whole_text_for_one_cue(self):
-        text = "Your ZIP is 97203? Is that right?"
+    def test_last_readback_is_the_whole_text_for_one_cue_group(self):
+        text = "Your ZIP is 97203. Did I get that right?"
         assert actor.last_readback(text) == text
 
-    def test_last_readback_cuts_after_the_previous_cue(self):
-        text = "ZIP 97203. Is that correct? Sorry, ZIP 90210. Is that correct?"
-        assert actor.last_readback(text) == "? Sorry, ZIP 90210. Is that correct?"
+    def test_last_readback_cuts_after_the_previous_cue_group(self):
+        text = ("ZIP 97203. Is that correct? Sorry, the ZIP is 90210. "
+                "Is that correct?")
+        assert actor.last_readback(text) == ("Sorry, the ZIP is 90210. "
+                                             "Is that correct?")
+
+    def test_a_glued_question_mark_ends_a_sentence(self):
+        text = ("ZIP 97203. Is that correct?The zip code is 90210. "
+                "Is that correct?")
+        assert "97203" not in actor.last_readback(text)
 
     def test_last_readback_is_empty_without_a_cue(self):
         assert actor.last_readback("What is your ZIP code?") == ""

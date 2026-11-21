@@ -387,20 +387,35 @@ def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
     return False
 
 
+# A sentence ends at . ? or ! followed by space or end, or at a "?" glued to
+# the next word ("...zip code?The ZIP is"). Spelled letters ("L, U, C, Y.")
+# stay inside one sentence.
+_SENTENCE_END = re.compile(r"(?<=[.?!])\s+|(?<=\?)(?=\S)")
+
+
 def last_readback(text: str) -> str:
-    """The last read-back in `text`: everything after the second-to-last
-    read-back cue (the whole text when it holds one cue), or "" when it
-    holds none. One heard window can hold two read-backs ("...97203. Is that
-    correct? ... The ZIP is 90210. Is that correct?"), and the user answers
-    the LAST one, so an earlier read-back must not count as evidence. Cutting
-    at the previous CUE, not at a question mark, keeps a read-back whose
-    value and cue straddle one ("Your ZIP is 97203? Is that right?").
-    Residual: two cue-first read-backs ("Did I get that right? ZIP 97203.
-    Did I get that right? ZIP 90210.") leave both values in the window."""
-    cues = list(_READBACK.finditer(text or ""))
-    if not cues:
+    """The last read-back in `text`, or "" when it has no read-back cue.
+
+    The text is split into sentences. Consecutive sentences holding a cue are
+    ONE cue group: "Did I get that right?" is two regex matches, and "To
+    confirm, X. Is that correct?" is two cue sentences, but each is one
+    read-back. With one cue group the whole text is the read-back. With more,
+    the read-back is everything after the second-to-last group. A heard window
+    can hold two read-backs ("...97203. Is that correct? ... The ZIP is
+    90210. Is that correct?"), and the user answers the LAST one.
+    Residual: two cue-FIRST read-backs ("Did I get that right? ZIP 97203. Did
+    I get that right? ZIP 90210.") leave both values in the window; bd
+    polyglot-pdf-ya4vi.4 (check the stored value) is the backstop."""
+    sents = [x for x in _SENTENCE_END.split(text or "") if x.strip()]
+    cue = [bool(_READBACK.search(x)) for x in sents]
+    # index just past the end of each cue group
+    group_ends = [k + 1 for k in range(len(sents))
+                  if cue[k] and (k + 1 == len(sents) or not cue[k + 1])]
+    if not group_ends:
         return ""
-    return text[cues[-2].end():] if len(cues) > 1 else text
+    if len(group_ends) == 1:
+        return text
+    return " ".join(sents[group_ends[-2]:])
 
 
 def referee(decision: Decision, model_text: str, history: list,
