@@ -602,8 +602,11 @@ reviewer, or a gap you can neither fix nor honestly classify -- never a round co
 
 ### Merge-conflict resolution (bd polyglot-pdf-hrn.6)
 
-The Step-6 pre-push `git pull --rebase origin dev` can hit a **merge conflict**
-when the feature branch and the integration branch touched the same lines. When
+The Step-6 pre-push sync with `origin/dev` can hit a **merge conflict** when the
+feature branch and the integration branch touched the same lines. The sync never
+rewrites pushed commits: it does nothing when the branch already contains
+`origin/dev`, MERGES `origin/dev` in when the branch is already on the remote,
+and rebases only a never-pushed branch. When
 that happens, **the orchestrator resolves it; it is not an automatic escalation.**
 Most closeout conflicts are mechanical (two PRs each appended a journal entry, a
 changelog line, or a bead row), and stopping to ask the maintainer to hand-merge a
@@ -650,9 +653,13 @@ Keep the working tree clean between rounds (`git status --short`). Both loops ru
 
 Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 `NO-GAPS`), or the review was skipped per the Step 5.6 gate. So the PR opens with review already done: **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (the two-call watcher pattern is gone -- there was no bot to wait on). Then make the merge decision.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push sync with `origin/dev` (a merge for an already-pushed branch, a rebase for a new one, nothing if it already contains dev) may hit a conflict -- resolve it per "Merge-conflict resolution" above. Pass `--bead` once per bead (a comma list is also split). The equivalent raw commands, if opening BY HAND:
    ```bash
-   git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev
+   git -C "<WT>" fetch origin
+   # skip if `git -C "<WT>" merge-base --is-ancestor origin/dev HEAD` succeeds;
+   # an ALREADY-PUSHED branch merges (`git -C "<WT>" merge --no-edit origin/dev`),
+   # never rebases -- a rebase makes the push non-fast-forward
+   git -C "<WT>" pull --rebase origin dev     # never-pushed branch only
    git -C "<WT>" push -u origin <branch>
    PR=$(gh pr create --base dev \
         --title "<scope>(<context>): <summary> (bd <full-id>)" \
