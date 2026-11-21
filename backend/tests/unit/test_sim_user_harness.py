@@ -2057,7 +2057,27 @@ class TestRefereeInTheLoop:
 
 
 class TestGttsRetry:
-    """A transient gTTS refusal must not kill a live session (bd ya4vi.5)."""
+    """A transient gTTS refusal must not kill a live session (bd ya4vi.5).
+
+    gTTS and soundfile are measurement-only dependencies that CI does not
+    install, so every test here runs against stand-in modules."""
+
+    @pytest.fixture(autouse=True)
+    def _fake_gtts(self, monkeypatch):
+        import types
+
+        class gTTSError(Exception):
+            pass
+
+        gtts_mod = types.ModuleType("gtts")
+        tts_mod = types.ModuleType("gtts.tts")
+        tts_mod.gTTSError = gTTSError
+        gtts_mod.tts = tts_mod
+        gtts_mod.gTTS = object
+        monkeypatch.setitem(sys.modules, "gtts", gtts_mod)
+        monkeypatch.setitem(sys.modules, "gtts.tts", tts_mod)
+        monkeypatch.setitem(sys.modules, "soundfile",
+                            types.ModuleType("soundfile"))
 
     @staticmethod
     def _flaky(failures):
