@@ -418,8 +418,10 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
     mapped locale the voice listing shows no voice for, or an unavailable
     listing raises `SpellbackLanguageUnavailable`; `/api/tts/spellback` answers
     **406**, the client acks reason `tts_http_406`, and the tool returns the
-    `read_back_yourself` variant telling the model to read the STORED digits
-    itself, one at a time, in the session language. The listing check is
+    `read_back_yourself` variant telling the model to read the STORED value
+    itself, one character at a time: each digit as the session language's own
+    word for it, never English, and any letters by name (the gate keys on
+    "contains a digit", so a passport-style `X1234567` lands here too). The listing check is
     load-bearing: on 2026-11-21 `ur-PK` and `fa-IR` listed NO voice, and a
     voiceless `ur-PK` request with no voice name came back in an ENGLISH voice
     (Urdu STT heard "five zero"), while `fa-IR` 400s. An explicit

@@ -1401,27 +1401,33 @@ class CallbackHandler:
                     ),
                 }
             elif ack.get("reason") == SPELLBACK_NO_SESSION_VOICE_REASON:
-                # bd polyglot-pdf-r3ham.26: a NUMBER in a session language no
-                # TTS voice speaks (unmapped, or a locale like ur-PK / fa-IR
-                # with no voice). A clip there would be in ENGLISH, so there
-                # is none; the model -- which speaks the session language --
-                # reads it back instead. This is the one variant that hands
-                # the read-back to the model, so it scopes that permission to
-                # this value and keeps the no-English rule explicit.
+                # bd polyglot-pdf-r3ham.26: a value CONTAINING A DIGIT in a
+                # session language no TTS voice speaks (unmapped, or a locale
+                # like ur-PK / fa-IR with no voice). A clip there would be in
+                # ENGLISH, so there is none; the model -- which speaks the
+                # session language -- reads it back instead. The value may
+                # also carry letters (a passport number, an email), so the
+                # instruction covers EVERY character, and it lifts the
+                # declaration's never-speak-it-yourself rule for this one
+                # value only, so the two instructions do not contradict.
                 response = {
                     "success": False,
                     "status": "read_back_yourself",
                     "message": (
                         "No audio clip is available in the session language "
-                        "for this value, so YOU read it back now. Read the "
-                        "STORED value (the one update_form_fields returned), "
-                        "never your memory of what was said: say every digit "
-                        "separately, one at a time, as the SESSION LANGUAGE's "
+                        "for this value, so YOU read it back now -- for this "
+                        "one value, that replaces the rule against reading a "
+                        "value back yourself. Read the STORED value (the one "
+                        "update_form_fields returned), never your memory of "
+                        "what was said, one character at a time, in order: "
+                        "say every digit separately as the SESSION LANGUAGE's "
                         "own word for that digit -- never in English, and "
-                        "never grouped into larger numbers. Then ask whether "
-                        "it is correct, wait for their answer, and confirm "
-                        "as usual once they agree. Do not call name_spellback "
-                        "again for this value."
+                        "never grouped into larger numbers -- and say every "
+                        "letter, if it has any, as that letter's name, one "
+                        "letter at a time. Then ask whether it is correct, "
+                        "wait for their answer, and confirm as usual once "
+                        "they agree. Do not call name_spellback again for "
+                        "this value."
                     ),
                 }
             else:

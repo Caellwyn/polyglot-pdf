@@ -342,6 +342,26 @@ class TestNoSessionVoiceContract:
         assert "never in English" in msg
         assert "never grouped into larger numbers" in msg
         assert "Do not call name_spellback again for this value" in msg
+        # The gate keys on "contains a digit", so a MIXED value (passport
+        # X1234567, an email) lands here too: the instruction must cover its
+        # letters, and must lift the declaration's never-speak-it-yourself
+        # rule for this value, or the model holds two contradicting orders
+        # (Opus cross-surface review, r3ham.26).
+        assert "one character at a time, in order" in msg
+        assert "say every letter, if it has any, as that letter's name" in msg
+        assert "replaces the rule against reading a value back yourself" in msg
+
+    @pytest.mark.asyncio
+    async def test_a_mixed_letter_digit_value_takes_the_digit_gate(self):
+        """Pin WHY the variant covers letters: a passport-style value with one
+        digit gets no clip in a voiceless language, exactly like a phone."""
+        voices = _voices_for(*[c for c in SPOKEN_LANGUAGE_BCP47.values()
+                               if c != "ur-PK"])
+        with patch.object(spellback_tts, "_known_voices", return_value=voices), \
+             patch.object(spellback_tts, "_synthesize_sync") as synth:
+            with pytest.raises(SpellbackLanguageUnavailable):
+                await synthesize_spellback("X1234567", _settings(), "Urdu")
+            synth.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_other_errors_keep_the_reask_variant(self):
