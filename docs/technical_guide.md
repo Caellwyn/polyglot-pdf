@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-17 (bd polyglot-pdf-vzvio: Surface contract 25 -- scripts/setup-telemetry.sh derives the telemetry dataset LOCATION from the Cloud Billing export dataset via new scripts/telemetry_bq_setup.py instead of a hard-coded us-central1, and the two dataset-scoped BigQuery IAM grants move to that script's grant-dataset-role subcommand instead of `bq add-iam-policy-binding`; BILLING_EXPORT_TABLE's producer row corrected from REQUIRED to OPTIONAL to match the shipped script.)*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 *Last updated: 2026-09-16 (bd polyglot-pdf-bwevj, sprint 23 C2: the `/ws/fill` and dev-socket rows.)*
 *Last updated: 2026-09-16 (bd polyglot-pdf-vcjgs, sprint 23 C3: the `POST /api/signup/check` route row.)*

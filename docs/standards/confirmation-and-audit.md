@@ -533,4 +533,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-09-16 (bd polyglot-pdf-oqtm7 outer cross-surface review: `CONFIRMATION_FIRESTORE_ENABLED`'s producer is `cloudbuild.yaml`'s backend deploy -- `deploy-all.sh`'s `BACKEND_ENV` was deleted with the inline bash deploy stages. No confirmation or audit behavior changed.) (2026-09-08, bd polyglot-pdf-uum5g: `manual` means typed AND explicitly verified -- typing alone no longer produces a confirmation, so a keystroke cannot stand behind a per-field audit claim).*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*

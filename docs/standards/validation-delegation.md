@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-08-08 (the `/ws/fill` text clients are process-cached and
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 shared across sessions -- stateless, so sharing is safe -- while
 `get_live_ai` stays per-connection. NOTE (bd polyglot-pdf-6dn2n): the date is
 intentionally left at 2026-08-08 -- tracked code has moved since then, so

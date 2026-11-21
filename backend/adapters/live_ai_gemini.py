@@ -244,9 +244,9 @@ def derive_compression_window(
     the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
     and the session's tool list (7 declarations -- continuous mode drops
     switch_section, and name_spellback is appended by default since bd
-    polyglot-pdf-apkdl), the CURRENT default DTI form derives a 5499 floor ->
-    6098 window -> 7598 trigger, above the API minimum 5000. Those three are
-    MEASURED (2026-08-25, by executing this function on the shipped config),
+    polyglot-pdf-apkdl), the CURRENT default DTI form derives a 5887 floor ->
+    6486 window -> 7986 trigger, above the API minimum 5000. Those three are
+    MEASURED (2026-11-21, by executing this function on the shipped config),
     not estimated -- RE-EXECUTE rather than trusting them, since they move
     whenever the SI or the tool list does (they dropped
     ~1.4k when the v4 SI diet cut the SI to 11,994 chars, bd polyglot-pdf-6a79;
@@ -265,7 +265,7 @@ def derive_compression_window(
     # session never opens (the wsao.2 measured failure). 0 for a details-less
     # form -> the FORMULA is unchanged from pre-wsao.8 (the derived numbers
     # still move whenever the SI text itself grows). The default DTI form
-    # currently derives ~6.3k window / ~7.8k trigger -- above the API minimum
+    # currently derives ~6.5k window / ~8.0k trigger -- above the API minimum
     # (already true before wsao.8), so the clamp-to-5000 path fires only for
     # forms with a much smaller SI floor.
     window = floor + max(1, window_headroom_tokens) + max(0, injection_budget_tokens)

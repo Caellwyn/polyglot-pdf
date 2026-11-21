@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/routes/disclaimer_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-08-24 (bd polyglot-pdf-suwud: gave disclaimer_routes.py its own Med-tier row, explaining why it stays med rather than high despite the durable evidence write bd polyglot-pdf-0dsv4 added; added the file to this doc's Tracks line, which had never named it).*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of

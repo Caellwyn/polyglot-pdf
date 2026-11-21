@@ -2,7 +2,7 @@
 
 **Tracks:** backend/services/ai_context.py backend/services/manifest_service.py backend/services/secretary_context.py backend/services/form_filling_service.py backend/config.py frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/state/hiddenFieldCounting.test.ts
 
-*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 Two models read the form and they must read **different** things. This doc is the
 single answer to "if I add a key to a form-kit schema, who sees it?"

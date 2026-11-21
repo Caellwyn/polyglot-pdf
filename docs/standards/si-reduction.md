@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the cost rationale pointer
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 follows the 3.8 re-measurement -- text-in and audio-in are the two cost lines,
 neither dominant; see logging-and-cost.md).*
 
