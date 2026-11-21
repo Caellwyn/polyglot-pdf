@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-11-18. See [journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md](../journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md) for closeout details.*
+*Last updated: 2026-11-21. See [journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md](../journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
