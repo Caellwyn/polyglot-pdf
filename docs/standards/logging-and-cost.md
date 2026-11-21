@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/services/spellback_tts.py backend/services/notice_tts.py backend/services/intro_tts.py backend/utils/log_schemas.py backend/utils/structured_logger.py scripts/setup-telemetry.sh sql/telemetry_views.sql backend/services/credit_ledger.py backend/utils/logging.py scripts/setup-monitoring.sh scripts/telemetry_bq_setup.py
 
-*Last updated: 2026-11-18 (bd polyglot-pdf-e72on: the measured cost invariant is re-measured on the production tier `gemini-3.8-live` -- text-in leads the happy path narrowly, audio-in leads corrections; 3.8 costs ~30% more per W-7 than 2.5; thinking and input transcription costed as their own lines. 2.5 kept as the prior record. See `scripts/spikes/3p8_cost_bench_findings.md`. bd polyglot-pdf-r3ham.5: thinking is framed as an upper bound.)*
+*Last updated: 2026-11-20. See [docs/journal/entries/2026-11-20-bd-15j9v-3p8-sim-user-benchmark.md](../journal/entries/2026-11-20-bd-15j9v-3p8-sim-user-benchmark.md) for closeout details.*
 
 *Last updated: 2026-09-18 (bd polyglot-pdf-65jeu: module-level `structlog.get_logger().bind(...)` froze `ConsoleRenderer` onto 49 loggers, so `ledger_export`, `form_session_ended`, `usage_rollup_written` and `sweep_expired_links_complete` reached Cloud Logging as textPayload and never matched the sink's `jsonPayload.event_type` filter -- the income view had no source rows. All 49 sites are now bind-free `structlog.get_logger(module=...)`, and the processor chain is applied at import of `backend/utils/logging.py`, which both `main.py` files now import first. NOTE for the post-deploy check: the stdout/stderr split described below was measured when these lines were console-rendered; which stream the now-JSON rows land on must be re-confirmed against the live table names before the `${TELEMETRY_TABLE_STDERR}` assumption in `sql/telemetry_views.sql` is trusted.)*
 
@@ -133,30 +133,37 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 > bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`). The cumulative cost in
 > `token_usage.jsonl` is the baseline that work measures against.
 
-> **MEASURED COST INVARIANT -- TEXT-IN AND AUDIO-IN ARE THE TWO COST LINES; ON
-> 3.8 TEXT-IN LEADS THE HAPPY PATH (do not re-derive from the rate table).** On
-> the production tier, **`gemini-3.8-live`**, with the production configuration
-> (continuous DTI + DERIVED context compression, push-to-talk, transcription on),
-> text-input and audio-input together are ~85-95% of a form's cost. Which of the
-> two leads depends on the session's shape:
+> **MEASURED COST INVARIANT -- TEXT-IN AND AUDIO-IN ARE THE TWO COST LINES
+> (do not re-derive from the rate table).** On the production tier,
+> **`gemini-3.8-live`**, with the production configuration (continuous DTI +
+> DERIVED context compression, push-to-talk, transcription on), text-input and
+> audio-input together are ~86-90% of a form's cost. Which of the two leads
+> depends on the session's shape. Measured with a simulated applicant that
+> listens, answers and corrects (n=3 per row, 2026-11-20):
 >
-> | 3.8, full 22-field W-7, n=3 each | text-in | audio-in | audio-out | thinking (upper bound) | other text-out | $ / form | $ / correct field |
+> | 3.8, simulated applicant | text-in | audio-in | audio-out | thinking (upper bound) | other text-out | $ / form | $ / correct field |
 > |---|---|---|---|---|---|---|---|
-> | happy path | **~50%** | ~40% | ~6% | ~3% | ~1% | $0.87-0.94 | ~$0.043 |
-> | unhappy path (every answer corrected once) | ~44% | **~46%** | ~6% | ~3% | ~1% | $1.50-1.83 | ~$0.088 |
+> | W-7 (22 fields), happy path | **~45%** | ~42% | ~10% | ~3% | ~1% | $1.03-1.10 | ~$0.048 |
+> | W-7, every answer wrong once then corrected | ~44% | ~44% | ~8% | ~3% | ~1% | $1.39-1.72 | ~$0.071 |
+> | I-90 v2 (57 fields), happy path | ~40% | **~50%** | ~7% | ~2% | ~1% | $3.28-3.87 | ~$0.064 |
 >
-> The prior record, on the **2.5** native-audio model (same script and config,
-> n=3, 2026-11-18): happy path audio-in ~50% / text-in ~45% / other ~5%, at
-> $0.67-0.74 per form. 2.5 native audio retires on Vertex on 2026-12-13.
+> All 9 runs completed the form (237 of 237 fields filled and confirmed). The
+> product cost above excludes the measurement overhead of the simulated user
+> (its actor model and the STT audio check, ~$0.37-1.03 per run).
 >
-> **3.8 costs ~30% more per form than 2.5 on the identical script.** Prompt size
-> is about the same on both (~610k vs ~640k text-in tokens per W-7). The gap is:
-> 3.8's text-in rate is 1.5x (0.75 vs 0.50), 3.8 speaks about twice as much
-> audio, and 3.8 reports thinking tokens (priced at the output rate; an upper
-> bound, see lever 4). So the audio-in-leads ordering measured on 2.5
-> flipped back to text-in on the 3.8 happy path, as the rate table predicted, but
-> only narrowly: corrections and long sessions add user audio and put audio-in
-> back on top.
+> The prior record, on the **2.5** native-audio model (a fixed-script user, same
+> config, n=3, 2026-11-18): W-7 happy path audio-in ~50% / text-in ~45% / other
+> ~5%, at $0.67-0.74 per form. 2.5 native audio retires on Vertex on 2026-12-13.
+>
+> **3.8 costs ~30% more per form than 2.5 on the identical script** (W-7,
+> fixed-script user, 2026-11-18: $0.905 vs $0.697). Prompt size is about the same
+> on both (~610k vs ~640k text-in tokens per W-7). The gap is: 3.8's text-in rate
+> is 1.5x (0.75 vs 0.50), 3.8 speaks about twice as much audio, and 3.8 reports
+> thinking tokens (priced at the output rate; an upper bound, see lever 4). A
+> responsive user adds ~17% on top of the fixed script ($1.055 vs $0.905 per
+> W-7): fuller answers add audio-in, and answering spelling requests adds turns.
+> So text-in and audio-in are close on 3.8: text-in leads the short happy path
+> narrowly, they are even with corrections, and audio-in leads the long I-90.
 >
 > **This is an EVOLUTION and a WIN, not a contradiction of the older number.**
 > Text-in genuinely *was* 95-98% of session cost when it was measured (bd
@@ -180,7 +187,7 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 >    correction costs disproportionately because it adds expensive audio.
 > 3. **SI size** still sets the compression floor (a bigger SI derives a bigger
 >    window -> fewer evictions) but it is no longer the single dominant line.
-> 4. **Thinking** is ~3% (about 260 tokens per question, output rate). It is
+> 4. **Thinking** is ~2-3% (about 300 tokens per question, output rate). It is
 >    priced from `usage_metadata`; PR #908's deployed-billing reconciliation (n=1)
 >    found 3.8 thought tokens did not appear as a billed line, so treat it as an
 >    upper bound.
@@ -190,10 +197,12 @@ fatal for the client-link spend CEILING. The ceiling reads the never-reset
 >    `scripts/spikes/probe_input_transcription_cost.py`.
 >
 > **PROVENANCE, and what would invalidate this.** Runs and per-modality split:
-> `scripts/spikes/3p8_cost_bench_findings.md` (bd `polyglot-pdf-e72on`), raw
-> artifacts in `scripts/spikes/data/r3ham/bench/`. The split was summed from
+> `scripts/spikes/sim_user_findings.md` (bd `polyglot-pdf-15j9v`), raw artifacts
+> in `scripts/spikes/data/sim_user/bench/`. The 3.8-vs-2.5 comparison is from
+> `scripts/spikes/3p8_cost_bench_findings.md` (bd `polyglot-pdf-e72on`, raw
+> artifacts in `scripts/spikes/data/r3ham/bench/`). The split was summed from
 > each run's per-turn `token_usage` lines, which match the harness's `voice_usd`
-> to within ~3%. **The ORDERING is the durable finding, and it is close on 3.8 --
+> to within ~1%. **The ORDERING is the durable finding, and it is close on 3.8 --
 > treat the percentages as approximate.** Re-measure if the SI changes
 > materially, if the model or its rates change, and note the split depends on
 > compression being ON and DERIVED -- on a loose 12000/9000 window text-in

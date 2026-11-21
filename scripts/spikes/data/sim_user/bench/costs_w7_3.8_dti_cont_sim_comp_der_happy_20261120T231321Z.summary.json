@@ -1,0 +1,277 @@
+{
+  "run": {
+    "model": "gemini-3.8-live",
+    "tier": "3.8",
+    "schema": "w7",
+    "arm": "dti",
+    "path": "happy",
+    "questions": 22,
+    "compression": true,
+    "trigger": 9503,
+    "window": 8003,
+    "continuous": true,
+    "started": "20261120T231321Z",
+    "events_mode": "none",
+    "reactivity": null,
+    "lang": "en",
+    "text_ai_wired": true
+  },
+  "headline": {
+    "all_in_usd": 1.393657,
+    "voice_usd": 1.393657,
+    "text_usd": 0,
+    "text_usd_by_caller": {},
+    "greeting_usd": 0.013704,
+    "voice_tokens": 1044147,
+    "wall_clock_s": 854.8,
+    "steps": 63,
+    "fill_accuracy": {
+      "matched": 22,
+      "total": 22,
+      "accuracy": 1.0
+    },
+    "fill_failure_modes": {
+      "missing": 0,
+      "format": 0,
+      "transcription": 0,
+      "wrong-field": 0,
+      "mismatch": 0,
+      "spurious": 0
+    },
+    "usd_per_correct_field": 0.0633
+  },
+  "validator": {
+    "windows_submitted": 0,
+    "boundaries": 0,
+    "calls": 0,
+    "window_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "verdict_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "pr": null,
+    "duplicate_steers": 0,
+    "steers": 0,
+    "steer_outcomes": {},
+    "steer_to_switch_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "fail_opens": 0,
+    "drains": {
+      "count": 0,
+      "delivered": 0,
+      "undelivered_retries": 0
+    },
+    "drain_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "usd": 0,
+    "latency_s": null,
+    "conflicts": 0,
+    "calls": 0
+  },
+  "secretary": {
+    "calls": 0,
+    "blocked_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "pending_detached": 0,
+    "recall_events": 0,
+    "tool_fired": 0,
+    "answers_correct": 0,
+    "answers_wrong": 0,
+    "cache_hit_rate": null,
+    "warnings": 0
+  },
+  "navigation": {
+    "attempts": 0,
+    "switched": 0,
+    "hit_target": 0,
+    "seam_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "skips": {
+    "requested": 0,
+    "recorded": 0
+  },
+  "latency": {
+    "turn_s": {
+      "n": 60,
+      "p50": 1.156,
+      "p90": 1.297,
+      "p95": 1.391,
+      "max": 1.5
+    }
+  },
+  "errors": {
+    "close_1011": 0,
+    "go_away_announced": 1,
+    "reconnects": 1,
+    "reconnect_downtime_s": {
+      "n": 1,
+      "p50": 3.219,
+      "p90": 3.219,
+      "p95": 3.219,
+      "max": 3.219
+    },
+    "stalled_turns": 0,
+    "tool_callback_exceptions": 0,
+    "dti_coercions": 0,
+    "unknown_field_rejections": 0,
+    "spurious_fills": [],
+    "validation_dropped": 0,
+    "secretary_delivers_dropped": 0,
+    "dropped_drains": 0,
+    "unpriced_model_calls": [],
+    "captured_errors": 0
+  },
+  "sim_user": {
+    "persona_id": "w7_ana_selfcorrect_v1",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "user": "sim",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts_kind": "gtts",
+    "model": "gemini-3.8-live",
+    "max_user_turns": 150,
+    "filled_confirmed": 22,
+    "fact_fields": 22,
+    "correct_vs_factsheet": {
+      "matched": 22,
+      "total": 22,
+      "accuracy": 1.0
+    },
+    "off_sheet_values": 0,
+    "corrections": {
+      "facts_with_slips": 22,
+      "slips_spoken": 20,
+      "slips_corrected": 20,
+      "fields_uncorrected": [],
+      "reject_and_correct_turns": 17
+    },
+    "referee_overrides": {
+      "reject_to_confirm": 1,
+      "confirm_to_reject": 1
+    },
+    "gate_violations": 0,
+    "gate_timeouts": 0,
+    "silence_closes": 0,
+    "spellback_clips": 3,
+    "late_completions": 0,
+    "user_turns": 63,
+    "stalls": 0,
+    "render_errors": 0,
+    "stop_reason": "complete",
+    "aborted": false,
+    "abort_message": null,
+    "fallbacks": {
+      "count": 0,
+      "rate": 0.0,
+      "errors": []
+    },
+    "generations": 65,
+    "divergence": {
+      "n_generations": 65,
+      "n_scored": 62,
+      "n_divergent": 6,
+      "divergence_rate": 0.0968,
+      "verdict_counts": {
+        "ALIGNED": 56,
+        "NO_AUDIO": 3,
+        "PARTIAL": 4,
+        "UTTERANCE_DESYNC": 2
+      },
+      "worst": [
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.8182,
+          "transcript": "Two four nine eight one seven three eight -- is that correct?",
+          "stt_text": "2 4981738 is that correct?"
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.8182,
+          "transcript": "Two four nine eight one seven three six -- is that correct?",
+          "stt_text": "2 4981736. Is that correct?"
+        },
+        {
+          "verdict": "PARTIAL",
+          "divergence": 0.6296,
+          "transcript": "I have updated the passport number to one zero four seven two two eight five. Is that correct?",
+          "stt_text": "I have updated the passport number as 1 0 4 7, 2 2 8 6,"
+        },
+        {
+          "verdict": "PARTIAL",
+          "divergence": 0.5556,
+          "transcript": "March fourth, nineteen ninety -- is that correct?",
+          "stt_text": "March 4th 1990, is that correct?"
+        },
+        {
+          "verdict": "PARTIAL",
+          "divergence": 0.5556,
+          "transcript": "March fourteenth, nineteen ninety -- is that correct?",
+          "stt_text": "March 14th 1990. Is that correct?"
+        }
+      ],
+      "stt_billed_seconds": 990,
+      "stt_cost_usd": 0.396
+    },
+    "divergence_valid": true,
+    "stt": {
+      "valid": true,
+      "stt_calls": 62,
+      "stt_errors": 0,
+      "stt_error_rate": 0.0,
+      "first_error": null
+    },
+    "tts": {
+      "kind": "gtts",
+      "chars": 2182,
+      "calls": 64
+    },
+    "actor_usage": {
+      "input": 119933,
+      "output": 1663,
+      "cache_read": 118016,
+      "cache_creation": 0
+    },
+    "cost": {
+      "gemini_live_usd": 1.393657,
+      "sidecar_text_usd": 0,
+      "actor_usd": 0.014005,
+      "tts_usd": 0.0,
+      "stt_usd": 0.396,
+      "total_usd": 1.803662
+    }
+  }
+}

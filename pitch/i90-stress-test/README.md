@@ -4,8 +4,9 @@ Everything the pitch needs from the 2026-07-14 stress-test series, in one place.
 Source of record for the numbers below is the epic `polyglot-pdf-00pt` run
 artifacts; this folder is a copy for pitch compilation.
 
-> **2026-11-18:** the default voice model is now `gemini-3.8-live`. The investor demo
-> still serves 2.5 until it is redeployed. The figures below are the 2.5 record. Read the dated update at the end before quoting any number.
+> **2026-11-20:** the voice model is now `gemini-3.8-live`, on the investor demo too
+> since its 2026-11-19 redeploy. The figures below are the 2.5 record. Read the 3.8
+> section at the end before quoting any number.
 
 ## What's here
 
@@ -57,14 +58,26 @@ prompting / scorer / kit-hygiene fixes, each with a measured baseline to verify
 a fix against. The one with product consequence is a checkbox occasionally being
 checked when the user declined it (bd cx23).
 
-## 2026-11-18 update: the default voice model is now gemini-3.8-live
+## gemini-3.8-live figures (measured 2026-11-18 to 2026-11-20)
 
-The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The default voice model in the code is now `gemini-3.8-live`. It has run deployed only once, on staging; the investor demo still serves 2.5. 2.5 retires on Vertex on 2026-12-13.
+The numbers above were measured on **gemini-2.5 native audio**, the production model in July 2026. They stay here as the prior record. The voice model is now `gemini-3.8-live`, and the investor demo has served it since its 2026-11-19 redeploy. 2.5 retires on Vertex on 2026-12-13.
 
-Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say today:
+Epic `polyglot-pdf-r3ham` and bd `polyglot-pdf-15j9v` re-measured on 3.8. What the pitch can say today:
 
-- **There is no measured full-I-90 figure on 3.8 yet. Do not quote one.** All three 3.8 runs of the current I-90 kit stopped early, at questions 42, 36 and 23 of 57. The model fell out of step at the "same as mailing address" question (bd `polyglot-pdf-r3ham.10`), and once at the first Part 3 question (bd `polyglot-pdf-r3ham.16`). That is a fix to make, not a cost finding. The ~16 minutes and $2.44 above are 2.5 numbers.
-- **On a like-for-like form, 3.8 costs about 30% more than 2.5.** The full 22-field W-7, ideal user, 3 runs each, same script:
+- **A full I-90 on 3.8 costs about $3.55 and completes.** Measured with a simulated applicant who listens, answers and corrects, n=3: **$3.55 per I-90 ($3.28-3.87)**. All 57 fields were filled and confirmed in every run, and 54-57 of 57 matched the answer sheet exactly. That is about $0.06 per correct field. Two of the five misses were formatting only ("the Philippines" for "Philippines"). Source: `scripts/spikes/sim_user_findings.md`.
+  - **This is the current 57-question I-90 kit (`i-90_v2`), not the 113-question form of the 2.5 stress test above.** So do not set $3.55 against $2.44, the flat $0.021 per question, or the earlier "about $3.2 on 3.8" extrapolation (which was built from the 113-question figures). The closest 2.5 reference on the current kit is **$2.06 per I-90** (bd `polyglot-pdf-2nikx`, 2026-08-28, fixed-script user, 48/57 correct). That is still not like-for-like: the user model differs, and three months of code changes sit between the runs.
+  - An earlier fixed-script user never let a 3.8 I-90 finish. That user always said yes and never answered a spelling request, so the failures were mostly the script's, not the model's. With a responsive user, the "same as mailing address" question (bd `polyglot-pdf-r3ham.10`) costs 3-8 extra turns but no longer derails the session.
+  - The ~16 minutes and $2.44 above are 2.5 numbers. Do not quote a 3.8 I-90 duration from these runs: the simulated user's own thinking and speech time inflate the wall clock.
+- **Per form, with the same simulated applicant (3.8, n=3 each):**
+
+  | Form | $ / form | Fields correct |
+  |---|---|---|
+  | W-7 (22 fields), happy path | $1.06 ($1.03-1.10) | 22, 22, 22 of 22 |
+  | W-7, every answer wrong once, then corrected | $1.57 ($1.39-1.72) | 22, 22, 22 of 22 |
+  | I-90 (57 fields), happy path | $3.55 ($3.28-3.87) | 55, 57, 54 of 57 |
+
+  Every correction a user made was caught and fixed. Corrections cost about 50% more than a smooth session.
+- **On a like-for-like form, 3.8 costs about 30% more than 2.5.** The full 22-field W-7, fixed-script user, 3 runs each, same script:
 
   | | $ / form | Fields correct | First-audio latency p50 (LOCAL) |
   |---|---|---|---|
@@ -72,13 +85,18 @@ Epic `polyglot-pdf-r3ham` re-measured on 3.8. What the pitch can and cannot say 
   | 2.5 | $0.697 ($0.67-0.74) | 19, 22, 21 of 22 | 1.31 s |
 
   The increase comes from three things: 3.8's higher text-input price (1.5x), its longer spoken replies, and its "thinking" (about 3%). Thinking is priced from the model's reported token counts. The one reconciled 3.8 billing day did NOT show thinking as billed text output (n=1, `scripts/spikes/3p8_deployed_telemetry_findings.md`), so treat that line as an upper bound. Source: `scripts/spikes/3p8_cost_bench_findings.md`.
-- **The I-90 estimate is an EXTRAPOLATION, not a measurement.** Applying the W-7 ratio to the $2.44 above gives about **$3.2 per full I-90 on 3.8**. That is an order-of-magnitude guide only, until a 3.8 I-90 completes.
-- **Context compression fires on 3.8, about twice as often as on 2.5** (12-16 trims per W-7 vs 6), because 3.8's longer speech fills the window faster. That is what kept 2.5's cost linear in form length; linear cost on a full 3.8 I-90 is NOT yet measured.
+  - The responsive applicant costs more per W-7 than the fixed script ($1.06 vs $0.905), because fuller answers and answered spelling requests add audio. Quote the simulated-applicant figures as the realistic ones, and the fixed-script table only for the 3.8-vs-2.5 comparison.
+- **Open accuracy defects to know about before a demo** (both filed):
+  - Once in 45 spelling read-backs, the model spoke an internal instruction aloud (bd `polyglot-pdf-r3ham.23`).
+  - In 3 of 237 fields, the model stored a different value than the user said, and it was confirmed (bd `polyglot-pdf-r3ham.24`). One was a phone number whose spoken read-back and on-screen transcript disagreed.
+  - Both are I-90-only so far, and the reviewing professional sees the draft before filing.
+- **Context compression fires on 3.8, about twice as often as on 2.5** (12-16 trims per W-7 vs 6), because 3.8's longer speech fills the window faster. That is what kept 2.5's cost linear in form length. On 3.8, with the simulated applicant, the 57-question I-90 costs about 3.4x the 22-field W-7, for 2.6x the fields, and audio-in is a larger share of it (~50% vs ~42%). Why it grows faster than the field count is not decomposed yet.
 - **Multilingual still holds on 3.8.** A 14-question W-7 slice in Spanish, Chinese, Hindi, Russian and Arabic was spoken in the right language on every question, with 13-14 of 14 fields correct (`scripts/spikes/3p8_quirk_retest_findings.md`).
 - **Error-catching:** the cheap helper model moved to `gemini-3.1-flash-lite` with no quality regression. The trade-offs are small: about 0.15 s slower at the median, about 2.6x the cost per secretary call of the earlier `gemini-2.5-flash-lite` (still below the `gemini-2.5-flash` that deployed helper calls actually ran on before), and occasional HTTP 429 rate-limit replies under load, which the app treats as transient.
   - Planted-contradiction recall is 1.000 (68 of 68).
   - The form secretary's judged hallucinations went down: 1 of 49, against 5 before (`scripts/spikes/3p1_lite_revalidation_findings.md`).
 - **Latency:**
   - Every number above is still LOCAL.
-  - The first deployed 3.8 telemetry is one staging session (`scripts/spikes/3p8_deployed_telemetry_findings.md`). That is too few to quote, and the demo still runs 2.5.
+  - Local first-audio latency is unchanged by a realistic user: 1.16-1.20 s median and 1.34-1.47 s p90 across all three simulated-applicant groups.
+  - The first deployed 3.8 telemetry is one staging session (`scripts/spikes/3p8_deployed_telemetry_findings.md`). That is too few to quote.
   - Quote it as "about 1.2 s measured locally; deployed 3.8 latency so far comes from one staging session, too few to quote", or give no hard number.

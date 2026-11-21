@@ -1,0 +1,279 @@
+{
+  "run": {
+    "model": "gemini-3.8-live",
+    "tier": "3.8",
+    "schema": "i90-v2",
+    "arm": "dti",
+    "path": "happy",
+    "questions": 57,
+    "compression": true,
+    "trigger": 10876,
+    "window": 9376,
+    "continuous": true,
+    "started": "20261120T200124Z",
+    "events_mode": "none",
+    "reactivity": null,
+    "lang": "en",
+    "text_ai_wired": true
+  },
+  "headline": {
+    "all_in_usd": 3.857109,
+    "voice_usd": 3.850571,
+    "text_usd": 0.006538,
+    "text_usd_by_caller": {
+      "secretary": 0.006538
+    },
+    "greeting_usd": 0.006463,
+    "voice_tokens": 2788734,
+    "wall_clock_s": 2714.7,
+    "steps": 150,
+    "fill_accuracy": {
+      "matched": 51,
+      "total": 57,
+      "accuracy": 0.8947
+    },
+    "fill_failure_modes": {
+      "missing": 4,
+      "format": 0,
+      "transcription": 0,
+      "wrong-field": 0,
+      "mismatch": 0,
+      "spurious": 2
+    },
+    "usd_per_correct_field": 0.0756
+  },
+  "validator": {
+    "windows_submitted": 0,
+    "boundaries": 0,
+    "calls": 0,
+    "window_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "verdict_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "pr": null,
+    "duplicate_steers": 0,
+    "steers": 0,
+    "steer_outcomes": {},
+    "steer_to_switch_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "fail_opens": 0,
+    "drains": {
+      "count": 0,
+      "delivered": 0,
+      "undelivered_retries": 0
+    },
+    "drain_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "usd": 0,
+    "latency_s": null,
+    "conflicts": 0,
+    "calls": 0
+  },
+  "secretary": {
+    "calls": 2,
+    "blocked_s": {
+      "n": 2,
+      "p50": 1.828,
+      "p90": 4.328,
+      "p95": 4.328,
+      "max": 4.328
+    },
+    "pending_detached": 0,
+    "recall_events": 0,
+    "tool_fired": 0,
+    "answers_correct": 0,
+    "answers_wrong": 0,
+    "cache_hit_rate": 0.0,
+    "warnings": 0
+  },
+  "navigation": {
+    "attempts": 0,
+    "switched": 0,
+    "hit_target": 0,
+    "seam_latency_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "skips": {
+    "requested": 0,
+    "recorded": 0
+  },
+  "latency": {
+    "turn_s": {
+      "n": 135,
+      "p50": 1.359,
+      "p90": 1.781,
+      "p95": 1.953,
+      "max": 9.797
+    }
+  },
+  "errors": {
+    "close_1011": 0,
+    "go_away_announced": 4,
+    "reconnects": 4,
+    "reconnect_downtime_s": {
+      "n": 4,
+      "p50": 4.485,
+      "p90": 5.188,
+      "p95": 5.188,
+      "max": 5.188
+    },
+    "stalled_turns": 0,
+    "tool_callback_exceptions": 0,
+    "dti_coercions": 0,
+    "unknown_field_rejections": 0,
+    "spurious_fills": [],
+    "validation_dropped": 0,
+    "secretary_delivers_dropped": 0,
+    "dropped_drains": 0,
+    "unpriced_model_calls": [],
+    "captured_errors": 2
+  },
+  "sim_user": {
+    "persona_id": "i90v2_elena_nospell_v1",
+    "kit_sha256": "9a29668538c8cdd9253a8b4850346dbeb0da110af286e7f711c9060a517f19f9",
+    "user": "sim",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts_kind": "gtts",
+    "model": "gemini-3.8-live",
+    "max_user_turns": 150,
+    "filled_confirmed": 54,
+    "fact_fields": 57,
+    "correct_vs_factsheet": {
+      "matched": 51,
+      "total": 57,
+      "accuracy": 0.8947
+    },
+    "off_sheet_values": 0,
+    "corrections": {
+      "facts_with_slips": 0,
+      "slips_spoken": 0,
+      "slips_corrected": 0,
+      "fields_uncorrected": [],
+      "reject_and_correct_turns": 24
+    },
+    "gate_violations": 0,
+    "gate_timeouts": 0,
+    "silence_closes": 0,
+    "spellback_clips": 24,
+    "late_completions": 0,
+    "user_turns": 150,
+    "stalls": 0,
+    "render_errors": 0,
+    "stop_reason": "max_user_turns",
+    "aborted": false,
+    "abort_message": null,
+    "fallbacks": {
+      "count": 0,
+      "rate": 0.0,
+      "errors": []
+    },
+    "generations": 156,
+    "divergence": {
+      "n_generations": 156,
+      "n_scored": 127,
+      "n_divergent": 14,
+      "divergence_rate": 0.1102,
+      "verdict_counts": {
+        "ALIGNED": 113,
+        "LOW_CONFIDENCE": 1,
+        "NO_AUDIO": 15,
+        "PARTIAL": 3,
+        "SPELLING_DESYNC": 3,
+        "TOO_SHORT": 4,
+        "TOO_SHORT_TO_JUDGE": 9,
+        "UTTERANCE_DESYNC": 8
+      },
+      "worst": [
+        {
+          "verdict": "SPELLING_DESYNC",
+          "divergence": 1.0,
+          "transcript": "-",
+          "stt_text": "No that's not right it's spelled c o r a z o n."
+        },
+        {
+          "verdict": "SPELLING_DESYNC",
+          "divergence": 1.0,
+          "transcript": "...",
+          "stt_text": "No that's not right it's spelled c o r a z o n."
+        },
+        {
+          "verdict": "SPELLING_DESYNC",
+          "divergence": 1.0,
+          "transcript": "...",
+          "stt_text": "No that's not right it's spelled c o r a z o n."
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 1.0,
+          "transcript": "...",
+          "stt_text": "Pause."
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 1.0,
+          "transcript": "<no speech>{pause}",
+          "stt_text": "The field has been updated correctly."
+        }
+      ],
+      "stt_billed_seconds": 2925,
+      "stt_cost_usd": 1.17
+    },
+    "divergence_valid": true,
+    "stt": {
+      "valid": true,
+      "stt_calls": 137,
+      "stt_errors": 0,
+      "stt_error_rate": 0.0,
+      "first_error": null
+    },
+    "tts": {
+      "kind": "gtts",
+      "chars": 5471,
+      "calls": 155
+    },
+    "actor_usage": {
+      "input": 562164,
+      "output": 3399,
+      "cache_read": 440028,
+      "cache_creation": 5752
+    },
+    "cost": {
+      "gemini_live_usd": 3.850571,
+      "sidecar_text_usd": 0.006538,
+      "actor_usd": 0.063035,
+      "tts_usd": 0.0,
+      "stt_usd": 1.17,
+      "total_usd": 5.090144
+    }
+  }
+}
