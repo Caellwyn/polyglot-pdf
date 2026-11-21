@@ -188,13 +188,14 @@ class FakeSession:
 
 
 def make_driver(session, *, actor=None, ears="transcript", stt_fn=None,
-                max_user_turns=500, timing=FAST, persona=None):
+                max_user_turns=500, timing=FAST, persona=None, expected=None):
     persona = persona or PERSONA
     return mfsc.SimDriver(
         persona=persona, actor=actor or sim_actor.StubActor(persona),
         recorder=session.rec, client=session.client, tts=session.tts,
         inject=session.inject, stt_fn=stt_fn or fake_stt, ears=ears,
-        max_user_turns=max_user_turns, timing=timing, rng=random.Random(0))
+        max_user_turns=max_user_turns, timing=timing, rng=random.Random(0),
+        expected=expected)
 
 
 def run_driver(session, driver, finalize=True):
@@ -2265,6 +2266,35 @@ class CrossFieldModelScript(ExtraTokenModelScript):
         return out
 
 
+def _any_of_judgeable(persona, table):
+    """Judgeable fields whose strict key accepts several renderings, each
+    with a rendering other than the persona's own value."""
+    out = {}
+    for fid in _judgeable(persona):
+        exp = table.get(fid)
+        if isinstance(exp, (list, tuple)):
+            own = mfsc._canon_value(persona.facts[fid]["value"])
+            alts = [e for e in exp if e and mfsc._canon_value(e) != own]
+            if alts:
+                out[fid] = alts[0]
+    return out
+
+
+class AltRenderingModelScript(ModelScript):
+    """Stores an alternate rendering the strict key accepts ("Apt" for
+    "Apartment", "USA" for "United States") while reading back the value the
+    user said."""
+
+    alts: dict = {}
+
+    def respond(self, user_text):
+        out = super().respond(user_text)
+        fill = out.get("fill")
+        if fill and fill[0] in self.alts:
+            out["fill"] = (fill[0], self.alts[fill[0]])
+        return out
+
+
 class TestRefereeStoredValueGate:
     """bd polyglot-pdf-ya4vi.4: the referee turns a reject into a confirm only
     when the STORED value is also right, not merely present in the read-back."""
@@ -2289,6 +2319,23 @@ class TestRefereeStoredValueGate:
         for t in vetoed:
             assert t["move"] == "reject_and_correct"
             assert t["referee"] is None
+
+    def test_alternate_accepted_rendering_still_overrides(self):
+        """The gate judges with the run's strict key, any-of included: a
+        stored "418 Willow St, Apt 2B" is right, so a wrong reject of its
+        read-back is still overridden instead of looping."""
+        alts = _any_of_judgeable(PERSONA, mfsc.W7_EXPECTED)
+        assert alts                      # the persona has such fields
+        session = _session_for(PERSONA, AltRenderingModelScript)
+        session.model.alts = alts
+        driver = make_driver(session, actor=RejectEverythingActor(PERSONA),
+                             expected=mfsc.W7_EXPECTED,
+                             max_user_turns=4 * len(FIDS))
+        run_driver(session, driver)
+        assert driver.stop_reason == "complete"
+        assert not any(t["referee_veto"] for t in driver.user_turns)
+        for fid, alt in alts.items():
+            assert session.state[fid] == {"value": alt, "confirmed": True}
 
     def test_right_stored_value_still_overrides(self):
         session = _session_for(PERSONA)

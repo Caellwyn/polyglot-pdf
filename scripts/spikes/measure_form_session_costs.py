@@ -564,6 +564,24 @@ def _assert_expected_canon_matches_schema(schema_fields: dict, expected: dict) -
             "canon silently mis-scores fill accuracy:\n  " + "\n  ".join(problems))
 
 
+def value_matches_expected(written, exp, is_checkbox: bool = False) -> bool:
+    """The strict key's comparison for one field (exp is not None).
+
+    "" = correct to leave blank; for a CHECKBOX decline an explicit false-ish
+    write is the same correct end state (the box is unchecked), and only a
+    truthy write is wrong (E1 finding: the model sometimes CHECKS a declined
+    checkbox). A list/tuple = any-of: fields with several equally-correct
+    renderings (a country written "United States" OR "USA"). Else exact,
+    through _canon_value."""
+    if exp == "":
+        canon = _canon_value(written)
+        return canon == "" or (is_checkbox
+                               and canon in ("false", "unchecked", "no", "0"))
+    if isinstance(exp, (list, tuple)):
+        return _canon_value(written) in {_canon_value(e) for e in exp}
+    return _canon_value(written) == _canon_value(exp)
+
+
 def score_fill_accuracy(client, plan, expected) -> dict:
     """Per-field fill correctness for one arm (bd jnjj.7 / G3).
 
@@ -582,23 +600,12 @@ def score_fill_accuracy(client, plan, expected) -> dict:
         if exp is None:
             ok = written not in (None, "")  # lenient: unknown field, count as filled
             scored = "lenient"
-        elif exp == "":
-            canon = _canon_value(written)
-            # Correct to leave blank. For a CHECKBOX decline, an explicit
-            # false-ish write is the same correct end state (the box is
-            # unchecked); only a truthy write is a wrong answer (E1 finding,
-            # bd filed: the model sometimes CHECKS a declined checkbox).
-            is_checkbox = (client.schema_fields.get(fid) or {}).get("type") == "checkbox"
-            ok = canon == "" or (is_checkbox and canon in ("false", "unchecked", "no", "0"))
-            scored = "expect-empty"
-        elif isinstance(exp, (list, tuple)):
-            # Any-of: fields with several equally-correct renderings (e.g. a text
-            # country field the model may write as "United States" OR "USA").
-            ok = _canon_value(written) in {_canon_value(e) for e in exp}
-            scored = "any-of"
         else:
-            ok = _canon_value(written) == _canon_value(exp)
-            scored = "exact"
+            is_checkbox = (client.schema_fields.get(fid) or {}).get("type") == "checkbox"
+            ok = value_matches_expected(written, exp, is_checkbox)
+            scored = ("expect-empty" if exp == ""
+                      else "any-of" if isinstance(exp, (list, tuple))
+                      else "exact")
         matched += 1 if ok else 0
         detail.append({"field_id": fid, "expected": exp, "written": written,
                        "ok": ok, "scored": scored})
@@ -2968,8 +2975,12 @@ class SimDriver:
                  stt_fn, ears: str = "transcript",
                  max_user_turns: int = SIM_DEFAULT_MAX_USER_TURNS,
                  timing: SimTiming | None = None, rng=None,
-                 on_turn_done=None, maintenance=None, clock=time.monotonic):
+                 on_turn_done=None, maintenance=None, clock=time.monotonic,
+                 expected: dict | None = None):
         self.persona = persona
+        # The run's strict key (SCHEMAS[...]["expected"] plus any event
+        # overrides): what _stored_is_true judges a stored value against.
+        self.expected = dict(expected or {})
         self.actor = actor
         self.rec = recorder
         self.client = client
@@ -3016,15 +3027,19 @@ class SimDriver:
 
     # -- state ----------------------------------------------------------
     def _stored_is_true(self, fid) -> bool:
-        """The field's stored client value canonically equals the persona's
-        true value (_canon_value, the strict scorer's comparison)."""
+        """The field's stored client value is right by the run's strict key
+        (value_matches_expected, the scorer's own comparison, so an any-of
+        field such as "USA" for "United States" counts). A field the key
+        does not list falls back to the persona's true value."""
         f = self.persona.facts.get(fid)
         if f is None:
             return False
         stored = (self.client.state.get(fid) or {}).get("value")
         if stored is None:
             return False
-        return _canon_value(stored) == _canon_value(f.get("value"))
+        exp = self.expected.get(fid)
+        return value_matches_expected(
+            stored, f.get("value") if exp is None else exp)
 
     def all_done(self) -> bool:
         state = self.client.state
@@ -4819,7 +4834,8 @@ async def run(args) -> int:
                 max_user_turns=getattr(args, "max_user_turns",
                                        SIM_DEFAULT_MAX_USER_TURNS),
                 timing=sim_timing, rng=random.Random(0),
-                on_turn_done=_sim_turn_done, maintenance=_sim_maintenance)
+                on_turn_done=_sim_turn_done, maintenance=_sim_maintenance,
+                expected=expected_tbl)
             await sim_driver.run()
             if sim_driver.aborted:
                 print(f"[sim-abort] {sim_driver.abort_message}", flush=True)

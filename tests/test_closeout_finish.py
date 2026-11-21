@@ -329,6 +329,13 @@ class TestPushSafeSync:
         assert _sync_calls(rec) == []
         assert not any(" push " in j for j in rec.joined())
 
+    def test_remote_lookup_uses_the_full_branch_ref(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (2, "", ""), **_PR_OK})
+        _job(rec).run()
+        lr = [c for c in rec.calls if "ls-remote" in c][0]
+        assert lr[-1] == "refs/heads/feat/x"
+
     def test_ancestor_check_uses_the_remote_base_and_head(self):
         rec = RunRecorder(responses={"--is-ancestor": (0, "", ""), **_PR_OK})
         _job(rec, base="origin/dev").run()

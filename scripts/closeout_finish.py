@@ -212,8 +212,11 @@ class Closeout:
                     base_ref, "HEAD"], check=False)
         if anc.returncode == 0:
             return
+        # The full ref: a bare name is a tail pattern, so "feat/x" would also
+        # match "other/feat/x".
         remote = _run(["git", "-C", self.wt, "ls-remote", "--exit-code",
-                       "--heads", "origin", self.args.branch], check=False)
+                       "origin", "refs/heads/{}".format(self.args.branch)],
+                      check=False)
         if remote.returncode == 0:
             verb = "merge"
             proc = _run(["git", "-C", self.wt, "merge", "--no-edit", base_ref],
