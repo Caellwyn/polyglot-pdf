@@ -1,0 +1,4906 @@
+{
+  "persona_id": "w7_ana_nospell_v1",
+  "run_meta": {
+    "bead": "polyglot-pdf-tmu0f",
+    "base_name": "costs_w7_3.8_dti_cont_sim_comp_der_happy_20261120T181950Z",
+    "stamp": "20261120T181950Z",
+    "model": "gemini-3.8-live",
+    "tier": "3.8",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts": "gtts",
+    "schema": "w7",
+    "arm": "dti",
+    "rng_seed": 0,
+    "quiet_window_s": 0.6,
+    "text_ai_wired": true
+  },
+  "summary": {
+    "persona_id": "w7_ana_nospell_v1",
+    "kit_sha256": "5f25577435f51b15a68ef676c6cf1709dbf14ceb25907ab3def8138f7724581e",
+    "user": "sim",
+    "ears": "transcript",
+    "actor": "haiku",
+    "tts_kind": "gtts",
+    "model": "gemini-3.8-live",
+    "max_user_turns": 150,
+    "filled_confirmed": 22,
+    "fact_fields": 22,
+    "correct_vs_factsheet": {
+      "matched": 22,
+      "total": 22,
+      "accuracy": 1.0
+    },
+    "off_sheet_values": 0,
+    "gate_violations": 0,
+    "gate_timeouts": 0,
+    "silence_closes": 0,
+    "spellback_clips": 3,
+    "late_completions": 0,
+    "user_turns": 48,
+    "stalls": 0,
+    "render_errors": 0,
+    "stop_reason": "complete",
+    "aborted": false,
+    "abort_message": null,
+    "fallbacks": {
+      "count": 0,
+      "rate": 0.0,
+      "errors": []
+    },
+    "generations": 50,
+    "divergence": {
+      "n_generations": 50,
+      "n_scored": 47,
+      "n_divergent": 4,
+      "divergence_rate": 0.0851,
+      "verdict_counts": {
+        "ALIGNED": 43,
+        "NO_AUDIO": 3,
+        "UTTERANCE_DESYNC": 4
+      },
+      "worst": [
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.8,
+          "transcript": "Your identification document was issued by Guatemala. Is that correct?",
+          "stt_text": "Your identification document are you submitting? The options are passport, driver's license or state ID USCIS documentation or other?"
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.6923,
+          "transcript": "Your foreign tax I.D. number is two four nine eight one seven three six. Is that correct?",
+          "stt_text": "Your foreign tax ID number is 2. 4 9 8 1 7 3 6. Is that correct?"
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.6842,
+          "transcript": "Your document number is one zero four seven two two eight five. Is that correct?",
+          "stt_text": "Your document number is 1 0 4. 7 3 6. Is that correct?"
+        },
+        {
+          "verdict": "UTTERANCE_DESYNC",
+          "divergence": 0.6667,
+          "transcript": "Your identification document type is passport. Is that correct?",
+          "stt_text": "Your identification document are you submitting? The options are passport, driver's license or state ID USCIS documentation or other?"
+        },
+        {
+          "verdict": "ALIGNED",
+          "divergence": 0.3846,
+          "transcript": "Your date of birth is March fourteenth, nineteen ninety. Is that correct?",
+          "stt_text": "Your date of birth is March 14th, 1990, is that correct?"
+        }
+      ],
+      "stt_billed_seconds": 825,
+      "stt_cost_usd": 0.33
+    },
+    "divergence_valid": true,
+    "stt": {
+      "valid": true,
+      "stt_calls": 47,
+      "stt_errors": 0,
+      "stt_error_rate": 0.0,
+      "first_error": null
+    },
+    "tts": {
+      "kind": "gtts",
+      "chars": 1424,
+      "calls": 49
+    },
+    "actor_usage": {
+      "input": 69677,
+      "output": 1071,
+      "cache_read": 85407,
+      "cache_creation": 0
+    },
+    "cost": {
+      "gemini_live_usd": 1.097252,
+      "sidecar_text_usd": 0,
+      "actor_usd": 0.008357,
+      "tts_usd": 0.0,
+      "stt_usd": 0.33,
+      "total_usd": 1.435609
+    }
+  },
+  "generations": [
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 0,
+      "reason": "turn_complete",
+      "t_first_audio_s": 5.015,
+      "t_close_s": 11.625,
+      "audio_s": 6.7,
+      "playback_end_s": 11.715,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Application Type. Are you applying for a new ITIN, or are you renewing an existing ITIN?",
+      "score": {
+        "transcript": "Application Type. Are you applying for a new ITIN, or are you renewing an existing ITIN?",
+        "stt_text": "Application type. Are you applying for a new itin or are you renewing an existing itin?",
+        "stt_confidence": 0.942,
+        "billed_seconds": 15,
+        "seconds": 6.7,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 1,
+      "reason": "turn_complete",
+      "t_first_audio_s": 22.984,
+      "t_close_s": 26.875,
+      "audio_s": 3.96,
+      "playback_end_s": 26.944,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You are applying for a new ITIN. Is that correct?",
+      "score": {
+        "transcript": "You are applying for a new ITIN. Is that correct?",
+        "stt_text": "You are applying for a new itin. Is that correct?",
+        "stt_confidence": 0.946,
+        "billed_seconds": 15,
+        "seconds": 3.96,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 2,
+      "reason": "turn_complete",
+      "t_first_audio_s": 32.89,
+      "t_close_s": 79.609,
+      "audio_s": 46.8,
+      "playback_end_s": 79.69,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Reason for applying. Please choose the one reason that best explains why you need this number.\n\na. Nonresident alien required to get an ITIN to claim tax treaty benefit.\n\nb. Nonresident alien filing a U.S. federal tax return.\n\nc. U.S. resident alien filing a U.S. federal tax return.\n\nd. Dependent of U.S. citizen or resident alien.\n\ne. Spouse of U.S. citizen or resident alien.\n\nf. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception.\n\ng. Dependent or spouse of a nonresident alien holding a U.S. visa.\n\nh. Other.",
+      "score": {
+        "transcript": "Reason for applying. Please choose the one reason that best explains why you need this number.\n\na. Nonresident alien required to get an ITIN to claim tax treaty benefit.\n\nb. Nonresident alien filing a U.S. federal tax return.\n\nc. U.S. resident alien filing a U.S. federal tax return.\n\nd. Dependent of U.S. citizen or resident alien.\n\ne. Spouse of U.S. citizen or resident alien.\n\nf. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception.\n\ng. Dependent or spouse of a nonresident alien holding a U.S. visa.\n\nh. Other.",
+        "stt_text": "Reason for applying please choose the 1 reason, that best explains why you need this number, a non-resident alien required to get an itin to claim tax. Treaty benefit, B, non-resident, alien filing, a US federal tax return, C, us, resident alien filing a US federal tax return, D dependent of US, citizen or resident alien. E spouse of US citizen or resident alien F non-resident, aliens student Professor or researcher filing. A US federal tax return or claiming an exception G dependent or spouse of a non-resident alien holding a US Visa H other",
+        "stt_confidence": 0.974,
+        "billed_seconds": 60,
+        "seconds": 46.8,
+        "divergence": 0.2308,
+        "needs_hand_check": false,
+        "letter_diffs": [
+          {
+            "transcript_letters": "AUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          },
+          {
+            "transcript_letters": "CUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          },
+          {
+            "transcript_letters": "AUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          },
+          {
+            "transcript_letters": "AUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          },
+          {
+            "transcript_letters": "AUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "AUSCUSAUSAUSAUS",
+        "containment": 0.831
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 3,
+      "reason": "turn_complete",
+      "t_first_audio_s": 88.0,
+      "t_close_s": 93.984,
+      "audio_s": 6.08,
+      "playback_end_s": 94.08,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+      "score": {
+        "transcript": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+        "stt_text": "You are a non-resident alien filing. A US federal tax return. Is that correct?",
+        "stt_confidence": 0.963,
+        "billed_seconds": 15,
+        "seconds": 6.08,
+        "divergence": 0.3333,
+        "needs_hand_check": false,
+        "letter_diffs": [
+          {
+            "transcript_letters": "AUS",
+            "stt_letters": "",
+            "match": false,
+            "opcodes": [
+              [
+                "delete",
+                0,
+                3,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "AUS",
+        "containment": 0.667
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 4,
+      "reason": "turn_complete",
+      "t_first_audio_s": 99.406,
+      "t_close_s": 106.718,
+      "audio_s": 7.35,
+      "playback_end_s": 106.756,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal first name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "score": {
+        "transcript": "What is your legal first name, spelled in Latin characters exactly as it appears on your identifying documents?",
+        "stt_text": "What is your legal first name spelled in Latin characters? Exactly as it appears on your identifying documents?",
+        "stt_confidence": 0.996,
+        "billed_seconds": 15,
+        "seconds": 7.35,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 5,
+      "reason": "turn_complete",
+      "t_first_audio_s": 112.609,
+      "t_close_s": 119.296,
+      "audio_s": 6.76,
+      "playback_end_s": 119.369,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Please spell your first name in Latin characters exactly as it appears on your identifying documents.",
+      "score": {
+        "transcript": "Please spell your first name in Latin characters exactly as it appears on your identifying documents.",
+        "stt_text": "Please spell your first name in Latin characters, exactly as it appears on your identifying documents.",
+        "stt_confidence": 0.998,
+        "billed_seconds": 15,
+        "seconds": 6.76,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 6,
+      "reason": "turn_complete",
+      "t_first_audio_s": null,
+      "t_close_s": 126.531,
+      "audio_s": 0.0,
+      "playback_end_s": 129.756,
+      "tool_calls": [
+        "update_form_fields",
+        "name_spellback"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "You said A, N, A. Is that correct?",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "",
+      "score": {
+        "transcript": "",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 0.0,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "NO_AUDIO"
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 7,
+      "reason": "turn_complete",
+      "t_first_audio_s": 132.953,
+      "t_close_s": 140.203,
+      "audio_s": 7.3,
+      "playback_end_s": 140.253,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal middle name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "score": {
+        "transcript": "What is your legal middle name, spelled in Latin characters exactly as it appears on your identifying documents?",
+        "stt_text": "What is your legal middle name? Spelled in Latin characters exactly as it appears on your identifying documents?",
+        "stt_confidence": 0.997,
+        "billed_seconds": 15,
+        "seconds": 7.3,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 8,
+      "reason": "turn_complete",
+      "t_first_audio_s": 146.125,
+      "t_close_s": 153.25,
+      "audio_s": 7.2,
+      "playback_end_s": 153.325,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Please spell your middle name in Latin characters exactly as it appears on your identifying documents.",
+      "score": {
+        "transcript": "Please spell your middle name in Latin characters exactly as it appears on your identifying documents.",
+        "stt_text": "Please spell your middle name spelled in Latin characters, exactly as it appears on your identifying documents.",
+        "stt_confidence": 0.996,
+        "billed_seconds": 15,
+        "seconds": 7.2,
+        "divergence": 0.0476,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.909
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 9,
+      "reason": "turn_complete",
+      "t_first_audio_s": null,
+      "t_close_s": 161.656,
+      "audio_s": 0.0,
+      "playback_end_s": 165.765,
+      "tool_calls": [
+        "update_form_fields",
+        "name_spellback"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "You said L, U, C, I, A. Is that correct?",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "",
+      "score": {
+        "transcript": "",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 0.0,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "NO_AUDIO"
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 10,
+      "reason": "turn_complete",
+      "t_first_audio_s": 169.484,
+      "t_close_s": 176.765,
+      "audio_s": 7.35,
+      "playback_end_s": 176.834,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your legal last name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "score": {
+        "transcript": "What is your legal last name, spelled in Latin characters exactly as it appears on your identifying documents?",
+        "stt_text": "What is your legal last name spelled in Latin characters? Exactly as it appears on your identifying documents?",
+        "stt_confidence": 0.997,
+        "billed_seconds": 15,
+        "seconds": 7.35,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 11,
+      "reason": "turn_complete",
+      "t_first_audio_s": 182.609,
+      "t_close_s": 189.796,
+      "audio_s": 7.25,
+      "playback_end_s": 189.859,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Please spell your last name in Latin characters exactly as it appears on your identifying documents.",
+      "score": {
+        "transcript": "Please spell your last name in Latin characters exactly as it appears on your identifying documents.",
+        "stt_text": "Please spell your last name spelled in Latin characters, exactly as it appears on your identifying documents.",
+        "stt_confidence": 0.994,
+        "billed_seconds": 15,
+        "seconds": 7.25,
+        "divergence": 0.0476,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.909
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 12,
+      "reason": "turn_complete",
+      "t_first_audio_s": null,
+      "t_close_s": 198.171,
+      "audio_s": 0.0,
+      "playback_end_s": 202.281,
+      "tool_calls": [
+        "update_form_fields",
+        "name_spellback"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "You said R, E, Y, E, S. Is that correct?",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "",
+      "score": {
+        "transcript": "",
+        "stt_text": "",
+        "stt_confidence": 0.0,
+        "billed_seconds": 0,
+        "seconds": 0.0,
+        "divergence": null,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [],
+        "verdict": "NO_AUDIO"
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 13,
+      "reason": "turn_complete",
+      "t_first_audio_s": 205.875,
+      "t_close_s": 211.109,
+      "audio_s": 5.31,
+      "playback_end_s": 211.185,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your mailing street address, including any apartment number or rural route?",
+      "score": {
+        "transcript": "What is your mailing street address, including any apartment number or rural route?",
+        "stt_text": "What is your mailing street address including any apartment number or rural route?",
+        "stt_confidence": 0.989,
+        "billed_seconds": 15,
+        "seconds": 5.31,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 14,
+      "reason": "turn_complete",
+      "t_first_audio_s": 219.906,
+      "t_close_s": 226.109,
+      "audio_s": 6.32,
+      "playback_end_s": 226.226,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your mailing street address is four one eight Willow Street, Apartment two B. Is that correct?",
+      "score": {
+        "transcript": "Your mailing street address is four one eight Willow Street, Apartment two B. Is that correct?",
+        "stt_text": "Your mailing street address is 418, Willow Street, apartment 2B, is that correct?",
+        "stt_confidence": 0.968,
+        "billed_seconds": 15,
+        "seconds": 6.32,
+        "divergence": 0.3,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.778
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 15,
+      "reason": "turn_complete",
+      "t_first_audio_s": 231.265,
+      "t_close_s": 237.734,
+      "audio_s": 6.55,
+      "playback_end_s": 237.815,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is the mailing city, state, and country for your address, including the ZIP code or postal code?",
+      "score": {
+        "transcript": "What is the mailing city, state, and country for your address, including the ZIP code or postal code?",
+        "stt_text": "What is the mailing city state and Country for your address including the ZIP code or postal code?",
+        "stt_confidence": 0.99,
+        "billed_seconds": 15,
+        "seconds": 6.55,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 16,
+      "reason": "turn_complete",
+      "t_first_audio_s": 248.296,
+      "t_close_s": 257.343,
+      "audio_s": 9.12,
+      "playback_end_s": 257.416,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+      "score": {
+        "transcript": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+        "stt_text": "Your mailing city state and country is Springfield Oregon United States. 97477 is that correct?",
+        "stt_confidence": 0.969,
+        "billed_seconds": 15,
+        "seconds": 9.12,
+        "divergence": 0.25,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.9
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 17,
+      "reason": "turn_complete",
+      "t_first_audio_s": 268.593,
+      "t_close_s": 277.703,
+      "audio_s": 9.16,
+      "playback_end_s": 277.753,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+      "score": {
+        "transcript": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+        "stt_text": "Your mailing city state and country is Springfield Oregon United States. 97477 is that correct?",
+        "stt_confidence": 0.967,
+        "billed_seconds": 15,
+        "seconds": 9.16,
+        "divergence": 0.25,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.9
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 18,
+      "reason": "turn_complete",
+      "t_first_audio_s": 282.828,
+      "t_close_s": 287.234,
+      "audio_s": 4.47,
+      "playback_end_s": 287.298,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your foreign street address, apartment number, or rural route number?",
+      "score": {
+        "transcript": "What is your foreign street address, apartment number, or rural route number?",
+        "stt_text": "What is your Foreign Street address apartment number or rural route?",
+        "stt_confidence": 0.978,
+        "billed_seconds": 15,
+        "seconds": 4.47,
+        "divergence": 0.0667,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 19,
+      "reason": "turn_complete",
+      "t_first_audio_s": 294.328,
+      "t_close_s": 299.0,
+      "audio_s": 4.82,
+      "playback_end_s": 299.148,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your foreign street address is twelve Avenida Central. Is that correct?",
+      "score": {
+        "transcript": "Your foreign street address is twelve Avenida Central. Is that correct?",
+        "stt_text": "Your foreign street address is 12. Aventa Central. Is that correct?",
+        "stt_confidence": 0.948,
+        "billed_seconds": 15,
+        "seconds": 4.82,
+        "divergence": 0.2857,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.714
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 20,
+      "reason": "turn_complete",
+      "t_first_audio_s": 304.062,
+      "t_close_s": 307.312,
+      "audio_s": 3.28,
+      "playback_end_s": 307.342,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your foreign city, state, and country?",
+      "score": {
+        "transcript": "What is your foreign city, state, and country?",
+        "stt_text": "What is your foreign city state and Country?",
+        "stt_confidence": 0.975,
+        "billed_seconds": 15,
+        "seconds": 3.28,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 21,
+      "reason": "turn_complete",
+      "t_first_audio_s": 313.968,
+      "t_close_s": 320.296,
+      "audio_s": 6.4,
+      "playback_end_s": 320.368,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your foreign city, state, and country is Quetzaltenango, Guatemala. Is that correct?",
+      "score": {
+        "transcript": "Your foreign city, state, and country is Quetzaltenango, Guatemala. Is that correct?",
+        "stt_text": "Your foreign city state and country is quetzaltenango Guatemala. Is that correct?",
+        "stt_confidence": 0.895,
+        "billed_seconds": 15,
+        "seconds": 6.4,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": true,
+            "in_stt": true
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 22,
+      "reason": "turn_complete",
+      "t_first_audio_s": 325.375,
+      "t_close_s": 327.125,
+      "audio_s": 1.83,
+      "playback_end_s": 327.205,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your date of birth?",
+      "score": {
+        "transcript": "What is your date of birth?",
+        "stt_text": "What is your date of birth?",
+        "stt_confidence": 0.992,
+        "billed_seconds": 15,
+        "seconds": 1.83,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 23,
+      "reason": "turn_complete",
+      "t_first_audio_s": 334.64,
+      "t_close_s": 339.64,
+      "audio_s": 5.04,
+      "playback_end_s": 339.68,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your date of birth is March fourteenth, nineteen ninety. Is that correct?",
+      "score": {
+        "transcript": "Your date of birth is March fourteenth, nineteen ninety. Is that correct?",
+        "stt_text": "Your date of birth is March 14th, 1990, is that correct?",
+        "stt_confidence": 0.982,
+        "billed_seconds": 15,
+        "seconds": 5.04,
+        "divergence": 0.3846,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.667
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 24,
+      "reason": "turn_complete",
+      "t_first_audio_s": 345.343,
+      "t_close_s": 347.328,
+      "audio_s": 2.03,
+      "playback_end_s": 347.373,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your country of birth?",
+      "score": {
+        "transcript": "What is your country of birth?",
+        "stt_text": "What is your country of birth?",
+        "stt_confidence": 0.992,
+        "billed_seconds": 15,
+        "seconds": 2.03,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 25,
+      "reason": "turn_complete",
+      "t_first_audio_s": 353.39,
+      "t_close_s": 357.156,
+      "audio_s": 3.84,
+      "playback_end_s": 357.23,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your country of birth is Guatemala. Is that correct?",
+      "score": {
+        "transcript": "Your country of birth is Guatemala. Is that correct?",
+        "stt_text": "Your country of birth, is Guatemala. Is that correct?",
+        "stt_confidence": 0.976,
+        "billed_seconds": 15,
+        "seconds": 3.84,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 26,
+      "reason": "turn_complete",
+      "t_first_audio_s": 362.687,
+      "t_close_s": 364.625,
+      "audio_s": 1.96,
+      "playback_end_s": 364.647,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your city of birth?",
+      "score": {
+        "transcript": "What is your city of birth?",
+        "stt_text": "What is your city of birth?",
+        "stt_confidence": 0.993,
+        "billed_seconds": 15,
+        "seconds": 1.96,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 27,
+      "reason": "turn_complete",
+      "t_first_audio_s": 371.562,
+      "t_close_s": 375.546,
+      "audio_s": 4.04,
+      "playback_end_s": 375.602,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your city of birth is Quetzaltenango. Is that correct?",
+      "score": {
+        "transcript": "Your city of birth is Quetzaltenango. Is that correct?",
+        "stt_text": "Your city of birth is quetzaltenango. Is that correct?",
+        "stt_confidence": 0.886,
+        "billed_seconds": 15,
+        "seconds": 4.04,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": true,
+            "in_stt": true
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 28,
+      "reason": "turn_complete",
+      "t_first_audio_s": 381.531,
+      "t_close_s": 384.531,
+      "audio_s": 3.08,
+      "playback_end_s": 384.611,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your sex, male or female?",
+      "score": {
+        "transcript": "What is your sex, male or female?",
+        "stt_text": "What is your sex male or female?",
+        "stt_confidence": 0.985,
+        "billed_seconds": 15,
+        "seconds": 3.08,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 29,
+      "reason": "turn_complete",
+      "t_first_audio_s": 389.781,
+      "t_close_s": 392.906,
+      "audio_s": 3.2,
+      "playback_end_s": 392.981,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your sex is female. Is that correct?",
+      "score": {
+        "transcript": "Your sex is female. Is that correct?",
+        "stt_text": "Your sex is female. Is that correct?",
+        "stt_confidence": 0.974,
+        "billed_seconds": 15,
+        "seconds": 3.2,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 30,
+      "reason": "turn_complete",
+      "t_first_audio_s": 398.0,
+      "t_close_s": 401.296,
+      "audio_s": 3.4,
+      "playback_end_s": 401.4,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your country or countries of citizenship?",
+      "score": {
+        "transcript": "What is your country or countries of citizenship?",
+        "stt_text": "What is your country or countries of citizenship?",
+        "stt_confidence": 0.985,
+        "billed_seconds": 15,
+        "seconds": 3.4,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 31,
+      "reason": "turn_complete",
+      "t_first_audio_s": 407.25,
+      "t_close_s": 411.437,
+      "audio_s": 4.26,
+      "playback_end_s": 411.51,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your country of citizenship is Guatemala. Is that correct?",
+      "score": {
+        "transcript": "Your country of citizenship is Guatemala. Is that correct?",
+        "stt_text": "Your country of citizenship is Guatemala. Is that correct?",
+        "stt_confidence": 0.977,
+        "billed_seconds": 15,
+        "seconds": 4.26,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 32,
+      "reason": "turn_complete",
+      "t_first_audio_s": 416.5,
+      "t_close_s": 419.156,
+      "audio_s": 2.67,
+      "playback_end_s": 419.17,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your foreign tax I.D. number?",
+      "score": {
+        "transcript": "What is your foreign tax I.D. number?",
+        "stt_text": "What is your foreign tax ID number?",
+        "stt_confidence": 0.948,
+        "billed_seconds": 15,
+        "seconds": 2.67,
+        "divergence": 0.3333,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.75
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 33,
+      "reason": "turn_complete",
+      "t_first_audio_s": 428.968,
+      "t_close_s": 439.953,
+      "audio_s": 11.06,
+      "playback_end_s": 440.028,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your foreign tax I.D. number is two four nine eight one seven three six. Is that correct?",
+      "score": {
+        "transcript": "Your foreign tax I.D. number is two four nine eight one seven three six. Is that correct?",
+        "stt_text": "Your foreign tax ID number is 2. 4 9 8 1 7 3 6. Is that correct?",
+        "stt_confidence": 0.955,
+        "billed_seconds": 15,
+        "seconds": 11.06,
+        "divergence": 0.6923,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "UTTERANCE_DESYNC",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.308
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 34,
+      "reason": "turn_complete",
+      "t_first_audio_s": 445.125,
+      "t_close_s": 449.562,
+      "audio_s": 4.54,
+      "playback_end_s": 449.665,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your U.S. visa type, number, and expiration date?",
+      "score": {
+        "transcript": "What is your U.S. visa type, number, and expiration date?",
+        "stt_text": "What is your US Visa? Type number and expiration date.",
+        "stt_confidence": 0.992,
+        "billed_seconds": 15,
+        "seconds": 4.54,
+        "divergence": 0.2308,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.833
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 35,
+      "reason": "turn_complete",
+      "t_first_audio_s": 456.281,
+      "t_close_s": 460.578,
+      "audio_s": 4.4,
+      "playback_end_s": 460.681,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You have no U.S. visa information recorded. Is that correct?",
+      "score": {
+        "transcript": "You have no U.S. visa information recorded. Is that correct?",
+        "stt_text": "You have no US Visa information recorded. Is that correct?",
+        "stt_confidence": 0.986,
+        "billed_seconds": 15,
+        "seconds": 4.4,
+        "divergence": 0.2,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.857
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 36,
+      "reason": "turn_complete",
+      "t_first_audio_s": 465.75,
+      "t_close_s": 475.437,
+      "audio_s": 9.79,
+      "playback_end_s": 475.54,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Which identification document are you submitting? The options are Passport, Driver's license or State I.D., USCIS documentation, or Other.",
+      "score": {
+        "transcript": "Which identification document are you submitting? The options are Passport, Driver's license or State I.D., USCIS documentation, or Other.",
+        "stt_text": "Which identification document are you submitting? The options are passport, driver's license or state ID USCIS documentation or other?",
+        "stt_confidence": 0.969,
+        "billed_seconds": 15,
+        "seconds": 9.79,
+        "divergence": 0.1034,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.929
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 37,
+      "reason": "turn_complete",
+      "t_first_audio_s": 481.671,
+      "t_close_s": 491.375,
+      "audio_s": 9.78,
+      "playback_end_s": 491.451,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your identification document type is passport. Is that correct?",
+      "score": {
+        "transcript": "Your identification document type is passport. Is that correct?",
+        "stt_text": "Your identification document are you submitting? The options are passport, driver's license or state ID USCIS documentation or other?",
+        "stt_confidence": 0.969,
+        "billed_seconds": 15,
+        "seconds": 9.78,
+        "divergence": 0.6667,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "UTTERANCE_DESYNC",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.231
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 38,
+      "reason": "turn_complete",
+      "t_first_audio_s": 496.328,
+      "t_close_s": 500.078,
+      "audio_s": 3.8,
+      "playback_end_s": 500.128,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Which state or country issued your identification document?",
+      "score": {
+        "transcript": "Which state or country issued your identification document?",
+        "stt_text": "Which state or country issued, your identification document.",
+        "stt_confidence": 0.992,
+        "billed_seconds": 15,
+        "seconds": 3.8,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 39,
+      "reason": "turn_complete",
+      "t_first_audio_s": 506.25,
+      "t_close_s": 516.0,
+      "audio_s": 9.8,
+      "playback_end_s": 516.05,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your identification document was issued by Guatemala. Is that correct?",
+      "score": {
+        "transcript": "Your identification document was issued by Guatemala. Is that correct?",
+        "stt_text": "Your identification document are you submitting? The options are passport, driver's license or state ID USCIS documentation or other?",
+        "stt_confidence": 0.962,
+        "billed_seconds": 15,
+        "seconds": 9.8,
+        "divergence": 0.8,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "UTTERANCE_DESYNC",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.154
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 40,
+      "reason": "turn_complete",
+      "t_first_audio_s": 521.515,
+      "t_close_s": 523.437,
+      "audio_s": 2.0,
+      "playback_end_s": 523.515,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your document number?",
+      "score": {
+        "transcript": "What is your document number?",
+        "stt_text": "What is your document number?",
+        "stt_confidence": 0.99,
+        "billed_seconds": 15,
+        "seconds": 2.0,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 41,
+      "reason": "turn_complete",
+      "t_first_audio_s": 532.546,
+      "t_close_s": 541.25,
+      "audio_s": 8.76,
+      "playback_end_s": 541.306,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your document number is one zero four seven two two eight five. Is that correct?",
+      "score": {
+        "transcript": "Your document number is one zero four seven two two eight five. Is that correct?",
+        "stt_text": "Your document number is 1 0 4. 7 3 6. Is that correct?",
+        "stt_confidence": 0.98,
+        "billed_seconds": 15,
+        "seconds": 8.76,
+        "divergence": 0.6842,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "UTTERANCE_DESYNC",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.333
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 42,
+      "reason": "turn_complete",
+      "t_first_audio_s": 546.703,
+      "t_close_s": 550.453,
+      "audio_s": 3.82,
+      "playback_end_s": 550.523,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is the expiration date of your identification document?",
+      "score": {
+        "transcript": "What is the expiration date of your identification document?",
+        "stt_text": "What is the expiration date of your identification? Document?",
+        "stt_confidence": 0.994,
+        "billed_seconds": 15,
+        "seconds": 3.82,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 43,
+      "reason": "turn_complete",
+      "t_first_audio_s": 556.14,
+      "t_close_s": 564.218,
+      "audio_s": 8.16,
+      "playback_end_s": 564.3,
+      "tool_calls": [],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "In the section regarding your identification document, what is the expiration date on the document? Please provide the month, day, and year.",
+      "score": {
+        "transcript": "In the section regarding your identification document, what is the expiration date on the document? Please provide the month, day, and year.",
+        "stt_text": "In the section regarding your identification document. What is the expiration date on the document? Please provide the month day and year.",
+        "stt_confidence": 0.988,
+        "billed_seconds": 15,
+        "seconds": 8.16,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 44,
+      "reason": "turn_complete",
+      "t_first_audio_s": 571.812,
+      "t_close_s": 576.609,
+      "audio_s": 4.9,
+      "playback_end_s": 576.712,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "The expiration date is August 30th, 2029. Is that correct?",
+      "score": {
+        "transcript": "The expiration date is August 30th, 2029. Is that correct?",
+        "stt_text": "The expiration date is August 30th. 2029 is that correct?",
+        "stt_confidence": 0.986,
+        "billed_seconds": 15,
+        "seconds": 4.9,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 45,
+      "reason": "turn_complete",
+      "t_first_audio_s": 581.734,
+      "t_close_s": 657.625,
+      "audio_s": 76.0,
+      "playback_end_s": 657.734,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "What is your date of entry into the United States? Please provide the month, day, and year. If you have never entered the United States, please let me know.",
+      "score": {
+        "transcript": "What is your date of entry into the United States? Please provide the month, day, and year. If you have never entered the United States, please let me know.",
+        "stt_text": "What is your date of entry into the United States? Please provide the month day and year. On August 2nd 2027.",
+        "stt_confidence": 0.892,
+        "billed_seconds": 90,
+        "seconds": 76.0,
+        "divergence": 0.3333,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 0.75
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 46,
+      "reason": "turn_complete",
+      "t_first_audio_s": 666.281,
+      "t_close_s": 672.25,
+      "audio_s": 6.0,
+      "playback_end_s": 672.281,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Your date of entry into the United States is June 11th, 2023. Is that correct?",
+      "score": {
+        "transcript": "Your date of entry into the United States is June 11th, 2023. Is that correct?",
+        "stt_text": "Your date of entry into the United States is June 11th. 2023 is that correct?",
+        "stt_confidence": 0.969,
+        "billed_seconds": 15,
+        "seconds": 6.0,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 47,
+      "reason": "turn_complete",
+      "t_first_audio_s": 677.437,
+      "t_close_s": 682.187,
+      "audio_s": 4.84,
+      "playback_end_s": 682.277,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "Have you previously received an ITIN or an Internal Revenue Service Number?",
+      "score": {
+        "transcript": "Have you previously received an ITIN or an Internal Revenue Service Number?",
+        "stt_text": "Have you previously received an itin or an internal revenue service number?",
+        "stt_confidence": 0.977,
+        "billed_seconds": 15,
+        "seconds": 4.84,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 48,
+      "reason": "turn_complete",
+      "t_first_audio_s": 691.812,
+      "t_close_s": 696.656,
+      "audio_s": 4.9,
+      "playback_end_s": 696.712,
+      "tool_calls": [
+        "update_form_fields"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "You have never received an ITIN or an IRSN. Is that correct?",
+      "score": {
+        "transcript": "You have never received an ITIN or an IRSN. Is that correct?",
+        "stt_text": "You have never received an itin or an irsn. Is that correct?",
+        "stt_confidence": 0.983,
+        "billed_seconds": 15,
+        "seconds": 4.9,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "index": 49,
+      "reason": "turn_complete",
+      "t_first_audio_s": 701.781,
+      "t_close_s": 705.437,
+      "audio_s": 3.71,
+      "playback_end_s": 705.491,
+      "tool_calls": [
+        "confirm_field"
+      ],
+      "pending_tools_at_close": 0,
+      "spellback_text": "",
+      "late_completion_reason": null,
+      "late_completion_delay_s": null,
+      "transcript": "We have completed filling out the form. Thank you for your time.",
+      "score": {
+        "transcript": "We have completed filling out the form. Thank you for your time.",
+        "stt_text": "We have completed filling out the form. Thank you for your time.",
+        "stt_confidence": 0.997,
+        "billed_seconds": 15,
+        "seconds": 3.71,
+        "divergence": 0.0,
+        "needs_hand_check": false,
+        "letter_diffs": [],
+        "expected_spellings": [
+          {
+            "expected": "A - N - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "L - U - C - I - A",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "R - E - Y - E - S",
+            "in_transcript": false,
+            "in_stt": false
+          },
+          {
+            "expected": "Q - U - E - T - Z - A - L - T - E - N - A - N - G - O",
+            "in_transcript": false,
+            "in_stt": false
+          }
+        ],
+        "verdict": "ALIGNED",
+        "letters_stt": "",
+        "letters_transcript": "",
+        "containment": 1.0
+      },
+      "stt_error": null
+    }
+  ],
+  "user_turns": [
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 1,
+      "t_start_s": 18.343,
+      "move": "answer",
+      "field_key": "application_type",
+      "text": "Yes. I am applying for a new ITIN.",
+      "values_spoken": [
+        "I am applying for a new ITIN."
+      ],
+      "ears": "transcript",
+      "ears_text": "Application Type. Are you applying for a new ITIN, or are you renewing an existing ITIN?",
+      "generations_heard": [
+        0
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 38,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 3.1e-05,
+      "actor_latency_s": 5.346,
+      "tts_chars": 34,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 2,
+      "t_start_s": 29.484,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right, thanks.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You are applying for a new ITIN. Is that correct?",
+      "generations_heard": [
+        1
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 81,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 3.5e-05,
+      "actor_latency_s": 1.368,
+      "tts_chars": 26,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 3,
+      "t_start_s": 82.046,
+      "move": "answer",
+      "field_key": "reason",
+      "text": "I am a nonresident alien filing a U.S. federal tax return.",
+      "values_spoken": [
+        "I am a nonresident alien filing a U.S. federal tax return."
+      ],
+      "ears": "transcript",
+      "ears_text": "Reason for applying. Please choose the one reason that best explains why you need this number.\n\na. Nonresident alien required to get an ITIN to claim tax treaty benefit.\n\nb. Nonresident alien filing a U.S. federal tax return.\n\nc. U.S. resident alien filing a U.S. federal tax return.\n\nd. Dependent of U.S. citizen or resident alien.\n\ne. Spouse of U.S. citizen or resident alien.\n\nf. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception.\n\ng. Dependent or spouse of a nonresident alien holding a U.S. visa.\n\nh. Other.",
+      "generations_heard": [
+        2
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 323,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 5.9e-05,
+      "actor_latency_s": 1.225,
+      "tts_chars": 58,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 4,
+      "t_start_s": 96.5,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You are a nonresident alien filing a U.S. federal tax return. Is that correct?",
+      "generations_heard": [
+        3
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 375,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 6.4e-05,
+      "actor_latency_s": 1.272,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 5,
+      "t_start_s": 109.218,
+      "move": "answer",
+      "field_key": "name_1a_first",
+      "text": "Yes. My first name is Ana.",
+      "values_spoken": [
+        "My first name is Ana."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal first name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "generations_heard": [
+        4
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 431,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 7.2e-05,
+      "actor_latency_s": 1.282,
+      "tts_chars": 26,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 6,
+      "t_start_s": 121.734,
+      "move": "spell",
+      "field_key": "name_1a_first",
+      "text": "Letter by letter: A - N - A.",
+      "values_spoken": [
+        "A - N - A"
+      ],
+      "ears": "transcript",
+      "ears_text": "Please spell your first name in Latin characters exactly as it appears on your identifying documents.",
+      "generations_heard": [
+        5
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 487,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 7.8e-05,
+      "actor_latency_s": 1.203,
+      "tts_chars": 28,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 7,
+      "t_start_s": 130.359,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You said A, N, A. Is that correct?",
+      "generations_heard": [
+        6
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 1.266,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 529,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 8e-05,
+      "actor_latency_s": 1.352,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 8,
+      "t_start_s": 142.734,
+      "move": "answer",
+      "field_key": "name_1a_middle",
+      "text": "Yes. My middle name is Lucia.",
+      "values_spoken": [
+        "My middle name is Lucia."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal middle name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "generations_heard": [
+        7
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 586,
+        "output": 24,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 8.8e-05,
+      "actor_latency_s": 1.325,
+      "tts_chars": 29,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 9,
+      "t_start_s": 155.843,
+      "move": "spell",
+      "field_key": "name_1a_middle",
+      "text": "Okay. L - U - C - I - A.",
+      "values_spoken": [
+        "L - U - C - I - A"
+      ],
+      "ears": "transcript",
+      "ears_text": "Please spell your middle name in Latin characters exactly as it appears on your identifying documents.",
+      "generations_heard": [
+        8
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 644,
+        "output": 24,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 9.4e-05,
+      "actor_latency_s": 1.36,
+      "tts_chars": 24,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 10,
+      "t_start_s": 166.406,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that is correct.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You said L, U, C, I, A. Is that correct?",
+      "generations_heard": [
+        9
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 2.25,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 691,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 9.6e-05,
+      "actor_latency_s": 1.247,
+      "tts_chars": 21,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 11,
+      "t_start_s": 179.265,
+      "move": "answer",
+      "field_key": "name_1a_last",
+      "text": "Sure. My last name is Reyes.",
+      "values_spoken": [
+        "My last name is Reyes."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your legal last name, spelled in Latin characters exactly as it appears on your identifying documents?",
+      "generations_heard": [
+        10
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 747,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000104,
+      "actor_latency_s": 1.28,
+      "tts_chars": 28,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 12,
+      "t_start_s": 192.25,
+      "move": "spell",
+      "field_key": "name_1a_last",
+      "text": "Okay. R - E - Y - E - S.",
+      "values_spoken": [
+        "R - E - Y - E - S"
+      ],
+      "ears": "transcript",
+      "ears_text": "Please spell your last name in Latin characters exactly as it appears on your identifying documents.",
+      "generations_heard": [
+        11
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 803,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000109,
+      "actor_latency_s": 1.241,
+      "tts_chars": 24,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 13,
+      "t_start_s": 202.906,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that is correct.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You said R, E, Y, E, S. Is that correct?",
+      "generations_heard": [
+        12
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 2.375,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 850,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000112,
+      "actor_latency_s": 1.146,
+      "tts_chars": 21,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 14,
+      "t_start_s": 213.562,
+      "move": "answer",
+      "field_key": "mailing_street",
+      "text": "My street address is 418 Willow Street, apartment 2B.",
+      "values_spoken": [
+        "My street address is 418 Willow Street, apartment 2B."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your mailing street address, including any apartment number or rural route?",
+      "generations_heard": [
+        13
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 894,
+        "output": 22,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000118,
+      "actor_latency_s": 1.254,
+      "tts_chars": 53,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 15,
+      "t_start_s": 228.531,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your mailing street address is four one eight Willow Street, Apartment two B. Is that correct?",
+      "generations_heard": [
+        14
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 952,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000122,
+      "actor_latency_s": 1.22,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 16,
+      "t_start_s": 240.218,
+      "move": "answer",
+      "field_key": "mailing_city_state_country",
+      "text": "Sure. Springfield, Oregon, United States, 97477.",
+      "values_spoken": [
+        "Springfield, Oregon, United States, 97477."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is the mailing city, state, and country for your address, including the ZIP code or postal code?",
+      "generations_heard": [
+        15
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1004,
+        "output": 26,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000131,
+      "actor_latency_s": 1.247,
+      "tts_chars": 48,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 17,
+      "t_start_s": 260.046,
+      "move": "reject_and_correct",
+      "field_key": "mailing_city_state_country",
+      "text": "No, that is wrong. Springfield, Oregon, United States, 97477.",
+      "values_spoken": [
+        "Springfield, Oregon, United States, 97477."
+      ],
+      "ears": "transcript",
+      "ears_text": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+      "generations_heard": [
+        16
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1076,
+        "output": 31,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000141,
+      "actor_latency_s": 1.506,
+      "tts_chars": 61,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 18,
+      "t_start_s": 280.234,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your mailing city, state, and country is Springfield, Oregon, United States, nine seven four seven seven. Is that correct?",
+      "generations_heard": [
+        17
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1153,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000142,
+      "actor_latency_s": 1.347,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 19,
+      "t_start_s": 289.937,
+      "move": "answer",
+      "field_key": "foreign_street",
+      "text": "My foreign address is 12 Avenida Central.",
+      "values_spoken": [
+        "My foreign address is 12 Avenida Central."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your foreign street address, apartment number, or rural route number?",
+      "generations_heard": [
+        18
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1197,
+        "output": 22,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000148,
+      "actor_latency_s": 1.489,
+      "tts_chars": 41,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 20,
+      "t_start_s": 301.484,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your foreign street address is twelve Avenida Central. Is that correct?",
+      "generations_heard": [
+        19
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1248,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000152,
+      "actor_latency_s": 1.266,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 21,
+      "t_start_s": 309.781,
+      "move": "answer",
+      "field_key": "foreign_city_state_country",
+      "text": "Yes. Quetzaltenango, Guatemala.",
+      "values_spoken": [
+        "Quetzaltenango, Guatemala."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your foreign city, state, and country?",
+      "generations_heard": [
+        20
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1285,
+        "output": 26,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000159,
+      "actor_latency_s": 1.234,
+      "tts_chars": 31,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 22,
+      "t_start_s": 322.75,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your foreign city, state, and country is Quetzaltenango, Guatemala. Is that correct?",
+      "generations_heard": [
+        21
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1349,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000162,
+      "actor_latency_s": 1.253,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 23,
+      "t_start_s": 329.578,
+      "move": "answer",
+      "field_key": "date_of_birth",
+      "text": "Okay, I was born on March 14th, 1990.",
+      "values_spoken": [
+        "I was born on March 14th, 1990."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your date of birth?",
+      "generations_heard": [
+        22
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1381,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000167,
+      "actor_latency_s": 1.263,
+      "tts_chars": 37,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 24,
+      "t_start_s": 342.109,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right, thanks.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your date of birth is March fourteenth, nineteen ninety. Is that correct?",
+      "generations_heard": [
+        23
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1437,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000171,
+      "actor_latency_s": 1.249,
+      "tts_chars": 26,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 25,
+      "t_start_s": 349.703,
+      "move": "answer",
+      "field_key": "country_of_birth",
+      "text": "Okay, I was born in Guatemala.",
+      "values_spoken": [
+        "I was born in Guatemala."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your country of birth?",
+      "generations_heard": [
+        24
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1469,
+        "output": 23,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000176,
+      "actor_latency_s": 1.151,
+      "tts_chars": 30,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 26,
+      "t_start_s": 359.703,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that is correct.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your country of birth is Guatemala. Is that correct?",
+      "generations_heard": [
+        25
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1516,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000179,
+      "actor_latency_s": 1.334,
+      "tts_chars": 21,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 27,
+      "t_start_s": 367.187,
+      "move": "answer",
+      "field_key": "city_state_of_birth",
+      "text": "Yes. I was born in Quetzaltenango.",
+      "values_spoken": [
+        "I was born in Quetzaltenango."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your city of birth?",
+      "generations_heard": [
+        26
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1548,
+        "output": 25,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000185,
+      "actor_latency_s": 1.328,
+      "tts_chars": 34,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 28,
+      "t_start_s": 378.062,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right, thanks.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your city of birth is Quetzaltenango. Is that correct?",
+      "generations_heard": [
+        27
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1600,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000187,
+      "actor_latency_s": 1.283,
+      "tts_chars": 26,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 29,
+      "t_start_s": 387.046,
+      "move": "answer",
+      "field_key": "sex",
+      "text": "Okay, Female.",
+      "values_spoken": [
+        "Female."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your sex, male or female?",
+      "generations_heard": [
+        28
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1634,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.00019,
+      "actor_latency_s": 1.262,
+      "tts_chars": 13,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 30,
+      "t_start_s": 395.343,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your sex is female. Is that correct?",
+      "generations_heard": [
+        29
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1671,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000194,
+      "actor_latency_s": 1.239,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 31,
+      "t_start_s": 403.906,
+      "move": "answer",
+      "field_key": "countries_of_citizenship",
+      "text": "I am a citizen of Guatemala.",
+      "values_spoken": [
+        "I am a citizen of Guatemala."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your country or countries of citizenship?",
+      "generations_heard": [
+        30
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1708,
+        "output": 26,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000201,
+      "actor_latency_s": 1.393,
+      "tts_chars": 28,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 32,
+      "t_start_s": 413.953,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your country of citizenship is Guatemala. Is that correct?",
+      "generations_heard": [
+        31
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1760,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000203,
+      "actor_latency_s": 1.294,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 33,
+      "t_start_s": 421.671,
+      "move": "answer",
+      "field_key": "foreign_tax_id_number",
+      "text": "Yes. My foreign tax I.D. number is 2 4 9 8 1 7 3 6.",
+      "values_spoken": [
+        "My foreign tax I.D. number is 2 4 9 8 1 7 3 6."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your foreign tax I.D. number?",
+      "generations_heard": [
+        32
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1798,
+        "output": 27,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000211,
+      "actor_latency_s": 1.29,
+      "tts_chars": 51,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 34,
+      "t_start_s": 442.515,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your foreign tax I.D. number is two four nine eight one seven three six. Is that correct?",
+      "generations_heard": [
+        33
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1861,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000213,
+      "actor_latency_s": 1.293,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 35,
+      "t_start_s": 452.015,
+      "move": "answer",
+      "field_key": "us_visa_type_number_expiration",
+      "text": "Yes. I do not have a U.S. visa.",
+      "values_spoken": [
+        "I do not have a U.S. visa."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your U.S. visa type, number, and expiration date?",
+      "generations_heard": [
+        34
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1904,
+        "output": 29,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000222,
+      "actor_latency_s": 1.26,
+      "tts_chars": 31,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 36,
+      "t_start_s": 463.015,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You have no U.S. visa information recorded. Is that correct?",
+      "generations_heard": [
+        35
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 1958,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000223,
+      "actor_latency_s": 1.261,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 37,
+      "t_start_s": 477.859,
+      "move": "answer",
+      "field_key": "id_document_type",
+      "text": "Sure. I am submitting my passport.",
+      "values_spoken": [
+        "I am submitting my passport."
+      ],
+      "ears": "transcript",
+      "ears_text": "Which identification document are you submitting? The options are Passport, Driver's license or State I.D., USCIS documentation, or Other.",
+      "generations_heard": [
+        36
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2023,
+        "output": 22,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000231,
+      "actor_latency_s": 1.232,
+      "tts_chars": 34,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 38,
+      "t_start_s": 493.828,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your identification document type is passport. Is that correct?",
+      "generations_heard": [
+        37
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2066,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000234,
+      "actor_latency_s": 1.242,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 39,
+      "t_start_s": 502.625,
+      "move": "answer",
+      "field_key": "id_document_issued_by",
+      "text": "It was issued by Guatemala.",
+      "values_spoken": [
+        "It was issued by Guatemala."
+      ],
+      "ears": "transcript",
+      "ears_text": "Which state or country issued your identification document?",
+      "generations_heard": [
+        38
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2102,
+        "output": 25,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.00024,
+      "actor_latency_s": 1.297,
+      "tts_chars": 27,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 40,
+      "t_start_s": 518.531,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that is correct.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your identification document was issued by Guatemala. Is that correct?",
+      "generations_heard": [
+        39
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2153,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000242,
+      "actor_latency_s": 1.307,
+      "tts_chars": 21,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 41,
+      "t_start_s": 526.062,
+      "move": "answer",
+      "field_key": "id_document_number",
+      "text": "Sure. The passport number is 1 0 4 7 2 2 8 5.",
+      "values_spoken": [
+        "The passport number is 1 0 4 7 2 2 8 5."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your document number?",
+      "generations_heard": [
+        40
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2183,
+        "output": 22,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000247,
+      "actor_latency_s": 1.384,
+      "tts_chars": 45,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 42,
+      "t_start_s": 543.765,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that is correct.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your document number is one zero four seven two two eight five. Is that correct?",
+      "generations_heard": [
+        41
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2233,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.00025,
+      "actor_latency_s": 1.323,
+      "tts_chars": 21,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 43,
+      "t_start_s": 566.265,
+      "move": "answer",
+      "field_key": "id_document_expiration_date",
+      "text": "Yes. It expires on August 30th, 2029.",
+      "values_spoken": [
+        "It expires on August 30th, 2029."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is the expiration date of your identification document? In the section regarding your identification document, what is the expiration date on the document? Please provide the month, day, and year.",
+      "generations_heard": [
+        42,
+        43
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 1,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2304,
+        "output": 26,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000261,
+      "actor_latency_s": 1.444,
+      "tts_chars": 37,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 44,
+      "t_start_s": 579.125,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "The expiration date is August 30th, 2029. Is that correct?",
+      "generations_heard": [
+        44
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2356,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000263,
+      "actor_latency_s": 1.298,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 45,
+      "t_start_s": 660.265,
+      "move": "answer",
+      "field_key": "date_of_entry_us",
+      "text": "I entered the United States on 06/11/2023.",
+      "values_spoken": [
+        "I entered the United States on 06/11/2023."
+      ],
+      "ears": "transcript",
+      "ears_text": "What is your date of entry into the United States? Please provide the month, day, and year. If you have never entered the United States, please let me know.",
+      "generations_heard": [
+        45
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2419,
+        "output": 25,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000272,
+      "actor_latency_s": 1.446,
+      "tts_chars": 42,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 46,
+      "t_start_s": 674.781,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Correct, thank you.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "Your date of entry into the United States is June 11th, 2023. Is that correct?",
+      "generations_heard": [
+        46
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2475,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000274,
+      "actor_latency_s": 1.276,
+      "tts_chars": 19,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 47,
+      "t_start_s": 685.14,
+      "move": "answer",
+      "field_key": "previously_received_itin_or_irsn",
+      "text": "Yes. No, I have never received an ITIN or an IRSN.",
+      "values_spoken": [
+        "No, I have never received an ITIN or an IRSN."
+      ],
+      "ears": "transcript",
+      "ears_text": "Have you previously received an ITIN or an Internal Revenue Service Number?",
+      "generations_heard": [
+        47
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2524,
+        "output": 30,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000285,
+      "actor_latency_s": 1.284,
+      "tts_chars": 50,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    },
+    {
+      "persona_id": "w7_ana_nospell_v1",
+      "turn": 48,
+      "t_start_s": 699.093,
+      "move": "confirm",
+      "field_key": "none",
+      "text": "Yes, that's right.",
+      "values_spoken": [],
+      "ears": "transcript",
+      "ears_text": "You have never received an ITIN or an IRSN. Is that correct?",
+      "generations_heard": [
+        48
+      ],
+      "heard_silence_closed": false,
+      "gate_open_at_start": true,
+      "gate_state": {
+        "open": true,
+        "closed_ok": true,
+        "no_pending_tool": true,
+        "playback_ended": true,
+        "quiet": true
+      },
+      "gate_wait_s": 0.0,
+      "redecides": 0,
+      "fallback_used": false,
+      "decision_valid": true,
+      "decision_error": null,
+      "render_error": null,
+      "actor_usage": {
+        "input": 2581,
+        "output": 19,
+        "cache_read": 1743,
+        "cache_creation": 0
+      },
+      "actor_cost_usd": 0.000285,
+      "actor_latency_s": 1.221,
+      "tts_chars": 18,
+      "response_stalled": false,
+      "overlap_audio_s": 0.0,
+      "overlapped": false,
+      "gate_violation": false
+    }
+  ]
+}
