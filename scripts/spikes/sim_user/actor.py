@@ -387,6 +387,17 @@ def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
     return False
 
 
+def last_readback(text: str) -> str:
+    """The last read-back in `text`: the last question-mark-ended segment that
+    holds a read-back cue, or "" when there is none. One heard window can hold
+    two read-backs ("...97203. Is that correct? ... The ZIP is 90210. Is that
+    correct?"); the user answers the LAST one, so only it is evidence."""
+    for seg in reversed(re.split(r"(?<=\?)", text or "")):
+        if _READBACK.search(seg):
+            return seg
+    return ""
+
+
 def referee(decision: Decision, model_text: str, history: list,
             persona: Persona, slips_spoken: Optional[set] = None
             ) -> tuple[Decision, Optional[str]]:
@@ -400,12 +411,14 @@ def referee(decision: Decision, model_text: str, history: list,
         slip -> confirm ("reject_to_confirm");
       - confirm, and the read-back holds the spoken slip and not the true
         value -> reject_and_correct on that field ("confirm_to_reject").
+    Only the LAST read-back in `model_text` is judged (`last_readback`).
     Anything else -- no read-back, a paraphrase, a date said in words, both
     values present -- is left to the actor. Returns (decision, label), where
     label is None when nothing changed."""
     if decision.move not in ("confirm", "reject_and_correct"):
         return decision, None
-    if not _READBACK.search(model_text or ""):
+    readback = last_readback(model_text)
+    if not readback:
         return decision, None
     facts = persona.facts
     fid = (decision.field_key if decision.move == "reject_and_correct"
@@ -413,7 +426,7 @@ def referee(decision: Decision, model_text: str, history: list,
     if fid not in facts:
         return decision, None
     f = facts[fid]
-    tt = _tokens(model_text)
+    tt = _tokens(readback)
     true_c = [f.get("spoken"), f.get("value"), f.get("spell")]
     slip_c: list = []
     if "slip" in f and slips_spoken is not None and fid in slips_spoken:

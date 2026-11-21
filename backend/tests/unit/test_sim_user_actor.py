@@ -836,6 +836,59 @@ class TestReferee:
             assert (d.move, d.field_key, label) == (move, fid, None)
 
 
+class TestRefereeLastReadback:
+    """One heard window can hold two read-backs; the user answers the last one,
+    so only it is evidence (bd ya4vi.3, I-90 run 20261120T232745Z turn 46)."""
+
+    _ZIP = SimpleNamespace(facts={"z": {"value": "97203", "spoken": "9 7 2 0 3"}})
+    _SLIP = SimpleNamespace(facts={"z": {
+        "value": "97203", "spoken": "9 7 2 0 3",
+        "slip": {"value": "97477", "spoken": "9 7 4 7 7"}}})
+
+    def test_true_value_only_in_an_earlier_read_back_does_not_confirm(self):
+        text = ("You provided the ZIP code nine seven two zero three. Is that "
+                "correct? In the section regarding your information, what is "
+                "your physical zip code?The physical zip code is nine zero two "
+                "one zero. Is that correct?")
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    def test_true_value_in_the_last_read_back_still_confirms(self):
+        text = ("The ZIP is nine zero two one zero. Is that correct? Sorry, "
+                "the ZIP is nine seven two zero three. Is that correct?")
+        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
+                                 _ref_hist("z"), self._ZIP, set())
+        assert label == "reject_to_confirm"
+
+    def test_slip_only_in_an_earlier_read_back_does_not_reject(self):
+        text = ("The ZIP is nine seven four seven seven. Is that correct? "
+                "I have updated it. The ZIP is nine seven two zero three now. "
+                "Is that correct?")
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert (d.move, label) == ("confirm", None)
+
+    def test_slip_in_the_last_read_back_still_rejects(self):
+        text = ("The ZIP is nine seven two zero three. Is that correct? "
+                "Actually I have nine seven four seven seven. Is that correct?")
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert label == "confirm_to_reject"
+
+    def test_last_readback_skips_a_trailing_next_question(self):
+        text = "The ZIP is 97203. Is that correct? What is your city?"
+        assert actor.last_readback(text) == "The ZIP is 97203. Is that correct?"
+
+    def test_last_readback_keeps_a_cue_led_read_back_whole(self):
+        text = "To confirm, your ZIP code is nine seven two zero three?"
+        assert actor.last_readback(text) == text
+
+    def test_last_readback_is_empty_without_a_cue(self):
+        assert actor.last_readback("What is your ZIP code?") == ""
+        assert actor.last_readback(None) == ""
+
+
 class TestRefereeEdges:
     def test_every_slipped_fact_is_refereeable_both_ways(self):
         # the parametrized skips above must not quietly cover the whole set
@@ -878,7 +931,7 @@ class TestRefereeEdges:
                        "slip": {"value": "Alma", "spoken": "Alma"}}}
         p = SimpleNamespace(facts=facts)
         d, label = actor.referee(_dec("confirm"),
-                                 "Is it Alma or A, N, A? Is that correct?",
+                                 "You said Alma or A, N, A. Is that correct?",
                                  _ref_hist("n"), p, {"n"})
         assert (d.move, label) == ("confirm", None)
 
