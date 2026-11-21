@@ -1333,9 +1333,10 @@ class CallbackHandler:
           to spelling from memory (that would reintroduce the defect exactly
           where it hurts).
         - read_back_yourself (reason tts_http_406, bd polyglot-pdf-r3ham.26):
-          a DIGIT value in a session language no TTS voice speaks. The only
-          clip possible there would be English, so there is none, and the
-          model reads the stored digits itself in the session language.
+          a value CONTAINING a digit in a session language no TTS voice
+          speaks. The only clip possible there would be English, so there is
+          none, and the model reads the stored value itself, one character at
+          a time: digits as the session language's own words, letters by name.
         """
         del arguments  # No-argument tool; anything sent is deliberately ignored.
 

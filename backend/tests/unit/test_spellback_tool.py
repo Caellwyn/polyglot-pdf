@@ -402,7 +402,10 @@ class TestSpellbackSiAddendum:
         overrides these in so many words):
           - verify-by-SPELLING wording ("read the SPELLING back") -- the
             preamble names it explicitly.
-          - digit-by-digit NUMBER read-back -- the addendum preserves it.
+          - digit-by-digit NUMBER read-back -- since bd r3ham.26 the
+            addendum routes identifier numbers to the clip too, and WORKFLOW
+            step 3's number rule carries its own yields-to clause (pinned in
+            test_spellback_digits.py).
         """
         import re
 
