@@ -836,45 +836,17 @@ class TestReferee:
             assert (d.move, d.field_key, label) == (move, fid, None)
 
 
-class TestRefereeLastReadback:
-    """One heard window can hold two read-backs; the user answers the last one,
-    so only it is evidence (bd ya4vi.3, I-90 run 20261120T232745Z turn 46)."""
+class TestRefereeReadbackUnits:
+    """The referee acts only on a heard window holding exactly ONE read-back;
+    two or more are ambiguous and left to the actor (bd ya4vi.3, I-90 run
+    20261120T232745Z turn 46: 97203 read back, re-asked, then 90210)."""
 
     _ZIP = SimpleNamespace(facts={"z": {"value": "97203", "spoken": "9 7 2 0 3"}})
     _SLIP = SimpleNamespace(facts={"z": {
         "value": "97203", "spoken": "9 7 2 0 3",
         "slip": {"value": "97477", "spoken": "9 7 4 7 7"}}})
-
-    def test_true_value_only_in_an_earlier_read_back_does_not_confirm(self):
-        text = ("You provided the ZIP code nine seven two zero three. Is that "
-                "correct? In the section regarding your information, what is "
-                "your physical zip code?The physical zip code is nine zero two "
-                "one zero. Is that correct?")
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert (d.move, label) == ("reject_and_correct", None)
-
-    def test_true_value_in_the_last_read_back_still_confirms(self):
-        text = ("The ZIP is nine zero two one zero. Is that correct? Sorry, "
-                "the ZIP is nine seven two zero three. Is that correct?")
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert label == "reject_to_confirm"
-
-    def test_slip_only_in_an_earlier_read_back_does_not_reject(self):
-        text = ("The ZIP is nine seven four seven seven. Is that correct? "
-                "I have updated it. The ZIP is nine seven two zero three now. "
-                "Is that correct?")
-        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
-                                 self._SLIP, {"z"})
-        assert (d.move, label) == ("confirm", None)
-
-    def test_slip_in_the_last_read_back_still_rejects(self):
-        text = ("The ZIP is nine seven two zero three. Is that correct? "
-                "Actually I have nine seven four seven seven. Is that correct?")
-        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
-                                 self._SLIP, {"z"})
-        assert label == "confirm_to_reject"
+    V = "nine seven two zero three"
+    W = "nine zero two one zero"
 
     # One phrase per branch of actor._READBACK (sub-alternatives expanded);
     # test_cue_phrases_cover_every_readback_branch pins the coverage.
@@ -891,6 +863,8 @@ class TestRefereeLastReadback:
         "Just to confirm, is that correct?", "Can you confirm?",
         "Is that what you said?", "Am I right?", "Correct?", "Right?",
     ]
+    # Read-back openers: a cue leading a statement of the value.
+    OPENERS = ["Just to confirm,", "To confirm,", "Let me confirm,"]
 
     @staticmethod
     def _branches(pattern):
@@ -905,6 +879,10 @@ class TestRefereeLastReadback:
                 cur += ch
         return out + [cur]
 
+    def _r2c(self, text):
+        return actor.referee(_dec("reject_and_correct", "z"), text,
+                             _ref_hist("z"), self._ZIP, set())
+
     def test_cue_phrases_cover_every_readback_branch(self):
         import re as _re
         for br in self._branches(actor._READBACK.pattern):
@@ -912,58 +890,85 @@ class TestRefereeLastReadback:
 
     @pytest.mark.parametrize("cue", CUE_PHRASES)
     def test_value_then_cue_is_one_read_back(self, cue):
-        text = "Your ZIP is nine seven two zero three. " + cue
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert label == "reject_to_confirm", actor.last_readback(text)
+        text = "Your ZIP is %s. %s" % (self.V, cue)
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
 
     @pytest.mark.parametrize("cue", CUE_PHRASES)
     def test_cue_then_value_is_one_read_back(self, cue):
-        text = cue + " Your ZIP is nine seven two zero three."
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert label == "reject_to_confirm", actor.last_readback(text)
+        text = "%s Your ZIP is %s." % (cue, self.V)
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
 
     @pytest.mark.parametrize("cue", CUE_PHRASES)
-    def test_an_earlier_read_back_is_not_evidence(self, cue):
-        text = ("Your ZIP is nine seven two zero three. " + cue +
-                " What is your physical zip code? The physical zip code is "
-                "nine zero two one zero. " + cue)
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert (d.move, label) == ("reject_and_correct", None),             actor.last_readback(text)
+    def test_value_cue_value_cue_is_two_and_abstains(self, cue):
+        # the turn-46 shape, for every cue: right value first, wrong value last
+        text = ("Your ZIP is %s. %s What is your physical zip code? The "
+                "physical zip code is %s. %s" % (self.V, cue, self.W, cue))
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_cue_value_cue_value_is_two_and_abstains(self, cue):
+        # cue-first, twice: right value first, wrong value last
+        text = "%s Your ZIP is %s. %s Your ZIP is %s." % (cue, self.V, cue, self.W)
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    @pytest.mark.parametrize("opener", OPENERS)
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_an_opened_multi_value_read_back_is_one(self, opener, cue):
+        text = ("%s I have your ZIP as %s. And your city is Portland. %s"
+                % (opener, self.V, cue))
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
 
     @pytest.mark.parametrize("text", [
         "Your ZIP is nine seven two zero three? Is that right?",
         "Is it nine seven two zero three? Please confirm.",
-        "To confirm, your ZIP code is nine seven two zero three. Is that correct?",
         "The ZIP is nine seven two zero three. Is that correct? What is your city?",
         "<no speech>{pause} You said nine seven two zero three. Is that correct?",
         "The ZIP is nine seven two zero three, is that correct",
+        "Just to confirm, the ZIP is nine seven two zero three.",
+        "The ZIP is nine seven two zero three. Is that correct?<no speech>",
     ])
     def test_one_read_back_is_judged_whatever_its_shape(self, text):
-        d, label = actor.referee(_dec("reject_and_correct", "z"), text,
-                                 _ref_hist("z"), self._ZIP, set())
-        assert label == "reject_to_confirm"
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
 
-    def test_last_readback_is_the_whole_text_for_one_cue_group(self):
-        text = "Your ZIP is 97203. Did I get that right?"
-        assert actor.last_readback(text) == text
+    @pytest.mark.parametrize("text", [
+        # a question-led read-back closes on its own "?"
+        "Could you confirm that the ZIP is nine seven two zero three? What is "
+        "your zip? The ZIP is nine zero two one zero, is that correct?",
+        # a "?" glued to the next word still ends the sentence
+        "ZIP nine seven two zero three. Is that correct?The zip code is nine "
+        "zero two one zero. Is that correct?",
+    ])
+    def test_two_read_backs_abstain_whatever_their_shape(self, text):
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
 
-    def test_last_readback_cuts_after_the_previous_cue_group(self):
-        text = ("ZIP 97203. Is that correct? Sorry, the ZIP is 90210. "
+    def test_two_read_backs_also_block_a_slip_reject(self):
+        text = ("The ZIP is nine seven four seven seven. Is that correct? "
+                "I have updated it. The ZIP is nine seven two zero three now. "
                 "Is that correct?")
-        assert actor.last_readback(text) == ("Sorry, the ZIP is 90210. "
-                                             "Is that correct?")
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert (d.move, label) == ("confirm", None)
 
-    def test_a_glued_question_mark_ends_a_sentence(self):
-        text = ("ZIP 97203. Is that correct?The zip code is 90210. "
-                "Is that correct?")
-        assert "97203" not in actor.last_readback(text)
+    def test_one_slip_read_back_still_rejects(self):
+        text = "The ZIP is nine seven four seven seven. Is that correct?"
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert label == "confirm_to_reject"
 
-    def test_last_readback_is_empty_without_a_cue(self):
-        assert actor.last_readback("What is your ZIP code?") == ""
-        assert actor.last_readback(None) == ""
+    def test_no_cue_is_zero_read_backs(self):
+        assert actor.readback_units("What is your ZIP code?") == 0
+        assert actor.readback_units(None) == 0
+        assert self._r2c("What is your ZIP code?")[1] is None
 
 
 class TestRefereeEdges:

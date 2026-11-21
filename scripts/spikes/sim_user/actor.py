@@ -391,31 +391,38 @@ def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
 # the next word ("...zip code?The ZIP is"). Spelled letters ("L, U, C, Y.")
 # stay inside one sentence.
 _SENTENCE_END = re.compile(r"(?<=[.?!])\s+|(?<=\?)(?=\S)")
+_WORDISH = re.compile(r"[A-Za-z0-9]")
 
 
-def last_readback(text: str) -> str:
-    """The last read-back in `text`, or "" when it has no read-back cue.
+def readback_units(text: str) -> int:
+    """How many read-backs `text` holds (0 = no read-back cue at all).
 
-    The text is split into sentences. Consecutive sentences holding a cue are
-    ONE cue group: "Did I get that right?" is two regex matches, and "To
-    confirm, X. Is that correct?" is two cue sentences, but each is one
-    read-back. With one cue group the whole text is the read-back. With more,
-    the read-back is everything after the second-to-last group. A heard window
-    can hold two read-backs ("...97203. Is that correct? ... The ZIP is
-    90210. Is that correct?"), and the user answers the LAST one.
-    Residual: two cue-FIRST read-backs ("Did I get that right? ZIP 97203. Did
-    I get that right? ZIP 90210.") leave both values in the window; bd
-    polyglot-pdf-ya4vi.4 (check the stored value) is the backstop."""
-    sents = [x for x in _SENTENCE_END.split(text or "") if x.strip()]
-    cue = [bool(_READBACK.search(x)) for x in sents]
-    # index just past the end of each cue group
-    group_ends = [k + 1 for k in range(len(sents))
-                  if cue[k] and (k + 1 == len(sents) or not cue[k + 1])]
-    if not group_ends:
-        return ""
-    if len(group_ends) == 1:
-        return text
-    return " ".join(sents[group_ends[-2]:])
+    The text is split into sentences. A cue sentence CLOSES a read-back when
+    it ends with "?" or nothing word-like follows its last cue ("...97203,
+    is that correct"). Otherwise it OPENS one ("Just to confirm, your ZIP is
+    97203."), and that read-back runs on to the next closing cue sentence,
+    so "To confirm, X. And Y. Is that correct?" is ONE read-back. An opening
+    read-back that never closes still counts as one.
+
+    The referee acts only on a window with exactly one read-back. A heard
+    window can hold two ("...97203. Is that correct? ... The ZIP is 90210.
+    Is that correct?"), and from text alone it is not decidable which value
+    the user's answer is about, so two or more leave the call to the actor.
+    Abstaining only loses an override; guessing the boundary wrong
+    manufactures one."""
+    units, open_ = 0, False
+    for sent in _SENTENCE_END.split(text or ""):
+        cues = list(_READBACK.finditer(sent))
+        if not cues:
+            continue
+        closes = (sent.rstrip().endswith("?")
+                  or not _WORDISH.search(sent[cues[-1].end():]))
+        if closes:
+            units += 1
+            open_ = False
+        elif not open_:
+            open_ = True
+    return units + (1 if open_ else 0)
 
 
 def referee(decision: Decision, model_text: str, history: list,
@@ -431,14 +438,14 @@ def referee(decision: Decision, model_text: str, history: list,
         slip -> confirm ("reject_to_confirm");
       - confirm, and the read-back holds the spoken slip and not the true
         value -> reject_and_correct on that field ("confirm_to_reject").
-    Only the LAST read-back in `model_text` is judged (`last_readback`).
+    It acts only when `model_text` holds exactly ONE read-back
+    (`readback_units`); two or more are ambiguous and left to the actor.
     Anything else -- no read-back, a paraphrase, a date said in words, both
     values present -- is left to the actor. Returns (decision, label), where
     label is None when nothing changed."""
     if decision.move not in ("confirm", "reject_and_correct"):
         return decision, None
-    readback = last_readback(model_text)
-    if not readback:
+    if readback_units(model_text) != 1:
         return decision, None
     facts = persona.facts
     fid = (decision.field_key if decision.move == "reject_and_correct"
@@ -446,7 +453,7 @@ def referee(decision: Decision, model_text: str, history: list,
     if fid not in facts:
         return decision, None
     f = facts[fid]
-    tt = _tokens(readback)
+    tt = _tokens(model_text)
     true_c = [f.get("spoken"), f.get("value"), f.get("spell")]
     slip_c: list = []
     if "slip" in f and slips_spoken is not None and fid in slips_spoken:
