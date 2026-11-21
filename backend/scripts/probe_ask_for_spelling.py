@@ -151,7 +151,7 @@ def build_si(arm: str) -> str:
         # conclude "the fix stopped mattering" when in truth the HARNESS broke.
         # A broken baseline arm is indistinguishable from a refuted fix, so it
         # must crash rather than mislead.
-        scope = ("This changes only how a spelling is READ BACK. It does NOT "
+        scope = ("This changes only how a value is READ BACK. It does NOT "
                  "change how you ASK: you still ask every person's name by "
                  "asking for its SPELLING up front, every time, exactly as "
                  "instructed above -- never just the name.\n")

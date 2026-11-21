@@ -274,6 +274,18 @@ class TestSpellbackDeclarationGating:
         ]
 
 
+def _assert_numbers_route_to_the_clip(si: str) -> None:
+    """The assembled SI tells the model to send identifier numbers to the
+    clip, and no longer carries the pre-r3ham.26 'read numbers yourself'
+    exemption. Shared by both SI modes."""
+    assert "AND for an identifier NUMBER" in si
+    assert "one letter or one digit at a time in the session language" in si
+    assert ("identifier-number field: ASK for the number -> fill the digits "
+            "-> call name_spellback -> stay silent") in si
+    assert "Numbers are unaffected" not in si
+    assert "digit by digit yourself" not in si
+
+
 class TestSpellbackSiAddendum:
     def _si(self, enabled: bool) -> str:
         from backend.services import ai_context
@@ -293,10 +305,10 @@ class TestSpellbackSiAddendum:
         assert "call the name_spellback tool instead" in si
         # bd 44ywm: the clip asks the question; the model's job is silence.
         assert "stay SILENT and listen" in si
-        # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
-        # SPEECH STYLE block in the same assembled SI requires digit-by-digit
-        # number read-back, and the addendum must not suppress it.
-        assert "digit by digit yourself" in si
+        # bd polyglot-pdf-r3ham.26: identifier NUMBERS ride the clip too (the
+        # 3.8 benchmark's voice read back an earlier phone number). The old
+        # letters-only exemption must be gone, not merely outvoted.
+        _assert_numbers_route_to_the_clip(si)
 
     def test_flag_on_appends_addendum_in_legacy_si_mode_too(self):
         """The tool declaration gates only on SPELLBACK_TOOL_ENABLED, not on
@@ -318,10 +330,10 @@ class TestSpellbackSiAddendum:
         assert "call the name_spellback tool instead" in si
         # bd 44ywm: the clip asks the question; the model's job is silence.
         assert "stay SILENT and listen" in si
-        # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
-        # SPEECH STYLE block in the same assembled SI requires digit-by-digit
-        # number read-back, and the addendum must not suppress it.
-        assert "digit by digit yourself" in si
+        # bd polyglot-pdf-r3ham.26: identifier NUMBERS ride the clip too (the
+        # 3.8 benchmark's voice read back an earlier phone number). The old
+        # letters-only exemption must be gone, not merely outvoted.
+        _assert_numbers_route_to_the_clip(si)
 
     def test_addendum_reasserts_the_ask_after_its_prohibitions(self):
         """The model's LAST naming instruction must tell it to ASK.
@@ -358,7 +370,7 @@ class TestSpellbackSiAddendum:
 
         # The addendum must also SCOPE itself: without this it reads as the
         # whole naming policy rather than a read-back rule.
-        assert "changes only how a spelling is READ BACK" in si
+        assert "changes only how a value is READ BACK" in si
         assert "does NOT change how you ASK" in si
 
     def test_dti_names_block_forbids_filling_a_guessed_spelling(self):
@@ -888,7 +900,7 @@ class TestSpellbackText:
         loop_thread = threading.get_ident()
         seen = {}
 
-        def fake_resolve(settings, language_name=None):
+        def fake_resolve(settings, language_name=None, **_kw):
             seen["resolve_thread"] = threading.get_ident()
             return "", "en-US"
 

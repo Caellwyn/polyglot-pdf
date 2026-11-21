@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-2k00x: the `ask_secretary` row now names all three shipped uses -- past-answer recall, field identification for navigation, and official instruction text quoted back -- matching the `backend/config.py` declaration, which grew the third use under bd polyglot-pdf-wsao.8. Also current: the `name_spellback` clip is plain-text, session-language, and carries the whole verification question, so its delivered response tells the model to stay SILENT rather than ask (bd polyglot-pdf-22h1f + 44ywm).)*
+*Last updated: 2026-11-21 (bd polyglot-pdf-r3ham.26: the `name_spellback` row: identifier numbers ride the clip too, and the `read_back_yourself` fallback for a session language no TTS voice speaks.)*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -28,7 +28,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question: recall a past answer, identify a field for navigation, or get the official instruction text quoted back (bd polyglot-pdf-jnjj.45 + wsao.8) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
 | `switch_to_field` | Jump to one specific field so it becomes current (correction/revisit path, distinct from switch_section) (bd polyglot-pdf-jnjj.36) | `field` |
-| `name_spellback` (`SPELLBACK_TOOL_ENABLED`, default ON since bd polyglot-pdf-apkdl; the flag remains as a rollback) | Play a deterministic Cloud TTS clip of the CURRENT field's stored value -- letters spoken one by one IN THE SESSION LANGUAGE, and the clip asks the verification question itself, so the model never speaks a spelling and does not re-ask afterwards (bd polyglot-pdf-22h1f + 44ywm). The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
+| `name_spellback` (`SPELLBACK_TOOL_ENABLED`, default ON since bd polyglot-pdf-apkdl; the flag remains as a rollback) | Play a deterministic Cloud TTS clip of the CURRENT field's stored value -- letters, or the digits of an identifier number, spoken one by one IN THE SESSION LANGUAGE, and the clip asks the verification question itself, so the model never speaks a spelling or an identifier-number read-back and does not re-ask afterwards (bd polyglot-pdf-22h1f + 44ywm + r3ham.26). A digit value in a session language no TTS voice speaks gets NO clip (the route's 406) and the `read_back_yourself` response instead: the model reads the digits itself in the session language, never an English clip. The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
 
 ## Inbound: how a tool call reaches the backend
 

@@ -406,7 +406,7 @@ async def test_synthesize_spellback_emits_tts_spellback_usage_event(monkeypatch)
     monkeypatch.setattr(spellback_tts, "_synthesize_sync", fake_synth)
     monkeypatch.setattr(
         spellback_tts, "resolve_spellback_voice",
-        lambda settings, language_name=None: ("en-US-Chirp3-HD-Algieba", "en-US"),
+        lambda settings, language_name=None, **_kw: ("en-US-Chirp3-HD-Algieba", "en-US"),
     )
 
     with patch("backend.services.spellback_tts.get_structured_logger") as mock_get:

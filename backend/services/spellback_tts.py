@@ -22,9 +22,23 @@ SSML approach):
   spoken language ({locale}-Chirp3-HD-{persona}); letter names come out the
   way that language's speakers say them (a Spanish speaker hears 'jota';
   languages with no native Latin-letter names -- e.g. Chinese -- naturally get
-  English-style letter names from their regional voice). Locales with no
-  Chirp3 voice fall back to en-US -- availability is derived from the API's
-  list_voices at runtime, NEVER a hand-pinned language list (repo rule).
+  English-style letter names from their regional voice). Availability is
+  derived from the API's list_voices at runtime, NEVER a hand-pinned language
+  list (repo rule).
+- NUMBERS TOO (bd polyglot-pdf-r3ham.26): identifier numbers (phone, ZIP,
+  ID numbers) ride the same clip, one digit per comma-separated token, so the
+  session-language voice says each digit as that language's own word
+  ("cinco, cero, tres") -- never one multi-digit number. A DIGIT clip has a
+  stricter language rule than a letter clip: it is NEVER English unless the
+  session language IS English. A language that is unmapped, or whose locale
+  Cloud TTS carries no voice for (live 2026-11-21: ur-PK and fa-IR list none,
+  and a voiceless ur-PK request is silently answered in an ENGLISH voice),
+  raises SpellbackLanguageUnavailable instead; the route maps it to 406 and
+  the tool tells the model to read the digits itself in the session language.
+  Letter clips keep their existing rules (an unmapped language takes the
+  en-US frame and voice): a name is stored in Latin characters, and the model
+  speaking a spelling is the measured bd 0rpu defect this tool exists to
+  avoid, so "no clip" is the worse outcome for letters.
 - Frames + per-language punctuation words are DATA (spellback_frames.json,
   UTF-8; code files stay ASCII-only).
 - PII: the value is never logged here (lengths only), matching the server-side
@@ -139,11 +153,39 @@ def _load_frames() -> dict:
 _FRAMES = _load_frames()
 
 
+class SpellbackLanguageUnavailable(Exception):
+    """A DIGIT clip was asked for in a session language no voice can speak.
+
+    Deliberately NOT a ValueError: the route maps ValueError to 400 (a bad
+    value), and this is a distinct, expected condition the client reports to
+    the tool as a fixed reason token (see SPELLBACK_NO_SESSION_VOICE_STATUS).
+    Carries no field value.
+    """
+
+
+# The HTTP status /api/tts/spellback answers for SpellbackLanguageUnavailable.
+# 406 Not Acceptable is content negotiation's "I cannot produce this in the
+# language you need" -- and, unlike 422, FastAPI never emits it on its own (a
+# malformed body is a 422), so the code cannot be confused with a validation
+# failure. The client forwards it verbatim as reason 'tts_http_406'
+# (spellbackPlayer.ts), which is what callback_handler matches on.
+SPELLBACK_NO_SESSION_VOICE_STATUS = 406
+
+
+def contains_digit(value: str) -> bool:
+    """True when `value` has at least one digit -- the trigger for the
+    digit clip's no-English rule. Keyed on the VALUE, not a field type: the
+    route never sees the field, and a digit spoken in the wrong language is
+    wrong whatever field it came from."""
+    return any(ch.isdigit() for ch in value)
+
+
 def resolve_spellback_locale(language_name) -> str:
     """The clip's BCP-47 locale for a spoken-language NAME ('Spanish').
 
     Uses the same name->code map as the ASR bias (language_codes.py). Unknown,
-    empty, or unmapped names fall back to en-US.
+    empty, or unmapped names fall back to en-US -- the LETTER-clip policy. A
+    digit clip never takes that fallback (see resolve_spellback_voice).
     """
     codes = bcp47_codes_for_spoken_language(language_name)
     return codes[0] if codes else _FALLBACK_LOCALE
@@ -177,10 +219,13 @@ def build_spellback_text(value: str, locale: str) -> str:
 _client = None
 _client_lock = threading.Lock()
 
-# Voice-availability cache (populated from list_voices on first use; process
-# lifetime). None = not yet fetched; empty set = fetch failed (fail open: use
-# the derived name and let a bad one surface as a synth error -> the tool's
-# error variant).
+# Voice-availability cache (populated from list_voices on first SUCCESSFUL use;
+# process lifetime). None = not yet fetched. A failed fetch is NOT cached: the
+# call that saw it gets an empty set (letter clips fail open: use the derived
+# name and let a bad one surface as a synth error -> the tool's error
+# variant; digit clips fail CLOSED, see resolve_spellback_voice) and the next
+# call retries. Caching the failure would pin every digit read-back on the
+# instance to the model-speaks fallback for its whole lifetime after one blip.
 _available_voices = None
 _voices_lock = threading.Lock()
 
@@ -202,7 +247,8 @@ def _get_client():
 def _known_voices() -> set:
     """Cached list_voices names. Derived at runtime, never hand-pinned per
     language (repo rule: languages grow 17 -> ~90). An empty set means the
-    fetch failed -- callers then fail OPEN and use the derived name.
+    fetch failed (and is retried next call) -- letter clips then fail OPEN
+    and use the derived name; digit clips fail closed.
     """
     global _available_voices
     if _available_voices is None:
@@ -214,8 +260,26 @@ def _known_voices() -> set:
                 except Exception as exc:
                     _log.warning("spellback_list_voices_failed",
                                  error_type=type(exc).__name__)
-                    _available_voices = set()
+                    return set()
     return _available_voices
+
+
+def _locale_has_voice(locale: str):
+    """True/False when the voice listing says whether Cloud TTS carries ANY
+    voice in `locale`; None when the listing is unavailable.
+
+    This rung exists because a voiceless locale does NOT fail: live
+    2026-11-21, a synthesize request for ur-PK (which lists no voices) with
+    no voice name returned audio in an ENGLISH voice -- Urdu STT heard the
+    digits as the English words "five zero". (fa-IR, also voiceless, returns
+    400 instead.) So "the locale's default voice" is only a safe rung after
+    the listing has confirmed the locale has one.
+    """
+    known = _known_voices()
+    if not known:
+        return None
+    prefix = locale + "-"
+    return any(n.startswith(prefix) for n in known)
 
 
 def _voice_exists(name: str) -> bool:
@@ -242,32 +306,66 @@ def _any_chirp3_voice_for(locale: str):
     return candidates[0] if candidates else None
 
 
-def resolve_spellback_voice(settings, language_name=None):
+def resolve_spellback_voice(settings, language_name=None, *, for_digits=False):
     """The (voice_name, locale) pair for the clip.
 
-    An explicit SPELLBACK_TTS_VOICE wins outright (full voice name; its locale
-    prefix is used as the language_code). Otherwise the voice follows the
-    SESSION language ({locale}-Chirp3-HD-{persona}) with the persona matched
-    to the Live model's LIVE_VOICE_NAME -- the Chirp 3 HD family carries the
-    Live API's prebuilt voice names, so the clip sounds like the same speaker.
-    Fallback ladder, LANGUAGE-FIRST (the user's language matters more than
-    the model's persona). Every rung keeps the SESSION locale -- an unknown
-    language already resolved to en-US upstream, so there is no separate
-    English rung to fall to:
-      1. {session-locale}-Chirp3-HD-{persona}  -- ideal: their language, our voice
-      2. any Chirp3 voice in the SESSION locale -- their language, other voice
-      3. the locale's default voice ("")       -- their language, always valid
+    An explicit SPELLBACK_TTS_VOICE wins outright for a letter clip (full
+    voice name; its locale prefix is used as the language_code). Otherwise
+    the voice follows the SESSION language ({locale}-Chirp3-HD-{persona})
+    with the persona matched to the Live model's LIVE_VOICE_NAME -- the
+    Chirp 3 HD family carries the Live API's prebuilt voice names, so the
+    clip sounds like the same speaker.
+
+    LANGUAGE GATE first (bd polyglot-pdf-r3ham.26) -- which locale may speak:
+      - letter clip (for_digits=False, also the intro/notice clips' path):
+        the session locale when mapped, else en-US. Unchanged by r3ham.26.
+      - digit clip (for_digits=True): the session locale ONLY. Unmapped,
+        voiceless, or unknowable (listing failed) raises
+        SpellbackLanguageUnavailable -- a digit is never voiced in English
+        to a non-English session. "Voiceless" matters: ur-PK and fa-IR list
+        no voice, and the locale-default rung below is then silently an
+        English voice (ur-PK) or a 400 (fa-IR) -- see _locale_has_voice. An
+        explicit SPELLBACK_TTS_VOICE is honored for digits only when its
+        locale IS the session locale.
+
+    Then the persona ladder, LANGUAGE-FIRST (the user's language matters
+    more than the model's persona), every rung keeping the gated locale:
+      1. {locale}-Chirp3-HD-{persona}  -- ideal: their language, our voice
+      2. any Chirp3 voice in that locale -- their language, other voice
+      3. the locale's default voice ("") -- for a digit clip the gate has
+         already confirmed the locale carries a voice
     Inputs are .strip()ed, matching the Live adapter's own LIVE_VOICE_NAME
     handling (bd polyglot-pdf-vx0q4).
     """
+    codes = bcp47_codes_for_spoken_language(language_name)
+    session_locale = codes[0] if codes else None
+
     explicit = (getattr(settings, "SPELLBACK_TTS_VOICE", "") or "").strip()
     if explicit:
         # 'en-US-Chirp3-HD-Algieba' -> locale 'en-US'.
         bits = explicit.split("-")
-        locale = "-".join(bits[:2]) if len(bits) >= 2 else _FALLBACK_LOCALE
-        return explicit, locale
+        explicit_locale = "-".join(bits[:2]) if len(bits) >= 2 else _FALLBACK_LOCALE
+        if not for_digits or explicit_locale == session_locale:
+            return explicit, explicit_locale
+        _log.info("spellback_voice_override_skipped_for_digits",
+                  override_locale=explicit_locale,
+                  session_locale=session_locale or "(unmapped)")
 
-    locale = resolve_spellback_locale(language_name)
+    if for_digits:
+        if session_locale is None:
+            _log.info("spellback_digits_no_session_voice", reason="unmapped")
+            raise SpellbackLanguageUnavailable("unmapped session language")
+        has_voice = _locale_has_voice(session_locale)
+        if has_voice is not True:
+            _log.info("spellback_digits_no_session_voice",
+                      reason=("no_voice" if has_voice is False
+                              else "voice_list_unavailable"),
+                      locale=session_locale)
+            raise SpellbackLanguageUnavailable("no voice for session locale")
+        locale = session_locale
+    else:
+        locale = session_locale or _FALLBACK_LOCALE
+
     persona = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
     if not persona:
         return "", locale
@@ -386,7 +484,10 @@ async def synthesize_spellback(
     every session for its duration, the exact defect class bd 4hnyq fixes on
     the handshake path (Opus cross-surface review). Raises ValueError on an
     empty/oversized value; propagates TTS client errors to the caller (the
-    route maps them to a 502 without logging the value).
+    route maps them to a 502 without logging the value). Raises
+    SpellbackLanguageUnavailable for a value containing a digit when no voice
+    in the session language can speak it (the route's 406) -- a digit clip is
+    never English to a non-English session (bd polyglot-pdf-r3ham.26).
 
     session_ctx (bd polyglot-pdf-t86oz): the route's own
     {firm_id, employee_id, link_jti, kit_id, channel} claims-derived context
@@ -399,7 +500,8 @@ async def synthesize_spellback(
         raise ValueError("value too long")
 
     def _resolve_and_synthesize():
-        voice_name, locale = resolve_spellback_voice(settings, language_name)
+        voice_name, locale = resolve_spellback_voice(
+            settings, language_name, for_digits=contains_digit(value))
         text = build_spellback_text(value, locale)
         return _synthesize_sync(text, voice_name, locale), locale, text, voice_name
 
