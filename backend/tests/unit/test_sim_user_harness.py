@@ -1757,6 +1757,37 @@ class SlipModelScript(ModelScript):
         return {"say": "Could you say that again?"}
 
 
+class VagueSlipModelScript(SlipModelScript):
+    """SlipModelScript whose read-back never says the value ("I have that
+    down"), so the deterministic referee cannot judge it and the actor's
+    verdict stands."""
+
+    def respond(self, user_text):
+        out = super().respond(user_text)
+        if out.get("fill"):
+            out["say"] = "I have that down. Is that correct?"
+        return out
+
+
+class RejectEverythingActor:
+    """The stub, except it rejects every correct read-back of a value the
+    referee can judge -- the Haiku failure that looped 34 turns on a correct
+    spelling. (A generic value like "No" is left alone: no referee acts on
+    it, so this actor would loop there forever.)"""
+
+    def __init__(self, persona):
+        self.persona = persona
+        self.stub = sim_actor.StubActor(persona)
+
+    async def decide(self, model_text, history):
+        d = await self.stub.decide(model_text, history)
+        fid = sim_actor.last_answered(history, self.persona.facts)
+        if (d.move == "confirm" and fid
+                and sim_actor.refereeable(self.persona.facts[fid]["spoken"])):
+            d.move, d.field_key = "reject_and_correct", fid
+        return d
+
+
 class ConfirmEverythingActor:
     """The stub, except it never rejects a read-back (it says yes to a wrong
     one): a field that was slipped stays holding the slip."""
@@ -1903,7 +1934,9 @@ class TestSelfCorrectSim:
         assert mfsc.count_off_sheet(plain, turns) > 0
 
     def test_a_field_left_holding_its_slip_scores_incorrect(self):
-        session = _session_for(SLIP, SlipModelScript)
+        # a vague read-back: the referee cannot see the slip, so the actor's
+        # wrong yes stands and the field keeps the slip
+        session = _session_for(SLIP, VagueSlipModelScript)
         driver = make_driver(session, persona=SLIP,
                              actor=ConfirmEverythingActor(SLIP))
         run_driver(session, driver)
@@ -1970,6 +2003,10 @@ class TestSelfCorrectSim:
         doc, _ = read_one(env.tmp / "out" / "sim_user", "*.sim-user.json")
         assert doc["summary"]["corrections"] == corr
         assert sum(1 for t in doc["user_turns"] if t["slip"]) == n
+        # the stub judges exact read-backs right, so the referee never fires
+        assert sim["referee_overrides"] == {"reject_to_confirm": 0,
+                                            "confirm_to_reject": 0}
+        assert all(t["referee"] is None for t in doc["user_turns"])
 
     def test_the_default_persona_reports_zero_corrections(self, sim_env):
         run_args(parse(sim_env))
@@ -1978,3 +2015,122 @@ class TestSelfCorrectSim:
         assert corr["slips_spoken"] == corr["slips_corrected"] == 0
         assert corr["facts_with_slips"] == 0
         assert corr["fields_uncorrected"] == []
+
+
+class TestRefereeInTheLoop:
+    def test_a_wrong_reject_of_a_correct_read_back_is_overridden(self):
+        session = _session_for(PERSONA)
+        driver = make_driver(session, actor=RejectEverythingActor(PERSONA))
+        run_driver(session, driver)
+        fids = list(PERSONA.facts)
+        assert driver.stop_reason == "complete"
+        assert mfsc.count_filled_confirmed(session.state, fids) == len(fids)
+        over = mfsc.count_referee_overrides(driver)
+        judgeable = [fid for fid, f in PERSONA.facts.items()
+                     if sim_actor.refereeable(f["spoken"])]
+        assert len(judgeable) > len(fids) // 2
+        # one wrong reject per judgeable field, each overridden
+        assert over == {"reject_to_confirm": len(judgeable),
+                        "confirm_to_reject": 0}
+        labelled = [t for t in driver.user_turns if t["referee"]]
+        assert labelled and all(
+            t["referee"] == "reject_to_confirm" and t["move"] == "confirm"
+            for t in labelled)
+
+    def test_a_wrong_yes_to_a_spoken_slip_is_overridden(self):
+        session = _session_for(SLIP, SlipModelScript)
+        driver = make_driver(session, persona=SLIP,
+                             actor=ConfirmEverythingActor(SLIP))
+        run_driver(session, driver)
+        fids = list(SLIP.facts)
+        acc = _accuracy(session, SLIP, mfsc.W7_EXPECTED)
+        # every refereeable slip is caught and corrected; nothing else changes
+        over = mfsc.count_referee_overrides(driver)
+        assert over["reject_to_confirm"] == 0
+        assert over["confirm_to_reject"] >= len(fids) * 3 // 4
+        corr = mfsc.count_corrections(driver, acc)
+        assert corr["slips_corrected"] == over["confirm_to_reject"]
+        for t in driver.user_turns:
+            if t["referee"]:
+                assert t["move"] == "reject_and_correct"
+                assert t["field_key"] in SLIP.facts
+
+
+class TestGttsRetry:
+    """A transient gTTS refusal must not kill a live session (bd ya4vi.5).
+
+    gTTS and soundfile are measurement-only dependencies that CI does not
+    install, so every test here runs against stand-in modules."""
+
+    @pytest.fixture(autouse=True)
+    def _fake_gtts(self, monkeypatch):
+        import types
+
+        class gTTSError(Exception):
+            pass
+
+        gtts_mod = types.ModuleType("gtts")
+        tts_mod = types.ModuleType("gtts.tts")
+        tts_mod.gTTSError = gTTSError
+        gtts_mod.tts = tts_mod
+        gtts_mod.gTTS = object
+        monkeypatch.setitem(sys.modules, "gtts", gtts_mod)
+        monkeypatch.setitem(sys.modules, "gtts.tts", tts_mod)
+        monkeypatch.setitem(sys.modules, "soundfile",
+                            types.ModuleType("soundfile"))
+
+    @staticmethod
+    def _flaky(failures):
+        from gtts.tts import gTTSError
+
+        calls = []
+
+        class Flaky:
+            def __init__(self, text, lang):
+                calls.append((text, lang))
+
+            def write_to_fp(self, fp):
+                if len(calls) <= failures:
+                    raise gTTSError("Failed to connect. Probable cause: Unknown")
+                fp.write(b"mp3-bytes")
+
+        return Flaky, calls
+
+    def test_recovers_after_transient_failures(self):
+        n_fail = len(mfsc._GTTS_RETRY_DELAYS_S)
+        cls, calls = self._flaky(n_fail)
+        slept = []
+        buf = mfsc._gtts_mp3(cls, "hello", "en", sleep=slept.append)
+        assert buf.read() == b"mp3-bytes"
+        assert len(calls) == n_fail + 1
+        assert slept == list(mfsc._GTTS_RETRY_DELAYS_S)
+
+    def test_raises_after_every_attempt_fails(self):
+        from gtts.tts import gTTSError
+
+        cls, calls = self._flaky(99)
+        slept = []
+        with pytest.raises(gTTSError):
+            mfsc._gtts_mp3(cls, "hello", "en", sleep=slept.append)
+        assert len(calls) == len(mfsc._GTTS_RETRY_DELAYS_S) + 1
+        assert slept == list(mfsc._GTTS_RETRY_DELAYS_S)
+
+    def test_first_try_success_does_not_sleep(self):
+        cls, calls = self._flaky(0)
+        slept = []
+        assert mfsc._gtts_mp3(cls, "hi", "es", sleep=slept.append).read() \
+            == b"mp3-bytes"
+        assert calls == [("hi", "es")] and slept == []
+
+    def test_synth_cached_goes_through_the_retry(self, tmp_path, monkeypatch):
+        seen = []
+
+        def spy(cls, text, lang, sleep=time.sleep):
+            seen.append((text, lang))
+            raise RuntimeError("stop after the spy")
+
+        monkeypatch.setattr(mfsc, "AUDIO_CACHE", tmp_path)
+        monkeypatch.setattr(mfsc, "_gtts_mp3", spy)
+        with pytest.raises(RuntimeError, match="spy"):
+            mfsc.synth_cached("uncached phrase", "zh")
+        assert seen == [("uncached phrase", "zh-CN")]

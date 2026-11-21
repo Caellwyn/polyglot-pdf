@@ -13,6 +13,8 @@ Pieces:
     spoken text); the FIRST `answer` for such a field speaks the slip, so the
     interviewer's read-back is wrong and the actor must reject-and-correct.
     The slip is fact-sheet text too, so it is never an off-sheet value.
+  - referee: a deterministic exact-match check that overrides the actor's
+    verdict on a read-back that plainly says the true value (or the slip).
   - StubActor: deterministic offline backend (and the fallback).
   - HaikuActor: Claude Haiku 5.5 via the Claude API (anthropic SDK,
     ANTHROPIC_API_KEY), strict JSON output. Deliberately NOT Vertex: Vertex
@@ -29,7 +31,7 @@ import os
 import random
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -348,6 +350,158 @@ def _asks_to_spell(text: str) -> bool:
         _SPELLED_RUN.search(text) and _READBACK.search(text))
 
 
+def last_answered(history: list, facts: dict) -> Optional[str]:
+    """The field of the most recent field move in `history` (the field a
+    bare read-back is most likely about), or None."""
+    for h in reversed(history or []):
+        if h.get("move") in FIELD_MOVES and h.get("field_key") in facts:
+            return h["field_key"]
+    return None
+
+
+# A value this short, or one of these generic words, is too common to
+# override on: "no" or "yes" turns up in read-backs about anything.
+_MIN_REFEREE_CHARS = 3
+_GENERIC_VALUES = frozenset({"yes", "no", "none", "not", "na", "nope",
+                             "yeah"})
+
+
+def refereeable(value) -> bool:
+    """True when `value` is distinctive enough for the referee to act on."""
+    joined = "".join(_tokens(str(value)))
+    return len(joined) >= _MIN_REFEREE_CHARS and joined not in _GENERIC_VALUES
+
+
+def _hits(text_tokens: list, cands: list, strict: bool) -> bool:
+    """Any candidate value appears in the text as a whole-token run. strict
+    skips the values too generic to act on; the non-strict form is the
+    conservative 'is the OTHER value there at all' guard."""
+    for c in cands:
+        if c is None:
+            continue
+        ct = _tokens(str(c))
+        if not ct or (strict and not refereeable(c)):
+            continue
+        if _contains_seq(text_tokens, ct):
+            return True
+    return False
+
+
+# A sentence ends at . ? or ! followed by space or end, or at a "?" glued to
+# the next word ("...zip code?The ZIP is"). Spelled letters ("L, U, C, Y.")
+# stay inside one sentence.
+_SENTENCE_END = re.compile(r"(?<=[.?!])\s+|(?<=\?)(?=\S)")
+_WORD = re.compile(r"[A-Za-z0-9]+")
+# Words that carry no value: "Can you confirm THAT IS right?" is one cue, and
+# "Could you confirm that?" closes a read-back rather than opening one.
+_CUE_FILLER = frozenset({"that", "this", "it", "is", "all", "everything",
+                         "above", "for", "me", "please", "now"})
+
+
+def _has_content(s: str) -> bool:
+    """True when `s` holds a word that is not cue filler."""
+    return any(w.lower() not in _CUE_FILLER for w in _WORD.findall(s))
+
+
+def _cue_spans(sent: str) -> list:
+    """The read-back cues in one sentence, as (start, end) spans; matches with
+    no content between them are ONE cue ("did i get that" + "right?", "just
+    to confirm" + ", is that correct", "can you confirm" + "that is" +
+    "right?")."""
+    spans: list = []
+    for m in _READBACK.finditer(sent):
+        if spans and not _has_content(sent[spans[-1][1]:m.start()]):
+            spans[-1] = (spans[-1][0], m.end())
+        else:
+            spans.append((m.start(), m.end()))
+    return spans
+
+
+def readback_units(text: str) -> int:
+    """How many read-backs `text` holds (0 = no read-back cue at all).
+
+    Each cue is classified by where it sits in its sentence:
+      - a TAG closes a read-back: content precedes it ("Your ZIP is
+        97203, is that correct"), no content follows it ("Did I get that
+        right?"), or it is the sentence's last cue and the sentence is a
+        question ("Could you confirm that the ZIP is 97203?");
+      - otherwise it is an OPENER ("To confirm, your ZIP is 97203."), which
+        starts a read-back that runs on to the next tag, so "To confirm, X.
+        And Y. Is that correct?" is ONE read-back. An opener that arrives while
+        another is still open, and an opener that never closes, each count.
+
+    The referee acts only on a window with exactly one read-back. A heard
+    window can hold two ("...97203. Is that correct? ... The ZIP is 90210.
+    Is that correct?"), and from text alone it is not decidable which value
+    the user's answer is about, so two or more leave the call to the actor.
+    Abstaining only loses an override; guessing the boundary wrong
+    manufactures one. Residual: a second read-back phrased with a cue not
+    in _READBACK ("does that look good?") is invisible to the count."""
+    units, open_ = 0, False
+    for sent in _SENTENCE_END.split(text or ""):
+        spans = _cue_spans(sent)
+        is_question = sent.rstrip().endswith("?")
+        prev_end = 0
+        for k, (a, b) in enumerate(spans):
+            nxt = spans[k + 1][0] if k + 1 < len(spans) else len(sent)
+            before = bool(_has_content(sent[prev_end:a]))
+            after = bool(_has_content(sent[b:nxt]))
+            last = k + 1 == len(spans)
+            if before or not after or (last and is_question):
+                units += 1
+                open_ = False
+            else:
+                if open_:
+                    units += 1
+                open_ = True
+            prev_end = b
+    return units + (1 if open_ else 0)
+
+
+def referee(decision: Decision, model_text: str, history: list,
+            persona: Persona, slips_spoken: Optional[set] = None
+            ) -> tuple[Decision, Optional[str]]:
+    """Deterministic check on the actor's verdict about a read-back.
+
+    The actor model judges read-backs, and it can judge them wrong both ways:
+    rejecting a read-back that says the fact exactly (a 34-turn loop on a
+    correct "C, O, R, A, Z, O, N") or confirming one that says the slip (a
+    wrong middle name accepted). Only an EXACT token match overrides it:
+      - reject_and_correct, and the read-back holds the true value and not the
+        slip -> confirm ("reject_to_confirm");
+      - confirm, and the read-back holds the spoken slip and not the true
+        value -> reject_and_correct on that field ("confirm_to_reject").
+    It acts only when `model_text` holds exactly ONE read-back
+    (`readback_units`); two or more are ambiguous and left to the actor.
+    Anything else -- no read-back, a paraphrase, a date said in words, both
+    values present -- is left to the actor. Returns (decision, label), where
+    label is None when nothing changed."""
+    if decision.move not in ("confirm", "reject_and_correct"):
+        return decision, None
+    if readback_units(model_text) != 1:
+        return decision, None
+    facts = persona.facts
+    fid = (decision.field_key if decision.move == "reject_and_correct"
+           else last_answered(history, facts))
+    if fid not in facts:
+        return decision, None
+    f = facts[fid]
+    tt = _tokens(model_text)
+    true_c = [f.get("spoken"), f.get("value"), f.get("spell")]
+    slip_c: list = []
+    if "slip" in f and slips_spoken is not None and fid in slips_spoken:
+        slip_c = [f["slip"].get("spoken"), f["slip"].get("value")]
+    if (decision.move == "reject_and_correct" and _hits(tt, true_c, True)
+            and not _hits(tt, slip_c, False)):
+        return (replace(decision, move="confirm", field_key=NONE_KEY),
+                "reject_to_confirm")
+    if (decision.move == "confirm" and _hits(tt, slip_c, True)
+            and not _hits(tt, true_c, False)):
+        return (replace(decision, move="reject_and_correct", field_key=fid),
+                "confirm_to_reject")
+    return decision, None
+
+
 # --------------------------------------------------------------------------
 # StubActor
 # --------------------------------------------------------------------------
@@ -368,10 +522,7 @@ class StubActor:
         return best
 
     def _last_answered(self, history: list) -> Optional[str]:
-        for h in reversed(history or []):
-            if h.get("move") in FIELD_MOVES and h.get("field_key") in self.persona.facts:
-                return h["field_key"]
-        return None
+        return last_answered(history, self.persona.facts)
 
     def _value_in_text(self, fid: str, text: str) -> bool:
         f = self.persona.facts[fid]

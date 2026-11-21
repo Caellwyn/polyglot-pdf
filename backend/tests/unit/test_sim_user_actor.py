@@ -757,3 +757,296 @@ class TestActorNeverSeesTheSlip:
         blob = json.dumps(ha.build_request("I have a read-back.", hist))
         for s in self._slip_answers(persona):
             assert s not in blob
+
+
+# =========================================================================
+# referee: the deterministic exact-match check on the actor's read-back
+# verdicts. Parametrized over EVERY slipped fact in the persona, not a sample.
+# =========================================================================
+_REF_PERSONA = _load(SLIP_PERSONA)
+_REF_FIDS = list(_REF_PERSONA.facts)
+
+
+def _ref_long_enough(s):
+    return actor.refereeable(s)
+
+
+def _ref_hist(fid):
+    return [{"model_text": "What is it?", "move": "answer", "field_key": fid}]
+
+
+def _readback(value):
+    return "I have %s. Is that correct?" % value
+
+
+def _dec(move, fid=actor.NONE_KEY):
+    return actor.Decision(move=move, field_key=fid)
+
+
+@pytest.mark.parametrize("fid", _REF_FIDS)
+class TestReferee:
+    def test_a_reject_of_the_exact_true_value_becomes_a_confirm(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        if not _ref_long_enough(f["spoken"]):
+            pytest.skip("value too short to referee")
+        d, label = actor.referee(_dec("reject_and_correct", fid),
+                                 _readback(f["spoken"]), _ref_hist(fid),
+                                 _REF_PERSONA, {fid})
+        assert (d.move, d.field_key, label) == (
+            "confirm", actor.NONE_KEY, "reject_to_confirm")
+
+    def test_a_confirm_of_the_spoken_slip_becomes_a_reject(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        if not _ref_long_enough(f["slip"]["spoken"]):
+            pytest.skip("slip too short to referee")
+        d, label = actor.referee(_dec("confirm"),
+                                 _readback(f["slip"]["spoken"]),
+                                 _ref_hist(fid), _REF_PERSONA, {fid})
+        assert (d.move, d.field_key, label) == (
+            "reject_and_correct", fid, "confirm_to_reject")
+
+    def test_a_slip_not_yet_spoken_is_left_to_the_actor(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        d, label = actor.referee(_dec("confirm"),
+                                 _readback(f["slip"]["spoken"]),
+                                 _ref_hist(fid), _REF_PERSONA, set())
+        assert (d.move, label) == ("confirm", None)
+
+    def test_a_read_back_holding_both_values_is_left_to_the_actor(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        both = _readback("%s, or %s" % (f["spoken"], f["slip"]["spoken"]))
+        for move, key in (("confirm", actor.NONE_KEY),
+                          ("reject_and_correct", fid)):
+            d, label = actor.referee(_dec(move, key), both, _ref_hist(fid),
+                                     _REF_PERSONA, {fid})
+            assert (d.move, label) == (move, None)
+
+    def test_text_that_is_not_a_read_back_is_left_to_the_actor(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        d, label = actor.referee(_dec("reject_and_correct", fid),
+                                 "I have %s." % f["spoken"], _ref_hist(fid),
+                                 _REF_PERSONA, {fid})
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    def test_other_moves_are_never_touched(self, fid):
+        f = _REF_PERSONA.facts[fid]
+        for move in ("answer", "spell"):
+            d, label = actor.referee(_dec(move, fid), _readback(f["spoken"]),
+                                     _ref_hist(fid), _REF_PERSONA, {fid})
+            assert (d.move, d.field_key, label) == (move, fid, None)
+
+
+class TestRefereeReadbackUnits:
+    """The referee acts only on a heard window holding exactly ONE read-back;
+    two or more are ambiguous and left to the actor (bd ya4vi.3, I-90 run
+    20261120T232745Z turn 46: 97203 read back, re-asked, then 90210)."""
+
+    _ZIP = SimpleNamespace(facts={"z": {"value": "97203", "spoken": "9 7 2 0 3"}})
+    _SLIP = SimpleNamespace(facts={"z": {
+        "value": "97203", "spoken": "9 7 2 0 3",
+        "slip": {"value": "97477", "spoken": "9 7 4 7 7"}}})
+    V = "nine seven two zero three"
+    W = "nine zero two one zero"
+
+    # One phrase per branch of actor._READBACK (sub-alternatives expanded);
+    # test_cue_phrases_cover_every_readback_branch pins the coverage.
+    CUE_PHRASES = [
+        "Is that correct?", "Is that right?", "Is that accurate?",
+        "Is this correct?", "Is this right?",
+        "Did I get that right?", "Did I get it right?", "Did I get this right?",
+        "Did I have that right?", "Did I hear that right?", "Did I hear it right?",
+        "Did I hear this correctly?",
+        "Do I have that right?", "Have I got that right?",
+        "Did I catch that right?", "Please confirm.", "Please confirm, is that correct?",
+        "Can you confirm that is right?", "Could you confirm that?",
+        "To confirm, is that correct?", "Let me confirm, is that right?",
+        "Just to confirm, is that correct?", "Can you confirm?",
+        "Is that what you said?", "Am I right?", "Correct?", "Right?",
+    ]
+    # Read-back openers: a cue leading a statement of the value.
+    OPENERS = ["Just to confirm,", "To confirm,", "Let me confirm,"]
+
+    @staticmethod
+    def _branches(pattern):
+        body = pattern[1:-1] if pattern.startswith("(") else pattern
+        out, depth, cur = [], 0, ""
+        for ch in body:
+            depth += (ch == "(") - (ch == ")")
+            if ch == "|" and depth == 0:
+                out.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        return out + [cur]
+
+    def _r2c(self, text):
+        return actor.referee(_dec("reject_and_correct", "z"), text,
+                             _ref_hist("z"), self._ZIP, set())
+
+    def test_cue_phrases_cover_every_readback_branch(self):
+        import re as _re
+        for br in self._branches(actor._READBACK.pattern):
+            assert any(_re.search(br, ph, _re.I) for ph in self.CUE_PHRASES), br
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_value_then_cue_is_one_read_back(self, cue):
+        text = "Your ZIP is %s. %s" % (self.V, cue)
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_cue_then_value_is_one_read_back(self, cue):
+        text = "%s Your ZIP is %s." % (cue, self.V)
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_value_cue_value_cue_is_two_and_abstains(self, cue):
+        # the turn-46 shape, for every cue: right value first, wrong value last
+        text = ("Your ZIP is %s. %s What is your physical zip code? The "
+                "physical zip code is %s. %s" % (self.V, cue, self.W, cue))
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_cue_value_cue_value_is_two_and_abstains(self, cue):
+        # cue-first, twice: right value first, wrong value last
+        text = "%s Your ZIP is %s. %s Your ZIP is %s." % (cue, self.V, cue, self.W)
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    @pytest.mark.parametrize("opener", OPENERS)
+    @pytest.mark.parametrize("cue", CUE_PHRASES)
+    def test_an_opened_multi_value_read_back_is_one(self, opener, cue):
+        text = ("%s I have your ZIP as %s. And your city is Portland. %s"
+                % (opener, self.V, cue))
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
+
+    @pytest.mark.parametrize("text", [
+        "Your ZIP is nine seven two zero three? Is that right?",
+        "Is it nine seven two zero three? Please confirm.",
+        "The ZIP is nine seven two zero three. Is that correct? What is your city?",
+        "<no speech>{pause} You said nine seven two zero three. Is that correct?",
+        "The ZIP is nine seven two zero three, is that correct",
+        "Just to confirm, the ZIP is nine seven two zero three.",
+        "The ZIP is nine seven two zero three. Is that correct?<no speech>",
+    ])
+    def test_one_read_back_is_judged_whatever_its_shape(self, text):
+        assert actor.readback_units(text) == 1
+        assert self._r2c(text)[1] == "reject_to_confirm"
+
+    @pytest.mark.parametrize("text", [
+        # a question-led read-back closes on its own "?"
+        "Could you confirm that the ZIP is nine seven two zero three? What is "
+        "your zip? The ZIP is nine zero two one zero, is that correct?",
+        # a "?" glued to the next word still ends the sentence
+        "ZIP nine seven two zero three. Is that correct?The zip code is nine "
+        "zero two one zero. Is that correct?",
+    ])
+    def test_two_read_backs_abstain_whatever_their_shape(self, text):
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    @pytest.mark.parametrize("text", [
+        # two openers, neither closed
+        "To confirm, your ZIP is nine seven two zero three. Let me confirm, "
+        "your ZIP is nine zero two one zero.",
+        # two openers, one closing tag
+        "Let me confirm: ZIP nine seven two zero three. Just to confirm: ZIP "
+        "nine zero two one zero. Is that correct?",
+        # two tags inside one sentence
+        "Your ZIP is nine seven two zero three, is that correct, and the "
+        "physical ZIP is nine zero two one zero, is that correct?",
+        # two tags, no punctuation at all
+        "your ZIP is nine seven two zero three is that correct and the "
+        "physical ZIP is nine zero two one zero is that correct",
+    ])
+    def test_two_read_backs_in_one_run_still_abstain(self, text):
+        assert actor.readback_units(text) == 2
+        d, label = self._r2c(text)
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    def test_two_read_backs_also_block_a_slip_reject(self):
+        text = ("The ZIP is nine seven four seven seven. Is that correct? "
+                "I have updated it. The ZIP is nine seven two zero three now. "
+                "Is that correct?")
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert (d.move, label) == ("confirm", None)
+
+    def test_one_slip_read_back_still_rejects(self):
+        text = "The ZIP is nine seven four seven seven. Is that correct?"
+        d, label = actor.referee(_dec("confirm"), text, _ref_hist("z"),
+                                 self._SLIP, {"z"})
+        assert label == "confirm_to_reject"
+
+    def test_no_cue_is_zero_read_backs(self):
+        assert actor.readback_units("What is your ZIP code?") == 0
+        assert actor.readback_units(None) == 0
+        assert self._r2c("What is your ZIP code?")[1] is None
+
+
+class TestRefereeEdges:
+    def test_every_slipped_fact_is_refereeable_both_ways(self):
+        # the parametrized skips above must not quietly cover the whole set
+        short = [fid for fid, f in _REF_PERSONA.facts.items()
+                 if not (_ref_long_enough(f["spoken"])
+                         and _ref_long_enough(f["slip"]["spoken"]))]
+        assert len(short) < len(_REF_FIDS) // 4, short
+
+    def test_a_spelled_read_back_matches_the_name(self):
+        facts = {"n": {"value": "Corazon", "spoken": "Corazon",
+                       "spell": "C - O - R - A - Z - O - N"}}
+        p = SimpleNamespace(facts=facts)
+        d, label = actor.referee(
+            _dec("reject_and_correct", "n"),
+            "You said C, O, R, A, Z, O, N. Is that correct?", _ref_hist("n"),
+            p, set())
+        assert label == "reject_to_confirm"
+
+    def test_digit_words_match_a_digit_value(self):
+        facts = {"t": {"value": "24981736", "spoken": "2 4 9 8 1 7 3 6"}}
+        p = SimpleNamespace(facts=facts)
+        d, label = actor.referee(
+            _dec("reject_and_correct", "t"),
+            "Your number is two four nine eight one seven three six. "
+            "Is that correct?", _ref_hist("t"), p, set())
+        assert label == "reject_to_confirm"
+
+    @pytest.mark.parametrize("word", ["No", "Yes", "None", "AB"])
+    def test_a_generic_or_short_value_is_never_refereed(self, word):
+        facts = {"q": {"value": word.lower(), "spoken": word}}
+        p = SimpleNamespace(facts=facts)
+        d, label = actor.referee(_dec("reject_and_correct", "q"),
+                                 "You said %s. Is that correct?" % word,
+                                 _ref_hist("q"), p, set())
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    def test_a_short_true_value_still_blocks_a_slip_override(self):
+        # "Ana" vs slip "Alma": both in the read-back, so neither is acted on
+        facts = {"n": {"value": "Ana", "spoken": "Ana",
+                       "slip": {"value": "Alma", "spoken": "Alma"}}}
+        p = SimpleNamespace(facts=facts)
+        d, label = actor.referee(_dec("confirm"),
+                                 "You said Alma or A, N, A. Is that correct?",
+                                 _ref_hist("n"), p, {"n"})
+        assert (d.move, label) == ("confirm", None)
+
+    def test_a_value_inside_a_longer_word_does_not_match(self):
+        facts = {"s": {"value": "male", "spoken": "Male"}}
+        p = SimpleNamespace(facts=facts)
+        d, label = actor.referee(_dec("reject_and_correct", "s"),
+                                 "You said female. Is that correct?",
+                                 _ref_hist("s"), p, set())
+        assert (d.move, label) == ("reject_and_correct", None)
+
+    def test_a_confirm_with_no_answered_field_is_left_alone(self):
+        f = _REF_PERSONA.facts[_REF_FIDS[0]]
+        d, label = actor.referee(_dec("confirm"),
+                                 _readback(f["slip"]["spoken"]), [],
+                                 _REF_PERSONA, set(_REF_FIDS))
+        assert (d.move, label) == ("confirm", None)

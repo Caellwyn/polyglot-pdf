@@ -1085,6 +1085,36 @@ TURNS_CSV_COLUMNS = [
 
 # ---------------------------------------------------------------- audio cache
 
+# Backoff (seconds) between gTTS attempts. The free gTTS endpoint refuses a
+# connection now and then; one refusal must not kill a whole live session.
+_GTTS_RETRY_DELAYS_S = (2.0, 5.0, 15.0, 30.0)
+
+
+def _gtts_mp3(gtts_cls, text: str, gtts_lang: str,
+              sleep=time.sleep) -> io.BytesIO:
+    """Synthesize `text` with gTTS into an MP3 buffer, retrying transient
+    failures with _GTTS_RETRY_DELAYS_S backoff; raises the last error once
+    every attempt has failed."""
+    from gtts.tts import gTTSError
+
+    attempts = len(_GTTS_RETRY_DELAYS_S) + 1
+    for attempt in range(attempts):
+        buf = io.BytesIO()
+        try:
+            gtts_cls(text, lang=gtts_lang).write_to_fp(buf)
+        except gTTSError as exc:
+            if attempt == attempts - 1:
+                raise
+            delay = _GTTS_RETRY_DELAYS_S[attempt]
+            print(f"    [tts] gTTS failed ({exc}); retry "
+                  f"{attempt + 1}/{attempts - 1} in {delay:.0f}s", flush=True)
+            sleep(delay)
+            continue
+        buf.seek(0)
+        return buf
+    raise AssertionError("unreachable")
+
+
 def synth_cached(text: str, lang: str = "en") -> bytes:
     """gTTS -> mono PCM16 @ 16 kHz, disk-cached so committed runs are repeatable.
 
@@ -1104,9 +1134,7 @@ def synth_cached(text: str, lang: str = "en") -> bytes:
     # Harness --lang values are full_form_script phrase keys; a few differ from
     # gTTS's code ("zh" -> "zh-CN"). Cache key stays on the harness lang.
     gtts_lang = {"zh": "zh-CN"}.get(lang, lang)
-    buf = io.BytesIO()
-    gTTS(text, lang=gtts_lang).write_to_fp(buf)
-    buf.seek(0)
+    buf = _gtts_mp3(gTTS, text, gtts_lang)
     y, sr = sf.read(buf, dtype="float32")
     if y.ndim > 1:
         y = y.mean(axis=1)
@@ -3171,6 +3199,9 @@ class SimDriver:
                 text = ears_text(gens, self.ears)
                 decision = await self.actor.decide(text, self.history)
                 self._note_decision(turn_no, decision)
+                decision, referee = _sim_actor.referee(
+                    decision, text, self.history, self.persona,
+                    self.slips_spoken)
                 rendered, render_error = self._render(decision)
                 pcm = await asyncio.to_thread(self.tts.synth, rendered.text)
                 opened, waited = await self.wait_gate()
@@ -3193,6 +3224,7 @@ class SimDriver:
                 "move": rendered.move, "field_key": rendered.field_key,
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
                 "slip": bool(rendered.slip),
+                "referee": referee,
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
                 "heard_silence_closed": any(
@@ -3250,8 +3282,10 @@ def count_corrections(driver: "SimDriver", fill_accuracy: dict) -> dict:
     slips_spoken: fields whose first answer spoke the wrong (slip) value.
     slips_corrected: of those, fields that END holding the true value
     (correct against the strict key, i.e. NOT still holding the slip).
-    fields_uncorrected: the rest. reject_and_correct_turns: how many times the
-    actor actually rejected a read-back. All zero for a persona with no slips."""
+    fields_uncorrected: the rest. reject_and_correct_turns: how many injected
+    turns rejected a read-back -- the move AFTER the referee, so it counts
+    referee-made rejects and leaves out actor rejects the referee flipped
+    (see referee_overrides). All zero for a persona with no slips."""
     ok = {d["field_id"]: bool(d.get("ok"))
           for d in (fill_accuracy.get("detail") or [])}
     spoken = sorted(driver.slips_spoken)
@@ -3265,6 +3299,17 @@ def count_corrections(driver: "SimDriver", fill_accuracy: dict) -> dict:
         "reject_and_correct_turns": sum(
             1 for t in driver.user_turns if t["move"] == "reject_and_correct"),
     }
+
+
+def count_referee_overrides(driver: "SimDriver") -> dict:
+    """How often the deterministic referee overrode the actor's verdict on a
+    read-back (sim_user.actor.referee), per direction, over injected turns."""
+    out = {"reject_to_confirm": 0, "confirm_to_reject": 0}
+    for t in driver.user_turns:
+        label = t.get("referee")
+        if label in out:
+            out[label] += 1
+    return out
 
 
 def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
@@ -3292,6 +3337,7 @@ def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict
                                  for k in ("matched", "total", "accuracy")},
         "off_sheet_values": count_off_sheet(persona, driver.user_turns),
         "corrections": count_corrections(driver, fill_accuracy),
+        "referee_overrides": count_referee_overrides(driver),
         "gate_violations": driver.gate_violations,
         "gate_timeouts": driver.gate_timeouts,
         # model-defect metrics: generations the recorder had to close because
