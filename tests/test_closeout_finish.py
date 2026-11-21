@@ -247,6 +247,8 @@ class TestOpenAndClose:
 class TestRebaseConflict:
     def test_aborts_and_signals(self):
         rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""),
+            "ls-remote": (2, "", ""),
             "pull --rebase": (1, "CONFLICT (content): journal.md", ""),
         })
         job = _job(rec)
@@ -258,6 +260,8 @@ class TestRebaseConflict:
     def test_main_maps_to_exit_4(self, monkeypatch):
         rec = RunRecorder(responses={
             "rev-parse --abbrev-ref": (0, "feat/x", ""),
+            "--is-ancestor": (1, "", ""),
+            "ls-remote": (2, "", ""),
             "pull --rebase": (1, "CONFLICT", ""),
         })
         monkeypatch.setattr(cf, "_run", rec)
@@ -269,6 +273,105 @@ class TestRebaseConflict:
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
                       "--pr-title", "t", "--pr-body-file", "f"])
         assert rc == cf.EXIT_REBASE_CONFLICT
+
+
+# --------------------------------------------------------------------------- #
+# Pre-push sync never rewrites pushed commits (bd polyglot-pdf-k914j)
+# --------------------------------------------------------------------------- #
+_PR_OK = {"pr create": (0, "https://github.com/o/r/pull/42", "")}
+
+
+def _sync_calls(rec):
+    return [j for j in rec.joined()
+            if "pull --rebase" in j or " merge --no-edit " in j]
+
+
+class TestPushSafeSync:
+    def test_branch_already_containing_base_is_not_touched(self):
+        # A pushed branch updated with `git merge origin/dev`: the base is an
+        # ancestor of HEAD, so neither a rebase nor a merge runs.
+        rec = RunRecorder(responses={"--is-ancestor": (0, "", ""), **_PR_OK})
+        assert _job(rec).run() == cf.EXIT_OK
+        assert _sync_calls(rec) == []
+        assert not any("ls-remote" in j for j in rec.joined())
+        assert any(" push -u origin feat/x" in j for j in rec.joined())
+
+    def test_pushed_branch_behind_base_merges_instead_of_rebasing(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (0, "abc refs/heads/feat/x", ""),
+            **_PR_OK})
+        assert _job(rec).run() == cf.EXIT_OK
+        assert _sync_calls(rec) == [
+            "git -C {} merge --no-edit origin/dev".format(FAKE_WT)]
+
+    def test_unpushed_branch_behind_base_rebases(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (2, "", ""), **_PR_OK})
+        assert _job(rec).run() == cf.EXIT_OK
+        assert _sync_calls(rec) == [
+            "git -C {} pull --rebase origin dev".format(FAKE_WT)]
+
+    def test_merge_conflict_aborts_the_merge(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (0, "abc", ""),
+            "merge --no-edit": (1, "CONFLICT", "")})
+        with pytest.raises(cf.RebaseConflict):
+            _job(rec).run()
+        assert any("merge --abort" in j for j in rec.joined())
+        assert not any("rebase --abort" in j for j in rec.joined())
+        assert not any(" push " in j for j in rec.joined())
+
+    def test_unknown_remote_state_fails_closed(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (128, "", "network down")})
+        with pytest.raises(cf.CloseoutError, match="refusing to rebase"):
+            _job(rec).run()
+        assert _sync_calls(rec) == []
+        assert not any(" push " in j for j in rec.joined())
+
+    def test_remote_lookup_uses_the_full_branch_ref(self):
+        rec = RunRecorder(responses={
+            "--is-ancestor": (1, "", ""), "ls-remote": (2, "", ""), **_PR_OK})
+        _job(rec).run()
+        lr = [c for c in rec.calls if "ls-remote" in c][0]
+        assert lr[-1] == "refs/heads/feat/x"
+
+    def test_ancestor_check_uses_the_remote_base_and_head(self):
+        rec = RunRecorder(responses={"--is-ancestor": (0, "", ""), **_PR_OK})
+        _job(rec, base="origin/dev").run()
+        anc = [c for c in rec.calls if "--is-ancestor" in c][0]
+        assert anc[-2:] == ["origin/dev", "HEAD"]
+
+
+# --------------------------------------------------------------------------- #
+# --bead a,b splits before any side effect (bd polyglot-pdf-k914j)
+# --------------------------------------------------------------------------- #
+class TestBeadCommaSplit:
+    def test_split_bead_args(self):
+        assert cf.split_bead_args(["a,b", " c ", "a", "d,,"]) == ["a", "b", "c", "d"]
+
+    def test_main_closes_each_comma_bead_separately(self, monkeypatch):
+        rec = RunRecorder(responses={
+            "rev-parse --abbrev-ref": (0, "feat/x", ""),
+            "--is-ancestor": (0, "", ""), **_PR_OK})
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.swarm_config, "repo", lambda: "owner/repo")
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11,proj-bb22", "--branch", "feat/x",
+                      "--pr-title", "t", "--pr-body-file", "f"])
+        assert rc == cf.EXIT_OK
+        closes = [c for c in rec.calls if "bd_safe.py" in " ".join(c)]
+        assert [c[c.index("close") + 1] for c in closes] == ["proj-aa11", "proj-bb22"]
+
+    def test_main_rejects_an_all_comma_bead_before_side_effects(self, monkeypatch):
+        rec = RunRecorder()
+        monkeypatch.setattr(cf, "_run", rec)
+        rc = cf.main(["--bead", ",", "--branch", "feat/x",
+                      "--pr-title", "t", "--pr-body-file", "f"])
+        assert rc == cf.EXIT_PRECONDITION
+        assert rec.calls == []
 
 
 # --------------------------------------------------------------------------- #

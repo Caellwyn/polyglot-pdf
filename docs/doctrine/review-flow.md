@@ -271,7 +271,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   file". The subagent is read directly -- there is no bot watcher and no re-trigger
   comment.
 - **Resolve mechanical merge conflicts inline; escalate only structural ones.**
-  When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
+  When the pre-push sync (a merge for an already-pushed branch, a rebase for a
+  never-pushed one) hits a conflict, the orchestrator decides it -- it is not
   an automatic escalation. **Mechanical / ordering** conflicts (append-only journal
   entries, changelog interleaving, independent additions to the same
   list/table) are resolved inline by **keeping both sides** in a sensible order,
@@ -279,7 +280,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   (STOP and ask) only on genuine structural incompatibility** -- the two sides
   change the same logic/contract incompatibly so keeping both is wrong and
   choosing is a design call; ambiguous counts as structural. On escalation, abort
-  the rebase first so the branch is left clean. Full procedure + the inline-vs-
+  the sync first (`git merge --abort` or `git rebase --abort`) so the branch is
+  left clean. Full procedure + the inline-vs-
   escalate boundary: the closeout skill's "Merge-conflict resolution" subsection
   under Step 5.6 (bd polyglot-pdf-hrn.6).
 - **Merge is autonomous for routine low-risk PRs, the maintainer's for

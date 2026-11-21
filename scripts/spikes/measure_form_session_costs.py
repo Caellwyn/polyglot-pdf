@@ -564,6 +564,24 @@ def _assert_expected_canon_matches_schema(schema_fields: dict, expected: dict) -
             "canon silently mis-scores fill accuracy:\n  " + "\n  ".join(problems))
 
 
+def value_matches_expected(written, exp, is_checkbox: bool = False) -> bool:
+    """The strict key's comparison for one field (exp is not None).
+
+    "" = correct to leave blank; for a CHECKBOX decline an explicit false-ish
+    write is the same correct end state (the box is unchecked), and only a
+    truthy write is wrong (E1 finding: the model sometimes CHECKS a declined
+    checkbox). A list/tuple = any-of: fields with several equally-correct
+    renderings (a country written "United States" OR "USA"). Else exact,
+    through _canon_value."""
+    if exp == "":
+        canon = _canon_value(written)
+        return canon == "" or (is_checkbox
+                               and canon in ("false", "unchecked", "no", "0"))
+    if isinstance(exp, (list, tuple)):
+        return _canon_value(written) in {_canon_value(e) for e in exp}
+    return _canon_value(written) == _canon_value(exp)
+
+
 def score_fill_accuracy(client, plan, expected) -> dict:
     """Per-field fill correctness for one arm (bd jnjj.7 / G3).
 
@@ -582,23 +600,12 @@ def score_fill_accuracy(client, plan, expected) -> dict:
         if exp is None:
             ok = written not in (None, "")  # lenient: unknown field, count as filled
             scored = "lenient"
-        elif exp == "":
-            canon = _canon_value(written)
-            # Correct to leave blank. For a CHECKBOX decline, an explicit
-            # false-ish write is the same correct end state (the box is
-            # unchecked); only a truthy write is a wrong answer (E1 finding,
-            # bd filed: the model sometimes CHECKS a declined checkbox).
-            is_checkbox = (client.schema_fields.get(fid) or {}).get("type") == "checkbox"
-            ok = canon == "" or (is_checkbox and canon in ("false", "unchecked", "no", "0"))
-            scored = "expect-empty"
-        elif isinstance(exp, (list, tuple)):
-            # Any-of: fields with several equally-correct renderings (e.g. a text
-            # country field the model may write as "United States" OR "USA").
-            ok = _canon_value(written) in {_canon_value(e) for e in exp}
-            scored = "any-of"
         else:
-            ok = _canon_value(written) == _canon_value(exp)
-            scored = "exact"
+            is_checkbox = (client.schema_fields.get(fid) or {}).get("type") == "checkbox"
+            ok = value_matches_expected(written, exp, is_checkbox)
+            scored = ("expect-empty" if exp == ""
+                      else "any-of" if isinstance(exp, (list, tuple))
+                      else "exact")
         matched += 1 if ok else 0
         detail.append({"field_id": fid, "expected": exp, "written": written,
                        "ok": ok, "scored": scored})
@@ -1145,6 +1152,14 @@ def synth_cached(text: str, lang: str = "en") -> bytes:
     pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
     cached.write_bytes(pcm)
     return pcm
+
+
+async def synth_off_loop(text: str, lang: str = "en") -> bytes:
+    """synth_cached, run in a worker thread. A cache miss calls gTTS, whose
+    retry backoff sleeps up to 52 s in all; on the event loop that would
+    freeze a live session's receive loop and keepalive (bd
+    polyglot-pdf-qgw48). Every async caller goes through here."""
+    return await asyncio.to_thread(synth_cached, text, lang)
 
 
 def _pcm_chunks(pcm: bytes) -> list[bytes]:
@@ -2960,8 +2975,12 @@ class SimDriver:
                  stt_fn, ears: str = "transcript",
                  max_user_turns: int = SIM_DEFAULT_MAX_USER_TURNS,
                  timing: SimTiming | None = None, rng=None,
-                 on_turn_done=None, maintenance=None, clock=time.monotonic):
+                 on_turn_done=None, maintenance=None, clock=time.monotonic,
+                 expected: dict | None = None):
         self.persona = persona
+        # The run's strict key (SCHEMAS[...]["expected"] plus any event
+        # overrides): what _stored_is_true judges a stored value against.
+        self.expected = dict(expected or {})
         self.actor = actor
         self.rec = recorder
         self.client = client
@@ -3007,6 +3026,21 @@ class SimDriver:
             if f.get("spellable") and f.get("spell")]
 
     # -- state ----------------------------------------------------------
+    def _stored_is_true(self, fid) -> bool:
+        """The field's stored client value is right by the run's strict key
+        (value_matches_expected, the scorer's own comparison, so an any-of
+        field such as "USA" for "United States" counts). A field the key
+        does not list falls back to the persona's true value."""
+        f = self.persona.facts.get(fid)
+        if f is None:
+            return False
+        stored = (self.client.state.get(fid) or {}).get("value")
+        if stored is None:
+            return False
+        exp = self.expected.get(fid)
+        return value_matches_expected(
+            stored, f.get("value") if exp is None else exp)
+
     def all_done(self) -> bool:
         state = self.client.state
         for fid in self.persona.facts:
@@ -3199,9 +3233,21 @@ class SimDriver:
                 text = ears_text(gens, self.ears)
                 decision = await self.actor.decide(text, self.history)
                 self._note_decision(turn_no, decision)
+                actor_decision = decision
                 decision, referee = _sim_actor.referee(
                     decision, text, self.history, self.persona,
                     self.slips_spoken)
+                referee_veto = None
+                if (referee == "reject_to_confirm"
+                        and not self._stored_is_true(
+                            actor_decision.field_key)):
+                    # The read-back holds the true value, but so might a
+                    # wrong one: extra tokens ("Ana Lucia" for "Ana") or
+                    # another field's identical value in a summary. Confirm
+                    # only when the value that would be confirmed is right
+                    # (bd polyglot-pdf-ya4vi.4); otherwise the reject stands.
+                    decision, referee = actor_decision, None
+                    referee_veto = "stored_value_wrong"
                 rendered, render_error = self._render(decision)
                 pcm = await asyncio.to_thread(self.tts.synth, rendered.text)
                 opened, waited = await self.wait_gate()
@@ -3224,7 +3270,12 @@ class SimDriver:
                 "move": rendered.move, "field_key": rendered.field_key,
                 "text": rendered.text, "values_spoken": rendered.values_spoken,
                 "slip": bool(rendered.slip),
-                "referee": referee,
+                "referee": referee, "referee_veto": referee_veto,
+                # The actor's own verdict, before the referee: on an override
+                # this is the only record of which field the actor rejected
+                # (bd polyglot-pdf-my0xl).
+                "actor_move": actor_decision.move,
+                "actor_field_key": actor_decision.field_key,
                 "ears": self.ears, "ears_text": text,
                 "generations_heard": [g["index"] for g in gens],
                 "heard_silence_closed": any(
@@ -3310,6 +3361,20 @@ def count_referee_overrides(driver: "SimDriver") -> dict:
         if label in out:
             out[label] += 1
     return out
+
+
+# The sim_user keys copied into meta.json. referee_overrides rides along with
+# corrections: the referee shapes the reject count, so a reader of one needs
+# the other (bd polyglot-pdf-my0xl).
+META_SIM_USER_KEYS = (
+    "persona_id", "kit_sha256", "filled_confirmed", "off_sheet_values",
+    "corrections", "referee_overrides", "gate_violations", "user_turns",
+    "stalls", "stop_reason", "aborted")
+
+
+def project_sim_meta(sim_summary: dict) -> dict:
+    """The meta.json projection of build_sim_summary's result."""
+    return {k: sim_summary[k] for k in META_SIM_USER_KEYS}
 
 
 def build_sim_summary(*, driver: SimDriver, args_view: dict, fill_accuracy: dict,
@@ -3767,7 +3832,7 @@ async def run(args) -> int:
             return 0
     else:
         for u in sorted(utterances):
-            synth_cached(u, lang=getattr(args, "lang", "en"))
+            await synth_off_loop(u, lang=getattr(args, "lang", "en"))
         print(f"audio cache ready: {len(utterances)} utterances "
               f"({AUDIO_CACHE})")
         if args.synth_only:
@@ -4289,7 +4354,7 @@ async def run(args) -> int:
 
         async def speak(text: str, label: str):
             nonlocal last_total
-            pcm = synth_cached(text, lang=getattr(args, "lang", "en"))
+            pcm = await synth_off_loop(text, lang=getattr(args, "lang", "en"))
             client.first_audio_at = None
             await service.send_activity_start()
             for chunk in _pcm_chunks(pcm):
@@ -4769,7 +4834,8 @@ async def run(args) -> int:
                 max_user_turns=getattr(args, "max_user_turns",
                                        SIM_DEFAULT_MAX_USER_TURNS),
                 timing=sim_timing, rng=random.Random(0),
-                on_turn_done=_sim_turn_done, maintenance=_sim_maintenance)
+                on_turn_done=_sim_turn_done, maintenance=_sim_maintenance,
+                expected=expected_tbl)
             await sim_driver.run()
             if sim_driver.aborted:
                 print(f"[sim-abort] {sim_driver.abort_message}", flush=True)
@@ -5314,10 +5380,7 @@ async def run(args) -> int:
                        "max_user_turns": args.max_user_turns},
             fill_accuracy=meta["fill_accuracy"],
             headline=summary["headline"], kit_hash=kit_hash, divergence=_div)
-        meta["sim_user"] = {k: summary["sim_user"][k] for k in (
-            "persona_id", "kit_sha256", "filled_confirmed",
-            "off_sheet_values", "corrections", "gate_violations", "user_turns", "stalls",
-            "stop_reason", "aborted")}
+        meta["sim_user"] = project_sim_meta(summary["sim_user"])
         sim_records_path = out_dir / "sim_user" / f"{base_name}.sim-user.json"
         write_sim_records(
             sim_records_path,

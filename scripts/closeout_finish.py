@@ -4,7 +4,7 @@ What this is
 ------------
 The /closeout skill's Steps 5-6 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
-command: commit the staged closeout work, pre-push rebase, push, open the PR,
+command: commit the staged closeout work, pre-push sync, push, open the PR,
 and close the bead(s). Every one of those is **deterministic mechanics** -- no
 judgment -- so this script collapses the mechanical subset into ONE process where
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
@@ -34,7 +34,7 @@ What it does NOT do (the judgment boundary)
 -------------------------------------------
 - run the review loop or triage fresh-eyes / outer-review findings (both reviews
   already cleared BEFORE this script runs -- SKILL Steps 5.5 + 5.6);
-- resolve a merge conflict (it aborts the rebase and exits REBASE-CONFLICT so
+- resolve a merge conflict (it aborts the merge/rebase and exits REBASE-CONFLICT so
   the orchestrator decides mechanical-vs-structural -- SKILL Step 5.6's
   "Merge-conflict resolution");
 - write journal prose, or ``git add`` (staging is the orchestrator's content
@@ -69,9 +69,9 @@ Exit codes
      after the commit, root resolution failed).
   2  a precondition the script can mechanically check is unmet (a missing PR-open
      arg; the branch arg doesn't match the checked-out branch).
-  4  REBASE-CONFLICT -- the pre-push rebase hit a conflict; the script aborted it
-     (branch left clean) and hands the conflict back to the orchestrator
-     (resolution is judgment).
+  4  REBASE-CONFLICT -- the pre-push sync (merge or rebase) hit a conflict; the
+     script aborted it (branch left clean) and hands the conflict back to the
+     orchestrator (resolution is judgment).
 
 Usage
 -----
@@ -127,7 +127,7 @@ class CloseoutError(Exception):
 
 
 class RebaseConflict(Exception):
-    """The pre-push rebase hit a conflict -> EXIT_REBASE_CONFLICT."""
+    """The pre-push sync (merge or rebase) hit a conflict -> EXIT_REBASE_CONFLICT."""
 
 
 # --------------------------------------------------------------------------- #
@@ -196,19 +196,52 @@ class Closeout:
             )
 
     def rebase(self) -> None:
-        """Pre-push rebase on the integration branch; abort+signal on conflict."""
+        """Bring the branch up to date with the base before the push, without
+        rewriting commits that are already pushed (bd polyglot-pdf-k914j):
+          - the base is already an ancestor of HEAD -> nothing to do (a pushed
+            branch updated with `git merge origin/<base>` lands here);
+          - the branch already exists on the remote -> MERGE the base in, so the
+            push stays a fast-forward (a rebase would linearize the pushed
+            commits and the push would be rejected; force-push is barred);
+          - otherwise (never pushed) -> rebase onto the base.
+        A conflict in either aborts it and raises RebaseConflict."""
         _run(["git", "-C", self.wt, "fetch", "origin"])
         name = _base_branch_name(self.args.base)
-        proc = _run(["git", "-C", self.wt, "pull", "--rebase", "origin", name],
-                    check=False)
+        base_ref = "origin/{}".format(name)
+        anc = _run(["git", "-C", self.wt, "merge-base", "--is-ancestor",
+                    base_ref, "HEAD"], check=False)
+        if anc.returncode == 0:
+            return
+        # The full ref: a bare name is a tail pattern, so "feat/x" would also
+        # match "other/feat/x".
+        remote = _run(["git", "-C", self.wt, "ls-remote", "--exit-code",
+                       "origin", "refs/heads/{}".format(self.args.branch)],
+                      check=False)
+        if remote.returncode == 0:
+            verb = "merge"
+            proc = _run(["git", "-C", self.wt, "merge", "--no-edit", base_ref],
+                        check=False)
+        elif remote.returncode == 2:   # --exit-code: no such remote branch
+            verb = "rebase"
+            proc = _run(["git", "-C", self.wt, "pull", "--rebase", "origin", name],
+                        check=False)
+        else:
+            # Fail closed: not knowing whether the branch is pushed means not
+            # knowing whether a rebase is safe.
+            raise CloseoutError(
+                "could not tell whether {} exists on origin (git ls-remote exit "
+                "{}); refusing to rebase blindly.\n{}".format(
+                    self.args.branch, remote.returncode,
+                    (remote.stderr or remote.stdout or "").strip()))
         if proc.returncode != 0:
             # Leave the branch clean for the orchestrator to resolve by hand.
-            _run(["git", "-C", self.wt, "rebase", "--abort"], check=False)
+            _run(["git", "-C", self.wt, verb, "--abort"], check=False)
             raise RebaseConflict(
-                "rebase onto {} conflicted; aborted and left the branch clean. "
+                "{} of {} conflicted; aborted and left the branch clean. "
                 "Resolve per SKILL Step 5.6's Merge-conflict resolution "
                 "(mechanical inline / structural "
-                "escalate).\n{}".format(name, (proc.stdout or proc.stderr or "").strip())
+                "escalate).\n{}".format(verb, base_ref,
+                                        (proc.stdout or proc.stderr or "").strip())
             )
 
     def push(self) -> None:
@@ -269,8 +302,10 @@ class Closeout:
                 self.commit))
         name = _base_branch_name(self.args.base)
         plan.append((
-            'git -C "{}" fetch origin && git -C "{}" pull --rebase origin {}'.format(
-                self.wt, self.wt, name), self.rebase))
+            'git -C "{}" fetch origin; then, unless origin/{} is already in HEAD: '
+            'git merge origin/{} if {} is on origin, else git pull --rebase '
+            'origin {}'.format(self.wt, name, name, self.args.branch, name),
+            self.rebase))
         plan.append(('git -C "{}" push -u origin {}'.format(self.wt, self.args.branch),
                      self.push))
         # Both review layers already cleared locally (SKILL Steps 5.5 + 5.6), so
@@ -359,8 +394,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def split_bead_args(raw: list[str]) -> list[str]:
+    """Each --bead value split on commas, stripped, empties and repeats
+    dropped, order kept."""
+    out: list[str] = []
+    for item in raw:
+        for b in item.split(","):
+            b = b.strip()
+            if b and b not in out:
+                out.append(b)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # "--bead a,b" would reach bd close as ONE id and fail only AFTER the PR
+    # opened (bd polyglot-pdf-k914j): split commas up front.
+    args.bead = split_bead_args(args.bead)
+    if not args.bead:
+        sys.stderr.write("closeout_finish.py: --bead is empty\n")
+        return EXIT_PRECONDITION
 
     # --close-only implies --close-beads (it exists to close, nothing else).
     if args.close_only:
