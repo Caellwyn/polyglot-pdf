@@ -118,8 +118,8 @@ script output, and make **no further calls**:
 
 - prep `RESULT: ATTENTION` or `PREP-ERROR`;
 - `closeout_finish.py` exits **4** (REBASE-CONFLICT) -- conflict resolution is
-  judgment (mechanical-vs-structural); the script already aborted the rebase and
-  left the branch clean, so just report it;
+  judgment (mechanical-vs-structural); the script already aborted the sync (a
+  merge or a rebase) and left the branch clean, so just report it;
 - `closeout_finish.py` exits **1** (tooling failure) or **2** (precondition: a
   missing PR flag, or a branch mismatch);
 - any required brief input is missing or ambiguous;
