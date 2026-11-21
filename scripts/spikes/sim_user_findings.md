@@ -143,7 +143,8 @@ checking every model generation's audio against its transcript.
 
 - **GoAway arrives about every 10 minutes of continuous session.** There
   were 15 in all: 0-2 per W-7 and 3 per I-90. W-7 happy run 1 ran 1072 s
-  with none, because its 5 unannounced drops kept restarting the session.
+  with none; it also had 5 unannounced drops, each of which started a new
+  session (the summary does not link the two).
 - **Each GoAway reconnect was clean.** Downtime was 3.1-5.3 s, and every run
   completed after up to 3 GoAway reconnects.
 - **There were 8 unannounced drops.** Two runs had extra reconnects after an
@@ -153,8 +154,8 @@ checking every model generation's audio against its transcript.
   recovered and completed.
 - **There were 0 close-1011 errors.**
 - **The turn gate timed out twice in each of the two runs with drops** (W-7
-  happy run 1 and I-90 run 3): the sim user waited for a reply that the
-  dropped session never sent, then moved on. There were no gate timeouts in
+  happy run 1 and I-90 run 3), and both runs also recorded 2 stalls. The
+  timeouts coincide with the drops, but no recorded field links them. There were no gate timeouts in
   the other 7 runs, and no gate violations in any.
 
 ## Verdicts on the open 3.8 beads that came from the scripted runs
@@ -221,7 +222,7 @@ up; closing a bead is its own decision.
 | Run | Why discarded |
 |---|---|
 | `costs_w7_..._20261120T193947Z` (W-7 self-correcting pilot) | Pre-referee; the actor confirmed a slip ("Lucy"), so 21/22 was the actor's error. |
-| `costs_i90-v2_..._20261120T200124Z` (I-90 pilot) | Pre-referee; the actor rejected a correct spelling 20 times and the run hit the turn cap at 54/57. |
+| `costs_i90-v2_..._20261120T200124Z` (I-90 pilot) | Pre-referee; the actor rejected a correct spelling 20 times and the run hit the turn cap at 54/57 confirmed (51/57 correct). |
 | two W-7 self-correcting runs at 21:23Z and 21:28Z | Crashed on a transient gTTS connection refusal at turn ~13 and ~27; no summary written. |
 
 ## Caveats
