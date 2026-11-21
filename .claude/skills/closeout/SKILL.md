@@ -105,7 +105,7 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
   which beads close**; the merge ping; any escalation.
 - **DELEGABLE (mechanics):** running `closeout_prep.py`; writing the
   already-composed journal entry to disk; and running **`scripts/closeout_finish.py`**
-  -- the one-shot glue that commits the staged work, rebases, pushes, opens the PR,
+  -- the one-shot glue that commits the staged work, syncs with the base, pushes, opens the PR,
   and closes the bead(s) -- ALL in one run, because both reviews already cleared
   before it runs. It resolves the `$R`/`$WT`/`$PY` worktree
   traps **internally**, so neither you nor the subagent re-derives them.
@@ -627,7 +627,12 @@ arrange them. This is the common case:
 
 After an inline resolution, **re-read the merged region** to confirm both sides'
 intent survived (an append-both that accidentally drops one side is the failure
-mode), then `git add` + `git rebase --continue` and proceed with the push.
+mode), then `git add` and finish the sync the same way the script ran it: after
+a MERGE (an already-pushed branch) `git commit --no-edit`; after a REBASE (a
+never-pushed branch) `git rebase --continue`. Then proceed with the push. To
+reproduce an aborted sync by hand, use the same choice as the script -- never
+`pull --rebase` a branch that is already on origin (it makes the push
+non-fast-forward, and force-push is barred).
 
 **Escalate (STOP and ask the maintainer)** ONLY on a **genuine structural
 incompatibility** -- where keeping both sides is *not* correct and choosing
@@ -640,7 +645,8 @@ between them is a real decision:
 - you **cannot tell** whether both intents survive a merge -- ambiguous counts as
   structural (same safe-default spirit as "ambiguous = blocker" above).
 
-When you escalate a structural conflict, **abort the rebase** (`git rebase --abort`)
+When you escalate a structural conflict, **abort the sync** (`git merge --abort`
+after a merge, `git rebase --abort` after a rebase)
 so the branch is left clean, not half-merged, then ping the maintainer with the
 conflicting hunks and what each side was trying to do. Per the hard-stop rule,
 first finish anything that does *not* depend on the resolution. (Verification of
@@ -653,7 +659,7 @@ Keep the working tree clean between rounds (`git status --short`). Both loops ru
 
 Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 `NO-GAPS`), or the review was skipped per the Step 5.6 gate. So the PR opens with review already done: **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (the two-call watcher pattern is gone -- there was no bot to wait on). Then make the merge decision.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push sync with `origin/dev` (a merge for an already-pushed branch, a rebase for a new one, nothing if it already contains dev) may hit a conflict -- resolve it per "Merge-conflict resolution" above. Pass `--bead` once per bead (a comma list is also split). The equivalent raw commands, if opening BY HAND:
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: sync with the base, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push sync with `origin/dev` (a merge for an already-pushed branch, a rebase for a new one, nothing if it already contains dev) may hit a conflict -- resolve it per "Merge-conflict resolution" above. Pass `--bead` once per bead (a comma list is also split). The equivalent raw commands, if opening BY HAND:
    ```bash
    git -C "<WT>" fetch origin
    # skip if `git -C "<WT>" merge-base --is-ancestor origin/dev HEAD` succeeds;
