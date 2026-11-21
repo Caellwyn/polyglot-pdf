@@ -82,24 +82,29 @@ def callback_handler(mock_websocket, mock_coordinator):
 class TestNameSpellbackTool:
     """The tool handler's response variants. Each message is checked with an
     ALLOWLIST of the sanctioned remedy (never a banned-word blacklist) plus the
-    one invariant every variant must carry: the model is told not to spell."""
+    invariant: the model is told not to spell. delivered is the exception --
+    it carries no message at all and is pinned exactly (bd r3ham.23)."""
 
     @pytest.mark.asyncio
-    async def test_delivered_instructs_confirm_without_respelling(
+    async def test_delivered_is_a_bare_status_with_no_prose(
         self, callback_handler, mock_coordinator
     ):
         response = await callback_handler.on_tool_call(
             tool_name="name_spellback", arguments={}
         )
 
-        assert response["success"] is True
-        assert response["status"] == "delivered"
         # bd 44ywm: the clip carries the whole verification question, so the
-        # sanctioned behavior is SILENCE -- wait for the user's answer.
-        assert "stay silent and listen" in response["message"]
-        assert "Do NOT ask again" in response["message"]
-        # The one invariant: the model must not repeat/spell the value itself.
-        assert "repeat or spell the value" in response["message"]
+        # sanctioned behavior is SILENCE. bd r3ham.23: the response is a bare
+        # status -- 3.8 read the old prose message aloud -- so it is pinned
+        # EXACTLY: no "message", and no value a model could say as a sentence.
+        assert response == {
+            "success": True,
+            "status": "delivered",
+            "user_has_been_asked": True,
+            "awaiting": "user_yes_or_no",
+        }
+        assert not any(isinstance(v, str) and " " in v
+                       for v in response.values())
         mock_coordinator.request_spellback.assert_awaited_once_with()
 
     @pytest.mark.asyncio
@@ -309,6 +314,13 @@ class TestSpellbackSiAddendum:
         # 3.8 benchmark's voice read back an earlier phone number). The old
         # letters-only exemption must be gone, not merely outvoted.
         _assert_numbers_route_to_the_clip(si)
+        # bd r3ham.23: the delivered response carries no prose, so the SI
+        # alone says it is never spoken -- scoped to name_spellback, because
+        # other tool responses (the stored-value echo, field guidance) ARE
+        # meant to be read back.
+        assert ("The name_spellback response is a status for you, never "
+                "text to say: do not read it aloud.") in si
+        assert "A tool response is a status" not in si
 
     def test_flag_on_appends_addendum_in_legacy_si_mode_too(self):
         """The tool declaration gates only on SPELLBACK_TOOL_ENABLED, not on

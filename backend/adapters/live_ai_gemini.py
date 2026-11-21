@@ -244,8 +244,8 @@ def derive_compression_window(
     the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
     and the session's tool list (7 declarations -- continuous mode drops
     switch_section, and name_spellback is appended by default since bd
-    polyglot-pdf-apkdl), the CURRENT default DTI form derives a 5887 floor ->
-    6486 window -> 7986 trigger, above the API minimum 5000. Those three are
+    polyglot-pdf-apkdl), the CURRENT default DTI form derives a 5910 floor ->
+    6509 window -> 8009 trigger, above the API minimum 5000. Those three are
     MEASURED (2026-11-21, by executing this function on the shipped config),
     not estimated -- RE-EXECUTE rather than trusting them, since they move
     whenever the SI or the tool list does (they dropped

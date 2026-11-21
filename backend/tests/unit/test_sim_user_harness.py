@@ -1183,6 +1183,11 @@ class FakeAdapter:
         rec = self.hub.services[0].client.gen_recorder
         self.hub.pending_during_tool.append(
             None if rec is None else rec.pending_tools)
+        fid = (arguments or {}).get("field_id")
+        if name == "update_form_fields" and fid:
+            # the real handler's echo shape (callback_handler stored_values)
+            return {"status": "ok", "success": True, "applied_fields": [fid],
+                    "stored_values": {fid: arguments["value"]}}
         return {"status": "ok"}
 
     def set_session_context(self, **kw):
@@ -1240,7 +1245,11 @@ class FakeService:
     async def _respond(self, out):
         c, ad = self.client, self.adapter
         await asyncio.sleep(0.01)
-        if out.get("fill") or out.get("confirm"):
+        if out.get("fill"):
+            fid, val = out["fill"]
+            await ad._on_tool_call("update_form_fields",
+                                   {"field_id": fid, "value": val})
+        elif out.get("confirm"):
             await ad._on_tool_call("update_form_fields", {})
         if out.get("fill"):
             fid, val = out["fill"]
@@ -1389,6 +1398,40 @@ class TestRunLevelEndToEnd:
         summary, _ = read_one(sim_env.tmp / "out", "*.summary.json")
         assert summary["sim_user"]["cost"]["tts_usd"] == 0.0
         assert summary["sim_user"]["tts"]["kind"] == "gtts"
+
+    def test_committed_record_logs_every_field_write(self, sim_env):
+        """bd polyglot-pdf-r3ham.24: each generation records what the model
+        SENT to update_form_fields and what was STORED, so a wrong confirmed
+        value can be traced to the write that made it."""
+        run_args(parse(sim_env))
+        doc, _ = read_one(sim_env.tmp / "out" / "sim_user", "*.sim-user.json")
+        writes = [w for g in doc["generations"] for w in g["field_writes"]]
+        # the fake's confirm step sends an argument-less call; it is
+        # recorded too (field_id None), and set aside here
+        assert any(w["field_id"] is None for w in writes)
+        writes = [w for w in writes if w["field_id"] is not None]
+        by_fid = {}
+        for w in writes:
+            by_fid.setdefault(w["field_id"], []).append(w)
+        assert set(by_fid) == set(FIDS)
+        for fid, ws in by_fid.items():
+            last = ws[-1]
+            assert last["sent"] == PERSONA.facts[fid]["value"]
+            assert last["success"] is True
+            assert last["applied_fields"] == [fid]
+            assert last["stored_values"] == {fid: PERSONA.facts[fid]["value"]}
+        # writes sit on the generation that carried the update_form_fields call
+        for g in doc["generations"]:
+            if g["field_writes"]:
+                assert "update_form_fields" in g["tool_calls"]
+
+    def test_field_write_record_of_a_rejected_write(self):
+        rec = mfsc.field_write_record(
+            {"field_id": "zip", "value": "90210"},
+            {"success": False, "unknown_fields": ["zip"]})
+        assert rec == {"field_id": "zip", "sent": "90210", "success": False,
+                       "applied_fields": [], "stored_values": {}}
+        assert mfsc.field_write_record(None, None)["field_id"] is None
 
     def test_committed_record_has_persona_id_everywhere_and_no_pcm(self, sim_env):
         run_args(parse(sim_env))

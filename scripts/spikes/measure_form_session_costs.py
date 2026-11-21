@@ -476,6 +476,21 @@ def _canon_value(v) -> str:
     return re.sub(r"[^a-z0-9]", "", joined)
 
 
+def field_write_record(arguments, resp) -> dict:
+    """What one update_form_fields call wrote: the field id and value the
+    model SENT, and what the handler applied and STORED (its applied_fields /
+    stored_values echo; empty when the write was rejected). Sim runs record
+    one per call on the generation that made it, so a wrong confirmed value
+    can be traced to a mis-heard write, a rejected write or a missing one."""
+    args = arguments if isinstance(arguments, dict) else {}
+    r = resp if isinstance(resp, dict) else {}
+    return {"field_id": args.get("field_id"),
+            "sent": _jsonable(args.get("value")),
+            "success": r.get("success"),
+            "applied_fields": _jsonable(list(r.get("applied_fields") or [])),
+            "stored_values": _jsonable(dict(r.get("stored_values") or {}))}
+
+
 def _jsonable(obj):
     """Best-effort JSON-safe copy for the debug artifact (bd jnjj.39). Tool args /
     responses are plain dicts/strings in practice, but a stray non-serializable
@@ -2524,6 +2539,7 @@ class GenerationRecorder:
             self._open = {"t_open": ts, "t_first_audio": None,
                           "t_last_audio": None, "pcm": bytearray(),
                           "transcript": [], "tool_calls": [],
+                          "field_writes": [],
                           "spellback_text": "", "spellback_end": None}
         return self._open
 
@@ -2547,6 +2563,12 @@ class GenerationRecorder:
         ts = self.clock() if ts is None else ts
         self._gen(ts)["tool_calls"].append(name)
         self.pending_tools += 1
+
+    def on_field_write(self, record: dict, ts: float | None = None) -> None:
+        """One update_form_fields call's sent/stored value (field_write_record)
+        on the generation that made it."""
+        ts = self.clock() if ts is None else ts
+        self._gen(ts)["field_writes"].append(record)
 
     def tool_end(self, name: str, ts: float | None = None) -> None:
         ts = self.clock() if ts is None else ts
@@ -2655,6 +2677,7 @@ class GenerationRecorder:
             "spellback_end": g["spellback_end"],
             "transcript": "".join(g["transcript"]).strip(),
             "tool_calls": list(g["tool_calls"]),
+            "field_writes": list(g["field_writes"]),
             "pending_tools_at_close": self.pending_tools,
             "pcm": pcm,
         })
@@ -2697,6 +2720,7 @@ class GenerationRecorder:
                 "audio_s": round(g["audio_s"], 3),
                 "playback_end_s": rel(g["playback_end"]),
                 "tool_calls": g["tool_calls"],
+                "field_writes": g.get("field_writes", []),
                 "pending_tools_at_close": g["pending_tools_at_close"],
                 "spellback_text": g.get("spellback_text", ""),
                 "late_completion_reason": g.get("late_completion_reason"),
@@ -4222,6 +4246,13 @@ async def run(args) -> int:
                     client.gen_recorder.tool_start(tool_name, _ts)
                 try:
                     resp = await orig_tool_cb(tool_name, arguments)
+                    if (client.gen_recorder is not None
+                            and tool_name == "update_form_fields"):
+                        # Sim runs only (synthetic persona values): what the
+                        # model SENT vs what the handler STORED, per write
+                        # (bd polyglot-pdf-r3ham.24).
+                        client.gen_recorder.on_field_write(
+                            field_write_record(arguments, resp))
                     if tool_name in ("ask_secretary", "switch_to_field",
                                      "skip_field"):
                         # Seam tools always recorded (event scoring needs the
