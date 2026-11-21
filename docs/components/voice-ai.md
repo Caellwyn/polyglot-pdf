@@ -389,8 +389,10 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
     and listen -- the user has already been asked. The `delivered` response is
     a bare status (`user_has_been_asked`, `awaiting: user_yes_or_no`) with NO
     prose message: given a sentence, gemini-3.8-live read it aloud (bd
-    polyglot-pdf-r3ham.23). The stay-silent rule, and "never read a tool
-    response aloud", live in `DTI_SPELLBACK_SI_ADDENDUM`.
+    polyglot-pdf-r3ham.23). The stay-silent rule, and "never read the
+    name_spellback response aloud" (scoped to this tool: the stored-value
+    echo and field guidance in other responses ARE read back), live in
+    `DTI_SPELLBACK_SI_ADDENDUM`.
   - **Session language, language-first voice ladder**
     (`spellback_tts.resolve_spellback_voice`): frame + voice follow the
     session's spoken language through the same name->BCP-47 map as the ASR

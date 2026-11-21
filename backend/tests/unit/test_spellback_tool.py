@@ -299,8 +299,12 @@ class TestSpellbackSiAddendum:
         # bd 44ywm: the clip asks the question; the model's job is silence.
         assert "stay SILENT and listen" in si
         # bd r3ham.23: the delivered response carries no prose, so the SI
-        # alone says a tool response is never spoken.
-        assert "do not read any of it aloud" in si
+        # alone says it is never spoken -- scoped to name_spellback, because
+        # other tool responses (the stored-value echo, field guidance) ARE
+        # meant to be read back.
+        assert ("The name_spellback response is a status for you, never "
+                "text to say: do not read it aloud.") in si
+        assert "A tool response is a status" not in si
         # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
         # SPEECH STYLE block in the same assembled SI requires digit-by-digit
         # number read-back, and the addendum must not suppress it.
