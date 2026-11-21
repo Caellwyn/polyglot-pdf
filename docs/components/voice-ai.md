@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-11-18. See [journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md](../journal/entries/2026-11-17-bd-r3ham.6-3p8-bundled-transcripts-receive-loop.md) for closeout details.*
+*Last updated: 2026-11-21. See [journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md](../journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -385,8 +385,14 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
     LLM-based: they generate prosody from natural text, and SSML
     `say-as`/`break` markup renders mechanically (robotic, unevenly spaced).
     Measured: JOHNSON letters-only SSML 10.2s vs plain text WITH the question
-    4.9s, synthesis 2.3s -> 0.9s. So the `delivered` tool response tells the
-    model to STAY SILENT and listen -- the user has already been asked.
+    4.9s, synthesis 2.3s -> 0.9s. So on `delivered` the model must STAY SILENT
+    and listen -- the user has already been asked. The `delivered` response is
+    a bare status (`user_has_been_asked`, `awaiting: user_yes_or_no`) with NO
+    prose message: given a sentence, gemini-3.8-live read it aloud (bd
+    polyglot-pdf-r3ham.23). The stay-silent rule, and "never read the
+    name_spellback response aloud" (scoped to this tool: the stored-value
+    echo and field guidance in other responses ARE read back), live in
+    `DTI_SPELLBACK_SI_ADDENDUM`.
   - **Session language, language-first voice ladder**
     (`spellback_tts.resolve_spellback_voice`): frame + voice follow the
     session's spoken language through the same name->BCP-47 map as the ASR
