@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/callback_handler.py backend/services/form_filling_service.py backend/services/request_coordinator.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts frontend/src/shared/connection.ts frontend/src/demo/VoiceOverlay.tsx
 
-*Last updated: 2026-08-06 (post-merge freshness check against
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 backend/services/callback_handler.py + backend/services/form_filling_service.py:
 every DEPRECATED-site symbol in the table -- `_handle_switch_section_tool`,
 `handle_switch_section`, `_complete_section_switch`, `request_section_info`,

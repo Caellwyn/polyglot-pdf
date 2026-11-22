@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py
 
-*Last updated: 2026-11-18. See [2026-11-18-bd-r3ham.5-docs-cost-pitch-fold-3-8-findings-into-logging.md](../journal/entries/2026-11-18-bd-r3ham.5-docs-cost-pitch-fold-3-8-findings-into-logging.md) for closeout details.*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 How the Gemini models are selected, how to A/B two voice tiers in live testing,
 and how that selection drives cost. The cost mechanics themselves live in

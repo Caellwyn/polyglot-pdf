@@ -2,7 +2,7 @@
 
 **Tracks:** backend/services/ai_context.py backend/config.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found; tombstone — JIT SI mode was purged in bd polyglot-pdf-en2j).*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 The **JIT (Just-In-Time manifest) SI mode was removed in bd polyglot-pdf-en2j.** The
 `USE_JIT_SCHEMA` flag, the `JIT_SYSTEM_INSTRUCTION` template, and the manifest-text SI

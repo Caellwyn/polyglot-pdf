@@ -903,18 +903,21 @@ class Settings(BaseModel):
 		"name": "name_spellback",
 		"description": (
 			"Play the CURRENT field's stored value to the user as a "
-			"deterministic audio clip that says the spelling letter by letter, "
-			"in the session language, AND asks them whether it is correct. This "
-			"is the ONLY way a LETTER spelling is ever read back -- never speak "
-			"a letter spelling yourself. (Digit-by-digit read-back of numbers is "
-			"unaffected: keep reading numbers back digit by digit yourself.) "
-			"After update_form_fields succeeds on a name (or other "
-			"letter-spelled) field, call this tool INSTEAD of doing the spoken "
-			"read-back yourself, and stop speaking. The audio is generated from "
-			"the STORED value, never from conversation memory, and it already "
-			"asks the verification question -- so when the tool returns "
-			"delivered, say NOTHING and wait silently for the user's answer, "
-			"then confirm as usual once they agree."
+			"deterministic audio clip that reads it out one letter or one "
+			"digit at a time, in the session language, AND asks them whether "
+			"it is correct. This is the ONLY way a LETTER spelling or an "
+			"IDENTIFIER NUMBER (phone, ZIP code, A-number, Social Security or "
+			"tax ID, account, case or document number) is ever read back -- "
+			"never speak one yourself. After update_form_fields succeeds on a "
+			"name, any other letter-spelled field, or an identifier-number "
+			"field, call this tool INSTEAD of doing the spoken read-back "
+			"yourself, and stop speaking. (Dates are not covered: read a date "
+			"back yourself as usual.) The audio is generated from the STORED "
+			"value, never from conversation memory, and it already asks the "
+			"verification question -- so when the tool returns delivered, say "
+			"NOTHING and wait silently for the user's answer, then confirm as "
+			"usual once they agree. If the tool tells you to read the value "
+			"back yourself, do exactly what it says."
 		),
 		"parameters": {
 			"type": "object",
@@ -944,27 +947,40 @@ class Settings(BaseModel):
 	# The scoping line and the closing SO-THE-SHAPE line exist to keep this
 	# block from reading as the whole naming policy. Keep BOTH if you edit
 	# this; test_spellback_si_addendum pins them.
+	#
+	# IDENTIFIER NUMBERS ride the clip too (bd polyglot-pdf-r3ham.26). In the
+	# 2026-11-20 3.8 benchmark the model's VOICE read back an earlier, similar
+	# phone number while its transcript said the new one, and a blend got
+	# stored -- the same speech-head attractor as the name defect (bd 0rpu).
+	# The base SI's DELIVERY rule (say a number digit by digit) still governs
+	# how the model speaks any number it does say: dates, which stay out of
+	# scope, and the tool's read_back_yourself variant for a session language
+	# no TTS voice can speak.
 	DTI_SPELLBACK_SI_ADDENDUM: str = (
 		"\n\nSPELL-BACK AUDIO TOOL (this is the mechanism that voices "
-		"spellings outside this conversation, and it overrides any earlier "
-		"instruction to read a LETTER spelling aloud or to verify by spelling "
-		"yourself):\n"
-		"This changes only how a spelling is READ BACK. It does NOT change how "
+		"spellings and identifier numbers outside this conversation, and it "
+		"overrides any earlier instruction to read a LETTER spelling or an "
+		"identifier NUMBER aloud, or to verify by spelling yourself):\n"
+		"This changes only how a value is READ BACK. It does NOT change how "
 		"you ASK: you still ask every person's name by asking for its SPELLING "
 		"up front, every time, exactly as instructed above -- never just the "
 		"name.\n"
-		"For a NAME or any letter-spelled value: after the fill succeeds, do "
-		"NOT read the value back and do NOT ask whether it is correct -- call "
-		"the name_spellback tool instead, and stop speaking. A deterministic "
-		"clip says the stored spelling to the user, letter by letter in the "
-		"session language, and asks them whether it is correct. When the tool "
-		"returns delivered, stay SILENT and listen for their answer; once they "
-		"agree, confirm as usual. The name_spellback response is a status for "
-		"you, never text to say: do not read it aloud. Numbers are unaffected: "
-		"keep reading "
-		"identifier numbers back digit by digit yourself.\n"
+		"For a NAME or any letter-spelled value, AND for an identifier NUMBER "
+		"(phone, ZIP code, A-number, Social Security or tax ID, account, case "
+		"or document number): after the fill succeeds, do NOT read the value "
+		"back and do NOT ask whether it is correct -- call the name_spellback "
+		"tool instead, and stop speaking. A deterministic clip says the stored "
+		"value to the user, one letter or one digit at a time in the session "
+		"language, and asks them whether it is correct. When the tool returns "
+		"delivered, stay SILENT and listen for their answer; once they agree, "
+		"confirm as usual. The name_spellback response is a status for you, "
+		"never text to say: do not read it aloud. Dates are not covered: read "
+		"a date back yourself. If the tool tells you to read a number back "
+		"yourself, do exactly what it says.\n"
 		"So the shape of every name field is: ASK for the spelling -> fill the "
-		"letters they gave -> call name_spellback -> stay silent."
+		"letters they gave -> call name_spellback -> stay silent. And of every "
+		"identifier-number field: ASK for the number -> fill the digits -> "
+		"call name_spellback -> stay silent."
 	)
 
 	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.
@@ -1206,7 +1222,7 @@ class Settings(BaseModel):
 		"WORKFLOW (one field at a time):\n"
 		"1. ASK for the current field. If it has options, present them as PRESENTING OPTIONS directs: read EVERY option aloud for a list (never one-by-one as yes/no questions), ONE natural question for a TWO-option field the guidance marks that way, ask directly for a standard list.\n"
 		"2. FILL that ONE field from the user's answer, using its exact field_id.\n"
-		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Unless a later instruction gives you a different way to verify a name, say a name as a word; read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
+		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Unless a later instruction gives you a different way to verify a name or an identifier number, say a name as a word and read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
 		"4. WAIT for explicit agreement (yes / correct / that's right).\n"
 		"5. CONFIRM with confirmation_method='verbal'.\n"
 		"6. The confirmation returns the NEXT field's guidance: ask for that field, following ITS instructions and copying ITS field_id.\n"

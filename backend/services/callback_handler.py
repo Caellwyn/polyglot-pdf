@@ -15,8 +15,16 @@ from .request_coordinator import (
     RequestCoordinator,
 )
 from backend.services.ai_context import render_field_guidance
+from backend.services.spellback_tts import SPELLBACK_NO_SESSION_VOICE_STATUS
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
+
+# The ack reason the client reports when /api/tts/spellback answers 406: the
+# value has a digit and no voice in the session language can speak it (bd
+# polyglot-pdf-r3ham.26). spellbackPlayer.ts forwards any non-OK status as
+# 'tts_http_<status>', so this token is derived from the route's own constant
+# rather than restated.
+SPELLBACK_NO_SESSION_VOICE_REASON = "tts_http_%d" % SPELLBACK_NO_SESSION_VOICE_STATUS
 
 _log = structlog.get_logger(module="callback_handler")
 _dev_log = get_dev_logger()
@@ -1314,7 +1322,7 @@ class CallbackHandler:
         target, so there is no id for the model to hallucinate and no
         value path from model memory (bd h7wx).
 
-        Three response variants, each an explicit behavioral instruction so the
+        Four response variants, each an explicit behavioral instruction so the
         model's post-tool generation stays letter-free:
         - delivered: say NOTHING and wait -- the clip already asked the
           verification question in the session language (bd 44ywm), so the
@@ -1324,6 +1332,11 @@ class CallbackHandler:
         - error/timeout: apologize and re-ask for the spelling; NEVER fall back
           to spelling from memory (that would reintroduce the defect exactly
           where it hurts).
+        - read_back_yourself (reason tts_http_406, bd polyglot-pdf-r3ham.26):
+          a value CONTAINING a digit in a session language no TTS voice
+          speaks. The only clip possible there would be English, so there is
+          none, and the model reads the stored value itself, one character at
+          a time: digits as the session language's own words, letters by name.
         """
         del arguments  # No-argument tool; anything sent is deliberately ignored.
 
@@ -1386,6 +1399,39 @@ class CallbackHandler:
                         "speaking now. Listen and respond to what they say. Do "
                         "NOT speak the spelling yourself; if the user wants to "
                         "hear it again, call name_spellback again."
+                    ),
+                }
+            elif ack.get("reason") == SPELLBACK_NO_SESSION_VOICE_REASON:
+                # bd polyglot-pdf-r3ham.26: a value CONTAINING A DIGIT in a
+                # session language no TTS voice speaks (unmapped, or a locale
+                # like ur-PK / fa-IR with no voice). A clip there would be in
+                # ENGLISH, so there is none; the model -- which speaks the
+                # session language -- reads it back instead. The value may
+                # also carry letters (a passport number, an email), so the
+                # instruction covers EVERY character, and it lifts BOTH rules
+                # that would otherwise forbid this for this one value only --
+                # the declaration's never-read-it-back-yourself rule and the
+                # base SI DELIVERY block's never-spell-aloud rule -- so the
+                # instructions in the model's context do not contradict.
+                response = {
+                    "success": False,
+                    "status": "read_back_yourself",
+                    "message": (
+                        "No audio clip is available in the session language "
+                        "for this value, so YOU read it back now -- for this "
+                        "one value, that replaces the rules against reading a "
+                        "value back yourself and against spelling a word out "
+                        "letter by letter aloud. Read the STORED value (the one "
+                        "update_form_fields returned), never your memory of "
+                        "what was said, one character at a time, in order: "
+                        "say every digit separately as the SESSION LANGUAGE's "
+                        "own word for that digit -- never in English, and "
+                        "never grouped into larger numbers -- and say every "
+                        "letter, if it has any, as that letter's name, one "
+                        "letter at a time. Then ask whether it is correct, "
+                        "wait for their answer, and confirm as usual once "
+                        "they agree. Do not call name_spellback again for "
+                        "this value."
                     ),
                 }
             else:

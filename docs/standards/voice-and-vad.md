@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-11-19. See [2026-11-19-bd-hhlce-fix-frontend-vad-onnxruntime-cdn-asset-urls-must.md](../journal/entries/2026-11-19-bd-hhlce-fix-frontend-vad-onnxruntime-cdn-asset-urls-must.md) for closeout details.*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live

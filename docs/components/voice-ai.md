@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-11-21. See [journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md](../journal/entries/2026-11-21-bd-r3ham.23-spellback-bare-status.md) for closeout details.*
+*Last updated: 2026-11-21 (bd polyglot-pdf-r3ham.26: identifier numbers read back through the `name_spellback` clip, digit by digit in the session language, never an English digit clip). See [journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -220,9 +220,14 @@ Three concerns, kept deliberately separate (bd polyglot-pdf-e1x9):
   cannot introspect).
 - **Identifier read-back** (DTI) -- a number that is an IDENTIFIER (id/case
   numbers, dates, phone, ZIP, accounts) is read DIGIT BY DIGIT, never as a
-  quantity; a real quantity is spoken normally. Letter-by-letter SPELL-BACK was
-  removed from the DTI SI: spelling aloud desyncs the native-audio model's audio
-  and text layers, and a dedicated TTS tool will own it.
+  quantity; a real quantity is spoken normally. This rule governs how the model
+  SPEAKS a number; while `name_spellback` is on, the model no longer speaks the
+  READ-BACK of an identifier number at all -- the clip does (bd
+  polyglot-pdf-r3ham.26, see the `name_spellback` bullet under Tool calling).
+  What the model still voices digit by digit is a date read-back (out of the
+  clip's scope) and the tool's `read_back_yourself` fallback. Letter-by-letter
+  SPELL-BACK was removed from the DTI SI: spelling aloud desyncs the
+  native-audio model's audio and text layers, and the same TTS tool owns it.
 - **Articulation** -- full sound through the END of each word, no
   slurring/swallowed syllables/mumbling, deliberate pauses between clauses, and
   no casual contractions or filler sounds. Written to generalize across the
@@ -353,8 +358,13 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   `skipped` flag); the SI requires a verbal confirm first.
 - `name_spellback` -- `SPELLBACK_TOOL_ENABLED`, default ON since the cutover
   (bd polyglot-pdf-apkdl; the flag remains as a rollback -- bd
-  polyglot-pdf-22h1f + 44ywm): deterministic spell-back for the current field.
-  Takes NO arguments; the client resolves the current field, reads the stored
+  polyglot-pdf-22h1f + 44ywm): deterministic spell-back for the current field
+  -- names and other letter-spelled values, AND identifier numbers (phone, ZIP,
+  A-number, SSN/tax ID, account/case/document numbers; dates are out of scope),
+  per bd polyglot-pdf-r3ham.26. Numbers moved here because the native-audio
+  speech head can re-say an EARLIER, similar number (the 2026-11-20 3.8
+  benchmark stored a blend of a daytime and a mobile number while Cloud STT
+  heard the voice read back the daytime one). Takes NO arguments; the client resolves the current field, reads the stored
   value, fetches a Cloud TTS clip (`POST /api/tts/spellback`, carrying the
   value + the session language), mutes the mic in every input mode, plays it
   BLOCKING, and acks delivered/interrupted/error. The tool response is
@@ -405,6 +415,26 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
     is derived from `list_voices` at runtime, never a hand-pinned language
     list. Frames + per-language punctuation words are DATA
     (`backend/services/spellback_frames.json`, UTF-8).
+  - **Digits: one token each, and NEVER English unless the session is.**
+    Every digit rides as its own comma-separated token, so the session voice
+    says each as that language's own word ("cinco, cero, tres") and never one
+    multi-digit number (pinned for every locale in the frames file). A value
+    containing a digit gets a STRICTER language gate than letters
+    (`resolve_spellback_voice(..., for_digits=True)`): an unmapped language, a
+    mapped locale the voice listing shows no voice for, or an unavailable
+    listing raises `SpellbackLanguageUnavailable`; `/api/tts/spellback` answers
+    **406**, the client acks reason `tts_http_406`, and the tool returns the
+    `read_back_yourself` variant telling the model to read the STORED value
+    itself, one character at a time: each digit as the session language's own
+    word for it, never English, and any letters by name (the gate keys on
+    "contains a digit", so a passport-style `X1234567` lands here too). The listing check is
+    load-bearing: on 2026-11-21 `ur-PK` and `fa-IR` listed NO voice, and a
+    voiceless `ur-PK` request with no voice name came back in an ENGLISH voice
+    (Urdu STT heard "five zero"), while `fa-IR` 400s. An explicit
+    `SPELLBACK_TTS_VOICE` is honored for digits only when its locale is the
+    session's. Letter clips keep their existing rules, including the en-US
+    clip for an unmapped language (a recorded decision: names are stored in
+    Latin characters, and the model speaking a spelling is the bd 0rpu defect).
 - `switch_to_field` -- jump the form's focus to ONE specific field (correction/
   revisit path: "go back to my mailing city"), by field_id, spoken name, or a
   rough description; DISTINCT from `switch_section`, which moves whole

@@ -41,6 +41,8 @@ from backend.services.intro_tts import (
 )
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
+    SPELLBACK_NO_SESSION_VOICE_STATUS,
+    SpellbackLanguageUnavailable,
     synthesize_spellback,
 )
 
@@ -82,7 +84,8 @@ class SpellbackRequest(BaseModel):
     value: str
     # The session's spoken-language NAME as the frontend holds it ("Spanish").
     # Optional for wire-compat with a client one deploy behind; absent means
-    # the en-US fallback frame/voice.
+    # the en-US fallback frame/voice for letters, and a 406 for a value with a
+    # digit (no session language known -> no digit clip).
     language: str | None = None
 
 
@@ -105,6 +108,13 @@ async def spellback_tts(
             value, settings, language_name=request.language,
             session_ctx=_usage_session_ctx(user),
         )
+    except SpellbackLanguageUnavailable:
+        # A digit value in a session language no voice can speak (bd
+        # polyglot-pdf-r3ham.26). Expected, not a failure: the client acks
+        # reason 'tts_http_406' and the tool tells the model to read the
+        # digits itself, in the session language -- never an English clip.
+        raise HTTPException(status_code=SPELLBACK_NO_SESSION_VOICE_STATUS,
+                            detail="no voice for the session language")
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid value")
     except Exception as exc:

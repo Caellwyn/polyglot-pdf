@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-11-18. See [2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md](../journal/entries/2026-11-18-bd-e72on-measure-cost-re-measure-session-cost-split-and.md) for closeout details.*
+*Last updated: 2026-11-21. See [2026-11-21-bd-r3ham.26-digit-readback-clip](../journal/entries/2026-11-21-bd-r3ham.26-digit-readback-clip.md) for closeout details.*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
 > `CONTEXT_COMPRESSION_ENABLED` defaults TRUE; the continuous whole-form session
@@ -156,7 +156,7 @@ per-form** (below); the static token values are the override:
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6098/7598 with the clamp NOT firing -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6509/8009 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -223,12 +223,14 @@ drifted post-eviction; wider windows stayed coherent).
 **On the CURRENT default DTI form the clamp does NOT fire.** Even after the v4
 SI diet and the spell-back cutover (bd polyglot-pdf-apkdl, which appended a
 7th tool declaration) the derivation lands well above the API minimum on its
-own (trigger 7598 vs the 5000 bound). Executed against the shipped config
+own (trigger 8009 vs the 5000 bound). Executed against the shipped config
 (`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's
 7 tool declarations -- continuous mode drops `switch_section`, `name_spellback`
-is appended by default): **floor 5499 -> window 6098 -> trigger 7598**
-with no injection budget (i-90, f1040), and roughly **window 7750 -> trigger
-9250** on a form needing the W-7's ~1652-token injection budget (the figure
+is appended by default; the SI includes the spell-back addendum): **floor
+5910 -> window 6509 -> trigger 8009** with no injection budget (measured
+2026-11-21, after bd polyglot-pdf-r3ham.26 routed identifier numbers to the
+clip), and roughly **window 8161 -> trigger 9661** on a form needing the W-7's
+~1652-token injection budget (the figure
 cited above, "on the W-7 it is 1652 tokens" -- carried forward from that
 measurement, not independently re-derived against a live W-7 kit here; the
 1652 figure itself dates to the bd polyglot-pdf-2zk3 docs audit -- re-derive
